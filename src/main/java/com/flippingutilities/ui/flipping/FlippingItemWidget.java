@@ -24,7 +24,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.flippingutilities;
+package com.flippingutilities.ui.flipping;
 
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
@@ -44,11 +44,10 @@ public class FlippingItemWidget
 {
 	private final Widget parent;
 	private final Client client;
-	private int value;
 	private Widget text;
 
 	@Inject
-	FlippingItemWidget(Widget parent, Client client)
+	public FlippingItemWidget(Widget parent, Client client)
 	{
 		this.parent = parent;
 		this.client = client;
@@ -85,9 +84,9 @@ public class FlippingItemWidget
 
 		switch (mode)
 		{
-			case ("setQuantity"):
+			case ("setCurrentQuantityInTrade"):
 				text.setText("Set to remaining GE limit: " + value);
-				text.setAction(1, "Set quantity");
+				text.setAction(1, "Set currentQuantityInTrade");
 				text.setOnOpListener((JavaScriptCallback) ev ->
 				{
 					client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(value + "*");
