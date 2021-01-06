@@ -3,9 +3,11 @@ package com.flippingutilities.ui.offereditor;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.Option;
 import com.flippingutilities.ui.uiutilities.CustomColors;
+import com.flippingutilities.ui.uiutilities.FastTabGroup;
 import com.flippingutilities.ui.uiutilities.Icons;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.FontManager;
+import net.runelite.client.ui.components.materialtabs.MaterialTab;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -110,7 +112,7 @@ public class OfferEditorPanel extends JPanel {
     }
 
     private void addOptionPanel() {
-        plugin.getOptionsForCurrentView().add(0, Option.defaultOption());
+        plugin.getOptionsForCurrentView().add(0, Option.defaultQuantityOption());
         rebuild(plugin.getOptionsForCurrentView());
     }
 
@@ -175,9 +177,9 @@ public class OfferEditorPanel extends JPanel {
         templateButton.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                plugin.getOptionsForCurrentView().add(new Option("p", Option.GE_LIMIT, "+0"));
-                plugin.getOptionsForCurrentView().add(new Option("l", Option.REMAINING_LIMIT, "+0"));
-                plugin.getOptionsForCurrentView().add(new Option("o", Option.CASHSTACK, "+0"));
+                plugin.getOptionsForCurrentView().add(new Option("p", Option.GE_LIMIT, "+0", true));
+                plugin.getOptionsForCurrentView().add(new Option("l", Option.REMAINING_LIMIT, "+0", true));
+                plugin.getOptionsForCurrentView().add(new Option("o", Option.CASHSTACK, "+0", true));
                 rebuild(plugin.getOptionsForCurrentView());
             }
 
