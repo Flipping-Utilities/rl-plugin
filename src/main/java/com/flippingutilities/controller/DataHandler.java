@@ -229,8 +229,4 @@ public class DataHandler {
             log.info("couldn't store trades", e);
         }
     }
-
-
-
-
 }

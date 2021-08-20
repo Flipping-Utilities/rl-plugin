@@ -2,14 +2,18 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.ui.widgets.TradeActivityTimer;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.http.api.item.ItemStats;
+import org.graalvm.compiler.nodes.calc.IntegerDivRemNode;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+@Slf4j
 public class NewOfferEventPipelineHandler {
     FlippingPlugin plugin;
 
@@ -38,6 +42,7 @@ public class NewOfferEventPipelineHandler {
         }
         OfferEvent newOfferEvent = createOfferEvent(offerChangedEvent);
         if (newOfferEvent.getTickArrivedAt() == plugin.getLoginTickCount()) {
+            log.info("this is triggering an awful lot");
             newOfferEvent.setBeforeLogin(true);
         }
         onNewOfferEvent(newOfferEvent);
@@ -48,7 +53,13 @@ public class NewOfferEventPipelineHandler {
         if (currentlyLoggedInAccount != null) {
             newOfferEvent.setMadeBy(currentlyLoggedInAccount);
         }
+
         Optional<OfferEvent> screenedOfferEvent = screenOfferEvent(newOfferEvent);
+
+        Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
+        for (int i =0;i < 8; i++) {
+            log.info("slot {}, event: {}", i, lastOfferEventForEachSlot.get(i));
+        }
 
         if (!screenedOfferEvent.isPresent()) {
             return;
@@ -114,47 +125,61 @@ public class NewOfferEventPipelineHandler {
     public Optional<OfferEvent> screenOfferEvent(OfferEvent newOfferEvent) {
         plugin.getSlotsPanel().update(newOfferEvent);
         Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
+        List<TradeActivityTimer> tradeActivityTimers = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getSlotTimers();
 
-        if (newOfferEvent.isCausedByEmptySlot()) {
+        OfferEvent lastOfferEvent = lastOfferEventForEachSlot.get(newOfferEvent.getSlot());
+
+        //user has no history
+        if (lastOfferEvent == null) {
+            log.info("last offer event was null");
+            if (newOfferEvent.isCausedByEmptySlot()) {
+                return Optional.empty();
+            }
+            else {
+                lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
+                return Optional.of(newOfferEvent);
+            }
+        }
+
+        //we get essentially every offer event twice..
+        if (lastOfferEvent.isDuplicate(newOfferEvent)) {
+            log.info("new offer event {} is dup", newOfferEvent);
             return Optional.empty();
         }
 
-        if (newOfferEvent.isStartOfOffer() && !isDuplicateStartOfOfferEvent(newOfferEvent)) {
-            plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getSlotTimers().get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
+        //get empty slot offer events on login, reject them. Just make sure offer isn't complete as we don't want to
+        //re-add a non complete offer as that will mess up its "ticksSinceFirstOffer"
+        if (newOfferEvent.isCausedByEmptySlot() && !lastOfferEvent.isComplete()) {
+            log.info("empty slot event on login, not removing: {}", newOfferEvent);
+            return Optional.empty();
+        }
+
+        //empty offer event after collecting an offer, mark the slot as being empty by removing the offer event for it.
+        //this will technically also trigger on login when we get those empty slot events if the last event
+        //had a complete state, but in that case we will just re-add that offer event on the next tick when we get an
+        //event for it
+        if (newOfferEvent.isCausedByEmptySlot() && lastOfferEvent.isComplete()) {
+            log.info("empty slot event after offer completed: {}", newOfferEvent);
+            lastOfferEventForEachSlot.remove(newOfferEvent.getSlot());
+            return Optional.empty();
+        }
+
+        if (newOfferEvent.getCurrentQuantityInTrade() == 0) {
+            tradeActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
+            log.info("start of offer event: {} actual event: {}", newOfferEvent.isStartOfOffer(),  newOfferEvent);
             lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent); //tickSinceFirstOffer is 0 here
             return Optional.empty();
         }
 
-        if (newOfferEvent.isStartOfOffer() && isDuplicateStartOfOfferEvent(newOfferEvent)) {
-            return Optional.empty();
-        }
-
-        if (newOfferEvent.getCurrentQuantityInTrade() == 0 && newOfferEvent.isComplete()) {
-            lastOfferEventForEachSlot.remove(newOfferEvent.getSlot());
-            plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getSlotTimers().get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
-            return Optional.empty();
-        }
-
         if (newOfferEvent.isRedundantEventBeforeOfferCompletion()) {
+            log.info("redundant offer before completion: {}", newOfferEvent);
             return Optional.empty();
         }
 
-        OfferEvent lastOfferEvent = lastOfferEventForEachSlot.get(newOfferEvent.getSlot());
-
-        //this occurs when the user made the trade while not having the plugin. As such, when the offer was made, no
-        //history for the slot was recorded.
-        if (lastOfferEvent == null) {
-            lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
-            return Optional.of(newOfferEvent);
-        }
-
-        if (lastOfferEvent.isDuplicate(newOfferEvent)) {
-            return Optional.empty();
-        }
-
+        log.info("offer event: {} going through!", newOfferEvent);
         newOfferEvent.setTicksSinceFirstOffer(lastOfferEvent);
         lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
-        plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getSlotTimers().get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
+        tradeActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
         return Optional.of(newOfferEvent);
     }
 
