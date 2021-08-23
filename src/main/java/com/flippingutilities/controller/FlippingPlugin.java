@@ -35,7 +35,7 @@ import com.flippingutilities.ui.gehistorytab.GeHistoryTabPanel;
 import com.flippingutilities.ui.settings.SettingsPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
-import com.flippingutilities.ui.widgets.TradeActivityTimer;
+import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.jobs.CacheUpdaterJob;
 import com.flippingutilities.utilities.GeHistoryTabExtractor;
 import com.flippingutilities.utilities.InvalidOptionException;
@@ -623,7 +623,7 @@ public class FlippingPlugin extends Plugin {
 
     public void rebuildTradeTimers() {
         for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
-            TradeActivityTimer timer = dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().get(slotIndex);
+            SlotActivityTimer timer = dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().get(slotIndex);
 
             //Get the offer slots from the window container
             //We add one to the index, as the first widget is the text above the offer slots
@@ -924,7 +924,7 @@ public class FlippingPlugin extends Plugin {
                     if (slotTimersTask != null) {
                         slotTimersTask.cancel(true);
                     }
-                    dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().forEach(TradeActivityTimer::resetToDefault);
+                    dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().forEach(SlotActivityTimer::resetToDefault);
                 }
             }
 
