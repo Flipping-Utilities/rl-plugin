@@ -346,18 +346,18 @@ public class StatsPanel extends JPanel
 		}
 		else if (totalProfit <= 100000)
 		{
-			//[0,100k[
-			totalProfitVal.setForeground(Color.YELLOW);
+			//[0,100k)
+			totalProfitVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 		}
 		else if (totalProfit <= 10000000)
 		{
-			//[100k,10m[
-			totalProfitVal.setForeground(Color.WHITE);
+			//[100k,10m)
+			totalProfitVal.setForeground(CustomColors.OFF_WHITE);
 		}
 		else
 		{
-			//[10m,inf[
-			totalProfitVal.setForeground(Color.GREEN);
+			//[10m,inf)
+			totalProfitVal.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
 		}
 	}
 
@@ -393,7 +393,7 @@ public class StatsPanel extends JPanel
 		if (totalExpenses == 0)
 		{
 			roiVal.setText("0.00%");
-			roiVal.setForeground(Color.RED);
+			roiVal.setForeground(CustomColors.TOMATO);
 			return;
 		}
 		else
@@ -916,6 +916,7 @@ public class StatsPanel extends JPanel
 		statItemPanelsContainer.setLayout(new BoxLayout(statItemPanelsContainer, BoxLayout.Y_AXIS));
 
 		JPanel statItemPanelsContainerWrapper = new JPanel(new BorderLayout());
+		statItemPanelsContainerWrapper.setBorder(new EmptyBorder(0,0,0,3));
 		statItemPanelsContainerWrapper.add(statItemPanelsContainer, BorderLayout.NORTH);
 
 		JScrollPane scrollPane = new JScrollPane(statItemPanelsContainerWrapper);
