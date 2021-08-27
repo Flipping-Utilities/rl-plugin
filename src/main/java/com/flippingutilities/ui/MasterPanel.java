@@ -46,6 +46,7 @@ import net.runelite.client.ui.components.materialtabs.MaterialTabGroup;
 import net.runelite.client.util.LinkBrowser;
 
 import javax.swing.*;
+import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.ItemEvent;
@@ -104,6 +105,7 @@ public class MasterPanel extends PluginPanel
 
 		tabGroup = tabSelector(mainDisplay, flippingPanel, statPanel, slotsPanel);
 		JPanel header = Header(accountSelector, settingsButton, tabGroup);
+		header.setBorder(BorderFactory.createMatteBorder(0,0,4,0, ColorScheme.DARKER_GRAY_COLOR.darker()));
 		add(header, BorderLayout.NORTH);
 		add(mainDisplay, BorderLayout.CENTER);
 	}
@@ -123,18 +125,18 @@ public class MasterPanel extends PluginPanel
 		settingsButton.setBorder(new EmptyBorder(0,0,2,0));
 
 		JPanel accountSelectorPanel = new JPanel(new BorderLayout());
-		accountSelectorPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
+		accountSelectorPanel.setBackground(CustomColors.DARK_GRAY);
 		accountSelectorPanel.add(accountSelector, BorderLayout.CENTER);
 		accountSelectorPanel.setBorder(new EmptyBorder(0,0,4,0));
 
 		JPanel tabGroupArea = new JPanel(new BorderLayout());
-		tabGroupArea.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
+		tabGroupArea.setBackground(CustomColors.DARK_GRAY);
 		tabGroupArea.add(tabSelector, BorderLayout.CENTER);
 		tabGroupArea.add(settingsButton, BorderLayout.EAST);
 		tabGroupArea.add(communityPanel(), BorderLayout.NORTH);
 
 		JPanel header = new JPanel(new BorderLayout());
-		header.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
+		header.setBackground(CustomColors.DARK_GRAY);
 		header.add(accountSelectorPanel, BorderLayout.NORTH);
 		header.add(tabGroupArea, BorderLayout.CENTER);
 
@@ -143,15 +145,15 @@ public class MasterPanel extends PluginPanel
 
 	private JPanel communityPanel() {
 		JPanel communityPanel = new JPanel(new BorderLayout());
-		communityPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
+		communityPanel.setBackground(CustomColors.DARK_GRAY);
 
 		JPanel topPanel = new JPanel();
-		topPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
+		topPanel.setBackground(CustomColors.DARK_GRAY);
 
 		JLabel topLabel = new JLabel("Join discord for bot dump alerts!", JLabel.CENTER);
 		topLabel.setForeground(CustomColors.VIBRANT_YELLOW);
 		topLabel.setFont(FontManager.getRunescapeSmallFont());
-		topLabel.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
+		topLabel.setBackground(CustomColors.DARK_GRAY);
 
 		JLabel questionMarkLabel = new JLabel(Icons.QUESTION_MARK);
 		JPopupMenu popup = new JPopupMenu();
@@ -223,7 +225,7 @@ public class MasterPanel extends PluginPanel
 
 
 		//centerPanel.setBorder(new EmptyBorder(4,0,0,0));
-		centerPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
+		centerPanel.setBackground(CustomColors.DARK_GRAY);
 		centerPanel.add(discordIcon);
 		centerPanel.add(twitterIcon);
 		centerPanel.add(githubIcon);
@@ -306,7 +308,7 @@ public class MasterPanel extends PluginPanel
 		MaterialTab statisticsTab = new MaterialTab("stats", tabGroup, statPanel);
 		MaterialTab slotsTab = new MaterialTab("slots", tabGroup, slotsPanel);
 
-		tabGroup.setBorder(new EmptyBorder(0, 20, 5, 0));
+		tabGroup.setBorder(new EmptyBorder(0, 20, 3, 0));
 		tabGroup.addTab(slotsTab);
 		tabGroup.addTab(flippingTab);
 		tabGroup.addTab(statisticsTab);

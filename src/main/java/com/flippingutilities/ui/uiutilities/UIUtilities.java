@@ -51,6 +51,7 @@ import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * This class contains various methods that the UI uses to format their visuals.
@@ -159,17 +160,16 @@ public class UIUtilities
 		return "https://prices.runescape.wiki/osrs/item/" + itemId;
 	}
 
-	public static IconTextField createSearchBar(ScheduledExecutorService executor, Runnable onSearch) {
+	public static IconTextField createSearchBar(ScheduledExecutorService executor, Consumer<IconTextField> onSearch) {
 		final Future<?>[] runningRequest = {null};
 		IconTextField searchBar = new IconTextField();
 		searchBar.setIcon(IconTextField.Icon.SEARCH);
 		searchBar.setPreferredSize(new Dimension(PluginPanel.PANEL_WIDTH - 20, 32));
-		searchBar.setBackground(ColorScheme.DARK_GRAY_COLOR);
-		searchBar.setBorder(BorderFactory.createMatteBorder(0, 5, 7, 5, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		searchBar.setBackground(CustomColors.DARK_GRAY_LIGHTER);
 		searchBar.setHoverBackgroundColor(ColorScheme.DARKER_GRAY_HOVER_COLOR);
 		searchBar.setMinimumSize(new Dimension(0, 35));
-		searchBar.addActionListener(e -> executor.execute(onSearch));
-		searchBar.addClearListener(onSearch);
+		searchBar.addActionListener(e -> executor.execute(() -> onSearch.accept(searchBar)));
+		searchBar.addClearListener(()-> onSearch.accept(searchBar));
 		searchBar.addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent e) {
@@ -177,7 +177,7 @@ public class UIUtilities
 				{
 					runningRequest[0].cancel(false);
 				}
-				runningRequest[0] = executor.schedule(onSearch, 250, TimeUnit.MILLISECONDS);
+				runningRequest[0] = executor.schedule(() -> onSearch.accept(searchBar), 250, TimeUnit.MILLISECONDS);
 			}
 		});
 		return searchBar;

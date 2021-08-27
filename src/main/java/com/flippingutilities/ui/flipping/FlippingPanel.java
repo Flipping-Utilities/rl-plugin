@@ -45,8 +45,6 @@ import net.runelite.http.api.item.ItemPrice;
 import net.runelite.http.api.item.ItemStats;
 
 import javax.swing.*;
-import javax.swing.border.Border;
-import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
@@ -61,17 +59,19 @@ import java.util.stream.Collectors;
 @Slf4j
 public class FlippingPanel extends JPanel
 {
+	public enum SORT {
+		FAVORITE,
+		ROI,
+		PROFIT,
+		TIME
+	}
+
 	@Getter
 	private static final String WELCOME_PANEL = "WELCOME_PANEL";
 	private static final String ITEMS_PANEL = "ITEMS_PANEL";
-	private static final Border TOP_PANEL_BORDER = new CompoundBorder(
-		BorderFactory.createMatteBorder(0, 0, 0, 0, ColorScheme.DARKER_GRAY_COLOR.darker()),
-		BorderFactory.createEmptyBorder(4, 0, 0, 0));
 
 	private final FlippingPlugin plugin;
 	private final ItemManager itemManager;
-
-	private final IconTextField searchBar;
 
 	public final CardLayout cardLayout = new CardLayout();
 
@@ -82,15 +82,12 @@ public class FlippingPanel extends JPanel
 	private ArrayList<FlippingItemPanel> activePanels = new ArrayList<>();
 
 	@Getter
-	JLabel resetIcon;
-
-	@Getter
 	@Setter
 	private boolean itemHighlighted = false;
 
 	@Getter
 	@Setter
-	private String selectedSort;
+	private SORT selectedSort;
 
 	@Getter
 	private Paginator paginator;
@@ -117,18 +114,9 @@ public class FlippingPanel extends JPanel
 		wrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		wrapper.add(flippingItemsPanel, BorderLayout.NORTH);
 
-		JScrollPane scrollWrapper = new JScrollPane(wrapper);
-		scrollWrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
-		scrollWrapper.getVerticalScrollBar().setPreferredSize(new Dimension(2, 0));
-		scrollWrapper.getVerticalScrollBar().setBorder(new EmptyBorder(0, 0, 0, 0));
-
-		//Contains the main content panel and top panel
-		JPanel container = new JPanel();
-		container.setLayout(new BorderLayout(0, 0));
-		container.setBackground(ColorScheme.DARK_GRAY_COLOR);
-
-		//Search bar beneath the tab manager.
-		searchBar = UIUtilities.createSearchBar(executor, () -> plugin.getClientThread().invoke(this::updateSearch));
+		JScrollPane scrollPane = new JScrollPane(wrapper);
+		scrollPane.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		scrollPane.getVerticalScrollBar().setPreferredSize(new Dimension(2, 0));
 
 		//Contains a greeting message when the items panel is empty.
 		JPanel welcomeWrapper = new JPanel(new BorderLayout());
@@ -141,72 +129,28 @@ public class FlippingPanel extends JPanel
 		welcomePanel.setContent("Flipping Utilities",
 			"Make offers for items to show up!");
 
-		//Clears the config and resets the items panel.
-		resetIcon = new JLabel(Icons.TRASH_ICON_OFF);
-		resetIcon.setBorder(new EmptyBorder(0,0,8,0));
-		resetIcon.setToolTipText("Reset trade history");
-		resetIcon.setPreferredSize(Icons.ICON_SIZE);
-		resetIcon.addMouseListener(new MouseAdapter()
-		{
-			@Override
-			public void mousePressed(MouseEvent e)
-			{
-				if (SwingUtilities.isLeftMouseButton(e))
-				{
-					//Display warning message
-					final int result = JOptionPane.showOptionDialog(resetIcon, "Are you sure you want to reset the flipping panel?",
-						"Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
-						null, new String[]{"Yes", "No"}, "No");
-
-					//If the user pressed "Yes"
-					if (result == JOptionPane.YES_OPTION)
-					{
-						plugin.setAllFlippingItemsAsHidden();
-						setItemHighlighted(false);
-						cardLayout.show(flippingItemContainer, WELCOME_PANEL);
-						rebuild(plugin.viewTradesForCurrentView());
-					}
-				}
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e)
-			{
-				resetIcon.setIcon(Icons.TRASH_ICON);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e)
-			{
-				resetIcon.setIcon(Icons.TRASH_ICON_OFF);
-			}
-		});
-
-		flippingItemContainer.add(scrollWrapper, ITEMS_PANEL);
+		flippingItemContainer.add(scrollPane, ITEMS_PANEL);
 		flippingItemContainer.add(welcomeWrapper, WELCOME_PANEL);
 		flippingItemContainer.setBorder(new EmptyBorder(0, 0, 0, 0));
 
-		final JPanel topPanel = new JPanel(new BorderLayout());
-		topPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
-		topPanel.add(resetIcon, BorderLayout.EAST);
-		topPanel.add(searchBar, BorderLayout.CENTER);
-		topPanel.setBorder(TOP_PANEL_BORDER);
+		IconTextField searchBar = UIUtilities.createSearchBar(executor,
+				(sBar) -> plugin.getClientThread().invoke(() -> this.updateSearch(sBar)));
+		searchBar.setBorder(BorderFactory.createMatteBorder(0,0,2,2, ColorScheme.DARKER_GRAY_COLOR.darker()));
 
-		final JPanel contentPanel = new JPanel(new BorderLayout());
-		contentPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		contentPanel.add(new FlippingPanelToolbar(this, plugin), BorderLayout.NORTH);
-		contentPanel.add(flippingItemContainer, BorderLayout.CENTER);
+		final JPanel topPanel = new JPanel(new BorderLayout());
+		topPanel.setBorder(new EmptyBorder(0,10,2,10));
+		topPanel.add(searchBar, BorderLayout.CENTER);
+		topPanel.add(this.createFavoriteButton(), BorderLayout.EAST);
 
 		paginator = new Paginator(() -> rebuild(plugin.viewTradesForCurrentView()));
 		paginator.setPageSize(10);
 
 		//To switch between greeting and items panels
 		cardLayout.show(flippingItemContainer, WELCOME_PANEL);
-		container.add(topPanel, BorderLayout.NORTH);
-		container.add(contentPanel, BorderLayout.CENTER);
-		container.add(paginator, BorderLayout.SOUTH);
-
-		add(container, BorderLayout.CENTER);
+		add(topPanel, BorderLayout.NORTH);
+		add(flippingItemContainer, BorderLayout.CENTER);
+		add(paginator, BorderLayout.SOUTH);
+		setBorder(new EmptyBorder(5,0,0,0));
 	}
 
 	/**
@@ -256,7 +200,6 @@ public class FlippingPanel extends JPanel
 
 	}
 
-
 	public List<FlippingItem> sortTradeList(List<FlippingItem> tradeList)
 	{
 		List<FlippingItem> result = new ArrayList<>(tradeList);
@@ -268,7 +211,7 @@ public class FlippingPanel extends JPanel
 
 		switch (selectedSort)
 		{
-			case "Most Recent":
+			case TIME:
 				result.sort((item1, item2) ->
 				{
 					if (item1 == null || item2 == null)
@@ -279,10 +222,10 @@ public class FlippingPanel extends JPanel
 					return item1.getLatestActivityTime().compareTo(item2.getLatestActivityTime());
 				});
 				break;
-			case "favorite":
+			case FAVORITE:
 				result = result.stream().filter(item -> item.isFavorite()).collect(Collectors.toList());
 				break;
-			case "profit":
+			case PROFIT:
 				result.sort((item1, item2) ->
 				{
 					if (item1 == null || item2 == null)
@@ -309,7 +252,7 @@ public class FlippingPanel extends JPanel
 					return item2.getPotentialProfit(shouldIncludeMarginCheck, shouldUseRemainingGeLimit).orElse(0) - item1.getPotentialProfit(shouldIncludeMarginCheck, shouldUseRemainingGeLimit).orElse(0);
 				});
 				break;
-			case "roi":
+			case ROI:
 				result.sort((item1, item2) -> {
 					if ((item1.getLatestInstaBuy().isPresent() && item1.getLatestInstaSell().isPresent()) && (!item2.getLatestInstaSell().isPresent() || !item2.getLatestInstaBuy().isPresent()))
 					{
@@ -349,6 +292,43 @@ public class FlippingPanel extends JPanel
 		});
 	}
 
+	private JLabel createFavoriteButton() {
+		JLabel favoriteButton = new JLabel(Icons.SMALL_STAR_OFF_ICON);
+		favoriteButton.setBorder(new EmptyBorder(0,5,0,0));
+		favoriteButton.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent e) {
+				if (selectedSort == SORT.FAVORITE) {
+					favoriteButton.setIcon(Icons.SMALL_STAR_OFF_ICON);
+					selectedSort = null;
+				}
+				else {
+					favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
+					selectedSort = SORT.FAVORITE;
+				}
+				rebuild(plugin.viewTradesForCurrentView());
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				if (selectedSort != SORT.FAVORITE) {
+					favoriteButton.setIcon(Icons.SMALL_STAR_HOVER_ICON);
+				}
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				if (selectedSort == SORT.FAVORITE) {
+					favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
+				}
+				else {
+					favoriteButton.setIcon(Icons.SMALL_STAR_OFF_ICON);
+				}
+			}
+		});
+		return favoriteButton;
+	}
+
 	//This is run whenever the PlayerVar containing the GE offer slot changes to its empty value (-1)
 	// or if the GE is closed/history tab opened
 	public void dehighlightItem()
@@ -379,9 +359,8 @@ public class FlippingPanel extends JPanel
 	}
 
 
-	private void updateSearch()
+	private void updateSearch(IconTextField searchBar)
 	{
-
 		String lookup = searchBar.getText().toLowerCase();
 
 		//Just so we don't mess with the highlight.
@@ -434,5 +413,49 @@ public class FlippingPanel extends JPanel
 				panel.setValueLabels();
 			}
 		}
+	}
+
+	private JLabel createResetButton() {
+		JLabel resetIcon = new JLabel(Icons.TRASH_ICON_OFF);
+		resetIcon.setBorder(new EmptyBorder(0,0,8,0));
+		resetIcon.setToolTipText("Reset trade history");
+		resetIcon.setPreferredSize(Icons.ICON_SIZE);
+		resetIcon.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mousePressed(MouseEvent e)
+			{
+				if (SwingUtilities.isLeftMouseButton(e))
+				{
+					//Display warning message
+					final int result = JOptionPane.showOptionDialog(resetIcon, "Are you sure you want to reset the flipping panel?",
+							"Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
+							null, new String[]{"Yes", "No"}, "No");
+
+					//If the user pressed "Yes"
+					if (result == JOptionPane.YES_OPTION)
+					{
+						plugin.setAllFlippingItemsAsHidden();
+						setItemHighlighted(false);
+						cardLayout.show(flippingItemContainer, WELCOME_PANEL);
+						rebuild(plugin.viewTradesForCurrentView());
+					}
+				}
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e)
+			{
+				resetIcon.setIcon(Icons.TRASH_ICON);
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e)
+			{
+				resetIcon.setIcon(Icons.TRASH_ICON_OFF);
+			}
+		});
+
+		return resetIcon;
 	}
 }

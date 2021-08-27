@@ -116,8 +116,9 @@ public class FlippingItemPanel extends JPanel
 		setBackground(CustomColors.DARK_GRAY);
 		setLayout(new BorderLayout());
 		setBorder(new CompoundBorder(
-				new EmptyBorder(5,5,0,0),
-				new MatteBorder(0, 0, 5, 5, ColorScheme.DARKER_GRAY_COLOR.darker())));
+				new MatteBorder(1, 0, 4, 4, ColorScheme.DARKER_GRAY_COLOR.darker()),
+				new EmptyBorder(10,5,0,0)));
+
 		setToolTipText("Flipped by " + flippingItem.getFlippedBy());
 
 		styleDescriptionLabels();
@@ -743,7 +744,7 @@ public class FlippingItemPanel extends JPanel
 			{
 				if (!flippingItem.isFavorite())
 				{
-					favoriteIcon.setIcon(Icons.STAR_HALF_ON_ICON);
+					favoriteIcon.setIcon(Icons.STAR_HOVER_ICON);
 				}
 			}
 
