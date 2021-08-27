@@ -79,13 +79,13 @@ public class UIUtilities
 	{
 		if (percentage < gradientMax * 0.5)
 		{
-			return (percentage <= 0) ? Color.RED
-				: ColorUtil.colorLerp(Color.RED, Color.YELLOW, percentage / gradientMax * 2);
+			return (percentage <= 0) ? CustomColors.TOMATO
+				: ColorUtil.colorLerp(CustomColors.TOMATO, ColorScheme.GRAND_EXCHANGE_ALCH, percentage / gradientMax * 2);
 		}
 		else
 		{
 			return (percentage >= gradientMax) ? ColorScheme.GRAND_EXCHANGE_PRICE
-				: ColorUtil.colorLerp(Color.YELLOW, ColorScheme.GRAND_EXCHANGE_PRICE, percentage / gradientMax * 0.5);
+				: ColorUtil.colorLerp(ColorScheme.GRAND_EXCHANGE_ALCH, ColorScheme.GRAND_EXCHANGE_PRICE, percentage / gradientMax * 0.5);
 		}
 	}
 

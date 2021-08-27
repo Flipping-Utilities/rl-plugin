@@ -60,10 +60,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class StatItemPanel extends JPanel
 {
-	private static final Border ITEM_INFO_BORDER = new CompoundBorder(
-		BorderFactory.createLineBorder(ColorScheme.DARKER_GRAY_COLOR.darker(), 3),
-		BorderFactory.createEmptyBorder(3, 3, 3, 3));
-
 	private static final Border ITEM_HISTORY_BORDER = new CompoundBorder(
 		BorderFactory.createLineBorder(ColorScheme.DARKER_GRAY_COLOR.darker(), 3),
 		BorderFactory.createEmptyBorder(3, 0, 0, 0));
@@ -129,8 +125,8 @@ public class StatItemPanel extends JPanel
 		this.flippingItem = flippingItem;
 		this.itemManager = itemManager;
 		this.statsPanel = plugin.getStatPanel();
-		this.flipPaginator = new Paginator(() -> buildAllFlipsPanel());
-		this.offerPaginator = new Paginator(()-> buildAllOffersPanels());
+		this.flipPaginator = new Paginator(this::buildAllFlipsPanel);
+		this.offerPaginator = new Paginator(this::buildAllOffersPanels);
 		flipPaginator.setPageSize(10);
 		offerPaginator.setPageSize(10);
 		flipPaginator.setBackground(ColorScheme.DARKER_GRAY_COLOR);
@@ -147,7 +143,6 @@ public class StatItemPanel extends JPanel
 		offerPaginator.updateTotalPages(tradeHistory.size());
 		flipPaginator.updateTotalPages(flips.size());
 
-
 		buildAllFlipsPanel();
 		buildAllOffersPanels();
 
@@ -161,16 +156,14 @@ public class StatItemPanel extends JPanel
 		setLayout(new BorderLayout());
 
 		JPanel titlePanel = titlePanel(iconPanel(), nameAndProfitPanel(), collapseIcon());
-
 		JPanel subInfoPanel = subInfoPanel(descriptionLabels, valueLabels);
-
 		JPanel tradeHistoryPanel = tradeHistoryPanel(allOffersPanel, allFlipsPanel);
 
 		updateLabels();
 
 		//Set background and border of container with sub infos and trade history
-		subInfoAndHistoryContainer.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		subInfoAndHistoryContainer.setBorder(ITEM_INFO_BORDER);
+		subInfoAndHistoryContainer.setBackground(CustomColors.DARK_GRAY);
+		subInfoAndHistoryContainer.setBorder(new EmptyBorder(10,6,3,6));
 
 		subInfoAndHistoryContainer.add(subInfoPanel, BorderLayout.CENTER);
 		subInfoAndHistoryContainer.add(tradeHistoryPanel, BorderLayout.SOUTH);
@@ -188,6 +181,7 @@ public class StatItemPanel extends JPanel
 		quantityBoughtLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 		quantitySoldLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 
+		setBorder(BorderFactory.createMatteBorder(0,0,2,2, ColorScheme.DARKER_GRAY_COLOR.darker()));
 		revalidate();
 		repaint();
 	}
@@ -278,9 +272,10 @@ public class StatItemPanel extends JPanel
 	private JPanel subInfoPanel(JLabel[] descriptionLabels, JLabel[] valueLabels)
 	{
 		JPanel subInfoContainer = new JPanel();
+		subInfoContainer.setBackground(CustomColors.DARK_GRAY);
 		subInfoContainer.setLayout(new DynamicGridLayout(valueLabels.length, descriptionLabels.length));
+		subInfoContainer.setBorder(new EmptyBorder(0,0,6,0));
 
-		boolean useAltColor = false;
 		for (int i = 0; i < descriptionLabels.length; i++)
 		{
 			JLabel textLabel = descriptionLabels[i];
@@ -291,9 +286,7 @@ public class StatItemPanel extends JPanel
 			panel.add(valLabel, BorderLayout.EAST);
 
 			panel.setBorder(new EmptyBorder(4, 2, 4, 2));
-
-			panel.setBackground(useAltColor ? CustomColors.DARK_GRAY_ALT_ROW_COLOR : ColorScheme.DARKER_GRAY_COLOR);
-			useAltColor = !useAltColor;
+			panel.setBackground(CustomColors.DARK_GRAY);
 
 			textLabel.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 
@@ -311,6 +304,7 @@ public class StatItemPanel extends JPanel
 		boolean shouldExpandTradeHistory = statsPanel.getExpandedTradeHistories().contains(flippingItem.getItemName());
 		boolean shouldSelectOffersTab = statsPanel.getItemsWithOffersTabSelected().contains(flippingItem.getItemId());
 		JPanel tradeHistoryTitlePanel = new JPanel(new BorderLayout());
+		tradeHistoryTitlePanel.setBackground(CustomColors.DARK_GRAY);
 		tradeHistoryTitlePanel.setBorder(TRADE_HISTORY_BORDER);
 
 		JPanel mainDisplay = new JPanel();
@@ -343,7 +337,8 @@ public class StatItemPanel extends JPanel
 		tabGroup.setVisible(shouldExpandTradeHistory);
 
 		JLabel collapseTradeHistoryIconLabel = new JLabel(shouldExpandTradeHistory ? Icons.OPEN_ICON : Icons.CLOSE_ICON);
-		JLabel tradeHistoryTitleLabel = new JLabel("Trade History", SwingConstants.CENTER);
+		JLabel tradeHistoryTitleLabel = new JLabel("View Trade History", SwingConstants.CENTER);
+		tradeHistoryTitleLabel.setFont(new Font(FontManager.getRunescapeSmallFont().getName(), Font.ITALIC, tradeHistoryTitleLabel.getFont().getSize()));
 		tradeHistoryTitlePanel.add(tradeHistoryTitleLabel, BorderLayout.CENTER);
 		tradeHistoryTitlePanel.add(collapseTradeHistoryIconLabel, BorderLayout.EAST);
 		tradeHistoryTitlePanel.addMouseListener(new MouseAdapter()
