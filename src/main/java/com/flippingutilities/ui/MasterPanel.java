@@ -129,7 +129,7 @@ public class MasterPanel extends PluginPanel
 		topPanel.setBorder(new EmptyBorder(0,0,10,0));
 
 		JLabel topLabel = new JLabel("Join discord for bot dump alerts!", JLabel.CENTER);
-		topLabel.setForeground(ColorScheme.BRAND_ORANGE.brighter());
+		topLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
 		topLabel.setFont(FontManager.getRunescapeSmallFont());
 		topLabel.setBackground(CustomColors.DARK_GRAY);
 
@@ -212,7 +212,6 @@ public class MasterPanel extends PluginPanel
 		communityPanel.add(centerPanel, BorderLayout.CENTER);
 
 		JLabel profileButton = new JLabel(Icons.USER);
-		profileButton.setToolTipText("yeeeet three ");
 		profileButton.setBorder(new EmptyBorder(0,15,10,0));
 		profileButton.addMouseListener(new MouseAdapter() {
 			@Override
@@ -230,6 +229,10 @@ public class MasterPanel extends PluginPanel
 				profileButton.setIcon(Icons.USER);
 			}
 		});
+
+		JPopupMenu profilePopup = new JPopupMenu();
+		profilePopup.add(new JLabel("Click to login!"));
+		UIUtilities.addPopupOnHover(profileButton, profilePopup, false);
 
 		communityPanel.add(profileButton, BorderLayout.WEST);
 		return communityPanel;
