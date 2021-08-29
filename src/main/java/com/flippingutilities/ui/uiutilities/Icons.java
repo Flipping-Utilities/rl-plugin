@@ -185,17 +185,17 @@ public class Icons {
         DOWNLOAD_ICON = new ImageIcon(downloadIcon);
         DONWLOAD_ICON_OFF = new ImageIcon(ImageUtil.alphaOffset(downloadIcon, 0.53f));
 
-        final BufferedImage githubIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/github.png");
+        final BufferedImage githubIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/github-alch.png");
         final BufferedImage githubIconOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/githubon.png");
         GITHUB_ICON = new ImageIcon(githubIcon);
         GITHUB_ICON_ON = new ImageIcon(githubIconOn);
 
-        final BufferedImage twitterIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/twitter.png");
+        final BufferedImage twitterIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/twitter-alch.png");
         final BufferedImage twitterIconOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/twitteron.png");
         TWITTER_ICON = new ImageIcon(twitterIcon);
         TWITTER_ICON_ON = new ImageIcon(twitterIconOn);
 
-        final BufferedImage discordIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discord.png");
+        final BufferedImage discordIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discord-alch.png");
         final BufferedImage discordIconOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discordon.png");
         DISCORD_ICON = new ImageIcon(discordIcon);
         DISCORD_ICON_ON = new ImageIcon(discordIconOn);
@@ -262,7 +262,8 @@ public class Icons {
         QUESTION_MARK = new ImageIcon(questionMark);
 
         final BufferedImage userIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-cheese.png");
-        USER_HOVER = new ImageIcon(userIcon);
-        USER = new ImageIcon(ImageUtil.alphaOffset(userIcon, 0.53f));
+        final BufferedImage userIconCheese = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-alch.png");
+        USER_HOVER = new ImageIcon(userIconCheese);
+        USER = new ImageIcon(userIcon);
     }
 }

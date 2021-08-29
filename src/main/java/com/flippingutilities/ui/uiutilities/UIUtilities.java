@@ -117,7 +117,7 @@ public class UIUtilities
 			+ new String[] {"", "K", "M", "B", "T"}[(int) (power / 3)];
 	}
 
-	public static JDialog createModalFromPanel(Component parent, JPanel panel)
+	public static JDialog createModalFromPanel(Component parent, JComponent panel)
 	{
 		JDialog modal = new JDialog();
 		modal.add(panel);
@@ -201,6 +201,9 @@ public class UIUtilities
 	}
 
 	public static void addPopupOnHover(JComponent component, JPopupMenu popup, boolean above) {
+		//can't really achieve this well with a modal (Jdialog) cause it opens up a window with an "X" button
+		//and so on. Whereas this just opens up popup menu with no border so this is more suited for the on hover
+		//popups.
 		component.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseEntered(MouseEvent e) {

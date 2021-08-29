@@ -332,12 +332,12 @@ public class FlippingItemPanel extends JPanel
 		searchCodePanel.setBorder(new EmptyBorder(0,0,0,4));
 		searchCodePanel.setBackground(CustomColors.DARK_GRAY);
 		searchCodePanel.setPreferredSize(new Dimension(0,20));
-		searchCodeLabel = new JLabel("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), CustomColors.VIBRANT_YELLOW) + "</html>", JLabel.CENTER);
+		searchCodeLabel = new JLabel("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>", JLabel.CENTER);
 		if (flippingItem.isFavorite()) {
 			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_PRICE) + "</html>");
 		}
 		else {
-			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", CustomColors.VIBRANT_YELLOW) + "</html>");
+			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
 		}
 		searchCodeLabel.setToolTipText("<html>If you have favorited this item, you can type the search code when you are <br>" +
 				"searching for items in the ge to populate your ge results with any item with this code</html>");
@@ -394,7 +394,7 @@ public class FlippingItemPanel extends JPanel
 
 			flippingItem.setFavoriteCode(searchCodeTextField.getText());
 
-			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), CustomColors.VIBRANT_YELLOW) + "</html>");
+			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
 
 			searchCodePanel.remove(searchCodeTextField);
 			searchCodePanel.add(searchCodeLabel);
@@ -735,7 +735,7 @@ public class FlippingItemPanel extends JPanel
 					searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_PRICE) + "</html>");
 				}
 				else {
-					searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", CustomColors.VIBRANT_YELLOW) + "</html>");
+					searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
 				}
 			}
 
