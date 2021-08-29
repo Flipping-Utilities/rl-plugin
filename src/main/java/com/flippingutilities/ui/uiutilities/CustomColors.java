@@ -11,4 +11,5 @@ public class CustomColors {
     public static final Color TOMATO = new Color(255,99,71);
     public static final Color DARK_GRAY_LIGHTER = new Color(32, 32, 32);
     public static final Color OFF_WHITE = new Color(207, 201, 201);
+    public static final Color CHEESE = new Color(255, 197, 0);
 }

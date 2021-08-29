@@ -46,15 +46,12 @@ import net.runelite.client.ui.components.materialtabs.MaterialTabGroup;
 import net.runelite.client.util.LinkBrowser;
 
 import javax.swing.*;
-import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.ItemEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.font.TextAttribute;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -62,12 +59,7 @@ public class MasterPanel extends PluginPanel
 {
 	@Getter
 	private JComboBox<String> accountSelector;
-
-	@Getter
-	private JLabel settingsButton;
-
 	private FlippingPlugin plugin;
-
 	private FastTabGroup tabGroup;
 
 	/**
@@ -82,7 +74,6 @@ public class MasterPanel extends PluginPanel
 	public MasterPanel(FlippingPlugin plugin,
 					   FlippingPanel flippingPanel,
 					   StatsPanel statPanel,
-					   SettingsPanel settingsPanel,
 					   SlotsPanel slotsPanel)
 	{
 		super(false);
@@ -94,18 +85,12 @@ public class MasterPanel extends PluginPanel
 		JPanel mainDisplay = new JPanel();
 
 		accountSelector = accountSelector();
-		JDialog modal = UIUtilities.createModalFromPanel(this, settingsPanel);
-		modal.setTitle("Settings");
-		settingsButton = settingsButton(() ->
-		{
-			modal.setVisible(true);
-			settingsPanel.rebuild();
-			modal.pack();
-		});
 
 		tabGroup = tabSelector(mainDisplay, flippingPanel, statPanel, slotsPanel);
-		JPanel header = Header(accountSelector, settingsButton, tabGroup);
-		header.setBorder(BorderFactory.createMatteBorder(0,0,4,0, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		JPanel header = createHeader(accountSelector, tabGroup);
+		header.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(0,0,4,0, ColorScheme.DARKER_GRAY_COLOR.darker()),
+				BorderFactory.createEmptyBorder(0,0,5,0)));
 		add(header, BorderLayout.NORTH);
 		add(mainDisplay, BorderLayout.CENTER);
 	}
@@ -116,48 +101,40 @@ public class MasterPanel extends PluginPanel
 	 * flipping or stats tab.
 	 *
 	 * @param accountSelector the account selector dropdown
-	 * @param settingsButton  a button which opens up a modal for altering settings
 	 * @param tabSelector     a tab group with allows a user to select either the flipping or stats tab to view.
 	 * @return a jpanel representing the header.
 	 */
-	private JPanel Header(JComboBox accountSelector, JLabel settingsButton, MaterialTabGroup tabSelector)
+	private JPanel createHeader(JComboBox accountSelector, MaterialTabGroup tabSelector)
 	{
-		settingsButton.setBorder(new EmptyBorder(0,0,2,0));
-
 		JPanel accountSelectorPanel = new JPanel(new BorderLayout());
 		accountSelectorPanel.setBackground(CustomColors.DARK_GRAY);
 		accountSelectorPanel.add(accountSelector, BorderLayout.CENTER);
 		accountSelectorPanel.setBorder(new EmptyBorder(0,0,4,0));
 
-		JPanel tabGroupArea = new JPanel(new BorderLayout());
-		tabGroupArea.setBackground(CustomColors.DARK_GRAY);
-		tabGroupArea.add(tabSelector, BorderLayout.CENTER);
-		tabGroupArea.add(settingsButton, BorderLayout.EAST);
-		tabGroupArea.add(communityPanel(), BorderLayout.NORTH);
-
 		JPanel header = new JPanel(new BorderLayout());
 		header.setBackground(CustomColors.DARK_GRAY);
 		header.add(accountSelectorPanel, BorderLayout.NORTH);
-		header.add(tabGroupArea, BorderLayout.CENTER);
-
+		header.add(createCommunityPanel(), BorderLayout.CENTER);
+		header.add(tabSelector, BorderLayout.SOUTH);
+		header.setBorder(new EmptyBorder(0,0,3,0));
 		return header;
 	}
 
-	private JPanel communityPanel() {
+	private JPanel createCommunityPanel() {
 		JPanel communityPanel = new JPanel(new BorderLayout());
 		communityPanel.setBackground(CustomColors.DARK_GRAY);
 
 		JPanel topPanel = new JPanel();
 		topPanel.setBackground(CustomColors.DARK_GRAY);
+		topPanel.setBorder(new EmptyBorder(0,0,10,0));
 
 		JLabel topLabel = new JLabel("Join discord for bot dump alerts!", JLabel.CENTER);
-		topLabel.setForeground(CustomColors.VIBRANT_YELLOW);
+		topLabel.setForeground(ColorScheme.BRAND_ORANGE.brighter());
 		topLabel.setFont(FontManager.getRunescapeSmallFont());
 		topLabel.setBackground(CustomColors.DARK_GRAY);
 
 		JLabel questionMarkLabel = new JLabel(Icons.QUESTION_MARK);
 		JPopupMenu popup = new JPopupMenu();
-		//popup.setPreferredSize(new Dimension(100,100));
 		popup.add(new JLabel(Icons.DUMP_ALERT_PIC));
 		UIUtilities.addPopupOnHover(questionMarkLabel, popup, false);
 
@@ -165,6 +142,7 @@ public class MasterPanel extends PluginPanel
 		topPanel.add(questionMarkLabel);
 
 		JPanel centerPanel = new JPanel();
+		centerPanel.setBorder(new EmptyBorder(0,0,6,43));
 
 		JLabel githubIcon = new JLabel(Icons.GITHUB_ICON);
 		githubIcon.setToolTipText("Click to go to Flipping Utilities github");
@@ -232,6 +210,28 @@ public class MasterPanel extends PluginPanel
 
 		communityPanel.add(topPanel, BorderLayout.NORTH);
 		communityPanel.add(centerPanel, BorderLayout.CENTER);
+
+		JLabel profileButton = new JLabel(Icons.USER);
+		profileButton.setToolTipText("yeeeet three ");
+		profileButton.setBorder(new EmptyBorder(0,15,10,0));
+		profileButton.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent e) {
+				super.mousePressed(e);
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				profileButton.setIcon(Icons.USER_HOVER);
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				profileButton.setIcon(Icons.USER);
+			}
+		});
+
+		communityPanel.add(profileButton, BorderLayout.WEST);
 		return communityPanel;
 	}
 
@@ -308,7 +308,6 @@ public class MasterPanel extends PluginPanel
 		MaterialTab statisticsTab = new MaterialTab("stats", tabGroup, statPanel);
 		MaterialTab slotsTab = new MaterialTab("slots", tabGroup, slotsPanel);
 
-		tabGroup.setBorder(new EmptyBorder(0, 20, 3, 0));
 		tabGroup.addTab(slotsTab);
 		tabGroup.addTab(flippingTab);
 		tabGroup.addTab(statisticsTab);

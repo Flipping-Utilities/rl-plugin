@@ -104,6 +104,9 @@ public class Icons {
 
     public static final ImageIcon QUESTION_MARK;
 
+    public static final ImageIcon USER;
+    public static final ImageIcon USER_HOVER;
+
     static
     {
         final BufferedImage openIcon = ImageUtil
@@ -255,7 +258,11 @@ public class Icons {
         final BufferedImage dumpPic = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/dumpwithprofit.png");
         DUMP_ALERT_PIC = new ImageIcon(dumpPic.getScaledInstance(450, 300, Image.SCALE_SMOOTH));
 
-        final BufferedImage questionMark = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/questionmark.png");
+        final BufferedImage questionMark = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/question-mark.png");
         QUESTION_MARK = new ImageIcon(questionMark);
+
+        final BufferedImage userIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-cheese.png");
+        USER_HOVER = new ImageIcon(userIcon);
+        USER = new ImageIcon(ImageUtil.alphaOffset(userIcon, 0.53f));
     }
 }

@@ -67,6 +67,7 @@ public class OfferPanel extends JPanel {
 
         JPanel deleteIconPanel = new JPanel(new BorderLayout());
         JLabel trashIcon = new JLabel(Icons.TRASH_CAN_OFF);
+        deleteIconPanel.add(trashIcon, BorderLayout.CENTER);
         trashIcon.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -75,7 +76,7 @@ public class OfferPanel extends JPanel {
                     return;
                 }
                 //Display warning message
-                final int result = JOptionPane.showOptionDialog(new JLabel(Icons.TRASH_CAN_ON), "Are you sure you want to delete this offer?",
+                final int result = JOptionPane.showOptionDialog(trashIcon, "Are you sure you want to delete this offer?",
                         "Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
                         null, new String[]{"Yes", "No"}, "No");
 
@@ -97,7 +98,7 @@ public class OfferPanel extends JPanel {
             }
         });
 
-        deleteIconPanel.add(trashIcon, BorderLayout.CENTER);
+
         body.add(deleteIconPanel);
 
         add(title, BorderLayout.NORTH);
