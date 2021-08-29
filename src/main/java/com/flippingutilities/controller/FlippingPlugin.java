@@ -191,10 +191,9 @@ public class FlippingPlugin extends Plugin {
 
         flippingPanel = new FlippingPanel(this, itemManager, executor);
         statPanel = new StatsPanel(this, itemManager, executor);
-        settingsPanel = new SettingsPanel(this);
         geHistoryTabPanel = new GeHistoryTabPanel(this);
         slotsPanel = new SlotsPanel(itemManager);
-        masterPanel = new MasterPanel(this, flippingPanel, statPanel, settingsPanel, slotsPanel);
+        masterPanel = new MasterPanel(this, flippingPanel, statPanel, slotsPanel);
         masterPanel.addView(geHistoryTabPanel, "ge history");
         navButton = NavigationButton.builder()
                 .tooltip("Flipping Utilities")
