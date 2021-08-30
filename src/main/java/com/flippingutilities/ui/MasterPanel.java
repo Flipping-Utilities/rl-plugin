@@ -41,6 +41,7 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.ComboBoxListRenderer;
+import net.runelite.client.ui.components.IconTextField;
 import net.runelite.client.ui.components.materialtabs.MaterialTab;
 import net.runelite.client.ui.components.materialtabs.MaterialTabGroup;
 import net.runelite.client.util.LinkBrowser;
@@ -123,23 +124,24 @@ public class MasterPanel extends PluginPanel
 	private JPanel createCommunityPanel() {
 		JPanel communityPanel = new JPanel(new BorderLayout());
 		communityPanel.setBackground(CustomColors.DARK_GRAY);
+		communityPanel.setBorder(new EmptyBorder(7,0,0,0));
 
-		JPanel topPanel = new JPanel();
-		topPanel.setBackground(CustomColors.DARK_GRAY);
-		topPanel.setBorder(new EmptyBorder(0,0,10,0));
-
-		JLabel topLabel = new JLabel("Join discord for bot dump alerts!", JLabel.CENTER);
-		topLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-		topLabel.setFont(FontManager.getRunescapeSmallFont());
-		topLabel.setBackground(CustomColors.DARK_GRAY);
-
-		JLabel questionMarkLabel = new JLabel(Icons.QUESTION_MARK);
-		JPopupMenu popup = new JPopupMenu();
-		popup.add(new JLabel(Icons.DUMP_ALERT_PIC));
-		UIUtilities.addPopupOnHover(questionMarkLabel, popup, false);
-
-		topPanel.add(topLabel);
-		topPanel.add(questionMarkLabel);
+//		JPanel topPanel = new JPanel();
+//		topPanel.setBackground(CustomColors.DARK_GRAY);
+//		topPanel.setBorder(new EmptyBorder(0,0,10,0));
+//
+//		JLabel topLabel = new JLabel("Join discord for bot dump alerts!", JLabel.CENTER);
+//		topLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+//		topLabel.setFont(FontManager.getRunescapeSmallFont());
+//		topLabel.setBackground(CustomColors.DARK_GRAY);
+//
+//		JLabel questionMarkLabel = new JLabel(Icons.QUESTION_MARK);
+//		JPopupMenu popup = new JPopupMenu();
+//		popup.add(new JLabel(Icons.DUMP_ALERT_PIC));
+//		UIUtilities.addPopupOnHover(questionMarkLabel, popup, false);
+//
+//		topPanel.add(topLabel);
+//		topPanel.add(questionMarkLabel);
 
 		JPanel centerPanel = new JPanel();
 		centerPanel.setBorder(new EmptyBorder(0,0,6,43));
@@ -208,15 +210,17 @@ public class MasterPanel extends PluginPanel
 		centerPanel.add(twitterIcon);
 		centerPanel.add(githubIcon);
 
-		communityPanel.add(topPanel, BorderLayout.NORTH);
+		//communityPanel.add(topPanel, BorderLayout.NORTH);
 		communityPanel.add(centerPanel, BorderLayout.CENTER);
 
 		JLabel profileButton = new JLabel(Icons.USER);
 		profileButton.setBorder(new EmptyBorder(0,15,10,0));
+		JDialog loginModal = UIUtilities.createModalFromPanel(profileButton, createLoginPanel());
+		loginModal.pack();
 		profileButton.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
-				super.mousePressed(e);
+				loginModal.setVisible(true);
 			}
 
 			@Override
@@ -236,6 +240,54 @@ public class MasterPanel extends PluginPanel
 
 		communityPanel.add(profileButton, BorderLayout.WEST);
 		return communityPanel;
+	}
+
+	private JPanel createLoginPanel() {
+		JPanel loginPanel = new JPanel(new BorderLayout());
+		loginPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		loginPanel.setBorder(new EmptyBorder(20,40,20,40));
+
+		JPanel header = new JPanel();
+		JLabel headerText = new JLabel();
+		header.setForeground(CustomColors.CHEESE);
+		JLabel fuIcon = new JLabel(Icons.FU_ICON, JLabel.CENTER);
+		header.add(fuIcon);
+
+		JPanel middlePanel = new JPanel(new BorderLayout());
+		middlePanel.setBorder(new EmptyBorder(20,0,20,0));
+		middlePanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+		IconTextField tokenField = new IconTextField();
+		tokenField.setBackground(CustomColors.DARK_GRAY);
+		tokenField.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()),
+				BorderFactory.createEmptyBorder(10,0,10,0)));
+
+		JLabel tokenFieldDescriptor = new JLabel("TOKEN", JLabel.LEFT);
+		tokenFieldDescriptor.setFont(new Font("Whitney", Font.BOLD, 12));
+		tokenFieldDescriptor.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+		tokenFieldDescriptor.setBorder(new EmptyBorder(0,0,5,0));
+
+		middlePanel.add(tokenFieldDescriptor, BorderLayout.NORTH);
+		middlePanel.add(tokenField, BorderLayout.CENTER);
+
+		JPanel loginButtonWrapper = new JPanel();
+		loginButtonWrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+		JLabel loginButton = new JLabel("Login", JLabel.CENTER);
+		loginButton.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0,0,0,0, ColorScheme.GRAND_EXCHANGE_PRICE.darker()),new EmptyBorder(10,20,10,20))
+		);
+		loginButton.setFont(new Font("Whitney", Font.BOLD, 12));
+		loginButton.setBackground(ColorScheme.GRAND_EXCHANGE_PRICE);
+		loginButton.setOpaque(true);
+
+		loginButtonWrapper.add(loginButton);
+
+		loginPanel.add(header, BorderLayout.NORTH);
+		loginPanel.add(middlePanel, BorderLayout.CENTER);
+		loginPanel.add(loginButtonWrapper, BorderLayout.SOUTH);
+
+		return loginPanel;
 	}
 
 	/**

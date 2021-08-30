@@ -181,7 +181,7 @@ public class StatItemPanel extends JPanel
 		quantityBoughtLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 		quantitySoldLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 
-		setBorder(BorderFactory.createMatteBorder(0,0,2,2, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 		revalidate();
 		repaint();
 	}

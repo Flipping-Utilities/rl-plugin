@@ -135,7 +135,7 @@ public class FlippingPanel extends JPanel
 
 		IconTextField searchBar = UIUtilities.createSearchBar(executor,
 				(sBar) -> plugin.getClientThread().invoke(() -> this.updateSearch(sBar)));
-		searchBar.setBorder(BorderFactory.createMatteBorder(0,0,2,2, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		searchBar.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 
 		final JPanel topPanel = new JPanel(new BorderLayout());
 		topPanel.setBorder(new EmptyBorder(0,10,2,10));

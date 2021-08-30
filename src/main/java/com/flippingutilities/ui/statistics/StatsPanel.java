@@ -233,7 +233,7 @@ public class StatsPanel extends JPanel
 		JComboBox<String> timeIntervalDropdown = new JComboBox<>(TIME_INTERVAL_STRINGS);
 		timeIntervalDropdown.setRenderer(new ComboBoxListRenderer());
 		timeIntervalDropdown.setEditable(true);
-		timeIntervalDropdown.setBorder(BorderFactory.createMatteBorder(0,0,2,2, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		timeIntervalDropdown.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 		timeIntervalDropdown.setBackground(CustomColors.DARK_GRAY_LIGHTER);
 		//setting the selected item as session before the item listener is attached so it doesn't fire a rebuild.
 		timeIntervalDropdown.setSelectedItem("Session");
@@ -731,7 +731,7 @@ public class StatsPanel extends JPanel
 	private JPanel createTopPanel() {
 		JPanel topPanel = new JPanel(new BorderLayout());
 		IconTextField searchBar = UIUtilities.createSearchBar(this.executor, this::updateSearch);
-		searchBar.setBorder(BorderFactory.createMatteBorder(0,0,2,2, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		searchBar.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 
 		JPanel searchAndDownloadPanel = new JPanel(new BorderLayout());
 		searchAndDownloadPanel.add(searchBar, BorderLayout.CENTER);
@@ -766,7 +766,7 @@ public class StatsPanel extends JPanel
 		sortDropdown.setSelectedItem("Most Recent");
 		sortDropdown.setRenderer(new ComboBoxListRenderer());
 		sortDropdown.setEditable(true);
-		sortDropdown.setBorder(BorderFactory.createMatteBorder(0,0,2,2, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		sortDropdown.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 		sortDropdown.setPreferredSize(new Dimension(sortDropdown.getWidth(), 32));
 		sortDropdown.setFocusable(false);
 		sortDropdown.setBackground(CustomColors.DARK_GRAY_LIGHTER);
@@ -807,7 +807,7 @@ public class StatsPanel extends JPanel
 		//Contains the total profit information.
 		JPanel totalProfitPanel = new JPanel(new BorderLayout());
 		totalProfitPanel.setBackground(CustomColors.DARK_GRAY);
-		totalProfitPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0,0,0,4, ColorScheme.DARKER_GRAY_COLOR.darker()),
+		totalProfitPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1,1,0,1, ColorScheme.DARKER_GRAY_COLOR.darker()),
 				new EmptyBorder(7,0,7,0)));
 		totalProfitPanel.add(profitTextAndVal, BorderLayout.CENTER);
 		totalProfitPanel.add(arrowIcon, BorderLayout.EAST);
@@ -826,7 +826,7 @@ public class StatsPanel extends JPanel
 						//Collapse sub info
 						arrowIcon.setIcon(Icons.CLOSE_ICON);
 						subInfoPanel.setVisible(false);
-						totalProfitPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0,0,4,4, ColorScheme.DARKER_GRAY_COLOR.darker()),
+						totalProfitPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()),
 								new EmptyBorder(7,0,7,0)));
 					}
 					else
@@ -834,7 +834,7 @@ public class StatsPanel extends JPanel
 						//Expand sub info
 						arrowIcon.setIcon(Icons.OPEN_ICON);
 						subInfoPanel.setVisible(true);
-						totalProfitPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0,0,0,4, ColorScheme.DARKER_GRAY_COLOR.darker()),
+						totalProfitPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1,1,0,1, ColorScheme.DARKER_GRAY_COLOR.darker()),
 								new EmptyBorder(7,0,7,0)));
 					}
 				}
@@ -876,7 +876,7 @@ public class StatsPanel extends JPanel
 		subInfoPanel.setBackground(CustomColors.DARK_GRAY);
 		subInfoPanel.setBorder(new EmptyBorder(9, 5, 5, 5));
 		subInfoPanel.setBorder(BorderFactory.createCompoundBorder(
-				BorderFactory.createMatteBorder(0,0,4,4, ColorScheme.DARKER_GRAY_COLOR.darker()),
+				BorderFactory.createMatteBorder(0,2,2,2, ColorScheme.DARKER_GRAY_COLOR.darker()),
 				new EmptyBorder(2, 5, 5, 5)));
 		return subInfoPanel;
 	}

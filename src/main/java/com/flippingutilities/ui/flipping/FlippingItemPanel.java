@@ -116,7 +116,7 @@ public class FlippingItemPanel extends JPanel
 		setBackground(CustomColors.DARK_GRAY);
 		setLayout(new BorderLayout());
 		setBorder(new CompoundBorder(
-				new MatteBorder(1, 0, 4, 4, ColorScheme.DARKER_GRAY_COLOR.darker()),
+				new MatteBorder(2, 2, 2, 2, ColorScheme.DARKER_GRAY_COLOR.darker()),
 				new EmptyBorder(10,5,0,0)));
 
 		setToolTipText("Flipped by " + flippingItem.getFlippedBy());
