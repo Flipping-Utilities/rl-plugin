@@ -38,6 +38,7 @@ import com.flippingutilities.ui.uiutilities.UIUtilities;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.ComboBoxListRenderer;
@@ -47,7 +48,9 @@ import net.runelite.client.ui.components.materialtabs.MaterialTabGroup;
 import net.runelite.client.util.LinkBrowser;
 
 import javax.swing.*;
+import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.MatteBorder;
 import java.awt.*;
 import java.awt.event.ItemEvent;
 import java.awt.event.MouseAdapter;
@@ -165,25 +168,6 @@ public class MasterPanel extends PluginPanel
 			}
 		});
 
-		JLabel discordIcon = new JLabel(Icons.DISCORD_ICON);
-		discordIcon.setToolTipText("Click to go to Flipping Utilities discord");
-		discordIcon.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mousePressed(MouseEvent e) {
-				LinkBrowser.browse("https://discord.gg/GDqVgMH26s");
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				discordIcon.setIcon(Icons.DISCORD_ICON_ON);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				discordIcon.setIcon(Icons.DISCORD_ICON);
-			}
-		});
-
 		JLabel twitterIcon = new JLabel(Icons.TWITTER_ICON);
 		twitterIcon.setToolTipText("Click to go to Flipping Utilities twitter");
 		twitterIcon.addMouseListener(new MouseAdapter() {
@@ -206,7 +190,7 @@ public class MasterPanel extends PluginPanel
 
 		//centerPanel.setBorder(new EmptyBorder(4,0,0,0));
 		centerPanel.setBackground(CustomColors.DARK_GRAY);
-		centerPanel.add(discordIcon);
+		centerPanel.add(createDiscordButton(Icons.DISCORD_ICON));
 		centerPanel.add(twitterIcon);
 		centerPanel.add(githubIcon);
 
@@ -245,10 +229,87 @@ public class MasterPanel extends PluginPanel
 	private JPanel createLoginPanel() {
 		JPanel loginPanel = new JPanel(new BorderLayout());
 		loginPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-		loginPanel.setBorder(new EmptyBorder(20,40,20,40));
+		loginPanel.setBorder(new EmptyBorder(20,40,20,25));
+
+		JPanel centerPanelWrapper = new JPanel(new BorderLayout());
+		centerPanelWrapper.setBorder(new EmptyBorder(0,30,0,30));
+
+		JPanel centerPanel = new JPanel();
+		centerPanel.setBorder(new MatteBorder(1,1,1,1, ColorScheme.MEDIUM_GRAY_COLOR));
+		centerPanel.setPreferredSize(new Dimension(1, centerPanel.getHeight()));
+
+		centerPanelWrapper.add(centerPanel, BorderLayout.CENTER);
+
+		loginPanel.add(createTokenPanel(), BorderLayout.WEST);
+		loginPanel.add(centerPanelWrapper, BorderLayout.CENTER);
+		loginPanel.add(createLoginInstructionsPanel(), BorderLayout.EAST);
+		return loginPanel;
+	}
+
+	private JPanel createLoginInstructionsPanel() {
+		JPanel instructionsPanel = new JPanel(new BorderLayout());
 
 		JPanel header = new JPanel();
-		JLabel headerText = new JLabel();
+		header.setForeground(CustomColors.CHEESE);
+		JLabel informationIcon = new JLabel(Icons.INFORMATION, JLabel.CENTER);
+		header.add(informationIcon);
+		instructionsPanel.add(header, BorderLayout.NORTH);
+
+		JPanel stepsPanel = new JPanel(new DynamicGridLayout(4, 0, 0, 0));
+
+		JPanel firstStepPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		JLabel firstStepNumber = new JLabel("<html>1. </html>");
+		firstStepNumber.setFont(new Font("Whitney", Font.BOLD, 14));
+		firstStepNumber.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+		JLabel firstStepDesc = new JLabel("Join our discord", JLabel.LEFT);
+		firstStepDesc.setFont(new Font("Whitney", Font.PLAIN, 12));
+		firstStepDesc.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+		firstStepPanel.add(firstStepNumber);
+		firstStepPanel.add(firstStepDesc);
+		firstStepPanel.add(createDiscordButton(Icons.DISCORD_CHEESE));
+
+		JPanel secondStepPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		JLabel secondStepDesc = new JLabel("Type !login in the bot channel");
+		secondStepDesc.setFont(new Font("Whitney", Font.PLAIN, 12));
+		secondStepDesc.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+		JLabel secondStepNumber = new JLabel("<html>2. </html>");
+		secondStepNumber.setFont(new Font("Whitney", Font.BOLD, 14));
+		secondStepNumber.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+		secondStepPanel.add(secondStepNumber);
+		secondStepPanel.add(secondStepDesc);
+
+		JPanel thirdStepPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		JLabel thirdStepNumber = new JLabel("<html>3. </html>");
+		thirdStepNumber.setFont(new Font("Whitney", Font.BOLD, 14));
+		thirdStepNumber.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+		JLabel thirdStepDesc = new JLabel("Enter the token here");
+		thirdStepDesc.setFont(new Font("Whitney", Font.PLAIN, 12));
+		thirdStepDesc.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+		thirdStepPanel.add(thirdStepNumber);
+		thirdStepPanel.add(thirdStepDesc);
+
+		stepsPanel.add(firstStepPanel);
+		stepsPanel.add(secondStepPanel);
+		stepsPanel.add(thirdStepPanel);
+
+		JLabel bottomText = new JLabel("<html>You will only have to do this once</html>");
+		bottomText.setFont(new Font("Whitney", Font.BOLD + Font.ITALIC, 10));
+		bottomText.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+		bottomText.setBorder(new EmptyBorder(35,0,0,0));
+
+		stepsPanel.add(bottomText);
+
+
+		instructionsPanel.add(stepsPanel, BorderLayout.SOUTH);
+
+		return instructionsPanel;
+	}
+
+	private JPanel createTokenPanel() {
+		JPanel tokenPanel = new JPanel(new BorderLayout());
+		tokenPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+		JPanel header = new JPanel();
 		header.setForeground(CustomColors.CHEESE);
 		JLabel fuIcon = new JLabel(Icons.FU_ICON, JLabel.CENTER);
 		header.add(fuIcon);
@@ -262,6 +323,7 @@ public class MasterPanel extends PluginPanel
 		tokenField.setBorder(BorderFactory.createCompoundBorder(
 				BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()),
 				BorderFactory.createEmptyBorder(10,0,10,0)));
+		tokenField.setPreferredSize(new Dimension(140, 40));
 
 		JLabel tokenFieldDescriptor = new JLabel("TOKEN", JLabel.LEFT);
 		tokenFieldDescriptor.setFont(new Font("Whitney", Font.BOLD, 12));
@@ -280,14 +342,52 @@ public class MasterPanel extends PluginPanel
 		loginButton.setFont(new Font("Whitney", Font.BOLD, 12));
 		loginButton.setBackground(ColorScheme.GRAND_EXCHANGE_PRICE);
 		loginButton.setOpaque(true);
+		loginButton.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent e) {
+				super.mousePressed(e);
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				loginButton.setBackground(ColorScheme.GRAND_EXCHANGE_PRICE.brighter());
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				loginButton.setBackground(ColorScheme.GRAND_EXCHANGE_PRICE);
+			}
+		});
 
 		loginButtonWrapper.add(loginButton);
 
-		loginPanel.add(header, BorderLayout.NORTH);
-		loginPanel.add(middlePanel, BorderLayout.CENTER);
-		loginPanel.add(loginButtonWrapper, BorderLayout.SOUTH);
+		tokenPanel.add(header, BorderLayout.NORTH);
+		tokenPanel.add(middlePanel, BorderLayout.CENTER);
+		tokenPanel.add(loginButtonWrapper, BorderLayout.SOUTH);
 
-		return loginPanel;
+		return tokenPanel;
+	}
+
+	private JLabel createDiscordButton(ImageIcon icon) {
+		JLabel discordIcon = new JLabel(icon);
+		discordIcon.setToolTipText("Click to go to Flipping Utilities discord");
+		discordIcon.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent e) {
+				LinkBrowser.browse("https://discord.gg/GDqVgMH26s");
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				discordIcon.setIcon(Icons.DISCORD_ICON_ON);
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				discordIcon.setIcon(icon);
+			}
+		});
+		return discordIcon;
 	}
 
 	/**
