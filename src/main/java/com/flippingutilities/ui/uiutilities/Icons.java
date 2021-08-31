@@ -68,6 +68,7 @@ public class Icons {
 
     public static final ImageIcon DISCORD_ICON;
     public static final ImageIcon DISCORD_ICON_ON;
+    public static final ImageIcon DISCORD_CHEESE;
 
     public static final ImageIcon TWITTER_ICON;
     public static final ImageIcon TWITTER_ICON_ON;
@@ -108,6 +109,8 @@ public class Icons {
     public static final ImageIcon USER_HOVER;
 
     public static final ImageIcon FU_ICON;
+
+    public static final ImageIcon INFORMATION;
 
     static
     {
@@ -199,8 +202,10 @@ public class Icons {
 
         final BufferedImage discordIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discord-alch.png");
         final BufferedImage discordIconOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discordon.png");
+        final BufferedImage discordCheese = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discord-cheese.png");
         DISCORD_ICON = new ImageIcon(discordIcon);
         DISCORD_ICON_ON = new ImageIcon(discordIconOn);
+        DISCORD_CHEESE = new ImageIcon(discordCheese);
 
         final BufferedImage plusIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/plus.png");
         PLUS_ICON = new ImageIcon(plusIcon.getScaledInstance(24,24,Image.SCALE_SMOOTH));
@@ -263,12 +268,15 @@ public class Icons {
         final BufferedImage questionMark = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/question-mark.png");
         QUESTION_MARK = new ImageIcon(questionMark);
 
-        final BufferedImage userIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-cheese.png");
-        final BufferedImage userIconCheese = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-alch.png");
+        final BufferedImage userIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-alch.png");
+        final BufferedImage userIconCheese = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-cheese.png");
         USER_HOVER = new ImageIcon(userIconCheese);
         USER = new ImageIcon(userIcon);
 
         final BufferedImage fuIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/graph_icon_green.png");
         FU_ICON = new ImageIcon(fuIcon);
+
+        final BufferedImage informationIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/key.png");
+        INFORMATION = new ImageIcon(informationIcon);
     }
 }
