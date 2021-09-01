@@ -107,7 +107,7 @@ public class FlippingPanel extends JPanel
 
 		//Holds all the item panels
 		flippingItemsPanel.setLayout(new BoxLayout(flippingItemsPanel, BoxLayout.Y_AXIS));
-		flippingItemsPanel.setBorder((new EmptyBorder(0, 9, 0, 7)));
+		flippingItemsPanel.setBorder((new EmptyBorder(0, 8, 0, 7)));
 		flippingItemsPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
 		JPanel wrapper = new JPanel(new BorderLayout());
@@ -131,14 +131,13 @@ public class FlippingPanel extends JPanel
 
 		flippingItemContainer.add(scrollPane, ITEMS_PANEL);
 		flippingItemContainer.add(welcomeWrapper, WELCOME_PANEL);
-		flippingItemContainer.setBorder(new EmptyBorder(0, 0, 0, 0));
 
 		IconTextField searchBar = UIUtilities.createSearchBar(executor,
 				(sBar) -> plugin.getClientThread().invoke(() -> this.updateSearch(sBar)));
 		searchBar.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 
 		final JPanel topPanel = new JPanel(new BorderLayout());
-		topPanel.setBorder(new EmptyBorder(0,10,2,10));
+		topPanel.setBorder(new EmptyBorder(0,8,2,10));
 		topPanel.add(searchBar, BorderLayout.CENTER);
 		topPanel.add(this.createFavoriteButton(), BorderLayout.EAST);
 
