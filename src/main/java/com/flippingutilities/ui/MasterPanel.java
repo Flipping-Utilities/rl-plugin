@@ -28,7 +28,6 @@ package com.flippingutilities.ui;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.ui.flipping.FlippingPanel;
-import com.flippingutilities.ui.settings.SettingsPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
@@ -39,7 +38,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
-import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.ComboBoxListRenderer;
 import net.runelite.client.ui.components.IconTextField;
@@ -231,31 +229,63 @@ public class MasterPanel extends PluginPanel
 		loginPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		loginPanel.setBorder(new EmptyBorder(20,40,20,25));
 
-		JPanel centerPanelWrapper = new JPanel(new BorderLayout());
-		centerPanelWrapper.setBorder(new EmptyBorder(0,30,0,30));
-
-		JPanel centerPanel = new JPanel();
-		centerPanel.setBorder(new MatteBorder(1,1,1,1, ColorScheme.MEDIUM_GRAY_COLOR));
-		centerPanel.setPreferredSize(new Dimension(1, centerPanel.getHeight()));
-
-		centerPanelWrapper.add(centerPanel, BorderLayout.CENTER);
-
-		loginPanel.add(createTokenPanel(), BorderLayout.WEST);
-		loginPanel.add(centerPanelWrapper, BorderLayout.CENTER);
+		loginPanel.add(createFeaturesPanel(), BorderLayout.WEST);
+		loginPanel.add(createTokenPanel(), BorderLayout.CENTER);
 		loginPanel.add(createLoginInstructionsPanel(), BorderLayout.EAST);
 		return loginPanel;
 	}
 
+	private JPanel createFeaturesPanel() {
+		JPanel featuresPanel = new JPanel(new BorderLayout());
+		featuresPanel.setBorder(new EmptyBorder(0,0,0,20));
+
+		JLabel flashIcon = new JLabel(Icons.FLASH, JLabel.CENTER);
+
+		JLabel headingText = new JLabel("<html>LOGIN TO...</html>");
+		headingText.setFont(new Font("Whitney", Font.BOLD, 14));
+		headingText.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+		headingText.setBorder(new EmptyBorder(0,0,4,0));
+
+		JPanel featuresListPanel = new JPanel(new DynamicGridLayout(4, 0, 0, 0));
+
+		JPanel firstFeaturePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		JLabel firstFeatureDesc = new JLabel(String.format("<html><div WIDTH=%d>%s</div></html>", 180, "Get discord DMs when offers complete or you are undercut, even when logged out of rs!"));
+		firstFeatureDesc.setFont(new Font("Whitney", Font.PLAIN, 12));
+		firstFeatureDesc.setForeground(CustomColors.SOFT_ALCH);
+		firstFeaturePanel.add(firstFeatureDesc);
+
+		JPanel secondFeaturePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		JLabel secondFeatureDesc = new JLabel(String.format("<html><div WIDTH=%d>%s</div></html>", 180, "View the current state of your offers on discord!"));
+		secondFeatureDesc.setFont(new Font("Whitney", Font.PLAIN, 12));
+		secondFeatureDesc.setForeground(CustomColors.SOFT_ALCH);
+		secondFeaturePanel.add(secondFeatureDesc);
+
+		JLabel bottomText = new JLabel("<html>More features are in development!</html>");
+		bottomText.setFont(new Font("Whitney", Font.BOLD + Font.ITALIC, 10));
+		bottomText.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+		bottomText.setBorder(new EmptyBorder(25,0,0,0));
+
+		featuresListPanel.add(headingText);
+		featuresListPanel.add(firstFeaturePanel);
+		featuresListPanel.add(secondFeaturePanel);
+		featuresListPanel.add(bottomText);
+
+		featuresPanel.add(flashIcon, BorderLayout.NORTH);
+		featuresPanel.add(featuresListPanel, BorderLayout.SOUTH);
+
+		return featuresPanel;
+	}
+
 	private JPanel createLoginInstructionsPanel() {
 		JPanel instructionsPanel = new JPanel(new BorderLayout());
+		instructionsPanel.setBorder(new EmptyBorder(0,20,0,0));
 
-		JPanel header = new JPanel();
-		header.setForeground(CustomColors.CHEESE);
-		JLabel informationIcon = new JLabel(Icons.INFORMATION, JLabel.CENTER);
-		header.add(informationIcon);
-		instructionsPanel.add(header, BorderLayout.NORTH);
+		JLabel keyIcon = new JLabel(Icons.KEY, JLabel.CENTER);
 
-		JPanel stepsPanel = new JPanel(new DynamicGridLayout(4, 0, 0, 0));
+		JLabel headingText = new JLabel("<html>GETTING A TOKEN</html>");
+		headingText.setFont(new Font("Whitney", Font.BOLD, 14));
+		headingText.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+		headingText.setBorder(new EmptyBorder(0,0,7,0));
 
 		JPanel firstStepPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		JLabel firstStepNumber = new JLabel("<html>1. </html>");
@@ -288,18 +318,19 @@ public class MasterPanel extends PluginPanel
 		thirdStepPanel.add(thirdStepNumber);
 		thirdStepPanel.add(thirdStepDesc);
 
-		stepsPanel.add(firstStepPanel);
-		stepsPanel.add(secondStepPanel);
-		stepsPanel.add(thirdStepPanel);
-
 		JLabel bottomText = new JLabel("<html>You will only have to do this once</html>");
 		bottomText.setFont(new Font("Whitney", Font.BOLD + Font.ITALIC, 10));
 		bottomText.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
-		bottomText.setBorder(new EmptyBorder(35,0,0,0));
+		bottomText.setBorder(new EmptyBorder(33,0,0,0));
 
+		JPanel stepsPanel = new JPanel(new DynamicGridLayout(5, 0, 0, 0));
+		stepsPanel.add(headingText);
+		stepsPanel.add(firstStepPanel);
+		stepsPanel.add(secondStepPanel);
+		stepsPanel.add(thirdStepPanel);
 		stepsPanel.add(bottomText);
 
-
+		instructionsPanel.add(keyIcon, BorderLayout.NORTH);
 		instructionsPanel.add(stepsPanel, BorderLayout.SOUTH);
 
 		return instructionsPanel;
@@ -308,6 +339,10 @@ public class MasterPanel extends PluginPanel
 	private JPanel createTokenPanel() {
 		JPanel tokenPanel = new JPanel(new BorderLayout());
 		tokenPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		tokenPanel.setBorder(new CompoundBorder(
+				new MatteBorder(0,1,0,1, ColorScheme.MEDIUM_GRAY_COLOR),
+				new EmptyBorder(0,30,0,30)
+				));
 
 		JPanel header = new JPanel();
 		header.setForeground(CustomColors.CHEESE);
@@ -323,7 +358,7 @@ public class MasterPanel extends PluginPanel
 		tokenField.setBorder(BorderFactory.createCompoundBorder(
 				BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()),
 				BorderFactory.createEmptyBorder(10,0,10,0)));
-		tokenField.setPreferredSize(new Dimension(140, 40));
+		tokenField.setPreferredSize(new Dimension(170, 40));
 
 		JLabel tokenFieldDescriptor = new JLabel("TOKEN", JLabel.LEFT);
 		tokenFieldDescriptor.setFont(new Font("Whitney", Font.BOLD, 12));
