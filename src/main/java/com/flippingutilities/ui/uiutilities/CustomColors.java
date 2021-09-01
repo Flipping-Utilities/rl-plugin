@@ -12,4 +12,5 @@ public class CustomColors {
     public static final Color DARK_GRAY_LIGHTER = new Color(32, 32, 32);
     public static final Color OFF_WHITE = new Color(207, 201, 201);
     public static final Color CHEESE = new Color(255, 197, 0);
+    public static final Color SOFT_ALCH = new Color(202, 186, 153);
 }

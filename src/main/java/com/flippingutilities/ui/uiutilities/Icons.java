@@ -110,7 +110,9 @@ public class Icons {
 
     public static final ImageIcon FU_ICON;
 
-    public static final ImageIcon INFORMATION;
+    public static final ImageIcon KEY;
+
+    public static final ImageIcon FLASH;
 
     static
     {
@@ -276,7 +278,10 @@ public class Icons {
         final BufferedImage fuIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/graph_icon_green.png");
         FU_ICON = new ImageIcon(fuIcon);
 
-        final BufferedImage informationIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/key.png");
-        INFORMATION = new ImageIcon(informationIcon);
+        final BufferedImage keyIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/key.png");
+        KEY = new ImageIcon(keyIcon);
+
+        final BufferedImage flashIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/flash-cheese.png");
+        FLASH = new ImageIcon(flashIcon);
     }
 }
