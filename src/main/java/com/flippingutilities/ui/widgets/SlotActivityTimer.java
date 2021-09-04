@@ -72,7 +72,7 @@ public class SlotActivityTimer
 	private Instant tradeStartTime;
 	private OfferEvent currentOffer;
 	//is true when we get an offer from when the account was logged out which means we don't know when it occurred.
-	private transient boolean offerOccurredAtUnknownTime;
+	private boolean offerOccurredAtUnknownTime;
 
 	public SlotActivityTimer(FlippingPlugin plugin, Client client, int slotIndex)
 	{
@@ -90,6 +90,7 @@ public class SlotActivityTimer
 
 	public void setCurrentOffer(OfferEvent offer)
 	{
+		log.info("setting offer: {}", offer);
 		if (offer.isBeforeLogin()) {
 			offerOccurredAtUnknownTime = true;
 			return;

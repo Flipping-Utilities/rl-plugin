@@ -3,6 +3,8 @@ package com.flippingutilities.utilities;
 import com.flippingutilities.model.OfferEvent;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 
 import java.time.Instant;
@@ -10,16 +12,18 @@ import java.util.Date;
 
 @Data
 @AllArgsConstructor
+@NoArgsConstructor
 public class SlotState {
-    private boolean isBuyOffer;
-    private int itemId;
-    private int filledQty;
+    public static final transient String DATE_FORMAT = "YYYY-MM-dd'T'HH:mm:ss.sssZ";
+    private Boolean isBuyOffer;
+    private Integer itemId;
+    private Integer filledQty;
     private Date lastFilledTimestamp;
     private int index;
     private GrandExchangeOfferState state;
-    private int offerQty;
-    private int offerPrice;
-    private int filledPrice;
+    private Integer offerQty;
+    private Integer offerPrice;
+    private Integer filledPrice;
     private Date createdAt;
     private String rsn;
 
@@ -34,11 +38,17 @@ public class SlotState {
                 offerEvent.getTotalQuantityInTrade(),
                 offerEvent.getListedPrice(),
                 offerEvent.getPrice(),
-                Date.from(offerEvent.getTradeStartedAt()),
+                offerEvent.getTradeStartedAt() != null? Date.from(offerEvent.getTradeStartedAt()): null,
                 offerEvent.getMadeBy()
         );
     }
+
+    /**
+     * GSON will exclude null fields when seralizing objects so
+     */
+    public static SlotState createEmptySlot(int index) {
+        SlotState emptySlot = new SlotState();
+        emptySlot.index = index;
+        return emptySlot;
+    }
 }
-//
-//@Data
-//class EmptySlotStatel

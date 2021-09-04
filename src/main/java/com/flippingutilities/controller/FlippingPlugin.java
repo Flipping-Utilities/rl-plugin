@@ -486,7 +486,7 @@ public class FlippingPlugin extends Plugin {
         wikiDataFetcherJob.subscribe(this::onWikiFetch);
         wikiDataFetcherJob.start();
 
-        //new SlotStateSenderJob(this, httpClient).start();
+        new SlotStateSenderJob(this, httpClient).start();
     }
 
     private void onWikiFetch(WikiRequest wikiRequest, Instant timeOfRequestCompletion) {
