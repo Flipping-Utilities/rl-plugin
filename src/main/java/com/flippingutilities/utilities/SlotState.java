@@ -6,29 +6,39 @@ import lombok.Data;
 import net.runelite.api.GrandExchangeOfferState;
 
 import java.time.Instant;
+import java.util.Date;
 
 @Data
 @AllArgsConstructor
 public class SlotState {
-    private boolean buy;
+    private boolean isBuyOffer;
     private int itemId;
-    private int currentQuantityInTrade;
-    private Instant time;
-    private int slot;
+    private int filledQty;
+    private Date lastFilledTimestamp;
+    private int index;
     private GrandExchangeOfferState state;
-    private int totalQuantityInTrade;
-    private int listedPrice;
+    private int offerQty;
+    private int offerPrice;
+    private int filledPrice;
+    private Date createdAt;
+    private String rsn;
 
     public static SlotState fromOfferEvent(OfferEvent offerEvent) {
         return new SlotState(
                 offerEvent.isBuy(),
                 offerEvent.getItemId(),
                 offerEvent.getCurrentQuantityInTrade(),
-                offerEvent.getTime(),
+                Date.from(offerEvent.getTime()),
                 offerEvent.getSlot(),
                 offerEvent.getState(),
                 offerEvent.getTotalQuantityInTrade(),
-                offerEvent.getListedPrice()
+                offerEvent.getListedPrice(),
+                offerEvent.getPrice(),
+                Date.from(offerEvent.getTradeStartedAt()),
+                offerEvent.getMadeBy()
         );
     }
 }
+//
+//@Data
+//class EmptySlotStatel

@@ -127,72 +127,18 @@ public class MasterPanel extends PluginPanel
 		communityPanel.setBackground(CustomColors.DARK_GRAY);
 		communityPanel.setBorder(new EmptyBorder(7,0,0,0));
 
-//		JPanel topPanel = new JPanel();
-//		topPanel.setBackground(CustomColors.DARK_GRAY);
-//		topPanel.setBorder(new EmptyBorder(0,0,10,0));
-//
-//		JLabel topLabel = new JLabel("Join discord for bot dump alerts!", JLabel.CENTER);
-//		topLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-//		topLabel.setFont(FontManager.getRunescapeSmallFont());
-//		topLabel.setBackground(CustomColors.DARK_GRAY);
-//
-//		JLabel questionMarkLabel = new JLabel(Icons.QUESTION_MARK);
-//		JPopupMenu popup = new JPopupMenu();
-//		popup.add(new JLabel(Icons.DUMP_ALERT_PIC));
-//		UIUtilities.addPopupOnHover(questionMarkLabel, popup, false);
-//
-//		topPanel.add(topLabel);
-//		topPanel.add(questionMarkLabel);
-
 		JPanel centerPanel = new JPanel();
 		centerPanel.setBorder(new EmptyBorder(0,0,6,43));
 
-		JLabel githubIcon = new JLabel(Icons.GITHUB_ICON);
-		githubIcon.setToolTipText("Click to go to Flipping Utilities github");
-		githubIcon.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mousePressed(MouseEvent e) {
-				LinkBrowser.browse("https://github.com/Belieal/flipping-utilities");
-			}
+		JLabel githubIcon = this.createIcon(Icons.GITHUB_ICON, Icons.GITHUB_ICON_ON, "https://github.com/Belieal/flipping-utilities", "Click to go to Flipping Utilities github");
+		JLabel twitterIcon = this.createIcon(Icons.TWITTER_ICON, Icons.TWITTER_ICON_ON, "https://twitter.com/flippingutils", "Click to go to Flipping Utilities twitter");
+		JLabel discordIcon = this.createIcon(Icons.DISCORD_ICON, Icons.DISCORD_ICON_ON, "https://discord.gg/GDqVgMH26s","Click to go to Flipping Utilities discord");
 
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				githubIcon.setIcon(Icons.GITHUB_ICON_ON);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				githubIcon.setIcon(Icons.GITHUB_ICON);
-			}
-		});
-
-		JLabel twitterIcon = new JLabel(Icons.TWITTER_ICON);
-		twitterIcon.setToolTipText("Click to go to Flipping Utilities twitter");
-		twitterIcon.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mousePressed(MouseEvent e) {
-				LinkBrowser.browse("https://twitter.com/flippingutils");
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				twitterIcon.setIcon(Icons.TWITTER_ICON_ON);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				twitterIcon.setIcon(Icons.TWITTER_ICON);
-			}
-		});
-
-
-		//centerPanel.setBorder(new EmptyBorder(4,0,0,0));
 		centerPanel.setBackground(CustomColors.DARK_GRAY);
-		centerPanel.add(createDiscordButton(Icons.DISCORD_ICON));
+		centerPanel.add(discordIcon);
 		centerPanel.add(twitterIcon);
 		centerPanel.add(githubIcon);
 
-		//communityPanel.add(topPanel, BorderLayout.NORTH);
 		communityPanel.add(centerPanel, BorderLayout.CENTER);
 
 		JLabel profileButton = new JLabel(Icons.USER);
@@ -296,7 +242,7 @@ public class MasterPanel extends PluginPanel
 		firstStepDesc.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 		firstStepPanel.add(firstStepNumber);
 		firstStepPanel.add(firstStepDesc);
-		firstStepPanel.add(createDiscordButton(Icons.DISCORD_CHEESE));
+		firstStepPanel.add(this.createIcon(Icons.DISCORD_CHEESE, Icons.DISCORD_ICON_ON,"https://discord.gg/GDqVgMH26s","Click to go to Flipping Utilities twitter"));
 
 		JPanel secondStepPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		JLabel secondStepDesc = new JLabel("Type !login in the bot channel");
@@ -403,28 +349,6 @@ public class MasterPanel extends PluginPanel
 		return tokenPanel;
 	}
 
-	private JLabel createDiscordButton(ImageIcon icon) {
-		JLabel discordIcon = new JLabel(icon);
-		discordIcon.setToolTipText("Click to go to Flipping Utilities discord");
-		discordIcon.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mousePressed(MouseEvent e) {
-				LinkBrowser.browse("https://discord.gg/GDqVgMH26s");
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				discordIcon.setIcon(Icons.DISCORD_ICON_ON);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				discordIcon.setIcon(icon);
-			}
-		});
-		return discordIcon;
-	}
-
 	/**
 	 * This is the dropdown at the top of the header which allows the user to select which account they want to view.
 	 * Its only set to visible if the user has more than once account with a trading history.
@@ -449,38 +373,6 @@ public class MasterPanel extends PluginPanel
 		});
 
 		return viewSelectorDropdown;
-	}
-
-	/**
-	 * This is the button that you click on to view the setting modal. It is only visible if the account selector is
-	 * visible.
-	 *
-	 * @param callback the callback executed when the button is clicked.
-	 * @return the settings button
-	 */
-	private JLabel settingsButton(Runnable callback)
-	{
-		JLabel button = new JLabel(Icons.SETTINGS_ICON_OFF);
-		button.setToolTipText("Open Settings Panel");
-		button.setPreferredSize(Icons.ICON_SIZE);
-		button.addMouseListener(new MouseAdapter()
-		{
-			public void mouseClicked(MouseEvent e)
-			{
-				callback.run();
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				button.setIcon(Icons.SETTINGS_ICON);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				button.setIcon(Icons.SETTINGS_ICON_OFF);
-			}
-		});
-		return button;
 	}
 
 	/**
@@ -555,5 +447,27 @@ public class MasterPanel extends PluginPanel
 		} else {
 			accountSelector.setVisible(false);
 		}
+	}
+
+	private JLabel createIcon(ImageIcon base, ImageIcon hover, String url, String tooltip) {
+		JLabel iconLabel = new JLabel(base);
+		iconLabel.setToolTipText(tooltip);
+		iconLabel.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent e) {
+				LinkBrowser.browse(url);
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				iconLabel.setIcon(hover);
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				iconLabel.setIcon(base);
+			}
+		});
+		return iconLabel;
 	}
 }

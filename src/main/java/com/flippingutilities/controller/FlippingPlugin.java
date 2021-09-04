@@ -28,6 +28,7 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.db.TradePersister;
+import com.flippingutilities.jobs.SlotStateSenderJob;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.MasterPanel;
 import com.flippingutilities.ui.flipping.FlippingPanel;
@@ -484,6 +485,8 @@ public class FlippingPlugin extends Plugin {
         wikiDataFetcherJob = new WikiDataFetcherJob(this, httpClient);
         wikiDataFetcherJob.subscribe(this::onWikiFetch);
         wikiDataFetcherJob.start();
+
+        //new SlotStateSenderJob(this, httpClient).start();
     }
 
     private void onWikiFetch(WikiRequest wikiRequest, Instant timeOfRequestCompletion) {

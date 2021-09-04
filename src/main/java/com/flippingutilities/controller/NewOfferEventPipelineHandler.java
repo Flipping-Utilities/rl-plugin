@@ -4,13 +4,13 @@ import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.WorldType;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.http.api.item.ItemStats;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.time.Instant;
+import java.util.*;
 
 @Slf4j
 public class NewOfferEventPipelineHandler {
@@ -30,6 +30,12 @@ public class NewOfferEventPipelineHandler {
      */
     @Subscribe
     public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged offerChangedEvent) {
+        EnumSet<WorldType> currentWorldType = this.plugin.getClient().getWorldType();
+        EnumSet<WorldType> excludedWorldTypes = EnumSet.of(WorldType.LEAGUE, WorldType.DEADMAN);
+        if (!Collections.disjoint(currentWorldType, excludedWorldTypes)) {
+            return;
+        }
+
         if (plugin.getCurrentlyLoggedInAccount() == null) {
             OfferEvent newOfferEvent = createOfferEvent(offerChangedEvent);
             //event came in before account was fully logged in. This means that the offer actually came through
@@ -126,14 +132,17 @@ public class NewOfferEventPipelineHandler {
             return Optional.empty();
         }
 
+        //is null when an offer was removed or perhaps the slot has an offer but that offer was made
+        //outside the plugin, so the lastOfferEvent for that slot is still null.
         if (lastOfferEvent == null) {
-            //if statement below should really only trigger if an offer was made outside the plugin. For example,
-            //user puts in an offer on mobile, then logs into runelite. lastOfferEvent would be null, but on login,
-            //they would get the three batches of events, two of which would not be empty slot events.
             if (!newOfferEvent.isCausedByEmptySlot()) {
                 lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
                 slotActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
             }
+            if (newOfferEvent.isStartOfOffer()) {
+                newOfferEvent.setTradeStartedAt(Instant.now());
+            }
+
             return Optional.empty();
         }
 
@@ -158,21 +167,15 @@ public class NewOfferEventPipelineHandler {
             return Optional.empty();
         }
 
-        //since this is after the empty slot event checks, this if statement usually catches start of trade offer events
-        if (newOfferEvent.getCurrentQuantityInTrade() == 0) {
-            slotActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
-            lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
-            return Optional.empty();
-        }
-
         if (newOfferEvent.isRedundantEventBeforeOfferCompletion()) {
             return Optional.empty();
         }
 
         newOfferEvent.setTicksSinceFirstOffer(lastOfferEvent);
+        newOfferEvent.setTradeStartedAt(lastOfferEvent.getTradeStartedAt());
         lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
         slotActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
-        return Optional.of(newOfferEvent);
+        return newOfferEvent.getTotalQuantityInTrade() ==0? Optional.empty() : Optional.of(newOfferEvent);
     }
 
     /**
