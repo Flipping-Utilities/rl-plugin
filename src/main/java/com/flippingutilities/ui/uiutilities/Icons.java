@@ -107,6 +107,7 @@ public class Icons {
 
     public static final ImageIcon USER;
     public static final ImageIcon USER_HOVER;
+    public static final ImageIcon USER_LOGGED_IN;
 
     public static final ImageIcon FU_ICON;
 
@@ -272,8 +273,10 @@ public class Icons {
 
         final BufferedImage userIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-alch.png");
         final BufferedImage userIconCheese = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-cheese.png");
+        final BufferedImage userIconLoggedIn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-loggedin.png");
         USER_HOVER = new ImageIcon(userIconCheese);
         USER = new ImageIcon(userIcon);
+        USER_LOGGED_IN = new ImageIcon(userIconLoggedIn);
 
         final BufferedImage fuIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/graph_icon_green.png");
         FU_ICON = new ImageIcon(fuIcon);

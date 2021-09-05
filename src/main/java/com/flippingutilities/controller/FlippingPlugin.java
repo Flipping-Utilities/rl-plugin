@@ -33,6 +33,7 @@ import com.flippingutilities.model.*;
 import com.flippingutilities.ui.MasterPanel;
 import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.gehistorytab.GeHistoryTabPanel;
+import com.flippingutilities.ui.login.LoginPanel;
 import com.flippingutilities.ui.settings.SettingsPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
@@ -134,6 +135,7 @@ public class FlippingPlugin extends Plugin {
     @Getter
     private GeHistoryTabPanel geHistoryTabPanel;
     private SettingsPanel settingsPanel;
+    private LoginPanel loginPanel;
 
     //this flag is to know that when we see the login screen an account has actually logged out and its not just that the
     //client has started.
@@ -176,6 +178,8 @@ public class FlippingPlugin extends Plugin {
     private GameUiChangesHandler gameUiChangesHandler;
     private NewOfferEventPipelineHandler newOfferEventPipelineHandler;
     @Getter
+    private ApiLoginHandler apiLoginHandler;
+    @Getter
     private WikiDataFetcherJob wikiDataFetcherJob;
 
     @Getter
@@ -189,12 +193,15 @@ public class FlippingPlugin extends Plugin {
         dataHandler = new DataHandler(this);
         gameUiChangesHandler = new GameUiChangesHandler(this);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
+        apiLoginHandler = new ApiLoginHandler(this);
 
         flippingPanel = new FlippingPanel(this, itemManager, executor);
         statPanel = new StatsPanel(this, itemManager, executor);
         geHistoryTabPanel = new GeHistoryTabPanel(this);
         slotsPanel = new SlotsPanel(itemManager);
-        masterPanel = new MasterPanel(this, flippingPanel, statPanel, slotsPanel);
+        loginPanel = new LoginPanel(this);
+
+        masterPanel = new MasterPanel(this, flippingPanel, statPanel, slotsPanel, loginPanel);
         masterPanel.addView(geHistoryTabPanel, "ge history");
         navButton = NavigationButton.builder()
                 .tooltip("Flipping Utilities")
@@ -216,6 +223,7 @@ public class FlippingPlugin extends Plugin {
             dataHandler.loadData();
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
+            apiLoginHandler.login();
             startJobs();
 
             //this is only relevant if the user downloads/enables the plugin after they login.

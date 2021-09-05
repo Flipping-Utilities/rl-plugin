@@ -32,6 +32,7 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.IconTextField;
 import net.runelite.client.util.ColorUtil;
+import net.runelite.client.util.LinkBrowser;
 import net.runelite.client.util.QuantityFormatter;
 import net.runelite.client.util.SwingUtil;
 
@@ -218,5 +219,27 @@ public class UIUtilities
 				popup.setVisible(false);
 			}
 		});
+	}
+
+	public static JLabel createIcon(ImageIcon base, ImageIcon hover, String url, String tooltip) {
+		JLabel iconLabel = new JLabel(base);
+		iconLabel.setToolTipText(tooltip);
+		iconLabel.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent e) {
+				LinkBrowser.browse(url);
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				iconLabel.setIcon(hover);
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				iconLabel.setIcon(base);
+			}
+		});
+		return iconLabel;
 	}
 }
