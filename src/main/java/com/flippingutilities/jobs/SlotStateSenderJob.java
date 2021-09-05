@@ -87,7 +87,6 @@ public class SlotStateSenderJob {
                     setPreviouslySentSlots.run();
                 }
             });
-
         }
         catch (Exception e) {
             log.info("Exception when sending slots", e);
