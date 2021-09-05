@@ -36,7 +36,7 @@ public class SlotStateSenderJob {
     }
 
     public void start() {
-        slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 5,1, TimeUnit.MINUTES);
+        slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 5,1, TimeUnit.SECONDS);
         log.info("started slot sender job");
     }
 
@@ -52,12 +52,16 @@ public class SlotStateSenderJob {
         if (plugin.getCurrentlyLoggedInAccount() == null) {
             return;
         }
+
         try {
             List<SlotState> currentSlotStates = this.getCurrentSlots();
             if (currentSlotStates.equals(this.previouslySentSlotState)) {
                 log.info("no updates to slots since the last time I sent them, not sending any requests.");
                 return;
             }
+            currentSlotStates.forEach((slotState -> {
+                log.info("slot: {}", slotState);
+            }));
             SlotsRequest slotsRequest = new SlotsRequest(plugin.getCurrentlyLoggedInAccount(), currentSlotStates);
             String json = new Gson().newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(slotsRequest);
             Runnable setPreviouslySentSlots = () -> this.previouslySentSlotState = currentSlotStates;
@@ -114,11 +118,13 @@ public class SlotStateSenderJob {
         Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
         List<SlotState> slotStates = new ArrayList<>();
         for (int i=0; i<8;i++) {
+            GrandExchangeOffer grandExchangeOffer = plugin.getClient().getGrandExchangeOffers()[i];
             //the offer event constructed from the true offer retrieved from client.getGrandExchangeOffers()
             OfferEvent trueOfferInSlot = this.getOfferEventConstructedFromClient(i);
 
             if (lastOfferEventForEachSlot.containsKey(i)) {
                 OfferEvent lastOfferEventForSlotTrackedByPlugin = lastOfferEventForEachSlot.get(i);
+                lastOfferEventForSlotTrackedByPlugin.setListedPrice(grandExchangeOffer.getPrice());
                 //when tracked offer is the same, prefer to use it as it has more info.
                 if (lastOfferEventForSlotTrackedByPlugin.isDuplicate(trueOfferInSlot)) {
                     slotStates.add(SlotState.fromOfferEvent(lastOfferEventForSlotTrackedByPlugin));
