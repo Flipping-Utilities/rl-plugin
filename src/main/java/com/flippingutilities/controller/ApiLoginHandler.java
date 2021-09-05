@@ -38,6 +38,7 @@ public class ApiLoginHandler {
     }
 
     public void login(String token, Runnable onSuccess, Runnable onFailure) {
+        log.info("attempting to login!");
         OkHttpClient httpClient = plugin.getHttpClient();
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
