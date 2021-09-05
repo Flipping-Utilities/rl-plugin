@@ -2,7 +2,9 @@ package com.flippingutilities.jobs;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.utilities.ApiUrl;
 import com.flippingutilities.utilities.SlotState;
+import com.flippingutilities.utilities.SlotsRequest;
 import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GrandExchangeOffer;
@@ -20,28 +22,21 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class SlotStateSenderJob {
-    String API;
+    String api = ApiUrl.getBaseUrl();
     FlippingPlugin plugin;
     ScheduledExecutorService executor;
     OkHttpClient httpClient;
     Future slotStateSenderTask;
     List<SlotState> previouslySentSlotState;
 
-
     public SlotStateSenderJob(FlippingPlugin plugin, OkHttpClient httpClient) {
         this.plugin = plugin;
         this.httpClient = httpClient;
         this.executor = Executors.newSingleThreadScheduledExecutor();
-        if (System.getenv("apiurl") == null) {
-            API = "something";
-        }
-        else {
-            API = System.getenv("apiurl");
-        }
     }
 
     public void start() {
-        slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 5,1, TimeUnit.SECONDS);
+        slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 5,1, TimeUnit.MINUTES);
         log.info("started slot sender job");
     }
 
@@ -53,6 +48,7 @@ public class SlotStateSenderJob {
     }
 
     private void sendSlots() {
+        //TODO if user hasn't authenticated yet also should return
         if (plugin.getCurrentlyLoggedInAccount() == null) {
             return;
         }
@@ -62,33 +58,33 @@ public class SlotStateSenderJob {
                 log.info("no updates to slots since the last time I sent them, not sending any requests.");
                 return;
             }
-            String json = new Gson().newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(currentSlotStates);
+            SlotsRequest slotsRequest = new SlotsRequest(plugin.getCurrentlyLoggedInAccount(), currentSlotStates);
+            String json = new Gson().newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(slotsRequest);
             Runnable setPreviouslySentSlots = () -> this.previouslySentSlotState = currentSlotStates;
+            String jwt = plugin.getDataHandler().getAccountWideData().getJwt();
             log.info("json slots are {}", json);
             RequestBody body = RequestBody.create(
                     MediaType.parse("application/json"), json);
             Request request = new Request.Builder().
                     header("User-Agent", "FlippingUtilities").
+                    header("Authorization", "bearer" + jwt).
                     post(body).
-                    url(API).
+                    url(api).
                     build();
             httpClient.newCall(request).enqueue(new Callback() {
                 @Override
                 public void onFailure(Call call, IOException e) {
-                    log.info("failed to send slots to api");
+                    log.info("failed to send slots to api", e);
                 }
 
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
-                    try (ResponseBody responseBody = response.body()) {
-                        if (!response.isSuccessful()) {
-                            log.info("The slot endpoint response was not successful. Response: {}", response.toString());
-                            return;
-                        }
-                        //can't reference "this" from inside the inner class...pain
-                        setPreviouslySentSlots.run();
-
+                    if (!response.isSuccessful()) {
+                        log.info("The slot endpoint response was not successful. Response: {}", response.toString());
+                        return;
                     }
+                    //can't reference "this" from inside the inner class...pain
+                    setPreviouslySentSlots.run();
                 }
             });
 
@@ -126,7 +122,6 @@ public class SlotStateSenderJob {
                 OfferEvent lastOfferEventForSlotTrackedByPlugin = lastOfferEventForEachSlot.get(i);
                 //when tracked offer is the same, prefer to use it as it has more info.
                 if (lastOfferEventForSlotTrackedByPlugin.isDuplicate(trueOfferInSlot)) {
-                    log.info("is duplicate!");
                     slotStates.add(SlotState.fromOfferEvent(lastOfferEventForSlotTrackedByPlugin));
                 }
                 //sometimes tracked offer can be incongruent with slot (collected an offer on mobile). In that case, use

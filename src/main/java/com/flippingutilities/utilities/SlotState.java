@@ -25,7 +25,6 @@ public class SlotState {
     private Integer offerPrice;
     private Integer filledPrice;
     private Date createdAt;
-    private String rsn;
 
     public static SlotState fromOfferEvent(OfferEvent offerEvent) {
         return new SlotState(
@@ -38,8 +37,7 @@ public class SlotState {
                 offerEvent.getTotalQuantityInTrade(),
                 offerEvent.getListedPrice(),
                 offerEvent.getPrice(),
-                offerEvent.getTradeStartedAt() != null? Date.from(offerEvent.getTradeStartedAt()): null,
-                offerEvent.getMadeBy()
+                offerEvent.getTradeStartedAt() != null? Date.from(offerEvent.getTradeStartedAt()): null
         );
     }
 

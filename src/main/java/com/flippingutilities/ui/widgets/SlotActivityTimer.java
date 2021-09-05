@@ -90,7 +90,6 @@ public class SlotActivityTimer
 
 	public void setCurrentOffer(OfferEvent offer)
 	{
-		log.info("setting offer: {}", offer);
 		if (offer.isBeforeLogin()) {
 			offerOccurredAtUnknownTime = true;
 			return;
