@@ -1,11 +1,11 @@
 package com.flippingutilities.utilities;
 import java.util.List;
 
-public class SlotsRequest {
+public class SlotsUpdate {
     public final String rsn;
     public final List<SlotState> slots;
 
-    public SlotsRequest(String rsn, List<SlotState> slots) {
+    public SlotsUpdate(String rsn, List<SlotState> slots) {
         this.rsn = rsn;
         this.slots = slots;
     }

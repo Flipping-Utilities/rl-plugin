@@ -22,7 +22,7 @@ public class LoginPanel extends JPanel{
 
     public LoginPanel(FlippingPlugin plugin) {
         this.plugin = plugin;
-        plugin.getApiLoginHandler().addAlwaysRunOnLoginAction(this::showLoggedInView);
+        plugin.getApiLoginHandler().subscribeToLogin(this::showLoggedInView);
         add(createLoggedOutPanel());
     }
 
@@ -226,10 +226,10 @@ public class LoginPanel extends JPanel{
         loginButton.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                plugin.getApiLoginHandler().login(
-                        tokenField.getText(),
-                        () -> {},
-                        () -> SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(loginButton, "Authentication error, contact us on discord for help!", "Authentication error 😔",  JOptionPane.ERROR_MESSAGE)));
+                plugin.getApiLoginHandler().login(tokenField.getText()).exceptionally((exception) -> {
+                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(loginButton, "Authentication error, contact us on discord for help!", "Authentication error 😔",  JOptionPane.ERROR_MESSAGE));
+                    return null;
+                });
             }
 
             @Override

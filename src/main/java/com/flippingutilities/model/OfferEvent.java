@@ -90,6 +90,7 @@ public class OfferEvent
 	private transient String itemName;
 	//used in the live slot view to show what price something was listed at
 	private transient int listedPrice;
+	private transient int spent;
 
 
 	/**
@@ -175,7 +176,9 @@ public class OfferEvent
 			madeBy,
 			beforeLogin,
 			itemName,
-				listedPrice);
+				listedPrice,
+				spent
+		);
 	}
 
 	public boolean equals(Object other)
@@ -242,7 +245,8 @@ public class OfferEvent
 			null,
 			false,
 			null,
-				offer.getPrice());
+				offer.getPrice(),
+				offer.getSpent());
 	}
 
 	/**
@@ -274,6 +278,7 @@ public class OfferEvent
 				"",
 				false,
 				itemName,
+				0,
 				0);
 	}
 }

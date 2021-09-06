@@ -165,6 +165,8 @@ public class FlippingPlugin extends Plugin {
 
     //updates the cache by monitoring the directory and loading a file's contents into the cache if it has been changed
     private CacheUpdaterJob cacheUpdaterJob;
+    private WikiDataFetcherJob wikiDataFetcherJob;
+    private SlotStateSenderJob slotStateSenderJob;
 
     private ScheduledFuture slotTimersTask;
     private Instant startUpTime = Instant.now();
@@ -180,7 +182,10 @@ public class FlippingPlugin extends Plugin {
     @Getter
     private ApiLoginHandler apiLoginHandler;
     @Getter
-    private WikiDataFetcherJob wikiDataFetcherJob;
+    private ApiRequestHandler apiRequestHandler;
+
+
+
 
     @Getter
     private WikiRequest lastWikiRequest;
@@ -194,6 +199,7 @@ public class FlippingPlugin extends Plugin {
         gameUiChangesHandler = new GameUiChangesHandler(this);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
         apiLoginHandler = new ApiLoginHandler(this);
+        apiRequestHandler = new ApiRequestHandler(this);
 
         flippingPanel = new FlippingPanel(this, itemManager, executor);
         statPanel = new StatsPanel(this, itemManager, executor);
@@ -262,6 +268,7 @@ public class FlippingPlugin extends Plugin {
         dataHandler.storeData();
         cacheUpdaterJob.stop();
         wikiDataFetcherJob.stop();
+        slotStateSenderJob.stop();
     }
 
     @Subscribe
@@ -494,7 +501,8 @@ public class FlippingPlugin extends Plugin {
         wikiDataFetcherJob.subscribe(this::onWikiFetch);
         wikiDataFetcherJob.start();
 
-        new SlotStateSenderJob(this, httpClient).start();
+        slotStateSenderJob = new SlotStateSenderJob(this, httpClient);
+        slotStateSenderJob.start();
     }
 
     private void onWikiFetch(WikiRequest wikiRequest, Instant timeOfRequestCompletion) {
