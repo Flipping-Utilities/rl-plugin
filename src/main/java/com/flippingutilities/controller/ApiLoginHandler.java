@@ -5,6 +5,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * This class handles all of the extra logic associated with performing logins.
+ * ALL attempts to login with the api MUST go through this class.
+ * Its main responsibility is ensuring that other components can subscribe to successful logins and fire off some action
+ * whenever a login happens.
+ */
 @Slf4j
 public class ApiLoginHandler {
     FlippingPlugin plugin;

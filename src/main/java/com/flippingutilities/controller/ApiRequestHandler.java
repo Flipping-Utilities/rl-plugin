@@ -17,6 +17,7 @@ import java.util.concurrent.CompletableFuture;
 public class ApiRequestHandler {
     FlippingPlugin plugin;
     OkHttpClient httpClient;
+
     public ApiRequestHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
         this.httpClient = plugin.getHttpClient();
