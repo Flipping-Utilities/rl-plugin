@@ -36,7 +36,7 @@ public class SlotState {
                 offerEvent.getState(),
                 offerEvent.getTotalQuantityInTrade(),
                 offerEvent.getListedPrice(),
-                offerEvent.getPrice(),
+                offerEvent.getSpent(),
                 offerEvent.getTradeStartedAt() != null? Date.from(offerEvent.getTradeStartedAt()): null
         );
     }
