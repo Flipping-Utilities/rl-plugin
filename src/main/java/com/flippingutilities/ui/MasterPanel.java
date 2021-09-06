@@ -147,7 +147,7 @@ public class MasterPanel extends PluginPanel
 		communityPanel.add(centerPanel, BorderLayout.CENTER);
 		MasterPanel m = this;
 		JLabel profileButton = new JLabel(Icons.USER);
-		plugin.getApiLoginHandler().addAlwaysRunOnLoginAction(() -> {
+		plugin.getApiLoginHandler().subscribeToLogin(() -> {
 			profileButton.setIcon(Icons.USER_LOGGED_IN);
 		});
 		profileButton.setBorder(new EmptyBorder(0,15,10,0));

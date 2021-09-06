@@ -2,32 +2,25 @@ package com.flippingutilities.jobs;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.OfferEvent;
-import com.flippingutilities.utilities.ApiUrl;
 import com.flippingutilities.utilities.SlotState;
-import com.flippingutilities.utilities.SlotsRequest;
-import com.google.gson.Gson;
+import com.flippingutilities.utilities.SlotsUpdate;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import okhttp3.*;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 @Slf4j
 public class SlotStateSenderJob {
-    String api = ApiUrl.getBaseUrl();
     FlippingPlugin plugin;
     ScheduledExecutorService executor;
     OkHttpClient httpClient;
     Future slotStateSenderTask;
-    List<SlotState> previouslySentSlotState;
+    SlotsUpdate previouslySentSlotUpdate;
 
     public SlotStateSenderJob(FlippingPlugin plugin, OkHttpClient httpClient) {
         this.plugin = plugin;
@@ -36,7 +29,7 @@ public class SlotStateSenderJob {
     }
 
     public void start() {
-        slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 5,1, TimeUnit.SECONDS);
+        slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 5, 1, TimeUnit.SECONDS);
         log.info("started slot sender job");
     }
 
@@ -53,48 +46,21 @@ public class SlotStateSenderJob {
             return;
         }
 
-        try {
-            List<SlotState> currentSlotStates = this.getCurrentSlots();
-            if (currentSlotStates.equals(this.previouslySentSlotState)) {
-                log.info("no updates to slots since the last time I sent them, not sending any requests.");
-                return;
-            }
-            currentSlotStates.forEach((slotState -> {
-                log.info("slot: {}", slotState);
-            }));
-            SlotsRequest slotsRequest = new SlotsRequest(plugin.getCurrentlyLoggedInAccount(), currentSlotStates);
-            String json = new Gson().newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(slotsRequest);
-            Runnable setPreviouslySentSlots = () -> this.previouslySentSlotState = currentSlotStates;
-            String jwt = plugin.getDataHandler().getAccountWideData().getJwt();
-            log.info("json slots are {}", json);
-            RequestBody body = RequestBody.create(
-                    MediaType.parse("application/json"), json);
-            Request request = new Request.Builder().
-                    header("User-Agent", "FlippingUtilities").
-                    header("Authorization", "bearer" + jwt).
-                    post(body).
-                    url(api).
-                    build();
-            httpClient.newCall(request).enqueue(new Callback() {
-                @Override
-                public void onFailure(Call call, IOException e) {
-                    log.info("failed to send slots to api", e);
-                }
+        List<SlotState> currentSlotStates = this.getCurrentSlots();
+        SlotsUpdate slotsUpdate = new SlotsUpdate(plugin.getCurrentlyLoggedInAccount(), currentSlotStates);
+        if (slotsUpdate.equals(this.previouslySentSlotUpdate)) {
+            log.info("no updates to slots since the last time I sent them, not sending any requests.");
+            return;
+        }
 
-                @Override
-                public void onResponse(Call call, Response response) throws IOException {
-                    if (!response.isSuccessful()) {
-                        log.info("The slot endpoint response was not successful. Response: {}", response.toString());
-                        return;
+        plugin.getApiRequestHandler().updateGeSlots(slotsUpdate)
+                .whenComplete((response, exception) -> {
+                    if (exception != null) {
+                        log.info("could not send slot update successfully", exception);
+                    } else {
+                        previouslySentSlotUpdate = slotsUpdate;
                     }
-                    //can't reference "this" from inside the inner class...pain
-                    setPreviouslySentSlots.run();
-                }
-            });
-        }
-        catch (Exception e) {
-            log.info("Exception when sending slots", e);
-        }
+                });
     }
 
     /**
@@ -105,11 +71,11 @@ public class SlotStateSenderJob {
      * offers in lastOffers in DataHandler is because it may not always reflect the current state of the slot. For
      * example, if someone collected an offer on mobile and then logged into runelite, the slot is empty, but lastOffers
      * won't reflect that.
-     *
+     * <p>
      * Whenever the offer in lastOffers reflects the offer actually in the slot, we prefer to use it over the
      * offer in client.getGrandExchangeOffers(). This is because the offer in lastOffers is decorated with additional
      * info such as the time the trade for the offer was created.
-     *
+     * <p>
      * Whenever the offer in lastOffers does not reflect the offer actually in the slot, we use the offer from
      * client.getGrandExchangeOffers(). However, in this case, the slotState object will have its createdAt field be null
      * as the offer from client.getGrandExchangeOffers() is missing that information.
@@ -117,7 +83,7 @@ public class SlotStateSenderJob {
     private List<SlotState> getCurrentSlots() {
         Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
         List<SlotState> slotStates = new ArrayList<>();
-        for (int i=0; i<8;i++) {
+        for (int i = 0; i < 8; i++) {
             GrandExchangeOffer grandExchangeOffer = plugin.getClient().getGrandExchangeOffers()[i];
             //the offer event constructed from the true offer retrieved from client.getGrandExchangeOffers()
             OfferEvent trueOfferInSlot = this.getOfferEventConstructedFromClient(i);
@@ -125,6 +91,7 @@ public class SlotStateSenderJob {
             if (lastOfferEventForEachSlot.containsKey(i)) {
                 OfferEvent lastOfferEventForSlotTrackedByPlugin = lastOfferEventForEachSlot.get(i);
                 lastOfferEventForSlotTrackedByPlugin.setListedPrice(grandExchangeOffer.getPrice());
+                lastOfferEventForSlotTrackedByPlugin.setSpent(grandExchangeOffer.getSpent());
                 //when tracked offer is the same, prefer to use it as it has more info.
                 if (lastOfferEventForSlotTrackedByPlugin.isDuplicate(trueOfferInSlot)) {
                     slotStates.add(SlotState.fromOfferEvent(lastOfferEventForSlotTrackedByPlugin));
@@ -161,5 +128,4 @@ public class SlotStateSenderJob {
         grandExchangeOfferChanged.setOffer(clientOffer);
         return OfferEvent.fromGrandExchangeEvent(grandExchangeOfferChanged);
     }
-
 }
