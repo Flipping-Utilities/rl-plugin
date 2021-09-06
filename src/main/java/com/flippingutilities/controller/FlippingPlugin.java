@@ -502,7 +502,7 @@ public class FlippingPlugin extends Plugin {
         wikiDataFetcherJob.start();
 
         slotStateSenderJob = new SlotStateSenderJob(this, httpClient);
-        slotStateSenderJob.start();
+        //slotStateSenderJob.start();
     }
 
     private void onWikiFetch(WikiRequest wikiRequest, Instant timeOfRequestCompletion) {
