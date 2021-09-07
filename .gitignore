@@ -3,4 +3,7 @@ build
 .idea/
 out/
 src/.idea/
-
+bin/
+.settings/
+.classpath
+.project
