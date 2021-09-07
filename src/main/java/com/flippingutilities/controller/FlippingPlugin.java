@@ -184,9 +184,6 @@ public class FlippingPlugin extends Plugin {
     @Getter
     private ApiRequestHandler apiRequestHandler;
 
-
-
-
     @Getter
     private WikiRequest lastWikiRequest;
     @Getter
@@ -194,6 +191,8 @@ public class FlippingPlugin extends Plugin {
 
     @Override
     protected void startUp() {
+        accountCurrentlyViewed = ACCOUNT_WIDE;
+
         optionHandler = new OptionHandler(this);
         dataHandler = new DataHandler(this);
         gameUiChangesHandler = new GameUiChangesHandler(this);
@@ -244,6 +243,7 @@ public class FlippingPlugin extends Plugin {
 
     @Override
     protected void shutDown() {
+        log.info("shutdown running!");
         if (generalRepeatingTasks != null) {
             generalRepeatingTasks.cancel(true);
             generalRepeatingTasks = null;
