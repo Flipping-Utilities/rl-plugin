@@ -28,11 +28,17 @@ public class ApiLoginHandler {
     //used to authenticate with the api when the client first opens (as opposed to the authentication attempt when
     //a user clicks the login button on the login panel).
     public void login() {
+
         String token = plugin.getDataHandler().getAccountWideData().getToken();
         if (token == null) {
             log.info("no token stored locally, not attempting to login");
             return;
         }
+
+        //check jwt health
+        //if jwt is outdated, get new one, if we cannot get new one cause the a new token for that user cannot be
+        //generated (cause their premium ran out for example), then we can end this process.
+        //check the rsns claimed by this user
         login(token);
     }
 
