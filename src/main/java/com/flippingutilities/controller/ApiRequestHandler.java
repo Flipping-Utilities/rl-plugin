@@ -26,7 +26,7 @@ public class ApiRequestHandler {
     public static String getBaseUrl() {
         if (System.getenv("apiurl") == null) {
             //TODO replace with actual url of course
-            return "https://discord.com/login/";
+            return "http://localhost:4444/api/";
         }
         else {
             return System.getenv("apiurl");
@@ -34,7 +34,7 @@ public class ApiRequestHandler {
     }
 
     public static String getSlotUpdateUrl() {
-        return getBaseUrl() + "something";
+        return getBaseUrl() + "ge/slots/update";
     }
 
     public static String getTokenUrl() {
