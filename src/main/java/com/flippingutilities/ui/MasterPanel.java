@@ -86,7 +86,7 @@ public class MasterPanel extends PluginPanel
 		JDialog loginModal = UIUtilities.createModalFromPanel(this, loginPanel);
 		loginPanel.addOnViewChange(() -> {
 			loginModal.pack();
-			loginModal.setLocation(this.getLocationOnScreen().x - loginModal.getWidth() - 10 , this.getLocationOnScreen().y - loginModal.getHeight()/2);
+			loginModal.setLocation(this.getLocationOnScreen().x - loginModal.getWidth() - 10 , Math.max(this.getLocationOnScreen().y,0) - loginModal.getHeight()/2 + 100);
 		});
 		loginModal.pack();
 
@@ -149,12 +149,15 @@ public class MasterPanel extends PluginPanel
 		JLabel profileButton = new JLabel(Icons.USER);
 		plugin.getApiLoginHandler().subscribeToLogin(() -> {
 			profileButton.setIcon(Icons.USER_LOGGED_IN);
+			JPopupMenu profilePopup = new JPopupMenu();
+			profilePopup.add(new JLabel("Click to open your profile page!"));
+			UIUtilities.addPopupOnHover(profileButton, profilePopup, false);
 		});
 		profileButton.setBorder(new EmptyBorder(0,15,10,0));
 		profileButton.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
-				loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, m.getLocationOnScreen().y - loginModal.getHeight()/2);
+				loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, Math.max(m.getLocationOnScreen().y - loginModal.getHeight()/2,0) + 100);
 				loginModal.setVisible(true);
 			}
 
