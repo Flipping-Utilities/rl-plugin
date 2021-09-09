@@ -41,7 +41,7 @@ public class FlippingPluginTest
 		Instant baseTime = Instant.now();
 
 		List<OfferEvent> offerEvents = new ArrayList<>();
-		//some empty slot events on loginWithToken
+		//some empty slot events on login
 		offerEvents.add(Utils.offer(false,0,0,baseTime,5,GrandExchangeOfferState.EMPTY,0,0,0));
 		offerEvents.add(Utils.offer(false,0,0,baseTime,6,GrandExchangeOfferState.EMPTY,0,0,0));
 		offerEvents.add(Utils.offer(false,0,0,baseTime,7,GrandExchangeOfferState.EMPTY,0,0,0));

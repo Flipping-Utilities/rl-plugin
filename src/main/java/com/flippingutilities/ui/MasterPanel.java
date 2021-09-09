@@ -163,20 +163,20 @@ public class MasterPanel extends PluginPanel
 
 			@Override
 			public void mouseEntered(MouseEvent e) {
-				if (!plugin.getApiAuthHandler().successfullyLoggedIn) {
+				if (!plugin.getApiAuthHandler().isValidJwt()) {
 					profileButton.setIcon(Icons.USER_HOVER);
 				}
 			}
 
 			@Override
 			public void mouseExited(MouseEvent e) {
-				ImageIcon icon = plugin.getApiAuthHandler().successfullyLoggedIn? Icons.USER_LOGGED_IN:Icons.USER;
+				ImageIcon icon = plugin.getApiAuthHandler().isValidJwt()? Icons.USER_LOGGED_IN:Icons.USER;
 				profileButton.setIcon(icon);
 			}
 		});
 
 		JPopupMenu profilePopup = new JPopupMenu();
-		profilePopup.add(new JLabel("Click to loginWithToken!"));
+		profilePopup.add(new JLabel("Click to login!"));
 		UIUtilities.addPopupOnHover(profileButton, profilePopup, false);
 
 		communityPanel.add(profileButton, BorderLayout.WEST);

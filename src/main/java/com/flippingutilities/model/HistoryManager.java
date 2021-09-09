@@ -111,10 +111,10 @@ public class HistoryManager
 		// have refreshed, the next refresh will be four hours after this offer's buy time.
 
 
-		//if we got the event before loginWithToken, there could be a problem. If the loginWithToken was outside the current window
+		//if we got the event before login, there could be a problem. If the login was outside the current window
 		//you don't know whether the event occurred within the window or outside.
 
-		//if the loginWithToken was within the window that was established by the purchase of an item while logged in
+		//if the login was within the window that was established by the purchase of an item while logged in
 		// there isn't a problem, bc u know to just add to the items bought this window.
 
 

@@ -137,7 +137,7 @@ public class ApiRequestHandler {
      * <p>
      * This method should really only be called by the ApiLoginHandler class as that class is responsible for handling
      * logins and running any action that components interested in subscribing to logins have provided it.
-     * If another component is calling this method and attempting to loginWithToken, the loginWithToken subscribers won't be notified,
+     * If another component is calling this method and attempting to login, the login subscribers won't be notified,
      * unless we want duplicate code to notify the subscribers....So, the central place for logins should be the
      * ApiLoginHandler class and as such only it should call this method.
      *
