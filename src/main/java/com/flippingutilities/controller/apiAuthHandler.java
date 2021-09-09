@@ -16,13 +16,13 @@ import java.util.stream.Collectors;
  * logins and fire off some action whenever a loginWithToken happens.
  */
 @Slf4j
-public class authHandler {
+public class apiAuthHandler {
     FlippingPlugin plugin;
     private boolean validJwt;
     private Set<String> successfullyRegisteredRsns = new HashSet<>();
     List<Runnable> loginSubscriberActions = new ArrayList<>();
 
-    public authHandler(FlippingPlugin plugin) {
+    public apiAuthHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
     }
 

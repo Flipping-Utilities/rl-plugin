@@ -180,7 +180,7 @@ public class FlippingPlugin extends Plugin {
     private GameUiChangesHandler gameUiChangesHandler;
     private NewOfferEventPipelineHandler newOfferEventPipelineHandler;
     @Getter
-    private authHandler authHandler;
+    private apiAuthHandler apiAuthHandler;
     @Getter
     private ApiRequestHandler apiRequestHandler;
 
@@ -197,7 +197,7 @@ public class FlippingPlugin extends Plugin {
         dataHandler = new DataHandler(this);
         gameUiChangesHandler = new GameUiChangesHandler(this);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
-        authHandler = new authHandler(this);
+        apiAuthHandler = new apiAuthHandler(this);
         apiRequestHandler = new ApiRequestHandler(this);
 
         flippingPanel = new FlippingPanel(this, itemManager, executor);
@@ -229,7 +229,7 @@ public class FlippingPlugin extends Plugin {
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
             startJobs();
-            authHandler.checkExistingJwt();
+            apiAuthHandler.checkExistingJwt();
 
             //this is only relevant if the user downloads/enables the plugin after they loginWithToken.
             if (client.getGameState() == GameState.LOGGED_IN) {
@@ -354,7 +354,7 @@ public class FlippingPlugin extends Plugin {
             slotTimersTask = startSlotTimers();
         }
 
-        authHandler.checkRsn(displayName);
+        apiAuthHandler.checkRsn(displayName);
     }
 
     public void handleLogout() {

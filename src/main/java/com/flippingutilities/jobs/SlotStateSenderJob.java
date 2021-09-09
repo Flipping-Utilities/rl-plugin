@@ -41,7 +41,7 @@ public class SlotStateSenderJob {
     }
 
     private void sendSlots() {
-        if (!plugin.getAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount())) {
+        if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount())) {
             return;
         }
 
