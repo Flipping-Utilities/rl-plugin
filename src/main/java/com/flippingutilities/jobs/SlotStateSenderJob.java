@@ -41,8 +41,7 @@ public class SlotStateSenderJob {
     }
 
     private void sendSlots() {
-        //TODO if user hasn't authenticated yet also should return
-        if (plugin.getCurrentlyLoggedInAccount() == null) {
+        if (!plugin.getAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount())) {
             return;
         }
 

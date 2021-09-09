@@ -22,7 +22,7 @@ public class LoginPanel extends JPanel{
 
     public LoginPanel(FlippingPlugin plugin) {
         this.plugin = plugin;
-        plugin.getApiLoginHandler().subscribeToLogin(this::showLoggedInView);
+        plugin.getAuthHandler().subscribeToLogin(this::showLoggedInView);
         add(createLoggedOutPanel());
     }
 
@@ -145,7 +145,7 @@ public class LoginPanel extends JPanel{
         firstStepPanel.add(UIUtilities.createIcon(Icons.DISCORD_CHEESE, Icons.DISCORD_ICON_ON,"https://discord.gg/GDqVgMH26s","Click to go to Flipping Utilities twitter"));
 
         JPanel secondStepPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JLabel secondStepDesc = new JLabel("Type !login in the bot channel");
+        JLabel secondStepDesc = new JLabel("Type !loginWithToken in the bot channel");
         secondStepDesc.setFont(new Font("Whitney", Font.PLAIN, 12));
         secondStepDesc.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
         JLabel secondStepNumber = new JLabel("<html>2. </html>");
@@ -226,7 +226,7 @@ public class LoginPanel extends JPanel{
         loginButton.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                plugin.getApiLoginHandler().login(tokenField.getText()).exceptionally((exception) -> {
+                plugin.getAuthHandler().loginWithToken(tokenField.getText()).exceptionally((exception) -> {
                     SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(loginButton, "Authentication error, contact us on discord for help!", "Authentication error 😔",  JOptionPane.ERROR_MESSAGE));
                     return null;
                 });

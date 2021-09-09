@@ -137,7 +137,7 @@ public class FlippingPlugin extends Plugin {
     private SettingsPanel settingsPanel;
     private LoginPanel loginPanel;
 
-    //this flag is to know that when we see the login screen an account has actually logged out and its not just that the
+    //this flag is to know that when we see the loginWithToken screen an account has actually logged out and its not just that the
     //client has started.
     private boolean previouslyLoggedIn;
 
@@ -180,7 +180,7 @@ public class FlippingPlugin extends Plugin {
     private GameUiChangesHandler gameUiChangesHandler;
     private NewOfferEventPipelineHandler newOfferEventPipelineHandler;
     @Getter
-    private ApiLoginHandler apiLoginHandler;
+    private authHandler authHandler;
     @Getter
     private ApiRequestHandler apiRequestHandler;
 
@@ -197,7 +197,7 @@ public class FlippingPlugin extends Plugin {
         dataHandler = new DataHandler(this);
         gameUiChangesHandler = new GameUiChangesHandler(this);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
-        apiLoginHandler = new ApiLoginHandler(this);
+        authHandler = new authHandler(this);
         apiRequestHandler = new ApiRequestHandler(this);
 
         flippingPanel = new FlippingPanel(this, itemManager, executor);
@@ -228,10 +228,10 @@ public class FlippingPlugin extends Plugin {
             dataHandler.loadData();
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
-            apiLoginHandler.login();
             startJobs();
+            authHandler.checkExistingJwt();
 
-            //this is only relevant if the user downloads/enables the plugin after they login.
+            //this is only relevant if the user downloads/enables the plugin after they loginWithToken.
             if (client.getGameState() == GameState.LOGGED_IN) {
                 log.info("user is already logged in when they downloaded/enabled the plugin");
                 onLoggedInGameState();
@@ -350,9 +350,11 @@ public class FlippingPlugin extends Plugin {
         masterPanel.getAccountSelector().setSelectedItem(displayName);
 
         if (slotTimersTask == null && config.slotTimersEnabled()) {
-            log.info("starting slot timers on login");
+            log.info("starting slot timers on loginWithToken");
             slotTimersTask = startSlotTimers();
         }
+
+        authHandler.checkRsn(displayName);
     }
 
     public void handleLogout() {

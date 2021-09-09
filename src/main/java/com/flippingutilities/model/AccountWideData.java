@@ -12,7 +12,6 @@ public class AccountWideData {
     List<Option> options = new ArrayList<>();
     List<Section> sections = new ArrayList<>();
     boolean shouldMakeNewAdditions = true;
-    String token;
     String jwt;
 
     public boolean setDefaults() {
