@@ -10,6 +10,7 @@ import okhttp3.Response;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 
 @AllArgsConstructor
@@ -32,6 +33,15 @@ public class Jwt {
 
     public boolean isExpired() {
         return this.payload.exp <=  Instant.now().getEpochSecond();
+    }
+
+    /**
+     * JWT should be refreshed if it will expire within the next 10 days. 10 days is a pretty safe buffer as we
+     * run this check on client start up, and RL updates every week, so players' should not have their client open
+     * for more than 10 days.
+     */
+    public boolean shouldRefresh() {
+        return this.payload.exp <= Instant.now().plus(10, ChronoUnit.DAYS).getEpochSecond();
     }
 }
 

@@ -1,8 +1,8 @@
 package com.flippingutilities.controller;
 
-import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.utilities.Jwt;
 import com.flippingutilities.utilities.OsrsAccount;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
@@ -11,13 +11,14 @@ import java.util.stream.Collectors;
 
 /**
  * This class handles all of the extra logic associated with performing logins.
- * ALL attempts to loginWithToken with the api MUST go through this class.
+ * ALL attempts to login with the api MUST go through this class.
  * Its main responsibility is ensuring that there is a central place where  components can subscribe to successful
- * logins and fire off some action whenever a loginWithToken happens.
+ * logins and fire off some action whenever a login happens.
  */
 @Slf4j
 public class apiAuthHandler {
     FlippingPlugin plugin;
+    @Getter
     private boolean validJwt;
     private Set<String> successfullyRegisteredRsns = new HashSet<>();
     List<Runnable> loginSubscriberActions = new ArrayList<>();
@@ -41,6 +42,8 @@ public class apiAuthHandler {
     /**
      * Checks if the existing JWT has expired, and if so, gets a refreshed JWT. The setting of validJwt is purely
      * to stop the plugin from making useless requests, the api will safely reject invalid jwts itself.
+     *
+     * This should be called on client start up
      */
     public void checkExistingJwt() {
         String jwtString = plugin.getDataHandler().getAccountWideData().getJwt();
@@ -51,10 +54,16 @@ public class apiAuthHandler {
         try {
             Jwt jwt = Jwt.fromString(jwtString);
             if (jwt.isExpired()) {
+                //TODO use master panel to display message about having to relog using a new token from flopper
+                validJwt = false;
+                return;
+            }
+            if (jwt.shouldRefresh()) {
                 CompletableFuture<String> newJwtFuture = plugin.getApiRequestHandler().refreshJwt(jwtString);
                 newJwtFuture.whenComplete((newJwt, exception) -> {
                     if (exception != null) {
                         log.info("failed to refresh jwt, error: ", exception);
+                        validJwt = false; //validJwt is false by default, just setting it here for clarity
                     }
                     else {
                         plugin.getDataHandler().getAccountWideData().setJwt(newJwt);
@@ -75,6 +84,10 @@ public class apiAuthHandler {
     }
 
     public void checkRsn(String displayName) {
+        if (!validJwt) {
+            log.info("not checking rsn as we don't have a valid jwt yet");
+            return;
+        }
         CompletableFuture<List<OsrsAccount>> userAccountsFuture = plugin.getApiRequestHandler().getUserAccounts();
         userAccountsFuture.thenApply(accs -> {
             Set<String> registeredRsns = accs.stream().map(OsrsAccount::getRsn).collect(Collectors.toSet());
@@ -103,7 +116,7 @@ public class apiAuthHandler {
 
         jwtFuture.whenComplete((jwt, exception) -> {
             if (exception != null) {
-                log.info("failed to loginWithToken!", exception);
+                log.info("failed to login with token!", exception);
             }
             else {
                 plugin.getDataHandler().getAccountWideData().setJwt(jwt);

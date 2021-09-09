@@ -151,15 +151,15 @@ public class NewOfferEventPipelineHandler {
             return Optional.empty();
         }
 
-        //get empty slot offer events on loginWithToken, reject them. Just make sure the last offer isn't complete as we don't
-        //want to re-add a non complete offer that comes in the second batch of loginWithToken events as that will mess up its
+        //get empty slot offer events on login, reject them. Just make sure the last offer isn't complete as we don't
+        //want to re-add a non complete offer that comes in the second batch of login events as that will mess up its
         //"ticksSinceFirstOffer" (making it 0).
         if (newOfferEvent.isCausedByEmptySlot() && !lastOfferEvent.isComplete()) {
             return Optional.empty();
         }
 
         //empty offer event after collecting an offer. Mark the slot as being empty by removing the offer event for it.
-        //this will technically also trigger on loginWithToken when we get those empty slot events if the last event
+        //this will technically also trigger on login when we get those empty slot events if the last event
         //had a complete state, but in that case we will just re-add that offer event on the next tick when we get an
         //event for it and since it's a complete offer already, its ticksSinceLastOffer
         if (newOfferEvent.isCausedByEmptySlot() && lastOfferEvent.isComplete()) {
@@ -179,7 +179,7 @@ public class NewOfferEventPipelineHandler {
     }
 
     /**
-     * We get offer events that mark the start of an offer on loginWithToken, even though we already received them prior to logging
+     * We get offer events that mark the start of an offer on login, even though we already received them prior to logging
      * out. This method is used to identify them.
      *
      * @param offerEvent

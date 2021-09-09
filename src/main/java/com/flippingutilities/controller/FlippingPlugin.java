@@ -137,7 +137,7 @@ public class FlippingPlugin extends Plugin {
     private SettingsPanel settingsPanel;
     private LoginPanel loginPanel;
 
-    //this flag is to know that when we see the loginWithToken screen an account has actually logged out and its not just that the
+    //this flag is to know that when we see the login screen an account has actually logged out and its not just that the
     //client has started.
     private boolean previouslyLoggedIn;
 
@@ -231,7 +231,7 @@ public class FlippingPlugin extends Plugin {
             startJobs();
             apiAuthHandler.checkExistingJwt();
 
-            //this is only relevant if the user downloads/enables the plugin after they loginWithToken.
+            //this is only relevant if the user downloads/enables the plugin after they login.
             if (client.getGameState() == GameState.LOGGED_IN) {
                 log.info("user is already logged in when they downloaded/enabled the plugin");
                 onLoggedInGameState();
@@ -350,7 +350,7 @@ public class FlippingPlugin extends Plugin {
         masterPanel.getAccountSelector().setSelectedItem(displayName);
 
         if (slotTimersTask == null && config.slotTimersEnabled()) {
-            log.info("starting slot timers on loginWithToken");
+            log.info("starting slot timers on login");
             slotTimersTask = startSlotTimers();
         }
 
