@@ -147,7 +147,7 @@ public class MasterPanel extends PluginPanel
 		communityPanel.add(centerPanel, BorderLayout.CENTER);
 		MasterPanel m = this;
 		JLabel profileButton = new JLabel(Icons.USER);
-		plugin.getAuthHandler().subscribeToLogin(() -> {
+		plugin.getApiAuthHandler().subscribeToLogin(() -> {
 			profileButton.setIcon(Icons.USER_LOGGED_IN);
 			JPopupMenu profilePopup = new JPopupMenu();
 			profilePopup.add(new JLabel("Click to open your profile page!"));
@@ -163,14 +163,14 @@ public class MasterPanel extends PluginPanel
 
 			@Override
 			public void mouseEntered(MouseEvent e) {
-				if (!plugin.getAuthHandler().successfullyLoggedIn) {
+				if (!plugin.getApiAuthHandler().successfullyLoggedIn) {
 					profileButton.setIcon(Icons.USER_HOVER);
 				}
 			}
 
 			@Override
 			public void mouseExited(MouseEvent e) {
-				ImageIcon icon = plugin.getAuthHandler().successfullyLoggedIn? Icons.USER_LOGGED_IN:Icons.USER;
+				ImageIcon icon = plugin.getApiAuthHandler().successfullyLoggedIn? Icons.USER_LOGGED_IN:Icons.USER;
 				profileButton.setIcon(icon);
 			}
 		});
