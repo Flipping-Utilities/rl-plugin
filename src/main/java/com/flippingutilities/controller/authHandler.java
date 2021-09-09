@@ -1,5 +1,6 @@
 package com.flippingutilities.controller;
 
+import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.utilities.Jwt;
 import com.flippingutilities.utilities.OsrsAccount;
 import lombok.extern.slf4j.Slf4j;
@@ -37,8 +38,10 @@ public class authHandler {
         return this.validJwt && successfullyRegisteredRsns.contains(displayName);
     }
 
-    //used to authenticate with the api when the client first opens (as opposed to the authentication attempt when
-    //a user clicks the loginWithToken button on the loginWithToken panel).
+    /**
+     * Checks if the existing JWT has expired, and if so, gets a refreshed JWT. The setting of validJwt is purely
+     * to stop the plugin from making useless requests, the api will safely reject invalid jwts itself.
+     */
     public void checkExistingJwt() {
         String jwtString = plugin.getDataHandler().getAccountWideData().getJwt();
         if (jwtString == null) {
@@ -59,6 +62,10 @@ public class authHandler {
                         loginSubscriberActions.forEach(Runnable::run);
                     }
                 });
+            }
+            else {
+                validJwt = true;
+                loginSubscriberActions.forEach(Runnable::run);
             }
         }
         //this catch clause is just for the Jwt.fromString line
