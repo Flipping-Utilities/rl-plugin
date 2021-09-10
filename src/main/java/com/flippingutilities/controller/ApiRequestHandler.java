@@ -13,6 +13,8 @@ import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * This class is responsible for wrapping the api. All api interactions must go through this class.
@@ -61,10 +63,10 @@ public class ApiRequestHandler {
     }
 
     public CompletableFuture<List<OsrsAccount>> getUserAccounts() {
-        String jwt = plugin.getDataHandler().getAccountWideData().getJwt();
+        String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
-                header("Authorization", jwt).
+                header("Authorization", "bearer " + jwt).
                 url(getAccountUrl()).
                 build();
         CompletableFuture<Response> response = getResponseFuture(request);
@@ -80,16 +82,14 @@ public class ApiRequestHandler {
                 throw new ResponseBodyReadingException(request, r, e);
             }
         });
-
-
     }
 
     public CompletableFuture<OsrsAccount> registerNewAccount(String rsn) {
-        String jwt = plugin.getDataHandler().getAccountWideData().getJwt();
+        String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
         HttpUrl url = HttpUrl.parse(getAccountRegistrationUrl()).newBuilder().addQueryParameter("rsn", rsn).build();
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
-                header("Authorization", jwt).
+                header("Authorization", "bearer " + jwt).
                 url(url).
                 build();
         CompletableFuture<Response> response = getResponseFuture(request);
@@ -109,7 +109,7 @@ public class ApiRequestHandler {
     public CompletableFuture<String> refreshJwt(String jwtString) {
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
-                header("Authorization", jwtString).
+                header("Authorization", "bearer " + jwtString).
                 url(getJwtRefreshUrl()).
                 build();
         CompletableFuture<Response> response = getResponseFuture(request);
@@ -119,12 +119,12 @@ public class ApiRequestHandler {
     //don't care about the response body (if there is any), so we just return the entire response in case the caller
     //wants something.
     public CompletableFuture<Response> updateGeSlots(SlotsUpdate slotsUpdate) {
-        String jwt = plugin.getDataHandler().getAccountWideData().getJwt();
+        String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
         String json = new Gson().newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(slotsUpdate);
         RequestBody body = RequestBody.create(MediaType.parse("application/json"), json);
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
-                header("Authorization", "bearer" + jwt).
+                header("Authorization", "bearer " + jwt).
                 post(body).
                 url(getSlotUpdateUrl()).
                 build();
@@ -190,6 +190,7 @@ public class ApiRequestHandler {
                 if (jwt == null) {
                     throw new NullDtoException(request, r, "Jwt");
                 }
+                responseBody.close();
                 return jwt;
             } catch (IOException e) {
                 throw new ResponseBodyReadingException(request, r, e);

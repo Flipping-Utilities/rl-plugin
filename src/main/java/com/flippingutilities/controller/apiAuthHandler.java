@@ -55,10 +55,12 @@ public class apiAuthHandler {
             Jwt jwt = Jwt.fromString(jwtString);
             if (jwt.isExpired()) {
                 //TODO use master panel to display message about having to relog using a new token from flopper
+                log.info("jwt is expired, prompting user to re log");
                 validJwt = false;
                 return;
             }
             if (jwt.shouldRefresh()) {
+                log.info("jwt should refresh");
                 CompletableFuture<String> newJwtFuture = plugin.getApiRequestHandler().refreshJwt(jwtString);
                 newJwtFuture.whenComplete((newJwt, exception) -> {
                     if (exception != null) {
@@ -68,11 +70,13 @@ public class apiAuthHandler {
                     else {
                         plugin.getDataHandler().getAccountWideData().setJwt(newJwt);
                         validJwt = true;
+                        log.info("successfully refreshed jwt");
                         loginSubscriberActions.forEach(Runnable::run);
                     }
                 });
             }
             else {
+                log.info("jwt is valid");
                 validJwt = true;
                 loginSubscriberActions.forEach(Runnable::run);
             }
@@ -97,7 +101,11 @@ public class apiAuthHandler {
             }
             else {
                 plugin.getApiRequestHandler().registerNewAccount(displayName).
-                        thenApply(acc -> successfullyRegisteredRsns.add(acc.getRsn())).
+                        thenApply(acc -> {
+                            successfullyRegisteredRsns.add(acc.getRsn());
+                            log.info("added rsn: {} to successfullyRegisteredRsns", acc.getRsn());
+                            return null;
+                        }).
                         exceptionally(e -> {
                             log.info("could not register display name: {}, error: {}", displayName, e);
                             return null;
@@ -122,6 +130,7 @@ public class apiAuthHandler {
                 plugin.getDataHandler().getAccountWideData().setJwt(jwt);
                 validJwt = true;
                 loginSubscriberActions.forEach(Runnable::run);
+                log.info("successfully logged in with token!");
                 if (plugin.getCurrentlyLoggedInAccount() != null) {
                     checkRsn(plugin.getCurrentlyLoggedInAccount());
                 }
