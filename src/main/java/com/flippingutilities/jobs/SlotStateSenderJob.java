@@ -29,7 +29,7 @@ public class SlotStateSenderJob {
     }
 
     public void start() {
-        slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 5, 1, TimeUnit.SECONDS);
+        slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 10, 60, TimeUnit.SECONDS);
         log.info("started slot sender job");
     }
 
@@ -58,6 +58,7 @@ public class SlotStateSenderJob {
                         log.info("could not send slot update successfully", exception);
                     } else {
                         previouslySentSlotUpdate = slotsUpdate;
+                        log.info("sent slot update successfully!");
                     }
                 });
     }
