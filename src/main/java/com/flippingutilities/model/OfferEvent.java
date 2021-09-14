@@ -85,7 +85,7 @@ public class OfferEvent
 	 */
 	private transient String madeBy;
 
-	private transient boolean beforeLogin;
+	private boolean beforeLogin;
 	//only used in theGeHistoryTabOfferPanel cause i don't want to pass the itemmanager down that far just to resolve item name from an id.
 	private transient String itemName;
 	//used in the live slot view to show what price something was listed at

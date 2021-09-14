@@ -69,10 +69,10 @@ public class SlotActivityTimer
 	@Getter
 	private int slotIndex;
 	private Instant lastUpdate;
-	private Instant tradeStartTime;
+	public Instant tradeStartTime;
 	private OfferEvent currentOffer;
 	//is true when we get an offer from when the account was logged out which means we don't know when it occurred.
-	private boolean offerOccurredAtUnknownTime;
+	public boolean offerOccurredAtUnknownTime;
 
 	public SlotActivityTimer(FlippingPlugin plugin, Client client, int slotIndex)
 	{
