@@ -24,14 +24,14 @@ public class SlotState {
     private Integer offerQty;
     private Integer offerPrice;
     private Integer filledPrice;
-    private Date createdAt;
+    private Date offerCreatedAt;
 
     public static SlotState fromOfferEvent(OfferEvent offerEvent) {
         return new SlotState(
                 offerEvent.isBuy(),
                 offerEvent.getItemId(),
                 offerEvent.getCurrentQuantityInTrade(),
-                Date.from(offerEvent.getTime()),
+                offerEvent.isBeforeLogin()? null: Date.from(offerEvent.getTime()), //if the offer came before login, we don't know when it was actually filled
                 offerEvent.getSlot(),
                 offerEvent.getState(),
                 offerEvent.getTotalQuantityInTrade(),

@@ -2,6 +2,7 @@ package com.flippingutilities.jobs;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.utilities.SlotState;
 import com.flippingutilities.utilities.SlotsUpdate;
 import lombok.extern.slf4j.Slf4j;
@@ -56,9 +57,11 @@ public class SlotStateSenderJob {
                 .whenComplete((response, exception) -> {
                     if (exception != null) {
                         log.info("could not send slot update successfully", exception);
+                        response.close();
                     } else {
                         previouslySentSlotUpdate = slotsUpdate;
                         log.info("sent slot update successfully!");
+                        response.close();
                     }
                 });
     }
@@ -82,6 +85,7 @@ public class SlotStateSenderJob {
      */
     private List<SlotState> getCurrentSlots() {
         Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
+        List<SlotActivityTimer> slotActivityTimers = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getSlotTimers();
         List<SlotState> slotStates = new ArrayList<>();
         for (int i = 0; i < 8; i++) {
             GrandExchangeOffer grandExchangeOffer = plugin.getClient().getGrandExchangeOffers()[i];
@@ -92,6 +96,10 @@ public class SlotStateSenderJob {
                 OfferEvent lastOfferEventForSlotTrackedByPlugin = lastOfferEventForEachSlot.get(i);
                 lastOfferEventForSlotTrackedByPlugin.setListedPrice(grandExchangeOffer.getPrice());
                 lastOfferEventForSlotTrackedByPlugin.setSpent(grandExchangeOffer.getSpent());
+                if (i < slotActivityTimers.size()) {
+                    lastOfferEventForSlotTrackedByPlugin.setBeforeLogin(slotActivityTimers.get(i).offerOccurredAtUnknownTime);
+                    lastOfferEventForSlotTrackedByPlugin.setTradeStartedAt(slotActivityTimers.get(i).tradeStartTime);
+                }
                 //when tracked offer is the same, prefer to use it as it has more info.
                 if (lastOfferEventForSlotTrackedByPlugin.isDuplicate(trueOfferInSlot)) {
                     slotStates.add(SlotState.fromOfferEvent(lastOfferEventForSlotTrackedByPlugin));
@@ -99,6 +107,7 @@ public class SlotStateSenderJob {
                 //sometimes tracked offer can be incongruent with slot (collected an offer on mobile). In that case, use
                 //the true offer from the client object.
                 else {
+                    trueOfferInSlot.setBeforeLogin(true); //we don't know when this offer came in as it wasn't tracked
                     slotStates.add(SlotState.fromOfferEvent(trueOfferInSlot));
                 }
             }
