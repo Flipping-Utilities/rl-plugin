@@ -174,6 +174,12 @@ public class ApiRequestHandler {
             public void onResponse(Call call, Response response) {
                 if (!response.isSuccessful()) {
                     future.completeExceptionally(new BadStatusCodeException(request, response));
+                    try {
+                        log.info("response not successful. Response: {}, response body: {}", response, response.body().string());
+                    }
+                    catch (Exception e) {
+                        log.info("couldn't read response body when accessing it to see why the response status code was bad");
+                    }
                     return;
                 }
                 future.complete(response);

@@ -30,7 +30,7 @@ public class SlotStateSenderJob {
     }
 
     public void start() {
-        slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 10, 60, TimeUnit.SECONDS);
+        slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 10, 10, TimeUnit.SECONDS);
         log.info("started slot sender job");
     }
 
@@ -92,6 +92,7 @@ public class SlotStateSenderJob {
             //the offer event constructed from the true offer retrieved from client.getGrandExchangeOffers()
             OfferEvent trueOfferInSlot = this.getOfferEventConstructedFromClient(i);
 
+
             if (lastOfferEventForEachSlot.containsKey(i)) {
                 OfferEvent lastOfferEventForSlotTrackedByPlugin = lastOfferEventForEachSlot.get(i);
                 lastOfferEventForSlotTrackedByPlugin.setListedPrice(grandExchangeOffer.getPrice());
@@ -108,7 +109,12 @@ public class SlotStateSenderJob {
                 //the true offer from the client object.
                 else {
                     trueOfferInSlot.setBeforeLogin(true); //we don't know when this offer came in as it wasn't tracked
-                    slotStates.add(SlotState.fromOfferEvent(trueOfferInSlot));
+                    if (trueOfferInSlot.isCausedByEmptySlot()) {
+                        slotStates.add(SlotState.createEmptySlot(i));
+                    }
+                    else {
+                        slotStates.add(SlotState.fromOfferEvent(trueOfferInSlot));
+                    }
                 }
             }
             //in the case when there is no tracked offer for the slot
