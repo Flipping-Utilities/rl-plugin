@@ -72,12 +72,12 @@ public class ApiRequestHandler {
         CompletableFuture<Response> response = getResponseFuture(request);
         return response.thenApply((r) -> {
             try (ResponseBody responseBody = r.body()) {
-                Type listType = new TypeToken<List<OsrsAccount>>(){}.getType();
-                List<OsrsAccount> accounts = new Gson().fromJson(responseBody.string(), listType);
+                Type listType = new TypeToken<ApiResponse<List<OsrsAccount>>>(){}.getType();
+                ApiResponse<List<OsrsAccount>> accounts = new Gson().fromJson(responseBody.string(), listType);
                 if (accounts == null) {
                     throw new NullDtoException(request, r, "OsrsAccount");
                 }
-                return accounts;
+                return accounts.data;
             } catch (IOException e) {
                 throw new ResponseBodyReadingException(request, r, e);
             }
@@ -95,11 +95,12 @@ public class ApiRequestHandler {
         CompletableFuture<Response> response = getResponseFuture(request);
         return response.thenApply((r) -> {
             try (ResponseBody responseBody = r.body()) {
-                OsrsAccount osrsAccount = new Gson().fromJson(responseBody.string(), OsrsAccount.class);
+                Type responseType = new TypeToken<ApiResponse<OsrsAccount>>(){}.getType();
+                ApiResponse<OsrsAccount> osrsAccount = new Gson().fromJson(responseBody.string(), responseType);
                 if (osrsAccount == null) {
                     throw new NullDtoException(request, r, "OsrsAccount");
                 }
-                return osrsAccount;
+                return osrsAccount.data;
             } catch (IOException e) {
                 throw new ResponseBodyReadingException(request, r, e);
             }
@@ -191,13 +192,13 @@ public class ApiRequestHandler {
     CompletableFuture<String> handleJwtResponse(Request request, CompletableFuture<Response> response) {
         return response.thenApply((r) -> {
             try (ResponseBody responseBody = r.body()) {
-                TokenResponse tokenResponse = new Gson().fromJson(responseBody.string(), TokenResponse.class);
-                String jwt = tokenResponse.getAccess_token();
-                if (jwt == null) {
+                Type responseType = new TypeToken<ApiResponse<TokenResponse>>(){}.getType();
+                ApiResponse<TokenResponse> tokenResponse = new Gson().fromJson(responseBody.string(), responseType);
+                if (tokenResponse.data == null) {
                     throw new NullDtoException(request, r, "Jwt");
                 }
                 responseBody.close();
-                return jwt;
+                return tokenResponse.data.getAccess_token();
             } catch (IOException e) {
                 throw new ResponseBodyReadingException(request, r, e);
             }
@@ -247,4 +248,24 @@ class RequestFailureException extends Exception {
                 "IOException: %s", request.toString(), e.toString()));
         this.request = request;
     }
+}
+
+class ApiResponse<T> {
+    T data;
+    String time;
+    List<ApiError> errors;
+    List<ApiMessage> messages;
+}
+
+class ApiMessage {
+    String type;
+    String key;
+    String message;
+}
+
+class ApiError {
+    int code;
+    String type;
+    String key;
+    String message;
 }

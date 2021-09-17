@@ -20,7 +20,7 @@ public class SlotState {
     private Integer filledQty;
     private Date lastFilledTimestamp;
     private int index;
-    private GrandExchangeOfferState state;
+    private String state;
     private Integer offerQty;
     private Integer offerPrice;
     private Integer filledPrice;
@@ -33,7 +33,7 @@ public class SlotState {
                 offerEvent.getCurrentQuantityInTrade(),
                 offerEvent.isBeforeLogin()? null: Date.from(offerEvent.getTime()), //if the offer came before login, we don't know when it was actually filled
                 offerEvent.getSlot(),
-                offerEvent.getState(),
+                convertStateEnum(offerEvent.getState()),
                 offerEvent.getTotalQuantityInTrade(),
                 offerEvent.getListedPrice(),
                 offerEvent.getSpent(),
@@ -41,8 +41,27 @@ public class SlotState {
         );
     }
 
+    public static String convertStateEnum(GrandExchangeOfferState grandExchangeOfferState) {
+        switch (grandExchangeOfferState) {
+            case SOLD:
+                return "FILLED_SELL";
+            case BOUGHT:
+                return "FILLED_BUY";
+            case BUYING:
+                return "ACTIVE_BUY";
+            case SELLING:
+                return "ACTIVE_SELL";
+            case CANCELLED_BUY:
+                return "CANCELLED_BUY";
+            case CANCELLED_SELL:
+                return "CANCELLED_SELL";
+            default:
+                return "EMPTY";
+        }
+    }
+
     /**
-     * GSON will exclude null fields when seralizing objects so
+     * GSON will exclude null fields when seralizing objects
      */
     public static SlotState createEmptySlot(int index) {
         SlotState emptySlot = new SlotState();
@@ -50,3 +69,5 @@ public class SlotState {
         return emptySlot;
     }
 }
+
+
