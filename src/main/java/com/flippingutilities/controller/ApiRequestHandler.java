@@ -168,15 +168,17 @@ public class ApiRequestHandler {
                             future.completeExceptionally(new NullDtoException(request, response, type.toString()));
                         }
                         else if (apiResponse.errors.size() > 0) {
-                            future.completeExceptionally(new NullDtoException(request, response,"test"));
+                            //TODO better exception here
+                            future.completeExceptionally(new BadStatusCodeException(request, response));
                         }
                         else {
                             future.complete(apiResponse);
                         }
-
+                        response.close();
                     }
                     catch (IOException e) {
                         future.completeExceptionally(new ResponseBodyReadingException(request, response, e));
+                        response.close();
                     }
                 }
             }
