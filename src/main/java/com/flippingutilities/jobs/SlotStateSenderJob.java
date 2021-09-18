@@ -69,12 +69,12 @@ public class SlotStateSenderJob {
                     if (exception != null) {
                         log.info("could not send slot update successfully", exception);
                         subscribers.forEach(subscriber -> subscriber.accept(2));
-                        response.close();
+
                     } else {
                         previouslySentSlotUpdate = slotsUpdate;
                         subscribers.forEach(subscriber -> subscriber.accept(1));
                         log.info("sent slot update successfully!");
-                        response.close();
+
                     }
                 });
     }
