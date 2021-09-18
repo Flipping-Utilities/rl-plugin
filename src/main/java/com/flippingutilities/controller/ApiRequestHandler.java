@@ -69,19 +69,7 @@ public class ApiRequestHandler {
                 header("Authorization", "bearer " + jwt).
                 url(getAccountUrl()).
                 build();
-        CompletableFuture<Response> response = getResponseFuture(request);
-        return response.thenApply((r) -> {
-            try (ResponseBody responseBody = r.body()) {
-                Type listType = new TypeToken<ApiResponse<List<OsrsAccount>>>(){}.getType();
-                ApiResponse<List<OsrsAccount>> accounts = new Gson().fromJson(responseBody.string(), listType);
-                if (accounts == null) {
-                    throw new NullDtoException(request, r, "OsrsAccount");
-                }
-                return accounts.data;
-            } catch (IOException e) {
-                throw new ResponseBodyReadingException(request, r, e);
-            }
-        });
+        return getResponseFuture(request, new TypeToken<ApiResponse<List<OsrsAccount>>>(){}).thenApply(r -> r.data);
     }
 
     public CompletableFuture<OsrsAccount> registerNewAccount(String rsn) {
@@ -92,19 +80,8 @@ public class ApiRequestHandler {
                 header("Authorization", "bearer " + jwt).
                 url(url).
                 build();
-        CompletableFuture<Response> response = getResponseFuture(request);
-        return response.thenApply((r) -> {
-            try (ResponseBody responseBody = r.body()) {
-                Type responseType = new TypeToken<ApiResponse<OsrsAccount>>(){}.getType();
-                ApiResponse<OsrsAccount> osrsAccount = new Gson().fromJson(responseBody.string(), responseType);
-                if (osrsAccount == null) {
-                    throw new NullDtoException(request, r, "OsrsAccount");
-                }
-                return osrsAccount.data;
-            } catch (IOException e) {
-                throw new ResponseBodyReadingException(request, r, e);
-            }
-        });
+        CompletableFuture<ApiResponse<OsrsAccount>> response = getResponseFuture(request, new TypeToken<ApiResponse<OsrsAccount>>(){});
+        return response.thenApply(r -> r.data);
     }
 
     public CompletableFuture<String> refreshJwt(String jwtString) {
@@ -113,13 +90,12 @@ public class ApiRequestHandler {
                 header("Authorization", "bearer " + jwtString).
                 url(getJwtRefreshUrl()).
                 build();
-        CompletableFuture<Response> response = getResponseFuture(request);
-        return handleJwtResponse(request, response);
+        return getResponseFuture(request, new TypeToken<ApiResponse<String>>(){}).thenApply(r -> r.data);
     }
 
     //don't care about the response body (if there is any), so we just return the entire response in case the caller
     //wants something.
-    public CompletableFuture<Response> updateGeSlots(SlotsUpdate slotsUpdate) {
+    public CompletableFuture<Integer> updateGeSlots(SlotsUpdate slotsUpdate) {
         String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
         String json = new Gson().newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(slotsUpdate);
         RequestBody body = RequestBody.create(MediaType.parse("application/json"), json);
@@ -129,7 +105,7 @@ public class ApiRequestHandler {
                 post(body).
                 url(getSlotUpdateUrl()).
                 build();
-        return getResponseFuture(request);
+        return getResponseFuture(request, new TypeToken<ApiResponse<Integer>>(){}).thenApply(r -> r.data);
     }
 
     /**
@@ -151,9 +127,12 @@ public class ApiRequestHandler {
                 header("Authorization", token).
                 url(getTokenUrl()).
                 build();
-        CompletableFuture<Response> response = getResponseFuture(request);
-        return handleJwtResponse(request, response);
+
+        CompletableFuture<ApiResponse<String>> response = getResponseFuture(request, new TypeToken<ApiResponse<String>>(){});
+        return response.thenApply(r -> r.data);
     }
+
+
 
     /**
      * CompletableFuture API is wack...but it is much more flexible then the only callback way that okhttp offers. And
@@ -162,8 +141,8 @@ public class ApiRequestHandler {
      * exists to bridge the gap between the callback only interface okhttp offers and Futures, specifically,
      * CompletableFutures.
      */
-    public CompletableFuture<Response> getResponseFuture(Request request) {
-        CompletableFuture<Response> future = new CompletableFuture<>();
+    public <T> CompletableFuture<ApiResponse<T>> getResponseFuture(Request request, TypeToken<ApiResponse<T>> type) {
+        CompletableFuture<ApiResponse<T>> future = new CompletableFuture<>();
 
         httpClient.newCall(request).enqueue(new Callback() {
             @Override
@@ -181,28 +160,28 @@ public class ApiRequestHandler {
                     catch (Exception e) {
                         log.info("couldn't read response body when accessing it to see why the response status code was bad");
                     }
-                    return;
                 }
-                future.complete(response);
+                else {
+                    try {
+                        ApiResponse<T> apiResponse = new Gson().fromJson(response.body().string(), type.getType());
+                        if (apiResponse == null) {
+                            future.completeExceptionally(new NullDtoException(request, response, type.toString()));
+                        }
+                        else if (apiResponse.errors.size() > 0) {
+                            future.completeExceptionally(new NullDtoException(request, response,"test"));
+                        }
+                        else {
+                            future.complete(apiResponse);
+                        }
+
+                    }
+                    catch (IOException e) {
+                        future.completeExceptionally(new ResponseBodyReadingException(request, response, e));
+                    }
+                }
             }
         });
         return future;
-    }
-
-    CompletableFuture<String> handleJwtResponse(Request request, CompletableFuture<Response> response) {
-        return response.thenApply((r) -> {
-            try (ResponseBody responseBody = r.body()) {
-                Type responseType = new TypeToken<ApiResponse<TokenResponse>>(){}.getType();
-                ApiResponse<TokenResponse> tokenResponse = new Gson().fromJson(responseBody.string(), responseType);
-                if (tokenResponse.data == null) {
-                    throw new NullDtoException(request, r, "Jwt");
-                }
-                responseBody.close();
-                return tokenResponse.data.getAccess_token();
-            } catch (IOException e) {
-                throw new ResponseBodyReadingException(request, r, e);
-            }
-        });
     }
 }
 
