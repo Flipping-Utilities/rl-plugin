@@ -5,15 +5,19 @@ import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.utilities.SlotState;
 import com.flippingutilities.utilities.SlotsUpdate;
+import com.flippingutilities.utilities.WikiRequest;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import okhttp3.*;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 @Slf4j
 public class SlotStateSenderJob {
@@ -22,6 +26,8 @@ public class SlotStateSenderJob {
     OkHttpClient httpClient;
     Future slotStateSenderTask;
     SlotsUpdate previouslySentSlotUpdate;
+    List<Consumer<Integer>> subscribers = new ArrayList<>();
+    public static int PERIOD = 10; //seconds
 
     public SlotStateSenderJob(FlippingPlugin plugin, OkHttpClient httpClient) {
         this.plugin = plugin;
@@ -29,8 +35,12 @@ public class SlotStateSenderJob {
         this.executor = Executors.newSingleThreadScheduledExecutor();
     }
 
+    public void subscribe(Consumer<Integer> subscriber) {
+        subscribers.add(subscriber);
+    }
+
     public void start() {
-        slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 10, 10, TimeUnit.SECONDS);
+        slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 10, PERIOD, TimeUnit.SECONDS);
         log.info("started slot sender job");
     }
 
@@ -50,6 +60,7 @@ public class SlotStateSenderJob {
         SlotsUpdate slotsUpdate = new SlotsUpdate(plugin.getCurrentlyLoggedInAccount(), currentSlotStates);
         if (slotsUpdate.equals(this.previouslySentSlotUpdate)) {
             log.info("no updates to slots since the last time I sent them, not sending any requests.");
+            subscribers.forEach(subscriber -> subscriber.accept(0));
             return;
         }
 
@@ -57,9 +68,11 @@ public class SlotStateSenderJob {
                 .whenComplete((response, exception) -> {
                     if (exception != null) {
                         log.info("could not send slot update successfully", exception);
+                        subscribers.forEach(subscriber -> subscriber.accept(2));
                         response.close();
                     } else {
                         previouslySentSlotUpdate = slotsUpdate;
+                        subscribers.forEach(subscriber -> subscriber.accept(1));
                         log.info("sent slot update successfully!");
                         response.close();
                     }

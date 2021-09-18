@@ -353,7 +353,6 @@ public class FlippingPlugin extends Plugin {
             log.info("starting slot timers on login");
             slotTimersTask = startSlotTimers();
         }
-
         apiAuthHandler.checkRsn(displayName);
     }
 
@@ -504,6 +503,7 @@ public class FlippingPlugin extends Plugin {
         wikiDataFetcherJob.start();
 
         slotStateSenderJob = new SlotStateSenderJob(this, httpClient);
+        slotStateSenderJob.subscribe((success) -> loginPanel.onSlotRequest(success));
         slotStateSenderJob.start();
     }
 

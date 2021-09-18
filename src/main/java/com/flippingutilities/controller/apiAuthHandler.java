@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -87,34 +88,34 @@ public class apiAuthHandler {
         }
     }
 
-    public void checkRsn(String displayName) {
+    public CompletableFuture<Set<String>> checkRsn(String displayName) {
         if (!validJwt) {
             log.info("not checking rsn as we don't have a valid jwt yet");
-            return;
+            return CompletableFuture.completedFuture(this.successfullyRegisteredRsns);
         }
         CompletableFuture<List<OsrsAccount>> userAccountsFuture = plugin.getApiRequestHandler().getUserAccounts();
-        userAccountsFuture.thenApply(accs -> {
+        return userAccountsFuture.thenCompose(accs -> {
             Set<String> registeredRsns = accs.stream().map(OsrsAccount::getRsn).collect(Collectors.toSet());
             if (registeredRsns.contains(displayName)) {
                 successfullyRegisteredRsns.add(displayName);
                 log.info("rsn: {} is already registered, not registering again", displayName);
+                return CompletableFuture.completedFuture(successfullyRegisteredRsns);
             }
             else {
-                plugin.getApiRequestHandler().registerNewAccount(displayName).
+                return plugin.getApiRequestHandler().registerNewAccount(displayName).
                         thenApply(acc -> {
                             successfullyRegisteredRsns.add(acc.getRsn());
                             log.info("added rsn: {} to successfullyRegisteredRsns", acc.getRsn());
-                            return null;
+                            return successfullyRegisteredRsns;
                         }).
                         exceptionally(e -> {
                             log.info("could not register display name: {}, error: {}", displayName, e);
-                            return null;
+                            return successfullyRegisteredRsns;
                 });
             }
-            return null;
         }).exceptionally(e -> {
             log.info("could not check rsn", e);
-            return null;
+            return successfullyRegisteredRsns;
         });
     }
 
