@@ -15,21 +15,71 @@ import javax.swing.border.MatteBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.time.Instant;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class LoginPanel extends JPanel{
     FlippingPlugin plugin;
     Runnable onViewChange;
+    public boolean showingLoggedInView;
+    JLabel slotFeatureHealthLabel = new JLabel("Inactive (not logged in)");
+    Instant timeOfLastSuccessfulRequest;
+    boolean errorWhenSendingSlotRequest;
+    boolean notSendingRequestDueToNoChange;
 
     public LoginPanel(FlippingPlugin plugin) {
         this.plugin = plugin;
         plugin.getApiAuthHandler().subscribeToLogin(this::showLoggedInView);
         add(createLoggedOutPanel());
+        Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(this::checkHealth, 5, 1, TimeUnit.SECONDS);
     }
 
     public void addOnViewChange(Runnable r) {
         this.onViewChange = r;
     }
 
+    private void checkHealth() {
+        SwingUtilities.invokeLater(() -> {
+            if (plugin.getCurrentlyLoggedInAccount() == null) {
+                timeOfLastSuccessfulRequest = null;
+                slotFeatureHealthLabel.setText("Inactive (not logged in)");
+            }
+            else if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount())) {
+                slotFeatureHealthLabel.setText("Inactive (not registered yet)");
+            }
+            else if (timeOfLastSuccessfulRequest == null) {
+                slotFeatureHealthLabel.setText("Active (starting up)");
+            }
+            else if (notSendingRequestDueToNoChange) {
+                slotFeatureHealthLabel.setText("Active (no slot change detected)");
+            }
+            else if (errorWhenSendingSlotRequest) {
+                slotFeatureHealthLabel.setText("Inactive (error on slot update)");
+            }
+            else {
+                long diff = Instant.now().getEpochSecond() - timeOfLastSuccessfulRequest.getEpochSecond();
+                slotFeatureHealthLabel.setText(String.format("Active (%ds since last update)", diff));
+            }
+            revalidate();
+            repaint();
+        });
+    }
+
+    public void onSlotRequest(int success) {
+        if (success == 0) {
+            notSendingRequestDueToNoChange = true;
+        }
+        else if (success == 1) {
+            timeOfLastSuccessfulRequest = Instant.now();
+            errorWhenSendingSlotRequest = false;
+            notSendingRequestDueToNoChange = false;
+        }
+        else {
+            errorWhenSendingSlotRequest = true;
+            notSendingRequestDueToNoChange = false;
+        }
+    }
 
     public void showLoggedInView() {
         SwingUtilities.invokeLater(() -> {
@@ -40,7 +90,7 @@ public class LoginPanel extends JPanel{
             if (this.onViewChange != null) {
                 this.onViewChange.run();
             }
-
+            showingLoggedInView = true;
         });
     }
 
@@ -58,15 +108,29 @@ public class LoginPanel extends JPanel{
 
     private JPanel createLoggedInPanel() {
         JPanel loggedInPanel = new JPanel(new BorderLayout());
-        loggedInPanel.setBorder(new EmptyBorder(30,20,70,20));
+        loggedInPanel.setBorder(new EmptyBorder(10,20,20,20));
         loggedInPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        JLabel headerLabel = new JLabel("Welcome!", JLabel.CENTER);
-        headerLabel.setFont(new Font("Whitney", Font.PLAIN, 16));
-        headerLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+        JLabel headerLabel = new JLabel("Health", JLabel.CENTER);
+        headerLabel.setFont(new Font("Whitney", Font.PLAIN + Font.BOLD, 16));
+        headerLabel.setForeground(CustomColors.CHEESE);
+
+        JPanel healthPanel = new JPanel(new BorderLayout());
+        healthPanel.setBorder(new EmptyBorder(10,0,0,0));
+
+        JPanel slotSendingHealthPanel = new JPanel(new BorderLayout());
+        JLabel slotFeatureHealthRight = new JLabel("Slot sending feature: ");
+        slotFeatureHealthRight.setFont(new Font("Whitney", Font.PLAIN, 10));
+        slotFeatureHealthRight.setForeground(CustomColors.CHEESE);
+        slotFeatureHealthLabel.setFont(new Font("Whitney", Font.PLAIN + Font.ITALIC, 10));
+
+        slotSendingHealthPanel.add(slotFeatureHealthRight, BorderLayout.WEST);
+        slotSendingHealthPanel.add(slotFeatureHealthLabel, BorderLayout.EAST);
+
+        healthPanel.add(slotSendingHealthPanel, BorderLayout.CENTER);
 
         loggedInPanel.add(headerLabel, BorderLayout.NORTH);
-
+        loggedInPanel.add(healthPanel, BorderLayout.CENTER);
         return loggedInPanel;
     }
 
