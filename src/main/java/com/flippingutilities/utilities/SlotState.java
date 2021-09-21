@@ -44,17 +44,17 @@ public class SlotState {
     public static String convertStateEnum(GrandExchangeOfferState grandExchangeOfferState) {
         switch (grandExchangeOfferState) {
             case SOLD:
-                return "FILLED_SELL";
+                return "FILLED";
             case BOUGHT:
-                return "FILLED_BUY";
+                return "FILLED";
             case BUYING:
-                return "ACTIVE_BUY";
+                return "ACTIVE";
             case SELLING:
-                return "ACTIVE_SELL";
+                return "ACTIVE";
             case CANCELLED_BUY:
-                return "CANCELLED_BUY";
+                return "CANCELLED";
             case CANCELLED_SELL:
-                return "CANCELLED_SELL";
+                return "CANCELLED";
             default:
                 return "EMPTY";
         }
