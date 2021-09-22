@@ -166,7 +166,8 @@ public class TradePersister
 		Map<String, AccountData> accountsData = new HashMap<>();
 		for (File f : PARENT_DIRECTORY.listFiles())
 		{
-			if (f.getName().equals("accountwide.json")) {
+			if (f.getName().equals("accountwide.json") || !f.getName().contains(".json")) {
+				log.info("not loading data from file: {}", f.getName());
 				continue;
 			}
 			String displayName = f.getName().split("\\.")[0];
