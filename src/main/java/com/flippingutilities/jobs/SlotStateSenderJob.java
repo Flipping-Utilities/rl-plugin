@@ -28,6 +28,7 @@ public class SlotStateSenderJob {
     SlotsUpdate previouslySentSlotUpdate;
     List<Consumer<Integer>> subscribers = new ArrayList<>();
     public static int PERIOD = 10; //seconds
+    public boolean justLoggedIn = false;
 
     public SlotStateSenderJob(FlippingPlugin plugin, OkHttpClient httpClient) {
         this.plugin = plugin;
@@ -58,12 +59,12 @@ public class SlotStateSenderJob {
 
         List<SlotState> currentSlotStates = this.getCurrentSlots();
         SlotsUpdate slotsUpdate = new SlotsUpdate(plugin.getCurrentlyLoggedInAccount(), currentSlotStates);
-        if (slotsUpdate.equals(this.previouslySentSlotUpdate)) {
+        if (slotsUpdate.equals(this.previouslySentSlotUpdate) && !justLoggedIn) {
             log.info("no updates to slots since the last time I sent them, not sending any requests.");
             subscribers.forEach(subscriber -> subscriber.accept(0));
             return;
         }
-
+        justLoggedIn = false;
         plugin.getApiRequestHandler().updateGeSlots(slotsUpdate)
                 .whenComplete((response, exception) -> {
                     if (exception != null) {

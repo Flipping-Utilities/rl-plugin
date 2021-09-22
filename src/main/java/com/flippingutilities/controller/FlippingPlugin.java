@@ -354,6 +354,7 @@ public class FlippingPlugin extends Plugin {
             slotTimersTask = startSlotTimers();
         }
         apiAuthHandler.checkRsn(displayName);
+        slotStateSenderJob.justLoggedIn = true;
     }
 
     public void handleLogout() {
