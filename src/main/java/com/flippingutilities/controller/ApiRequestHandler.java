@@ -11,7 +11,9 @@ import okhttp3.*;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -32,7 +34,7 @@ public class ApiRequestHandler {
     public static String getBaseUrl() {
         if (System.getenv("apiurl") == null) {
             //TODO replace with actual url of course
-            return "http://localhost:4444/api/";
+            return "http://localhost:4444/v1/";
         } else {
             return System.getenv("apiurl");
         }
@@ -90,7 +92,7 @@ public class ApiRequestHandler {
                 header("Authorization", "bearer " + jwtString).
                 url(getJwtRefreshUrl()).
                 build();
-        return getResponseFuture(request, new TypeToken<ApiResponse<String>>(){}).thenApply(r -> r.data);
+        return getResponseFuture(request, new TypeToken<ApiResponse<TokenResponse>>(){}).thenApply(r -> r.data.getAccess_token());
     }
 
     //don't care about the response body (if there is any), so we just return the entire response in case the caller
@@ -122,17 +124,16 @@ public class ApiRequestHandler {
      * @return the jwt meant to be sent on every subsequent request
      */
     public CompletableFuture<String> loginWithToken(String token) {
+        String json = new Gson().toJson(Collections.singletonMap("token", token));
+        RequestBody body = RequestBody.create(
+                MediaType.parse("application/json"), json);
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
-                header("Authorization", token).
+                post(body).
                 url(getTokenUrl()).
                 build();
-
-        CompletableFuture<ApiResponse<String>> response = getResponseFuture(request, new TypeToken<ApiResponse<String>>(){});
-        return response.thenApply(r -> r.data);
+        return getResponseFuture(request, new TypeToken<ApiResponse<TokenResponse>>(){}).thenApply(r -> r.data.getAccess_token());
     }
-
-
 
     /**
      * CompletableFuture API is wack...but it is much more flexible then the only callback way that okhttp offers. And
