@@ -18,7 +18,7 @@ public class SlotState {
     private Boolean isBuyOffer;
     private Integer itemId;
     private Integer filledQty;
-    private Date lastFilledTimestamp;
+    private Date lastFilledTime;
     private int index;
     private String state;
     private Integer offerQty;
