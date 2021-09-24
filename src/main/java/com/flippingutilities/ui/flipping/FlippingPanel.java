@@ -222,6 +222,12 @@ public class FlippingPanel extends JPanel
 				});
 				break;
 			case FAVORITE:
+				if (isItemHighlighted()){
+					//when the item is highlighted we always want to show it. If the sort is set to favorite and the
+					//highlighted item is not a favorite, the filtering will prevent it from being shown, so we don't want to
+					//filter in that case.
+					break;
+				}
 				result = result.stream().filter(item -> item.isFavorite()).collect(Collectors.toList());
 				break;
 			case PROFIT:
