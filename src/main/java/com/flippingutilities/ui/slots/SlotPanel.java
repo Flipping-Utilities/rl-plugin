@@ -34,7 +34,7 @@ public class SlotPanel extends JPanel {
         setLayout(new BorderLayout());
         setBackground(CustomColors.DARK_GRAY);
         setBorder(new CompoundBorder(
-                new MatteBorder(0, 0, 3, 3, ColorScheme.DARKER_GRAY_COLOR.darker()),
+                new MatteBorder(2, 2, 2, 2, ColorScheme.DARKER_GRAY_COLOR.darker()),
                 new EmptyBorder(10, 10, 0, 10)
         ));
         price.setAlignmentX(JLabel.CENTER_ALIGNMENT);

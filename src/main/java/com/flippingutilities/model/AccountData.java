@@ -27,10 +27,9 @@
 package com.flippingutilities.model;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.ui.widgets.TradeActivityTimer;
+import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.client.game.ItemManager;
 import net.runelite.http.api.item.ItemStats;
 
 import java.time.Duration;
@@ -49,7 +48,7 @@ public class AccountData
 	private Instant sessionStartTime = Instant.now();
 	private Duration accumulatedSessionTime = Duration.ZERO;
 	private Instant lastSessionTimeUpdate;
-	private List<TradeActivityTimer> slotTimers;
+	private List<SlotActivityTimer> slotTimers;
 
 	/**
 	 * Resets all session related data associated with an account. This is called when the plugin first starts
@@ -99,12 +98,12 @@ public class AccountData
 		}
 	}
 
-	private List<TradeActivityTimer> setupSlotTimers(FlippingPlugin plugin)
+	private List<SlotActivityTimer> setupSlotTimers(FlippingPlugin plugin)
 	{
-		ArrayList<TradeActivityTimer> slotTimers = new ArrayList<>();
+		ArrayList<SlotActivityTimer> slotTimers = new ArrayList<>();
 		for (int slotIndex = 0; slotIndex < 8; slotIndex++)
 		{
-			slotTimers.add(new TradeActivityTimer(plugin, plugin.getClient(), slotIndex));
+			slotTimers.add(new SlotActivityTimer(plugin, plugin.getClient(), slotIndex));
 		}
 		return slotTimers;
 	}

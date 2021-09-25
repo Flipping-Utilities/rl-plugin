@@ -119,7 +119,7 @@ public class FlipPanel extends JPanel
 		else if (flip.isOngoing())
 		{
 			title.setText(QuantityFormatter.formatNumber(flip.getQuantity()) + " Flipped (ongoing)");
-			title.setForeground(CustomColors.VIBRANT_YELLOW);
+			title.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 		}
 
 		else

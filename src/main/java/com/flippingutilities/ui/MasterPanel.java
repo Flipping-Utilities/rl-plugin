@@ -28,7 +28,7 @@ package com.flippingutilities.ui;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.ui.flipping.FlippingPanel;
-import com.flippingutilities.ui.settings.SettingsPanel;
+import com.flippingutilities.ui.login.LoginPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
@@ -38,12 +38,10 @@ import com.flippingutilities.ui.uiutilities.UIUtilities;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
-import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.ComboBoxListRenderer;
 import net.runelite.client.ui.components.materialtabs.MaterialTab;
 import net.runelite.client.ui.components.materialtabs.MaterialTabGroup;
-import net.runelite.client.util.LinkBrowser;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -51,9 +49,7 @@ import java.awt.*;
 import java.awt.event.ItemEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.font.TextAttribute;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -61,12 +57,7 @@ public class MasterPanel extends PluginPanel
 {
 	@Getter
 	private JComboBox<String> accountSelector;
-
-	@Getter
-	private JLabel settingsButton;
-
 	private FlippingPlugin plugin;
-
 	private FastTabGroup tabGroup;
 
 	/**
@@ -81,8 +72,8 @@ public class MasterPanel extends PluginPanel
 	public MasterPanel(FlippingPlugin plugin,
 					   FlippingPanel flippingPanel,
 					   StatsPanel statPanel,
-					   SettingsPanel settingsPanel,
-					   SlotsPanel slotsPanel)
+					   SlotsPanel slotsPanel,
+					   LoginPanel loginPanel)
 	{
 		super(false);
 
@@ -92,18 +83,23 @@ public class MasterPanel extends PluginPanel
 
 		JPanel mainDisplay = new JPanel();
 
-		accountSelector = accountSelector();
-		JDialog modal = UIUtilities.createModalFromPanel(this, settingsPanel);
-		modal.setTitle("Settings");
-		settingsButton = settingsButton(() ->
-		{
-			modal.setVisible(true);
-			settingsPanel.rebuild();
-			modal.pack();
+		JDialog loginModal = UIUtilities.createModalFromPanel(this, loginPanel);
+		loginPanel.addOnViewChange(() -> {
+			if (loginModal.isVisible()) {
+				loginModal.pack();
+				loginModal.setLocation(this.getLocationOnScreen().x - loginModal.getWidth() - 10 , Math.max(this.getLocationOnScreen().y,0) - loginModal.getHeight()/2 + 100);
+			}
 		});
+		loginModal.pack();
 
+		accountSelector = accountSelector();
 		tabGroup = tabSelector(mainDisplay, flippingPanel, statPanel, slotsPanel);
-		JPanel header = Header(accountSelector, settingsButton, tabGroup);
+
+		JPanel header = createHeader(accountSelector, tabGroup, loginModal);
+		header.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(0,0,4,0, ColorScheme.DARKER_GRAY_COLOR.darker()),
+				BorderFactory.createEmptyBorder(0,0,5,0)));
+
 		add(header, BorderLayout.NORTH);
 		add(mainDisplay, BorderLayout.CENTER);
 	}
@@ -114,122 +110,81 @@ public class MasterPanel extends PluginPanel
 	 * flipping or stats tab.
 	 *
 	 * @param accountSelector the account selector dropdown
-	 * @param settingsButton  a button which opens up a modal for altering settings
 	 * @param tabSelector     a tab group with allows a user to select either the flipping or stats tab to view.
 	 * @return a jpanel representing the header.
 	 */
-	private JPanel Header(JComboBox accountSelector, JLabel settingsButton, MaterialTabGroup tabSelector)
+	private JPanel createHeader(JComboBox accountSelector, MaterialTabGroup tabSelector, JDialog loginModal)
 	{
-		settingsButton.setBorder(new EmptyBorder(0,0,2,0));
-
 		JPanel accountSelectorPanel = new JPanel(new BorderLayout());
-		accountSelectorPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
+		accountSelectorPanel.setBackground(CustomColors.DARK_GRAY);
 		accountSelectorPanel.add(accountSelector, BorderLayout.CENTER);
 		accountSelectorPanel.setBorder(new EmptyBorder(0,0,4,0));
 
-		JPanel tabGroupArea = new JPanel(new BorderLayout());
-		tabGroupArea.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
-		tabGroupArea.add(tabSelector, BorderLayout.CENTER);
-		tabGroupArea.add(settingsButton, BorderLayout.EAST);
-		tabGroupArea.add(communityPanel(), BorderLayout.NORTH);
-
 		JPanel header = new JPanel(new BorderLayout());
-		header.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
+		header.setBackground(CustomColors.DARK_GRAY);
 		header.add(accountSelectorPanel, BorderLayout.NORTH);
-		header.add(tabGroupArea, BorderLayout.CENTER);
-
+		header.add(createCommunityPanel(loginModal), BorderLayout.CENTER);
+		header.add(tabSelector, BorderLayout.SOUTH);
+		header.setBorder(new EmptyBorder(0,0,3,0));
 		return header;
 	}
 
-	private JPanel communityPanel() {
+	private JPanel createCommunityPanel(JDialog loginModal) {
 		JPanel communityPanel = new JPanel(new BorderLayout());
-		communityPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
-
-		JPanel topPanel = new JPanel();
-		topPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
-
-		JLabel topLabel = new JLabel("Join discord for bot dump alerts!", JLabel.CENTER);
-		topLabel.setForeground(CustomColors.VIBRANT_YELLOW);
-		topLabel.setFont(FontManager.getRunescapeSmallFont());
-		topLabel.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
-
-		JLabel questionMarkLabel = new JLabel(Icons.QUESTION_MARK);
-		JPopupMenu popup = new JPopupMenu();
-		//popup.setPreferredSize(new Dimension(100,100));
-		popup.add(new JLabel(Icons.DUMP_ALERT_PIC));
-		UIUtilities.addPopupOnHover(questionMarkLabel, popup, false);
-
-		topPanel.add(topLabel);
-		topPanel.add(questionMarkLabel);
+		communityPanel.setBackground(CustomColors.DARK_GRAY);
+		communityPanel.setBorder(new EmptyBorder(7,0,0,0));
 
 		JPanel centerPanel = new JPanel();
+		centerPanel.setBorder(new EmptyBorder(0,0,6,43));
 
-		JLabel githubIcon = new JLabel(Icons.GITHUB_ICON);
-		githubIcon.setToolTipText("Click to go to Flipping Utilities github");
-		githubIcon.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mousePressed(MouseEvent e) {
-				LinkBrowser.browse("https://github.com/Belieal/flipping-utilities");
-			}
+		JLabel githubIcon = UIUtilities.createIcon(Icons.GITHUB_ICON, Icons.GITHUB_ICON_ON, "https://github.com/Belieal/flipping-utilities", "Click to go to Flipping Utilities github");
+		JLabel twitterIcon = UIUtilities.createIcon(Icons.TWITTER_ICON, Icons.TWITTER_ICON_ON, "https://twitter.com/flippingutils", "Click to go to Flipping Utilities twitter");
+		JLabel discordIcon = UIUtilities.createIcon(Icons.DISCORD_ICON, Icons.DISCORD_ICON_ON, "https://discord.gg/GDqVgMH26s","Click to go to Flipping Utilities discord");
 
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				githubIcon.setIcon(Icons.GITHUB_ICON_ON);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				githubIcon.setIcon(Icons.GITHUB_ICON);
-			}
-		});
-
-		JLabel discordIcon = new JLabel(Icons.DISCORD_ICON);
-		discordIcon.setToolTipText("Click to go to Flipping Utilities discord");
-		discordIcon.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mousePressed(MouseEvent e) {
-				LinkBrowser.browse("https://discord.gg/GDqVgMH26s");
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				discordIcon.setIcon(Icons.DISCORD_ICON_ON);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				discordIcon.setIcon(Icons.DISCORD_ICON);
-			}
-		});
-
-		JLabel twitterIcon = new JLabel(Icons.TWITTER_ICON);
-		twitterIcon.setToolTipText("Click to go to Flipping Utilities twitter");
-		twitterIcon.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mousePressed(MouseEvent e) {
-				LinkBrowser.browse("https://twitter.com/flippingutils");
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				twitterIcon.setIcon(Icons.TWITTER_ICON_ON);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				twitterIcon.setIcon(Icons.TWITTER_ICON);
-			}
-		});
-
-
-		//centerPanel.setBorder(new EmptyBorder(4,0,0,0));
-		centerPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
+		centerPanel.setBackground(CustomColors.DARK_GRAY);
 		centerPanel.add(discordIcon);
 		centerPanel.add(twitterIcon);
 		centerPanel.add(githubIcon);
 
-		communityPanel.add(topPanel, BorderLayout.NORTH);
 		communityPanel.add(centerPanel, BorderLayout.CENTER);
+		MasterPanel m = this;
+		JLabel profileButton = new JLabel(Icons.USER);
+		plugin.getApiAuthHandler().subscribeToLogin(() -> {
+			SwingUtilities.invokeLater(() -> {
+				profileButton.setIcon(Icons.USER_LOGGED_IN);
+				JPopupMenu profilePopup = new JPopupMenu();
+				profilePopup.add(new JLabel("Click to open your profile page!"));
+				UIUtilities.addPopupOnHover(profileButton, profilePopup, false);
+			});
+		});
+		profileButton.setBorder(new EmptyBorder(0,15,10,0));
+		profileButton.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent e) {
+				loginModal.pack();
+				loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, Math.max(m.getLocationOnScreen().y - loginModal.getHeight()/2,0) + 100);
+				loginModal.setVisible(true);
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				if (!plugin.getApiAuthHandler().isValidJwt()) {
+					profileButton.setIcon(Icons.USER_HOVER);
+				}
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				ImageIcon icon = plugin.getApiAuthHandler().isValidJwt()? Icons.USER_LOGGED_IN:Icons.USER;
+				profileButton.setIcon(icon);
+			}
+		});
+
+		JPopupMenu profilePopup = new JPopupMenu();
+		profilePopup.add(new JLabel("Click to login!"));
+		UIUtilities.addPopupOnHover(profileButton, profilePopup, false);
+
+		communityPanel.add(profileButton, BorderLayout.WEST);
 		return communityPanel;
 	}
 
@@ -260,38 +215,6 @@ public class MasterPanel extends PluginPanel
 	}
 
 	/**
-	 * This is the button that you click on to view the setting modal. It is only visible if the account selector is
-	 * visible.
-	 *
-	 * @param callback the callback executed when the button is clicked.
-	 * @return the settings button
-	 */
-	private JLabel settingsButton(Runnable callback)
-	{
-		JLabel button = new JLabel(Icons.SETTINGS_ICON_OFF);
-		button.setToolTipText("Open Settings Panel");
-		button.setPreferredSize(Icons.ICON_SIZE);
-		button.addMouseListener(new MouseAdapter()
-		{
-			public void mouseClicked(MouseEvent e)
-			{
-				callback.run();
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				button.setIcon(Icons.SETTINGS_ICON);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				button.setIcon(Icons.SETTINGS_ICON_OFF);
-			}
-		});
-		return button;
-	}
-
-	/**
 	 * Adds the tabs for the flipping panel and stats panel onto the main display panel. These tabs can then
 	 * be clicked to view the flipping/stats panel
 	 *
@@ -306,7 +229,6 @@ public class MasterPanel extends PluginPanel
 		MaterialTab statisticsTab = new MaterialTab("stats", tabGroup, statPanel);
 		MaterialTab slotsTab = new MaterialTab("slots", tabGroup, slotsPanel);
 
-		tabGroup.setBorder(new EmptyBorder(0, 20, 5, 0));
 		tabGroup.addTab(slotsTab);
 		tabGroup.addTab(flippingTab);
 		tabGroup.addTab(statisticsTab);

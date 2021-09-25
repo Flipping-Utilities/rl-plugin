@@ -62,6 +62,10 @@ public class OfferEvent
 	private GrandExchangeOfferState state;
 	@SerializedName("tAA")
 	private int tickArrivedAt;
+
+	//this isn't TRULY ticksSinceFirstOffer as the ticks don't constantly increase. This is only relevant within a
+	//short time frame (before the tick counter resets). As such, it should only be used to compare two events
+	//very close to each other, such as the whether an offer is a margin check.
 	@SerializedName("tSFO")
 	private int ticksSinceFirstOffer;
 	@SerializedName("tQIT")
@@ -70,6 +74,7 @@ public class OfferEvent
 	//The states change dependent on user-selected removals.
 	@SerializedName("vSQ")
 	private boolean validOfferEvent;
+	private Instant tradeStartedAt;
 	/**
 	 * a offer always belongs to a flipping item. Every flipping item was flipped by an account and only one account and
 	 * has a flipped by attribute. So, the reason this attribute is here is because during the process of creating
@@ -80,11 +85,13 @@ public class OfferEvent
 	 */
 	private transient String madeBy;
 
-	private transient boolean beforeLogin;
+	private boolean beforeLogin;
 	//only used in theGeHistoryTabOfferPanel cause i don't want to pass the itemmanager down that far just to resolve item name from an id.
 	private transient String itemName;
 	//used in the live slot view to show what price something was listed at
 	private transient int listedPrice;
+	private transient int spent;
+
 
 	/**
 	 * Returns a boolean representing that the offer is a complete offer. A complete offer signifies
@@ -149,7 +156,7 @@ public class OfferEvent
 	 */
 	public boolean isStartOfOffer()
 	{
-		return currentQuantityInTrade == 0 && !isComplete();
+		return currentQuantityInTrade == 0 && !isComplete() && !isCausedByEmptySlot();
 	}
 
 	public OfferEvent clone()
@@ -165,10 +172,13 @@ public class OfferEvent
 			ticksSinceFirstOffer,
 			totalQuantityInTrade,
 			validOfferEvent,
+			tradeStartedAt,
 			madeBy,
 			beforeLogin,
 			itemName,
-				listedPrice);
+				listedPrice,
+				spent
+		);
 	}
 
 	public boolean equals(Object other)
@@ -232,9 +242,11 @@ public class OfferEvent
 			offer.getTotalQuantity(),
 			true,
 			null,
+			null,
 			false,
 			null,
-				offer.getPrice());
+				offer.getPrice(),
+				offer.getSpent());
 	}
 
 	/**
@@ -262,9 +274,11 @@ public class OfferEvent
 				marginCheck? 1 : 10,
 				1,
 				false,
+				null,
 				"",
 				false,
 				itemName,
+				0,
 				0);
 	}
 }

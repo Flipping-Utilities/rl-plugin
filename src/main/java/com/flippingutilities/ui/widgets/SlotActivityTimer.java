@@ -45,7 +45,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
 @Slf4j
-public class TradeActivityTimer
+public class SlotActivityTimer
 {
 	//Spacing between the slot state text and the timer
 	private static final String BUY_SPACER = "          ";
@@ -69,12 +69,12 @@ public class TradeActivityTimer
 	@Getter
 	private int slotIndex;
 	private Instant lastUpdate;
-	private Instant tradeStartTime;
+	public Instant tradeStartTime;
 	private OfferEvent currentOffer;
 	//is true when we get an offer from when the account was logged out which means we don't know when it occurred.
-	private transient boolean offerOccurredAtUnknownTime;
+	public boolean offerOccurredAtUnknownTime;
 
-	public TradeActivityTimer(FlippingPlugin plugin, Client client, int slotIndex)
+	public SlotActivityTimer(FlippingPlugin plugin, Client client, int slotIndex)
 	{
 		this.plugin = plugin;
 		this.client = client;

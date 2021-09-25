@@ -91,7 +91,7 @@ public class OptionPanel extends JPanel {
     }
 
     private String createResultingValueText(int resultingValue) {
-        String keyText = String.format("<span style='color:%s;'>%s</span>",ColorUtil.colorToHexCode(CustomColors.VIBRANT_YELLOW), option.getKey());
+        String keyText = String.format("<span style='color:%s;'>%s</span>",ColorUtil.colorToHexCode(ColorScheme.GRAND_EXCHANGE_ALCH), option.getKey());
         String typeText = option.isQuantityOption()? "quantity":"price";
         String value = NumberFormat.getInstance(Locale.getDefault()).format(resultingValue);
         String valueText = String.format("<span style='color:%s;'>%s</span>", ColorUtil.colorToHexCode(ColorScheme.GRAND_EXCHANGE_PRICE), value);
