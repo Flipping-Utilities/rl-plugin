@@ -10,13 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
 
 import java.io.IOException;
-import java.lang.reflect.Type;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+
 
 /**
  * This class is responsible for wrapping the api. All api interactions must go through this class.
@@ -25,43 +22,18 @@ import java.util.logging.Logger;
 public class ApiRequestHandler {
     FlippingPlugin plugin;
     OkHttpClient httpClient;
+    private static String BASE_API_URL = System.getenv("OSRS_CLOUD_API_BASE_URL") != null ? System.getenv("OSRS_CLOUD_API_BASE_URL")  : "http://localhost:4444/v1/";
+    public static String SLOT_UPDATE_URL = BASE_API_URL + "ge/slots/update";
+    public static String JWT_HEALTH_URL = BASE_API_URL + "auth/jwt/health";
+    public static String JWT_REFRESH_URL = BASE_API_URL + "auth/refresh";
+    public static String ACCOUNT_URL = BASE_API_URL + "account/self";
+    public static String ACCOUNT_REGISTRATION_URL = BASE_API_URL + "account/register";
+    public static String TOKEN_URL = BASE_API_URL + "auth/token";
+
 
     public ApiRequestHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
         this.httpClient = plugin.getHttpClient();
-    }
-
-    public static String getBaseUrl() {
-        if (System.getenv("apiurl") == null) {
-            //TODO replace with actual url of course
-            return "http://localhost:4444/v1/";
-        } else {
-            return System.getenv("apiurl");
-        }
-    }
-
-    public static String getSlotUpdateUrl() {
-        return getBaseUrl() + "ge/slots/update";
-    }
-
-    public static String getJwtHealthUrl() {
-        return getBaseUrl() + "auth/jwt/health";
-    }
-
-    public static String getJwtRefreshUrl() {
-        return getBaseUrl() + "auth/refresh";
-    }
-
-    public static String getAccountUrl() {
-        return getBaseUrl() + "account/self";
-    }
-
-    public static String getAccountRegistrationUrl() {
-        return getBaseUrl() + "account/register";
-    }
-
-    public static String getTokenUrl() {
-        return getBaseUrl() + "auth/token";
     }
 
     public CompletableFuture<List<OsrsAccount>> getUserAccounts() {
@@ -69,14 +41,14 @@ public class ApiRequestHandler {
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
                 header("Authorization", "bearer " + jwt).
-                url(getAccountUrl()).
+                url(ACCOUNT_URL).
                 build();
         return getResponseFuture(request, new TypeToken<ApiResponse<List<OsrsAccount>>>(){}).thenApply(r -> r.data);
     }
 
     public CompletableFuture<OsrsAccount> registerNewAccount(String rsn) {
         String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
-        HttpUrl url = HttpUrl.parse(getAccountRegistrationUrl()).newBuilder().addQueryParameter("rsn", rsn).build();
+        HttpUrl url = HttpUrl.parse(ACCOUNT_REGISTRATION_URL).newBuilder().addQueryParameter("rsn", rsn).build();
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
                 header("Authorization", "bearer " + jwt).
@@ -90,7 +62,7 @@ public class ApiRequestHandler {
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
                 header("Authorization", "bearer " + jwtString).
-                url(getJwtRefreshUrl()).
+                url(JWT_REFRESH_URL).
                 build();
         return getResponseFuture(request, new TypeToken<ApiResponse<TokenResponse>>(){}).thenApply(r -> r.data.getAccess_token());
     }
@@ -105,7 +77,7 @@ public class ApiRequestHandler {
                 header("User-Agent", "FlippingUtilities").
                 header("Authorization", "bearer " + jwt).
                 post(body).
-                url(getSlotUpdateUrl()).
+                url(SLOT_UPDATE_URL).
                 build();
         return getResponseFuture(request, new TypeToken<ApiResponse<Integer>>(){}).thenApply(r -> r.data);
     }
@@ -130,7 +102,7 @@ public class ApiRequestHandler {
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
                 post(body).
-                url(getTokenUrl()).
+                url(TOKEN_URL).
                 build();
         return getResponseFuture(request, new TypeToken<ApiResponse<TokenResponse>>(){}).thenApply(r -> r.data.getAccess_token());
     }

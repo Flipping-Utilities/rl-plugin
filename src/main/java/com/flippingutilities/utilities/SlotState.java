@@ -44,15 +44,12 @@ public class SlotState {
     public static String convertStateEnum(GrandExchangeOfferState grandExchangeOfferState) {
         switch (grandExchangeOfferState) {
             case SOLD:
-                return "FILLED";
             case BOUGHT:
                 return "FILLED";
             case BUYING:
-                return "ACTIVE";
             case SELLING:
                 return "ACTIVE";
             case CANCELLED_BUY:
-                return "CANCELLED";
             case CANCELLED_SELL:
                 return "CANCELLED";
             default:
@@ -61,7 +58,7 @@ public class SlotState {
     }
 
     /**
-     * GSON will exclude null fields when seralizing objects
+     * GSON will exclude null fields when serializing objects
      */
     public static SlotState createEmptySlot(int index) {
         SlotState emptySlot = new SlotState();

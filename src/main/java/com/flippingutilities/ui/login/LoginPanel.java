@@ -206,7 +206,7 @@ public class LoginPanel extends JPanel{
         firstStepDesc.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
         firstStepPanel.add(firstStepNumber);
         firstStepPanel.add(firstStepDesc);
-        firstStepPanel.add(UIUtilities.createIcon(Icons.DISCORD_CHEESE, Icons.DISCORD_ICON_ON,"https://discord.gg/GDqVgMH26s","Click to go to Flipping Utilities twitter"));
+        firstStepPanel.add(UIUtilities.createIcon(Icons.DISCORD_CHEESE, Icons.DISCORD_ICON_ON,"https://discord.gg/GDqVgMH26s","Click to go to Flipping Utilities discord!"));
 
         JPanel secondStepPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JLabel secondStepDesc = new JLabel("Type !login in the bot channel");
