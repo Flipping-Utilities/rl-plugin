@@ -22,7 +22,7 @@ import java.util.concurrent.CompletableFuture;
 public class ApiRequestHandler {
     FlippingPlugin plugin;
     OkHttpClient httpClient;
-    private static String BASE_API_URL = System.getenv("OSRS_CLOUD_API_BASE_URL") != null ? System.getenv("OSRS_CLOUD_API_BASE_URL")  : "https://api.osrs.cloud/v1";
+    private static String BASE_API_URL = System.getenv("OSRS_CLOUD_API_BASE_URL") != null ? System.getenv("OSRS_CLOUD_API_BASE_URL")  : "https://api.osrs.cloud/v1/";
     public static String SLOT_UPDATE_URL = BASE_API_URL + "ge/slots/update";
     public static String JWT_HEALTH_URL = BASE_API_URL + "auth/jwt/health";
     public static String JWT_REFRESH_URL = BASE_API_URL + "auth/refresh";
