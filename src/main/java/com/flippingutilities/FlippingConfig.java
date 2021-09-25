@@ -125,6 +125,6 @@ public interface FlippingConfig extends Config
 			description = "the color of the sell text on the slot timers"
 	)
 	default Color slotTimerSellColor() {
-		return CustomColors.VIBRANT_YELLOW;
+		return ColorScheme.GRAND_EXCHANGE_ALCH;
 	}
 }

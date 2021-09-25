@@ -28,14 +28,16 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.db.TradePersister;
+import com.flippingutilities.jobs.SlotStateSenderJob;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.MasterPanel;
 import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.gehistorytab.GeHistoryTabPanel;
+import com.flippingutilities.ui.login.LoginPanel;
 import com.flippingutilities.ui.settings.SettingsPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
-import com.flippingutilities.ui.widgets.TradeActivityTimer;
+import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.jobs.CacheUpdaterJob;
 import com.flippingutilities.utilities.GeHistoryTabExtractor;
 import com.flippingutilities.utilities.InvalidOptionException;
@@ -133,6 +135,7 @@ public class FlippingPlugin extends Plugin {
     @Getter
     private GeHistoryTabPanel geHistoryTabPanel;
     private SettingsPanel settingsPanel;
+    private LoginPanel loginPanel;
 
     //this flag is to know that when we see the login screen an account has actually logged out and its not just that the
     //client has started.
@@ -162,6 +165,8 @@ public class FlippingPlugin extends Plugin {
 
     //updates the cache by monitoring the directory and loading a file's contents into the cache if it has been changed
     private CacheUpdaterJob cacheUpdaterJob;
+    private WikiDataFetcherJob wikiDataFetcherJob;
+    private SlotStateSenderJob slotStateSenderJob;
 
     private ScheduledFuture slotTimersTask;
     private Instant startUpTime = Instant.now();
@@ -175,7 +180,9 @@ public class FlippingPlugin extends Plugin {
     private GameUiChangesHandler gameUiChangesHandler;
     private NewOfferEventPipelineHandler newOfferEventPipelineHandler;
     @Getter
-    private WikiDataFetcherJob wikiDataFetcherJob;
+    private apiAuthHandler apiAuthHandler;
+    @Getter
+    private ApiRequestHandler apiRequestHandler;
 
     @Getter
     private WikiRequest lastWikiRequest;
@@ -184,17 +191,22 @@ public class FlippingPlugin extends Plugin {
 
     @Override
     protected void startUp() {
+        accountCurrentlyViewed = ACCOUNT_WIDE;
+
         optionHandler = new OptionHandler(this);
         dataHandler = new DataHandler(this);
         gameUiChangesHandler = new GameUiChangesHandler(this);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
+        apiAuthHandler = new apiAuthHandler(this);
+        apiRequestHandler = new ApiRequestHandler(this);
 
         flippingPanel = new FlippingPanel(this, itemManager, executor);
         statPanel = new StatsPanel(this, itemManager, executor);
-        settingsPanel = new SettingsPanel(this);
         geHistoryTabPanel = new GeHistoryTabPanel(this);
         slotsPanel = new SlotsPanel(itemManager);
-        masterPanel = new MasterPanel(this, flippingPanel, statPanel, settingsPanel, slotsPanel);
+        loginPanel = new LoginPanel(this);
+
+        masterPanel = new MasterPanel(this, flippingPanel, statPanel, slotsPanel, loginPanel);
         masterPanel.addView(geHistoryTabPanel, "ge history");
         navButton = NavigationButton.builder()
                 .tooltip("Flipping Utilities")
@@ -217,6 +229,7 @@ public class FlippingPlugin extends Plugin {
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
             startJobs();
+            apiAuthHandler.checkExistingJwt();
 
             //this is only relevant if the user downloads/enables the plugin after they login.
             if (client.getGameState() == GameState.LOGGED_IN) {
@@ -230,6 +243,7 @@ public class FlippingPlugin extends Plugin {
 
     @Override
     protected void shutDown() {
+        log.info("shutdown running!");
         if (generalRepeatingTasks != null) {
             generalRepeatingTasks.cancel(true);
             generalRepeatingTasks = null;
@@ -254,6 +268,7 @@ public class FlippingPlugin extends Plugin {
         dataHandler.storeData();
         cacheUpdaterJob.stop();
         wikiDataFetcherJob.stop();
+        slotStateSenderJob.stop();
     }
 
     @Subscribe
@@ -338,6 +353,8 @@ public class FlippingPlugin extends Plugin {
             log.info("starting slot timers on login");
             slotTimersTask = startSlotTimers();
         }
+        apiAuthHandler.checkRsn(displayName);
+        slotStateSenderJob.justLoggedIn = true;
     }
 
     public void handleLogout() {
@@ -485,6 +502,10 @@ public class FlippingPlugin extends Plugin {
         wikiDataFetcherJob = new WikiDataFetcherJob(this, httpClient);
         wikiDataFetcherJob.subscribe(this::onWikiFetch);
         wikiDataFetcherJob.start();
+
+        slotStateSenderJob = new SlotStateSenderJob(this, httpClient);
+        slotStateSenderJob.subscribe((success) -> loginPanel.onSlotRequest(success));
+        slotStateSenderJob.start();
     }
 
     private void onWikiFetch(WikiRequest wikiRequest, Instant timeOfRequestCompletion) {
@@ -502,6 +523,9 @@ public class FlippingPlugin extends Plugin {
      * @param fileName name of the file which was modified.
      */
     public void onDirectoryUpdate(String fileName) {
+        if (!fileName.contains(".json")) {
+            return;
+        }
         String displayNameOfChangedAcc = fileName.split("\\.")[0];
 
         if (displayNameOfChangedAcc.equals(dataHandler.thisClientLastStored)) {
@@ -623,7 +647,7 @@ public class FlippingPlugin extends Plugin {
 
     public void rebuildTradeTimers() {
         for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
-            TradeActivityTimer timer = dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().get(slotIndex);
+            SlotActivityTimer timer = dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().get(slotIndex);
 
             //Get the offer slots from the window container
             //We add one to the index, as the first widget is the text above the offer slots
@@ -924,7 +948,7 @@ public class FlippingPlugin extends Plugin {
                     if (slotTimersTask != null) {
                         slotTimersTask.cancel(true);
                     }
-                    dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().forEach(TradeActivityTimer::resetToDefault);
+                    dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().forEach(SlotActivityTimer::resetToDefault);
                 }
             }
 

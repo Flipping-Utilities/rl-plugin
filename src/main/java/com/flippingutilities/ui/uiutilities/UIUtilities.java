@@ -32,6 +32,7 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.IconTextField;
 import net.runelite.client.util.ColorUtil;
+import net.runelite.client.util.LinkBrowser;
 import net.runelite.client.util.QuantityFormatter;
 import net.runelite.client.util.SwingUtil;
 
@@ -42,6 +43,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.font.TextAttribute;
+import java.awt.image.BufferedImage;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.text.NumberFormat;
@@ -51,6 +53,7 @@ import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * This class contains various methods that the UI uses to format their visuals.
@@ -78,13 +81,13 @@ public class UIUtilities
 	{
 		if (percentage < gradientMax * 0.5)
 		{
-			return (percentage <= 0) ? Color.RED
-				: ColorUtil.colorLerp(Color.RED, Color.YELLOW, percentage / gradientMax * 2);
+			return (percentage <= 0) ? CustomColors.TOMATO
+				: ColorUtil.colorLerp(CustomColors.TOMATO, ColorScheme.GRAND_EXCHANGE_ALCH, percentage / gradientMax * 2);
 		}
 		else
 		{
 			return (percentage >= gradientMax) ? ColorScheme.GRAND_EXCHANGE_PRICE
-				: ColorUtil.colorLerp(Color.YELLOW, ColorScheme.GRAND_EXCHANGE_PRICE, percentage / gradientMax * 0.5);
+				: ColorUtil.colorLerp(ColorScheme.GRAND_EXCHANGE_ALCH, ColorScheme.GRAND_EXCHANGE_PRICE, percentage / gradientMax * 0.5);
 		}
 	}
 
@@ -115,7 +118,7 @@ public class UIUtilities
 			+ new String[] {"", "K", "M", "B", "T"}[(int) (power / 3)];
 	}
 
-	public static JDialog createModalFromPanel(Component parent, JPanel panel)
+	public static JDialog createModalFromPanel(Component parent, JComponent panel)
 	{
 		JDialog modal = new JDialog();
 		modal.add(panel);
@@ -159,17 +162,16 @@ public class UIUtilities
 		return "https://prices.runescape.wiki/osrs/item/" + itemId;
 	}
 
-	public static IconTextField createSearchBar(ScheduledExecutorService executor, Runnable onSearch) {
+	public static IconTextField createSearchBar(ScheduledExecutorService executor, Consumer<IconTextField> onSearch) {
 		final Future<?>[] runningRequest = {null};
 		IconTextField searchBar = new IconTextField();
 		searchBar.setIcon(IconTextField.Icon.SEARCH);
 		searchBar.setPreferredSize(new Dimension(PluginPanel.PANEL_WIDTH - 20, 32));
-		searchBar.setBackground(ColorScheme.DARK_GRAY_COLOR);
-		searchBar.setBorder(BorderFactory.createMatteBorder(0, 5, 7, 5, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		searchBar.setBackground(CustomColors.DARK_GRAY_LIGHTER);
 		searchBar.setHoverBackgroundColor(ColorScheme.DARKER_GRAY_HOVER_COLOR);
 		searchBar.setMinimumSize(new Dimension(0, 35));
-		searchBar.addActionListener(e -> executor.execute(onSearch));
-		searchBar.addClearListener(onSearch);
+		searchBar.addActionListener(e -> executor.execute(() -> onSearch.accept(searchBar)));
+		searchBar.addClearListener(()-> onSearch.accept(searchBar));
 		searchBar.addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent e) {
@@ -177,7 +179,7 @@ public class UIUtilities
 				{
 					runningRequest[0].cancel(false);
 				}
-				runningRequest[0] = executor.schedule(onSearch, 250, TimeUnit.MILLISECONDS);
+				runningRequest[0] = executor.schedule(() -> onSearch.accept(searchBar), 250, TimeUnit.MILLISECONDS);
 			}
 		});
 		return searchBar;
@@ -200,6 +202,9 @@ public class UIUtilities
 	}
 
 	public static void addPopupOnHover(JComponent component, JPopupMenu popup, boolean above) {
+		//can't really achieve this well with a modal (Jdialog) cause it opens up a window with an "X" button
+		//and so on. Whereas this just opens up popup menu with no border so this is more suited for the on hover
+		//popups.
 		component.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseEntered(MouseEvent e) {
@@ -214,5 +219,27 @@ public class UIUtilities
 				popup.setVisible(false);
 			}
 		});
+	}
+
+	public static JLabel createIcon(ImageIcon base, ImageIcon hover, String url, String tooltip) {
+		JLabel iconLabel = new JLabel(base);
+		iconLabel.setToolTipText(tooltip);
+		iconLabel.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent e) {
+				LinkBrowser.browse(url);
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				iconLabel.setIcon(hover);
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				iconLabel.setIcon(base);
+			}
+		});
+		return iconLabel;
 	}
 }

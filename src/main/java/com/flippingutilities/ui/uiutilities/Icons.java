@@ -1,7 +1,6 @@
 package com.flippingutilities.ui.uiutilities;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.util.ImageUtil;
 
 import javax.swing.*;
@@ -32,9 +31,12 @@ public class Icons {
     public static final ImageIcon HIGHLIGHT_DELETE_BUTTON;
 
     public static final ImageIcon STAR_ON_ICON;
-    public static final ImageIcon STAR_HALF_ON_ICON;
+    public static final ImageIcon STAR_HOVER_ICON;
     public static final ImageIcon STAR_OFF_ICON;
 
+    public static final ImageIcon SMALL_STAR_ON_ICON;
+    public static final ImageIcon SMALL_STAR_HOVER_ICON;
+    public static final ImageIcon SMALL_STAR_OFF_ICON;
 
     public static final ImageIcon SORT_BY_RECENT_OFF_ICON;
     public static final ImageIcon SORT_BY_RECENT_ON_ICON;
@@ -66,6 +68,7 @@ public class Icons {
 
     public static final ImageIcon DISCORD_ICON;
     public static final ImageIcon DISCORD_ICON_ON;
+    public static final ImageIcon DISCORD_CHEESE;
 
     public static final ImageIcon TWITTER_ICON;
     public static final ImageIcon TWITTER_ICON_ON;
@@ -101,6 +104,16 @@ public class Icons {
     public static final ImageIcon DUMP_ALERT_PIC;
 
     public static final ImageIcon QUESTION_MARK;
+
+    public static final ImageIcon USER;
+    public static final ImageIcon USER_HOVER;
+    public static final ImageIcon USER_LOGGED_IN;
+
+    public static final ImageIcon FU_ICON;
+
+    public static final ImageIcon KEY;
+
+    public static final ImageIcon FLASH;
 
     static
     {
@@ -146,7 +159,7 @@ public class Icons {
         SORT_BY_ROI_ON_ICON = new ImageIcon(sortByRoiOn.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
         SORT_BY_PROFIT_ON_ICON = new ImageIcon(sortByProfitOn.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
 
-        STAR_HALF_ON_ICON = new ImageIcon(starOff.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
+        STAR_HOVER_ICON = new ImageIcon(starOff.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
         SORT_BY_PROFIT_HALF_ON_ICON = new ImageIcon(sortByProfitOff.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
         SORT_BY_RECENT_HALF_ON_ICON = new ImageIcon(sortByRecentOff.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
         SORT_BY_ROI_HALF_ON_ICON = new ImageIcon(sortByRoiOff.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
@@ -155,6 +168,10 @@ public class Icons {
         SORT_BY_RECENT_OFF_ICON = new ImageIcon(ImageUtil.alphaOffset(sortByRecentOff, 0.53f).getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
         SORT_BY_ROI_OFF_ICON = new ImageIcon(ImageUtil.alphaOffset(sortByRoiOff, 0.53f).getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
         SORT_BY_PROFIT_OFF_ICON = new ImageIcon(ImageUtil.alphaOffset(sortByProfitOff, 0.53f).getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
+
+        SMALL_STAR_ON_ICON = new ImageIcon(starOn.getScaledInstance(13, 13, Image.SCALE_SMOOTH));
+        SMALL_STAR_HOVER_ICON = new ImageIcon(starOff.getScaledInstance(13, 13, Image.SCALE_SMOOTH));
+        SMALL_STAR_OFF_ICON = new ImageIcon(ImageUtil.alphaOffset(starOff, 0.53f).getScaledInstance(13, 13, Image.SCALE_SMOOTH));
 
         final BufferedImage arrowLeft = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/left-arrow.png");
         ARROW_LEFT = new ImageIcon(ImageUtil.alphaOffset(arrowLeft,0.70f));
@@ -176,20 +193,22 @@ public class Icons {
         DOWNLOAD_ICON = new ImageIcon(downloadIcon);
         DONWLOAD_ICON_OFF = new ImageIcon(ImageUtil.alphaOffset(downloadIcon, 0.53f));
 
-        final BufferedImage githubIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/github.png");
+        final BufferedImage githubIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/github-alch.png");
         final BufferedImage githubIconOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/githubon.png");
         GITHUB_ICON = new ImageIcon(githubIcon);
         GITHUB_ICON_ON = new ImageIcon(githubIconOn);
 
-        final BufferedImage twitterIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/twitter.png");
+        final BufferedImage twitterIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/twitter-alch.png");
         final BufferedImage twitterIconOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/twitteron.png");
         TWITTER_ICON = new ImageIcon(twitterIcon);
         TWITTER_ICON_ON = new ImageIcon(twitterIconOn);
 
-        final BufferedImage discordIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discord.png");
+        final BufferedImage discordIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discord-alch.png");
         final BufferedImage discordIconOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discordon.png");
+        final BufferedImage discordCheese = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discord-cheese.png");
         DISCORD_ICON = new ImageIcon(discordIcon);
         DISCORD_ICON_ON = new ImageIcon(discordIconOn);
+        DISCORD_CHEESE = new ImageIcon(discordCheese);
 
         final BufferedImage plusIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/plus.png");
         PLUS_ICON = new ImageIcon(plusIcon.getScaledInstance(24,24,Image.SCALE_SMOOTH));
@@ -249,7 +268,23 @@ public class Icons {
         final BufferedImage dumpPic = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/dumpwithprofit.png");
         DUMP_ALERT_PIC = new ImageIcon(dumpPic.getScaledInstance(450, 300, Image.SCALE_SMOOTH));
 
-        final BufferedImage questionMark = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/questionmark.png");
+        final BufferedImage questionMark = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/question-mark.png");
         QUESTION_MARK = new ImageIcon(questionMark);
+
+        final BufferedImage userIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-alch.png");
+        final BufferedImage userIconCheese = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-cheese.png");
+        final BufferedImage userIconLoggedIn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-loggedin.png");
+        USER_HOVER = new ImageIcon(userIconCheese);
+        USER = new ImageIcon(userIcon);
+        USER_LOGGED_IN = new ImageIcon(userIconLoggedIn);
+
+        final BufferedImage fuIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/graph_icon_green.png");
+        FU_ICON = new ImageIcon(fuIcon);
+
+        final BufferedImage keyIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/key.png");
+        KEY = new ImageIcon(keyIcon);
+
+        final BufferedImage flashIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/flash-cheese.png");
+        FLASH = new ImageIcon(flashIcon);
     }
 }

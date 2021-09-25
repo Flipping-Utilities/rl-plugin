@@ -116,8 +116,9 @@ public class FlippingItemPanel extends JPanel
 		setBackground(CustomColors.DARK_GRAY);
 		setLayout(new BorderLayout());
 		setBorder(new CompoundBorder(
-				new EmptyBorder(5,5,0,0),
-				new MatteBorder(0, 0, 5, 5, ColorScheme.DARKER_GRAY_COLOR.darker())));
+				new MatteBorder(2, 2, 2, 2, ColorScheme.DARKER_GRAY_COLOR.darker()),
+				new EmptyBorder(10,5,0,0)));
+
 		setToolTipText("Flipped by " + flippingItem.getFlippedBy());
 
 		styleDescriptionLabels();
@@ -331,12 +332,12 @@ public class FlippingItemPanel extends JPanel
 		searchCodePanel.setBorder(new EmptyBorder(0,0,0,4));
 		searchCodePanel.setBackground(CustomColors.DARK_GRAY);
 		searchCodePanel.setPreferredSize(new Dimension(0,20));
-		searchCodeLabel = new JLabel("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), CustomColors.VIBRANT_YELLOW) + "</html>", JLabel.CENTER);
+		searchCodeLabel = new JLabel("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>", JLabel.CENTER);
 		if (flippingItem.isFavorite()) {
 			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_PRICE) + "</html>");
 		}
 		else {
-			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", CustomColors.VIBRANT_YELLOW) + "</html>");
+			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
 		}
 		searchCodeLabel.setToolTipText("<html>If you have favorited this item, you can type the search code when you are <br>" +
 				"searching for items in the ge to populate your ge results with any item with this code</html>");
@@ -393,7 +394,7 @@ public class FlippingItemPanel extends JPanel
 
 			flippingItem.setFavoriteCode(searchCodeTextField.getText());
 
-			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), CustomColors.VIBRANT_YELLOW) + "</html>");
+			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
 
 			searchCodePanel.remove(searchCodeTextField);
 			searchCodePanel.add(searchCodeLabel);
@@ -594,7 +595,7 @@ public class FlippingItemPanel extends JPanel
 				customizationPanel.rebuild(plugin.getDataHandler().viewAccountWideData().getSections());
 				customizationModal.setVisible(true);
 				customizationModal.pack();
-				customizationModal.setLocation(getLocationOnScreen().x - customizationModal.getWidth() - 10 , getLocationOnScreen().y - customizationModal.getHeight()/2);
+				customizationModal.setLocation(getLocationOnScreen().x - customizationModal.getWidth() - 10 , Math.max(getLocationOnScreen().y - customizationModal.getHeight()/2,0));
 			}
 
 			@Override
@@ -734,7 +735,7 @@ public class FlippingItemPanel extends JPanel
 					searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_PRICE) + "</html>");
 				}
 				else {
-					searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", CustomColors.VIBRANT_YELLOW) + "</html>");
+					searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
 				}
 			}
 
@@ -743,7 +744,7 @@ public class FlippingItemPanel extends JPanel
 			{
 				if (!flippingItem.isFavorite())
 				{
-					favoriteIcon.setIcon(Icons.STAR_HALF_ON_ICON);
+					favoriteIcon.setIcon(Icons.STAR_HOVER_ICON);
 				}
 			}
 
