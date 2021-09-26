@@ -129,6 +129,24 @@ public class FlippingItem
 		this.flippedBy = flippedBy;
 	}
 
+	public FlippingItem shallowClone() {
+		return new FlippingItem(
+				itemId,
+				itemName,
+				totalGELimit,
+				history,
+				flippedBy,
+				validFlippingPanelItem,
+				favorite,
+				favoriteCode,
+				latestInstaBuy,
+				latestInstaSell,
+				latestBuy,
+				latestSell,
+				latestActivityTime,
+				expand);
+	}
+
 	public FlippingItem clone()
 	{
 		return new FlippingItem(
