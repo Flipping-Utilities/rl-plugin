@@ -24,7 +24,7 @@ public class SlotState {
     private Integer offerQty;
     private Integer offerPrice;
     private Integer filledPrice;
-    private Date offerCreatedAt;
+    private Date offerCreationTime;
 
     public static SlotState fromOfferEvent(OfferEvent offerEvent) {
         return new SlotState(
