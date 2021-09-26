@@ -386,7 +386,9 @@ public class FlippingPanel extends JPanel
 		List<FlippingItem> matchesNotInHistory = new ArrayList<>();
 		for (ItemPrice itemInfo:  itemManager.search(lookup)) {
 			if (currentFlippingItems.containsKey(itemInfo.getId())) {
-				matchesInHistory.add(currentFlippingItems.get(itemInfo.getId()));
+				FlippingItem shallowCopy = currentFlippingItems.get(itemInfo.getId()).shallowClone();
+				shallowCopy.setValidFlippingPanelItem(true);
+				matchesInHistory.add(shallowCopy);
 			}
 			else {
 				ItemStats itemStats = plugin.getItemManager().getItemStats(itemInfo.getId(), false);
