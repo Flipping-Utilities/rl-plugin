@@ -290,10 +290,20 @@ public class LoginPanel extends JPanel{
         loginButton.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                plugin.getApiAuthHandler().loginWithToken(tokenField.getText()).exceptionally((exception) -> {
-                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(loginButton, "Authentication error, contact us on discord for help!", "Authentication error 😔",  JOptionPane.ERROR_MESSAGE));
-                    return null;
-                });
+                int result = JOptionPane.showOptionDialog(
+                        loginButton,
+                        "Logging into flipping utilities will submit GE transactions and your IP address\n" +
+                                "to flipping utilities, a 3rd party not controlled or verified by the RuneLite developers",
+                        "Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
+                        null, new String[] {"Yes", "No"}, "No");
+
+                if (result == JOptionPane.YES_OPTION)
+                {
+                    plugin.getApiAuthHandler().loginWithToken(tokenField.getText()).exceptionally((exception) -> {
+                        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(loginButton, "Authentication error, contact us on discord for help!", "Authentication error 😔",  JOptionPane.ERROR_MESSAGE));
+                        return null;
+                    });
+                }
             }
 
             @Override
