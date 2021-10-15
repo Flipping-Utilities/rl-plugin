@@ -60,7 +60,7 @@ public class SlotStateSenderJob {
         List<SlotState> currentSlotStates = this.getCurrentSlots();
         SlotsUpdate slotsUpdate = new SlotsUpdate(plugin.getCurrentlyLoggedInAccount(), currentSlotStates);
         if (slotsUpdate.equals(this.previouslySentSlotUpdate) && !justLoggedIn) {
-            log.info("no updates to slots since the last time I sent them, not sending any requests.");
+            log.debug("no updates to slots since the last time I sent them, not sending any requests.");
             subscribers.forEach(subscriber -> subscriber.accept(0));
             return;
         }
@@ -68,13 +68,13 @@ public class SlotStateSenderJob {
         plugin.getApiRequestHandler().updateGeSlots(slotsUpdate)
                 .whenComplete((response, exception) -> {
                     if (exception != null) {
-                        log.info("could not send slot update successfully", exception);
+                        log.debug("could not send slot update successfully", exception);
                         subscribers.forEach(subscriber -> subscriber.accept(2));
 
                     } else {
                         previouslySentSlotUpdate = slotsUpdate;
                         subscribers.forEach(subscriber -> subscriber.accept(1));
-                        log.info("sent slot update successfully!");
+                        log.debug("sent slot update successfully!");
 
                     }
                 });
