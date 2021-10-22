@@ -4,7 +4,6 @@ import com.flippingutilities.utilities.OsrsAccount;
 import com.flippingutilities.utilities.SlotState;
 import com.flippingutilities.utilities.SlotsUpdate;
 import com.flippingutilities.utilities.TokenResponse;
-import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
@@ -37,6 +36,9 @@ public class ApiRequestHandler {
     }
 
     public CompletableFuture<List<OsrsAccount>> getUserAccounts() {
+        if (!plugin.getApiAuthHandler().isHasValidJWT()) {
+            return null;
+        }
         String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
@@ -47,6 +49,9 @@ public class ApiRequestHandler {
     }
 
     public CompletableFuture<OsrsAccount> registerNewAccount(String rsn) {
+        if (!plugin.getApiAuthHandler().isHasValidJWT()) {
+            return null;
+        }
         String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
         HttpUrl url = HttpUrl.parse(ACCOUNT_REGISTRATION_URL).newBuilder().addQueryParameter("rsn", rsn).build();
         Request request = new Request.Builder().
@@ -59,6 +64,9 @@ public class ApiRequestHandler {
     }
 
     public CompletableFuture<String> refreshJwt(String jwtString) {
+        if (!plugin.getApiAuthHandler().isHasValidJWT()) {
+            return null;
+        }
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
                 header("Authorization", "bearer " + jwtString).
@@ -70,8 +78,11 @@ public class ApiRequestHandler {
     //don't care about the response body (if there is any), so we just return the entire response in case the caller
     //wants something.
     public CompletableFuture<Integer> updateGeSlots(SlotsUpdate slotsUpdate) {
+        if (!plugin.getApiAuthHandler().isHasValidJWT()) {
+            return null;
+        }
         String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
-        String json = new Gson().newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(slotsUpdate);
+        String json = plugin.gson.newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(slotsUpdate);
         RequestBody body = RequestBody.create(MediaType.parse("application/json"), json);
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
@@ -96,7 +107,9 @@ public class ApiRequestHandler {
      * @return the jwt meant to be sent on every subsequent request
      */
     public CompletableFuture<String> loginWithToken(String token) {
-        String json = new Gson().toJson(Collections.singletonMap("token", token));
+        //Cannot have the JWT check like we do with the other methods because this is the method that is triggered
+        //when a user clicks the "Login" button on the login panel, so a user won't have a JWT at that point.
+        String json = plugin.gson.toJson(Collections.singletonMap("token", token));
         RequestBody body = RequestBody.create(
                 MediaType.parse("application/json"), json);
         Request request = new Request.Builder().
@@ -128,15 +141,15 @@ public class ApiRequestHandler {
                 if (!response.isSuccessful()) {
                     future.completeExceptionally(new BadStatusCodeException(request, response));
                     try {
-                        log.info("response not successful. Response: {}, response body: {}", response, response.body().string());
+                        log.debug("response not successful. Response: {}, response body: {}", response, response.body().string());
                     }
                     catch (Exception e) {
-                        log.info("couldn't read response body when accessing it to see why the response status code was bad");
+                        log.debug("couldn't read response body when accessing it to see why the response status code was bad");
                     }
                 }
                 else {
                     try {
-                        ApiResponse<T> apiResponse = new Gson().fromJson(response.body().string(), type.getType());
+                        ApiResponse<T> apiResponse = plugin.gson.fromJson(response.body().string(), type.getType());
                         if (apiResponse == null) {
                             future.completeExceptionally(new NullDtoException(request, response, type.toString()));
                         }

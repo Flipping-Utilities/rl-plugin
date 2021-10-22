@@ -26,7 +26,6 @@
 
 package com.flippingutilities.db;
 
-import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
 import com.flippingutilities.model.FlippingItem;
@@ -47,7 +46,6 @@ import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * This class is responsible for handling all the IO related tasks for persisting trades. This class should contain
@@ -57,10 +55,14 @@ import java.util.stream.Collectors;
 @Slf4j
 public class TradePersister
 {
+	Gson gson;
+
+	public TradePersister(Gson gson) {
+		this.gson = gson;
+	}
 
 	//this is in {user's home directory}/.runelite/flipping
 	public static final File PARENT_DIRECTORY = new File(RuneLite.RUNELITE_DIR, "flipping");
-
 	public static final File OLD_FILE = new File(PARENT_DIRECTORY, "trades.json");
 
 	/**
@@ -69,7 +71,7 @@ public class TradePersister
 	 *
 	 * @throws IOException handled in FlippingPlugin
 	 */
-	public static void setup() throws IOException
+	public static void setupFlippingFolder() throws IOException
 	{
 		if (!PARENT_DIRECTORY.exists())
 		{
@@ -84,72 +86,8 @@ public class TradePersister
 			log.info("flipping directory already exists so it's not being created");
 			if (OLD_FILE.exists())
 			{
-				log.info("trades.json exists and is being partitioned into separate files to match the new way of storing" +
-					"trades");
-				partitionOldFile(OLD_FILE);
 				OLD_FILE.delete();
 
-			}
-		}
-	}
-
-	/**
-	 * Reads the data from trades.json and creates separate files for each account to conform with the
-	 * new way of saving data. It also sets the "madeBy" field on every OfferEvent object in the trade lists
-	 * as the old trades (in trades.json) would not have that field.
-	 *
-	 * @param f the old trades.json file.
-	 */
-	private static void partitionOldFile(File f) throws IOException
-	{
-		String tradesJson = new String(Files.readAllBytes(OLD_FILE.toPath()));
-
-		final Gson gson = new Gson();
-		Type type = new TypeToken<Map<String, AccountData>>()
-		{
-		}.getType();
-		Map<String, AccountData> accountData = gson.fromJson(tradesJson, type);
-
-		//they have no data to partition
-		if (!accountData.containsKey(FlippingPlugin.ACCOUNT_WIDE))
-		{
-			return;
-		}
-
-		//the account wide list might have different entries than the account specific lists. We want to use the
-		//list which has the most data. For example, it might be the case that a user has cleared one of their
-		//account's trade list but they haven't cleared the account wide list, which still has all the data.
-		Map<String, List<FlippingItem>> accountWideData = accountData.get(FlippingPlugin.ACCOUNT_WIDE).
-			getTrades().
-			stream().
-			collect(Collectors.groupingBy(FlippingItem::getFlippedBy));
-
-		for (String displayName : accountData.keySet())
-		{
-			if (displayName.equals(FlippingPlugin.ACCOUNT_WIDE))
-			{
-				continue;
-			}
-
-			AccountData accountSpecificData = accountData.get(displayName);
-
-			if (accountWideData.containsKey(displayName))
-			{
-				//if the account wide list has more items for that display name
-				if (accountWideData.get(displayName).size() > accountSpecificData.getTrades().size())
-				{
-					accountSpecificData.setTrades(accountWideData.get(displayName));
-				}
-			}
-
-			try
-			{
-				storeTrades(displayName, accountSpecificData);
-			}
-			catch (IOException e)
-			{
-				log.info("error while partitioning trades.json into files for each account. error = {}, display name = {}.",
-					e, displayName);
 			}
 		}
 	}
@@ -161,7 +99,7 @@ public class TradePersister
 	 * @return a map of display name to that account's data
 	 * @throws IOException handled in FlippingPlugin
 	 */
-	public static Map<String, AccountData> loadAllAccounts() throws IOException
+	public Map<String, AccountData> loadAllAccounts() throws IOException
 	{
 		Map<String, AccountData> accountsData = new HashMap<>();
 		for (File f : PARENT_DIRECTORY.listFiles())
@@ -185,7 +123,7 @@ public class TradePersister
 		return accountsData;
 	}
 
-	public static AccountData loadAccount(String displayName) throws IOException
+	public AccountData loadAccount(String displayName) throws IOException
 	{
 		log.info("loading data for {}", displayName);
 		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
@@ -198,22 +136,19 @@ public class TradePersister
 		return accountData;
 	}
 
-	private static AccountData loadFromFile(File f) throws IOException
+	private AccountData loadFromFile(File f) throws IOException
 	{
 		String accountDataJson = new String(Files.readAllBytes(f.toPath()));
-		final Gson gson = new Gson();
 		Type type = new TypeToken<AccountData>()
 		{
 		}.getType();
-		AccountData accountData = gson.fromJson(accountDataJson, type);
-		return accountData;
+		return gson.fromJson(accountDataJson, AccountData.class);
 	}
 
-	public static AccountWideData loadAccountWideData() throws IOException {
+	public AccountWideData loadAccountWideData() throws IOException {
 		File accountFile = new File(PARENT_DIRECTORY, "accountwide.json");
 		if (accountFile.exists()){
 			String accountWideDataJson = new String(Files.readAllBytes(accountFile.toPath()));
-			final Gson gson = new Gson();
 			Type type = new TypeToken<AccountWideData>(){}.getType();
 			return gson.fromJson(accountWideDataJson, type);
 		}
@@ -229,11 +164,10 @@ public class TradePersister
 	 * @param data        the trades and last offers of that account
 	 * @throws IOException
 	 */
-	public static void storeTrades(String displayName, Object data) throws IOException
+	public void storeTrades(String displayName, Object data) throws IOException
 	{
 		log.info("storing trades for {}", displayName);
 		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
-		final Gson gson = new Gson();
 		final String json = gson.toJson(data);
 		Files.write(accountFile.toPath(), json.getBytes());
 	}
