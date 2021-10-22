@@ -124,7 +124,7 @@ public class DataHandler {
     public void loadData() {
         try {
             log.info("initiating load");
-            TradePersister.setup();
+            TradePersister.setupFlippingFolder();
             accountWideData = fetchAccountWideData();
             accountSpecificData = fetchAllAccountData();
         }
@@ -150,7 +150,7 @@ public class DataHandler {
     private AccountWideData fetchAccountWideData() {
         try {
             log.info("loading account wide data");
-            AccountWideData accountWideData = TradePersister.loadAccountWideData();
+            AccountWideData accountWideData = plugin.tradePersister.loadAccountWideData();
             boolean didActuallySetDefaults = accountWideData.setDefaults();
             accountWideDataChanged = didActuallySetDefaults;
             log.info("successfully loaded account wide data");
@@ -169,7 +169,7 @@ public class DataHandler {
     {
         try
         {
-            Map<String, AccountData> trades = TradePersister.loadAllAccounts();
+            Map<String, AccountData> trades = plugin.tradePersister.loadAllAccounts();
             trades.values().forEach(accountData -> {
                 accountData.startNewSession();
                 accountData.prepareForUse(plugin);
@@ -188,7 +188,7 @@ public class DataHandler {
     {
         try
         {
-            AccountData accountData = TradePersister.loadAccount(displayName);
+            AccountData accountData = plugin.tradePersister.loadAccount(displayName);
             accountData.prepareForUse(plugin);
             return accountData;
         }
@@ -211,7 +211,7 @@ public class DataHandler {
                 data = new AccountData();
             }
             thisClientLastStored = displayName;
-            TradePersister.storeTrades(displayName, data);
+            plugin.tradePersister.storeTrades(displayName, data);
             log.info("successfully stored trades for {}", displayName);
         }
         catch (IOException e)
@@ -222,7 +222,7 @@ public class DataHandler {
 
     private void storeAccountWideData() {
         try {
-            TradePersister.storeTrades("accountwide", accountWideData);
+            plugin.tradePersister.storeTrades("accountwide", accountWideData);
             log.info("successfully stored account wide data");
         }
         catch (IOException e) {

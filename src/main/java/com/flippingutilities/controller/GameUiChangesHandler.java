@@ -24,7 +24,7 @@ import static net.runelite.api.VarPlayer.CURRENT_GE_ITEM;
 /**
  * This class is responsible for handling all the logic that should trigger when the main game ui changes. For example,
  * this class should detect when the chatbox gets opened, when the ge history box opens, when the user is in the
- * ge offer setup screen, etc and trigger appropriate logic in those cases.
+ * ge offer setupFlippingFolder screen, etc and trigger appropriate logic in those cases.
  */
 @Slf4j
 public class GameUiChangesHandler {

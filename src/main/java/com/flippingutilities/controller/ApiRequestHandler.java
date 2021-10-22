@@ -4,7 +4,6 @@ import com.flippingutilities.utilities.OsrsAccount;
 import com.flippingutilities.utilities.SlotState;
 import com.flippingutilities.utilities.SlotsUpdate;
 import com.flippingutilities.utilities.TokenResponse;
-import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
@@ -83,7 +82,7 @@ public class ApiRequestHandler {
             return null;
         }
         String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
-        String json = new Gson().newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(slotsUpdate);
+        String json = plugin.gson.newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(slotsUpdate);
         RequestBody body = RequestBody.create(MediaType.parse("application/json"), json);
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
@@ -110,7 +109,7 @@ public class ApiRequestHandler {
     public CompletableFuture<String> loginWithToken(String token) {
         //Cannot have the JWT check like we do with the other methods because this is the method that is triggered
         //when a user clicks the "Login" button on the login panel, so a user won't have a JWT at that point.
-        String json = new Gson().toJson(Collections.singletonMap("token", token));
+        String json = plugin.gson.toJson(Collections.singletonMap("token", token));
         RequestBody body = RequestBody.create(
                 MediaType.parse("application/json"), json);
         Request request = new Request.Builder().
@@ -150,7 +149,7 @@ public class ApiRequestHandler {
                 }
                 else {
                     try {
-                        ApiResponse<T> apiResponse = new Gson().fromJson(response.body().string(), type.getType());
+                        ApiResponse<T> apiResponse = plugin.gson.fromJson(response.body().string(), type.getType());
                         if (apiResponse == null) {
                             future.completeExceptionally(new NullDtoException(request, response, type.toString()));
                         }

@@ -44,6 +44,7 @@ import com.flippingutilities.utilities.InvalidOptionException;
 import com.flippingutilities.jobs.WikiDataFetcherJob;
 import com.flippingutilities.utilities.WikiRequest;
 import com.google.common.primitives.Shorts;
+import com.google.gson.Gson;
 import com.google.inject.Provides;
 import lombok.Getter;
 import lombok.Setter;
@@ -189,9 +190,16 @@ public class FlippingPlugin extends Plugin {
     @Getter
     private Instant timeOfLastWikiRequest;
 
+    @Inject
+    public Gson gson;
+
+    public TradePersister tradePersister;
+
     @Override
     protected void startUp() {
         accountCurrentlyViewed = ACCOUNT_WIDE;
+
+        tradePersister = new TradePersister(gson);
 
         optionHandler = new OptionHandler(this);
         dataHandler = new DataHandler(this);
@@ -422,9 +430,11 @@ public class FlippingPlugin extends Plugin {
 
     public Duration viewAccumulatedTimeForCurrentView() {
         if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
-            return dataHandler.viewAllAccountData().stream().map(AccountData::getAccumulatedSessionTime).reduce(Duration.ZERO, (d1, d2) -> d1.plus(d2));
+            long millis = dataHandler.viewAllAccountData().stream().map(AccountData::getAccumulatedSessionTimeMillis).reduce(0L, (d1, d2) -> d1 + d2);
+            return Duration.of(millis, ChronoUnit.MILLIS);
         } else {
-            return dataHandler.viewAccountData(accountCurrentlyViewed).getAccumulatedSessionTime();
+            long millis = dataHandler.viewAccountData(accountCurrentlyViewed).getAccumulatedSessionTimeMillis();
+            return Duration.of(millis, ChronoUnit.MILLIS);
         }
     }
 
@@ -626,14 +636,14 @@ public class FlippingPlugin extends Plugin {
     private void updateSessionTime() {
         if (currentlyFlipping()) {
             Instant lastSessionTimeUpdate = dataHandler.viewAccountData(currentlyLoggedInAccount).getLastSessionTimeUpdate();
-            Duration accumulatedSessionTime = dataHandler.viewAccountData(currentlyLoggedInAccount).getAccumulatedSessionTime();
+            long accumulatedSessionTime = dataHandler.viewAccountData(currentlyLoggedInAccount).getAccumulatedSessionTimeMillis();
             if (lastSessionTimeUpdate == null) {
                 lastSessionTimeUpdate = Instant.now();
             }
             long millisSinceLastSessionTimeUpdate = Instant.now().toEpochMilli() - lastSessionTimeUpdate.toEpochMilli();
-            accumulatedSessionTime = accumulatedSessionTime.plus(millisSinceLastSessionTimeUpdate, ChronoUnit.MILLIS);
+            accumulatedSessionTime = accumulatedSessionTime + millisSinceLastSessionTimeUpdate;
             lastSessionTimeUpdate = Instant.now();
-            dataHandler.getAccountData(currentlyLoggedInAccount).setAccumulatedSessionTime(accumulatedSessionTime);
+            dataHandler.getAccountData(currentlyLoggedInAccount).setAccumulatedSessionTimeMillis(accumulatedSessionTime);
             dataHandler.getAccountData(currentlyLoggedInAccount).setLastSessionTimeUpdate(lastSessionTimeUpdate);
 
             if (accountCurrentlyViewed.equals(ACCOUNT_WIDE) || accountCurrentlyViewed.equals(currentlyLoggedInAccount)) {

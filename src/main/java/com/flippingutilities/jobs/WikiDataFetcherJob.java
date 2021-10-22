@@ -2,7 +2,6 @@ package com.flippingutilities.jobs;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.utilities.WikiRequest;
-import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
@@ -88,8 +87,7 @@ public class WikiDataFetcherJob {
                     try {
                         timeOfLastRequestCompletion = Instant.now();
                         inFlightRequest = false;
-                        Gson gson = new Gson();
-                        WikiRequest wikiRequest = gson.fromJson(responseBody.string(), WikiRequest.class);
+                        WikiRequest wikiRequest = plugin.gson.fromJson(responseBody.string(), WikiRequest.class);
                         subscribers.forEach(subscriber -> subscriber.accept(wikiRequest, timeOfLastRequestCompletion));
                     }
                     catch (JsonSyntaxException e) { }
