@@ -52,7 +52,7 @@ public class apiAuthHandler {
             return;
         }
         try {
-            Jwt jwt = Jwt.fromString(jwtString);
+            Jwt jwt = Jwt.fromString(jwtString, plugin.gson);
             if (jwt.isExpired()) {
                 //TODO use master panel to display message about having to relog using a new token from flopper
                 log.info("jwt is expired, prompting user to re log");

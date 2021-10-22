@@ -20,13 +20,13 @@ public class Jwt {
     JwtPayload payload;
     String signature;
 
-    public static Jwt fromString(String jwtString) throws JsonSyntaxException, ArrayIndexOutOfBoundsException, IllegalArgumentException {
+    public static Jwt fromString(String jwtString, Gson gson) throws JsonSyntaxException, ArrayIndexOutOfBoundsException, IllegalArgumentException {
         //need to escape the "." as it's a special character
         String[] parts = jwtString.split("\\.");
         String jwtHeaderString = new String(Base64.getDecoder().decode(parts[0]));
         String jwtPayloadString = new String(Base64.getDecoder().decode(parts[1]));
-        JwtHeader jwtHeader = new Gson().fromJson(jwtHeaderString, JwtHeader.class);
-        JwtPayload jwtPayload = new Gson().fromJson(jwtPayloadString, JwtPayload.class);
+        JwtHeader jwtHeader = gson.fromJson(jwtHeaderString, JwtHeader.class);
+        JwtPayload jwtPayload = gson.fromJson(jwtPayloadString, JwtPayload.class);
         String signature = parts[2];
         return new Jwt(jwtHeader, jwtPayload, signature);
     }

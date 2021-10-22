@@ -32,7 +32,6 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.http.api.item.ItemStats;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -46,7 +45,7 @@ public class AccountData
 	private Map<Integer, OfferEvent> lastOffers = new HashMap<>();
 	private List<FlippingItem> trades = new ArrayList<>();
 	private Instant sessionStartTime = Instant.now();
-	private Duration accumulatedSessionTime = Duration.ZERO;
+	private long accumulatedSessionTimeMillis = 0;
 	private Instant lastSessionTimeUpdate;
 	private List<SlotActivityTimer> slotTimers;
 
@@ -57,7 +56,7 @@ public class AccountData
 	public void startNewSession()
 	{
 		sessionStartTime = Instant.now();
-		accumulatedSessionTime = Duration.ZERO;
+		accumulatedSessionTimeMillis = 0;
 		lastSessionTimeUpdate = null;
 	}
 
