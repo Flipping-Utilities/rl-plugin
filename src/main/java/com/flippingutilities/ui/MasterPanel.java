@@ -168,14 +168,14 @@ public class MasterPanel extends PluginPanel
 
 			@Override
 			public void mouseEntered(MouseEvent e) {
-				if (!plugin.getApiAuthHandler().isValidJwt()) {
+				if (!plugin.getApiAuthHandler().isHasValidJWT()) {
 					profileButton.setIcon(Icons.USER_HOVER);
 				}
 			}
 
 			@Override
 			public void mouseExited(MouseEvent e) {
-				ImageIcon icon = plugin.getApiAuthHandler().isValidJwt()? Icons.USER_LOGGED_IN:Icons.USER;
+				ImageIcon icon = plugin.getApiAuthHandler().isHasValidJWT()? Icons.USER_LOGGED_IN:Icons.USER;
 				profileButton.setIcon(icon);
 			}
 		});
