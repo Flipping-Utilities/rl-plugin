@@ -211,15 +211,10 @@ public class NewOfferEventPipelineHandler {
     private void updateTradesList(List<FlippingItem> trades, Optional<FlippingItem> flippingItem, OfferEvent newOffer) {
         if (flippingItem.isPresent()) {
             FlippingItem item = flippingItem.get();
-//            if (newOffer.isMarginCheck()) {
-//                trades.remove(item);
-//                trades.add(0, item);
-//            }
+
             //if a user buys/sells an item they previously deleted from the flipping panel, show the panel again.
             if (!item.getValidFlippingPanelItem()) {
                 item.setValidFlippingPanelItem(true);
-//                trades.remove(item);
-//                trades.add(0, item);
             }
 
             item.updateHistory(newOffer);
