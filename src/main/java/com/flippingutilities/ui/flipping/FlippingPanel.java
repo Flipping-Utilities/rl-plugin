@@ -56,7 +56,6 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 
-
 @Slf4j
 public class FlippingPanel extends JPanel
 {
