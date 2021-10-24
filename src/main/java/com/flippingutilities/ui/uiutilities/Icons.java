@@ -115,8 +115,6 @@ public class Icons {
 
     public static final ImageIcon FLASH;
 
-    public static final ImageIcon CAUTION;
-
     static
     {
         final BufferedImage openIcon = ImageUtil
@@ -288,8 +286,5 @@ public class Icons {
 
         final BufferedImage flashIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/flash-cheese.png");
         FLASH = new ImageIcon(flashIcon);
-
-        final BufferedImage warning = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/warning-cheese.png");
-        CAUTION = new ImageIcon(warning);
     }
 }

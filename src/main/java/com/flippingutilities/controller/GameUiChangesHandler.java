@@ -137,22 +137,9 @@ public class GameUiChangesHandler {
     public void onVarbitChanged(VarbitChanged event) {
         Client client = plugin.getClient();
 
-        //when a user clicks on a slot or leaves on, this event triggers
+        //when a user clicks on a slot or leaves one, this event triggers
         if (event.getIndex() == 375) {
-            int slot = client.getVarbitValue(4439) - 1;
-            if (slot == -1 && highlightedItem.isPresent()) {
-                deHighlightOffer();
-                return;
-            }
-            if (slot != -1 && !highlightedItem.isPresent()) {
-                int itemId  = plugin.getClient().getGrandExchangeOffers()[slot].getItemId();
-                if (itemId == 0) {
-                    return;
-                }
-                log.info("item id was {} and slot was {}", itemId, slot);
-                highlightOffer(itemId);
-                return;
-            }
+            handleClickOrLeaveOffer();
             return;
         }
 
@@ -173,6 +160,26 @@ public class GameUiChangesHandler {
         if (event.getIndex() == CURRENT_GE_ITEM.getId() &&
                 (client.getVar(CURRENT_GE_ITEM) == -1 || client.getVar(CURRENT_GE_ITEM) == 0) && highlightedItem.isPresent()) {
             deHighlightOffer();
+        }
+    }
+
+    /**
+     * Is triggered when a user clicks on an offer or leaves one
+     */
+    private void handleClickOrLeaveOffer() {
+        Client client = plugin.getClient();
+        int slot = client.getVarbitValue(4439) - 1;
+        if (slot == -1 && highlightedItem.isPresent()) {
+            deHighlightOffer();
+            return;
+        }
+        if (slot != -1 && !highlightedItem.isPresent()) {
+            int itemId = plugin.getClient().getGrandExchangeOffers()[slot].getItemId();
+            if (itemId == 0) {
+                return;
+            }
+            log.info("item id was {} and slot was {}", itemId, slot);
+            highlightOffer(itemId);
         }
     }
 
