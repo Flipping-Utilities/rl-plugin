@@ -102,12 +102,7 @@ public class NewOfferEventPipelineHandler {
             return;
         }
 
-        if (!flippingItem.isPresent() || flippingItem.isPresent() && offerEvent.isMarginCheck()) {
-            plugin.getFlippingPanel().rebuild(plugin.viewTradesForCurrentView());
-        } else if (flippingItem.isPresent() && !offerEvent.isMarginCheck()) {
-            plugin.getFlippingPanel().refreshPricesForFlippingItemPanel(flippingItem.get().getItemId());
-        }
-
+        plugin.getFlippingPanel().onNewOfferEventRebuild(offerEvent);
         plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
     }
 
@@ -216,15 +211,10 @@ public class NewOfferEventPipelineHandler {
     private void updateTradesList(List<FlippingItem> trades, Optional<FlippingItem> flippingItem, OfferEvent newOffer) {
         if (flippingItem.isPresent()) {
             FlippingItem item = flippingItem.get();
-            if (newOffer.isMarginCheck()) {
-                trades.remove(item);
-                trades.add(0, item);
-            }
+
             //if a user buys/sells an item they previously deleted from the flipping panel, show the panel again.
             if (!item.getValidFlippingPanelItem()) {
                 item.setValidFlippingPanelItem(true);
-                trades.remove(item);
-                trades.add(0, item);
             }
 
             item.updateHistory(newOffer);

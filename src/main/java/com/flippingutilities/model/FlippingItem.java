@@ -129,6 +129,24 @@ public class FlippingItem
 		this.flippedBy = flippedBy;
 	}
 
+	public FlippingItem shallowClone() {
+		return new FlippingItem(
+				itemId,
+				itemName,
+				totalGELimit,
+				history,
+				flippedBy,
+				validFlippingPanelItem,
+				favorite,
+				favoriteCode,
+				latestInstaBuy,
+				latestInstaSell,
+				latestBuy,
+				latestSell,
+				latestActivityTime,
+				expand);
+	}
+
 	public FlippingItem clone()
 	{
 		return new FlippingItem(
@@ -326,7 +344,7 @@ public class FlippingItem
 	/**
 	 * When the plugin starts up, the flipping items are constructed, but they are going to be missing
 	 * values for certain fields that aren't persisted. I chose not to persist those fields as those fields
-	 * can be constructed using the history that is already persisted. The downside, is that I have to
+	 * can be constructed using the history that is already persisted. The downside is that I have to
 	 * manually sync state when flipping items are created at plugin startup.
 	 */
 	public void syncState() {

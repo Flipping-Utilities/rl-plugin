@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
 import net.runelite.api.VarClientInt;
+import net.runelite.api.VarbitComposition;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.events.VarbitChanged;
@@ -135,6 +136,13 @@ public class GameUiChangesHandler {
 
     public void onVarbitChanged(VarbitChanged event) {
         Client client = plugin.getClient();
+
+        //when a user clicks on a slot or leaves one, this event triggers
+        if (event.getIndex() == 375) {
+            handleClickOrLeaveOffer();
+            return;
+        }
+
         FlippingPanel flippingPanel = plugin.getFlippingPanel();
         OfferEditorContainerPanel offerEditorContainerPanel = flippingPanel.getOfferEditorContainerPanel();
         //this is the varbit with id 4398
@@ -144,7 +152,7 @@ public class GameUiChangesHandler {
         }
 
         if (event.getIndex() == CURRENT_GE_ITEM.getId() && client.getVar(CURRENT_GE_ITEM) != -1 && client.getVar(CURRENT_GE_ITEM) != 0) {
-            highlightOffer();
+            highlightOffer(plugin.getClient().getVar(CURRENT_GE_ITEM));
         }
 
         //need to check if panel is highlighted in this case because curr ge item is changed if you come back to ge interface after exiting out
@@ -152,6 +160,26 @@ public class GameUiChangesHandler {
         if (event.getIndex() == CURRENT_GE_ITEM.getId() &&
                 (client.getVar(CURRENT_GE_ITEM) == -1 || client.getVar(CURRENT_GE_ITEM) == 0) && highlightedItem.isPresent()) {
             deHighlightOffer();
+        }
+    }
+
+    /**
+     * Is triggered when a user clicks on an offer or leaves one
+     */
+    private void handleClickOrLeaveOffer() {
+        Client client = plugin.getClient();
+        int slot = client.getVarbitValue(4439) - 1;
+        if (slot == -1 && highlightedItem.isPresent()) {
+            deHighlightOffer();
+            return;
+        }
+        if (slot != -1 && !highlightedItem.isPresent()) {
+            int itemId = plugin.getClient().getGrandExchangeOffers()[slot].getItemId();
+            if (itemId == 0) {
+                return;
+            }
+            log.info("item id was {} and slot was {}", itemId, slot);
+            highlightOffer(itemId);
         }
     }
 
@@ -193,8 +221,8 @@ public class GameUiChangesHandler {
         }
     }
 
-    private void highlightOffer() {
-        highlightedItemId = plugin.getClient().getVar(CURRENT_GE_ITEM);
+    private void highlightOffer(int itemId) {
+        highlightedItemId = itemId;
         Optional<FlippingItem> itemInHistory = plugin.viewTradesForCurrentView().stream().filter(item -> item.getItemId() == highlightedItemId && item.getValidFlippingPanelItem()).findFirst();
         if (itemInHistory.isPresent()) {
             highlightedItem = itemInHistory;

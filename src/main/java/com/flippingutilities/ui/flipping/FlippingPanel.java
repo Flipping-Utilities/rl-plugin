@@ -28,6 +28,7 @@ package com.flippingutilities.ui.flipping;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.FlippingItem;
+import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.offereditor.OfferEditorContainerPanel;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
@@ -54,7 +55,6 @@ import java.util.*;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
-
 
 @Slf4j
 public class FlippingPanel extends JPanel
@@ -87,7 +87,7 @@ public class FlippingPanel extends JPanel
 
 	@Getter
 	@Setter
-	private SORT selectedSort;
+	private SORT selectedSort = SORT.TIME;
 
 	@Getter
 	private Paginator paginator;
@@ -199,27 +199,32 @@ public class FlippingPanel extends JPanel
 
 	}
 
+	public void onNewOfferEventRebuild(OfferEvent offerEvent) {
+		boolean currentlySortedByTime = selectedSort == SORT.TIME || selectedSort == SORT.FAVORITE;
+		boolean newOfferEventAlreadyAtTop = activePanels.size() > 0 && activePanels.get(0).getFlippingItem().getItemId() == offerEvent.getItemId();
+		if (currentlySortedByTime && newOfferEventAlreadyAtTop) {
+			refreshPricesForFlippingItemPanel(offerEvent.getItemId());
+			return;
+		}
+		rebuild(plugin.viewTradesForCurrentView());
+	}
+
 	public List<FlippingItem> sortTradeList(List<FlippingItem> tradeList)
 	{
 		List<FlippingItem> result = new ArrayList<>(tradeList);
 
-		if (selectedSort == null || result.isEmpty())
+		if (result.isEmpty())
 		{
 			return result;
+		}
+		if (selectedSort == null) {
+			selectedSort = SORT.TIME;
 		}
 
 		switch (selectedSort)
 		{
 			case TIME:
-				result.sort((item1, item2) ->
-				{
-					if (item1 == null || item2 == null)
-					{
-						return -1;
-					}
-
-					return item1.getLatestActivityTime().compareTo(item2.getLatestActivityTime());
-				});
+				sortByTime(result);
 				break;
 			case FAVORITE:
 				if (isItemHighlighted()){
@@ -229,6 +234,7 @@ public class FlippingPanel extends JPanel
 					break;
 				}
 				result = result.stream().filter(item -> item.isFavorite()).collect(Collectors.toList());
+				sortByTime(result); //when it is on favorites you also want it to be sorted by time
 				break;
 			case PROFIT:
 				result.sort((item1, item2) ->
@@ -285,6 +291,21 @@ public class FlippingPanel extends JPanel
 				break;
 		}
 		return result;
+	}
+
+	private void sortByTime(List<FlippingItem> items) {
+		items.sort((item1, item2) ->
+		{
+			if (item1 == null || item2 == null)
+			{
+				return -1;
+			}
+			if (item1.getLatestActivityTime() == null || item2.getLatestActivityTime() == null) {
+				return -1;
+			}
+
+			return item2.getLatestActivityTime().compareTo(item1.getLatestActivityTime());
+		});
 	}
 
 	//Clears all other items, if the item in the offer setup slot is presently available on the panel
@@ -386,7 +407,9 @@ public class FlippingPanel extends JPanel
 		List<FlippingItem> matchesNotInHistory = new ArrayList<>();
 		for (ItemPrice itemInfo:  itemManager.search(lookup)) {
 			if (currentFlippingItems.containsKey(itemInfo.getId())) {
-				matchesInHistory.add(currentFlippingItems.get(itemInfo.getId()));
+				FlippingItem shallowCopy = currentFlippingItems.get(itemInfo.getId()).shallowClone();
+				shallowCopy.setValidFlippingPanelItem(true);
+				matchesInHistory.add(shallowCopy);
 			}
 			else {
 				ItemStats itemStats = plugin.getItemManager().getItemStats(itemInfo.getId(), false);
