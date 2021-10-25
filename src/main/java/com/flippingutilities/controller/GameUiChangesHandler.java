@@ -178,7 +178,6 @@ public class GameUiChangesHandler {
             if (itemId == 0) {
                 return;
             }
-            log.info("item id was {} and slot was {}", itemId, slot);
             highlightOffer(itemId);
         }
     }
