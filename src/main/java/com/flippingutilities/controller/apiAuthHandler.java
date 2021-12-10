@@ -61,6 +61,7 @@ public class apiAuthHandler {
             }
             if (jwt.shouldRefresh()) {
                 log.info("jwt should refresh");
+                hasValidJWT = true; //so it passes the check in refreshJwt
                 CompletableFuture<String> newJwtFuture = plugin.getApiRequestHandler().refreshJwt(jwtString);
                 newJwtFuture.whenComplete((newJwt, exception) -> {
                     if (exception != null) {

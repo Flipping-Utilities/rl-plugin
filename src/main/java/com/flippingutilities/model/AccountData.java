@@ -77,6 +77,7 @@ public class AccountData
 			item.setOfferMadeBy();
 			item.setTotalGELimit(geLimit);
 			item.syncState();
+			item.setOfferIds();
 			//when this change was made the field will not exist and will be null
 			if (item.getValidFlippingPanelItem() == null)
 			{
