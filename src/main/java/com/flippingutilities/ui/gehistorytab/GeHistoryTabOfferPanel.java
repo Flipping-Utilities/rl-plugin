@@ -10,6 +10,7 @@ import net.runelite.client.ui.FontManager;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.text.NumberFormat;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -64,14 +65,14 @@ public class GeHistoryTabOfferPanel extends JPanel
 
 		JPanel quantityPanel = new JPanel(new BorderLayout());
 		JLabel leftQuantityLabel = new JLabel("Quantity:");
-		JLabel rightQuantityLabel = new JLabel(String.valueOf(offer.getCurrentQuantityInTrade()));
+		JLabel rightQuantityLabel = new JLabel(NumberFormat.getIntegerInstance().format(offer.getCurrentQuantityInTrade()));
 		quantityPanel.add(leftQuantityLabel, BorderLayout.WEST);
 		quantityPanel.add(rightQuantityLabel, BorderLayout.EAST);
 		quantityPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 
 		JPanel pricePanel = new JPanel(new BorderLayout());
 		JLabel leftPriceLabel = new JLabel("Price Ea:");
-		JLabel rightPriceLabel = new JLabel(String.valueOf(offer.getPrice()));
+		JLabel rightPriceLabel = new JLabel(NumberFormat.getIntegerInstance().format(offer.getPrice()));
 		pricePanel.add(leftPriceLabel, BorderLayout.WEST);
 		pricePanel.add(rightPriceLabel, BorderLayout.EAST);
 		pricePanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
