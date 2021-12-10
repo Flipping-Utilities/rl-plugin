@@ -27,15 +27,18 @@
 package com.flippingutilities.model;
 
 
+import com.flippingutilities.utilities.Constants;
 import com.google.gson.annotations.SerializedName;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.UUID;
 
 /**
  * This class stores information from a {@link GrandExchangeOfferChanged} event and is populated with
@@ -44,8 +47,10 @@ import java.time.temporal.ChronoUnit;
  */
 @Data
 @AllArgsConstructor
+@NoArgsConstructor
 public class OfferEvent
 {
+	private String uuid;
 	@SerializedName("b")
 	private boolean buy;
 	@SerializedName("id")
@@ -92,6 +97,16 @@ public class OfferEvent
 	private transient int listedPrice;
 	private transient int spent;
 
+	public int getPrice() {
+		if (buy || time.getEpochSecond() < Constants.GE_TAX_START) {
+			return price;
+		}
+		if (price >= Constants.MAX_PRICE_FOR_GE_TAX) {
+			return price - Constants.GE_TAX_CAP;
+		}
+		int tax = (int)Math.floor(price /100);
+		return price - tax;
+	}
 
 	/**
 	 * Returns a boolean representing that the offer is a complete offer. A complete offer signifies
@@ -161,21 +176,23 @@ public class OfferEvent
 
 	public OfferEvent clone()
 	{
-		return new OfferEvent(buy,
-			itemId,
-			currentQuantityInTrade,
-			price,
-			time,
-			slot,
-			state,
-			tickArrivedAt,
-			ticksSinceFirstOffer,
-			totalQuantityInTrade,
-			validOfferEvent,
-			tradeStartedAt,
-			madeBy,
-			beforeLogin,
-			itemName,
+		return new OfferEvent(
+				uuid,
+				buy,
+				itemId,
+				currentQuantityInTrade,
+				price,
+				time,
+				slot,
+				state,
+				tickArrivedAt,
+				ticksSinceFirstOffer,
+				totalQuantityInTrade,
+				validOfferEvent,
+				tradeStartedAt,
+				madeBy,
+				beforeLogin,
+				itemName,
 				listedPrice,
 				spent
 		);
@@ -230,6 +247,7 @@ public class OfferEvent
 			|| offer.getState() == GrandExchangeOfferState.BUYING;
 
 		return new OfferEvent(
+			UUID.randomUUID().toString(),
 			isBuy,
 			offer.getItemId(),
 			offer.getQuantitySold(),
@@ -263,6 +281,7 @@ public class OfferEvent
 
 	public static OfferEvent dummyOffer(boolean buyState, boolean marginCheck, int price, int id, String itemName) {
 		return new OfferEvent(
+				UUID.randomUUID().toString(),
 				buyState,
 				id,
 				0,
