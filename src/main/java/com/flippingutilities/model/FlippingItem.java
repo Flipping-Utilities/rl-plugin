@@ -37,6 +37,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * This class is the representation of an item that a user is flipping. It contains information about the
@@ -357,6 +358,14 @@ public class FlippingItem
 
 	public void setOfferMadeBy() {
 		history.getCompressedOfferEvents().forEach(o -> o.setMadeBy(flippedBy));
+	}
+
+	public void setOfferIds() {
+		history.getCompressedOfferEvents().forEach(o -> {
+			if (o.getUuid() == null) {
+				o.setUuid(UUID.randomUUID().toString());
+			}
+		});
 	}
 
 	public void resetGeLimit() {
