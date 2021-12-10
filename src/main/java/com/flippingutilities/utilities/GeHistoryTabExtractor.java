@@ -48,18 +48,35 @@ public class GeHistoryTabExtractor {
         return offerEvent;
     }
 
+    /**
+     * Gets original price of each item (price before ge tax) from the ge history. We want
+     * to get the price before ge tax bc the the price after ge tax is always calculated by the
+     * OfferEvent class wherever we need to display it. That means that if we get the price after tax
+     * here and then construct an OfferEvent with that price, and then try to display the OfferEvent's price
+     * using OfferEvent.getPrice(), we will effectively be applying the ge tax twice.
+     * @return the original price of each item in the offer
+     */
     private static int getPrice(Widget w, int quantity) {
         String text = w.getText();
         String numString = text;
         Matcher m;
         boolean isTotalPrice = false;
+        // This will trigger anytime there is the ge tax text on an offer in the history
+        // For example when you have that text with the format "({original price} - {ge_tax})
+        // Whenever that text is present, we want to get the original price (NOT THE PRICE
+        // AFTER THE TAX). However, since the original price displayed is not the price of each item
+        //we have to divide it by the quantity to get the original price of each item.
         if (text.contains(")</col>")) {
             m = ORIGINAL_PRICE_PATTERN.matcher(text);
             isTotalPrice = true;
         }
+        //if the case above doesn't trigger that means there is no tax on the item, so we check if "each"
+        //is present which allows us to use the regex for getting the price of each item when multiple
+        //have been traded.
         else if (text.contains("each")) {
             m = MULTI_ITEM_PATTERN.matcher(text);
         }
+        //if this case triggers than it is an offer for a single item that is untaxed
         else {
             m = SINGLE_ITEM_PATTERN.matcher(text);
         }
