@@ -104,7 +104,7 @@ public class OfferEvent
 		if (price >= Constants.MAX_PRICE_FOR_GE_TAX) {
 			return price - Constants.GE_TAX_CAP;
 		}
-		int tax = (int)Math.floor(price /100);
+		int tax = (int)Math.floor(price * Constants.GE_TAX);
 		return price - tax;
 	}
 
