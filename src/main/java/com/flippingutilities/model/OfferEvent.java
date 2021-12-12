@@ -97,6 +97,9 @@ public class OfferEvent
 	private transient int listedPrice;
 	private transient int spent;
 
+	/**
+	 * @return post tax values
+	 */
 	public int getPrice() {
 		if (buy || time.getEpochSecond() < Constants.GE_TAX_START) {
 			return price;
@@ -106,6 +109,14 @@ public class OfferEvent
 		}
 		int tax = (int)Math.floor(price * Constants.GE_TAX);
 		return price - tax;
+	}
+
+	public int getPreTaxPrice() {
+		return price;
+	}
+
+	public int getTaxPaid() {
+		return (getPreTaxPrice() - getPrice()) * currentQuantityInTrade;
 	}
 
 	/**
@@ -234,7 +245,7 @@ public class OfferEvent
 			&& currentQuantityInTrade == other.getCurrentQuantityInTrade()
 			&& slot == other.getSlot()
 			&& totalQuantityInTrade == other.getTotalQuantityInTrade() && itemId == other.getItemId()
-			&& price == other.getPrice();
+			&& getPrice() == other.getPrice();
 	}
 
 	public static OfferEvent fromGrandExchangeEvent(GrandExchangeOfferChanged event)

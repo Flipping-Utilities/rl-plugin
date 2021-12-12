@@ -87,30 +87,28 @@ public class StatsPanel extends JPanel
 	private final JLabel hourlyProfitText = new JLabel("Hourly Profit: ");
 	private final JLabel roiText = new JLabel("ROI: ");
 	private final JLabel totalFlipsText = new JLabel("Total Flips Made: ");
-	private final JLabel mostCommonFlipText = new JLabel("Most Common: ");
+	private final JLabel taxPaidText = new JLabel("Tax paid: ");
 	private final JLabel sessionTimeText = new JLabel("Session Time: ");
-	private final JLabel[] textLabelArray = {hourlyProfitText, roiText, totalFlipsText, mostCommonFlipText, sessionTimeText};
+	private final JLabel[] textLabelArray = {hourlyProfitText, roiText, totalFlipsText, taxPaidText, sessionTimeText};
 
 	/* Subinfo value labels */
 	private final JLabel hourlyProfitVal = new JLabel("", SwingConstants.RIGHT);
 	private final JLabel roiVal = new JLabel("", SwingConstants.RIGHT);
 	private final JLabel totalFlipsVal = new JLabel("", SwingConstants.RIGHT);
-	private final JLabel mostCommonFlipVal = new JLabel("", SwingConstants.RIGHT);
+	private final JLabel taxPaidVal = new JLabel("", SwingConstants.RIGHT);
 	private final JLabel sessionTimeVal = new JLabel("", SwingConstants.RIGHT);
-	private final JLabel[] valLabelArray = {hourlyProfitVal, roiVal, totalFlipsVal, mostCommonFlipVal, sessionTimeVal};
+	private final JLabel[] valLabelArray = {hourlyProfitVal, roiVal, totalFlipsVal, taxPaidVal, sessionTimeVal};
 
 	private final JPanel hourlyProfitPanel = new JPanel(new BorderLayout());
 	private final JPanel roiPanel = new JPanel(new BorderLayout());
 	private final JPanel totalFlipsPanel = new JPanel(new BorderLayout());
-	private final JPanel mostCommonFlipPanel = new JPanel(new BorderLayout());
+	private final JPanel taxPaidPanel = new JPanel(new BorderLayout());
 	private final JPanel sessionTimePanel = this.createSessionTimePanel();
-	private final JPanel[] subInfoPanelArray = {hourlyProfitPanel, roiPanel, totalFlipsPanel, mostCommonFlipPanel, sessionTimePanel};
+	private final JPanel[] subInfoPanelArray = {hourlyProfitPanel, roiPanel, totalFlipsPanel, taxPaidPanel, sessionTimePanel};
 
 	private long totalProfit;
 	private long totalExpenses;
 	private int totalFlips;
-	private String mostCommonItemName;
-	private int mostFlips;
 
 	//Contains the unix time of the start of the interval.
 	@Getter
@@ -284,11 +282,12 @@ public class StatsPanel extends JPanel
 			subInfoPanel.remove(hourlyProfitPanel);
 		}
 
+		//TODO why are these instance variables....
 		totalProfit = 0;
 		totalExpenses = 0;
 		totalFlips = 0;
-		mostCommonItemName = null;
-		mostFlips = 0;
+
+		long taxPaid = 0;
 
 		for (FlippingItem item : tradesList)
 		{
@@ -297,15 +296,11 @@ public class StatsPanel extends JPanel
 			{
 				continue;
 			}
+			taxPaid += item.getTaxPaid(intervalHistory);
 			totalProfit += item.currentProfit(intervalHistory);
 			totalExpenses += item.getFlippedCashFlow(startOfInterval, true);
 			int flips = item.getFlips(startOfInterval).size();
 			totalFlips += flips;
-			if (mostCommonItemName == null || mostFlips < flips)
-			{
-				mostFlips = flips;
-				mostCommonItemName = item.getItemName();
-			}
 		}
 
 		updateTotalProfitDisplay();
@@ -318,7 +313,7 @@ public class StatsPanel extends JPanel
 		}
 		updateRoiDisplay();
 		updateTotalFlipsDisplay();
-		updateMostCommonFlip();
+		updateTaxPaidDisplay(taxPaid);
 	}
 
 	/**
@@ -413,19 +408,13 @@ public class StatsPanel extends JPanel
 			"<br>Does not count margin checks</html>");
 	}
 
-	private void updateMostCommonFlip()
+	private void updateTaxPaidDisplay(long taxPaid)
 	{
-		if (mostCommonItemName == null || mostFlips == 0)
-		{
-			mostCommonFlipVal.setText("None");
-			mostCommonFlipVal.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-			return;
-		}
-		mostCommonFlipVal.setText(mostCommonItemName);
-		mostCommonFlipVal.setToolTipText("Flipped " + mostFlips + (mostFlips == 1 ? " time" : " times"));
-		mostCommonFlipVal.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-		mostCommonFlipPanel.setToolTipText("<html>Most commonly flipped item determined by the item with most flips completed" +
-			"<br>Does not count margin checks</html>");
+		String taxPaidText = UIUtilities.quantityToRSDecimalStack(taxPaid, true) + " gp";
+		taxPaidVal.setText(taxPaidText);
+		taxPaidVal.setToolTipText("Tax paid after its implementation");
+		taxPaidVal.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+		taxPaidPanel.setToolTipText("<html>Tax paid after its implementation</html>");
 	}
 
 	/**
@@ -749,7 +738,7 @@ public class StatsPanel extends JPanel
 		Arrays.stream(textLabelArray).forEach(l -> l.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH));
 
 		//To ensure the item's name won't wrap the whole panel.
-		mostCommonFlipVal.setMaximumSize(new Dimension(145, 0));
+//		taxPaidVal.setMaximumSize(new Dimension(145, 0));
 
 		sessionTimeVal.setText(TimeFormatters.formatDuration(plugin.viewAccumulatedTimeForCurrentView()));
 		sessionTimeVal.setPreferredSize(new Dimension(200, 0));

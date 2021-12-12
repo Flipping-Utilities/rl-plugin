@@ -238,6 +238,10 @@ public class FlippingItem
 		return history.currentProfit(tradeList);
 	}
 
+	public long getTaxPaid(List<OfferEvent> tradeList) {
+		return tradeList.stream().mapToInt(OfferEvent::getTaxPaid).sum();
+	}
+
 	public long getFlippedCashFlow(List<OfferEvent> tradeList, boolean getExpense)
 	{
 		return history.getFlippedCashFlow(tradeList, getExpense);

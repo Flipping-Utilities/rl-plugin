@@ -65,7 +65,7 @@ public class NewOfferEventPipelineHandler {
         }
 
         OfferEvent finalizedOfferEvent = screenedOfferEvent.get();
-
+        
         List<FlippingItem> currentlyLoggedInAccountsTrades = plugin.getDataHandler().getAccountData(currentlyLoggedInAccount).getTrades();
 
         Optional<FlippingItem> flippingItem = currentlyLoggedInAccountsTrades.stream().filter(item -> item.getItemId() == finalizedOfferEvent.getItemId()).findFirst();
@@ -116,7 +116,7 @@ public class NewOfferEventPipelineHandler {
      * @param newOfferEvent event that just occurred
      * @return an optional containing an OfferEvent.
      */
-    public Optional<OfferEvent> screenOfferEvent(OfferEvent newOfferEvent) {
+    public Optional<OfferEvent>  screenOfferEvent(OfferEvent newOfferEvent) {
         //TODO this method can probably handle the different states in a more elegant manner...
         plugin.getSlotsPanel().update(newOfferEvent);
         Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
