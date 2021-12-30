@@ -39,6 +39,7 @@ import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.jobs.CacheUpdaterJob;
+import com.flippingutilities.utilities.CombinationFlipFinder;
 import com.flippingutilities.utilities.GeHistoryTabExtractor;
 import com.flippingutilities.utilities.InvalidOptionException;
 import com.flippingutilities.jobs.WikiDataFetcherJob;
@@ -101,6 +102,7 @@ public class FlippingPlugin extends Plugin {
     @Getter
     private ClientThread clientThread;
     @Inject
+    @Getter
     private ScheduledExecutorService executor;
     private ScheduledFuture generalRepeatingTasks;
     @Inject
@@ -194,12 +196,14 @@ public class FlippingPlugin extends Plugin {
     public Gson gson;
 
     public TradePersister tradePersister;
+    public CombinationFlipFinder combinationFlipFinder;
 
     @Override
     protected void startUp() {
         accountCurrentlyViewed = ACCOUNT_WIDE;
 
         tradePersister = new TradePersister(gson);
+        combinationFlipFinder = new CombinationFlipFinder(gson);
 
         optionHandler = new OptionHandler(this);
         dataHandler = new DataHandler(this);
@@ -208,8 +212,8 @@ public class FlippingPlugin extends Plugin {
         apiAuthHandler = new apiAuthHandler(this);
         apiRequestHandler = new ApiRequestHandler(this);
 
-        flippingPanel = new FlippingPanel(this, itemManager, executor);
-        statPanel = new StatsPanel(this, itemManager, executor);
+        flippingPanel = new FlippingPanel(this);
+        statPanel = new StatsPanel(this);
         geHistoryTabPanel = new GeHistoryTabPanel(this);
         slotsPanel = new SlotsPanel(itemManager);
         loginPanel = new LoginPanel(this);
@@ -906,6 +910,10 @@ public class FlippingPlugin extends Plugin {
                                 log.info("exception when trying to update timer. e: {}", e);
                             }
                         })), 1000, 1000, TimeUnit.MILLISECONDS);
+    }
+
+    public Map<Integer, Optional<FlippingItem>> getItemsInCombination(int itemId) {
+        return combinationFlipFinder.getItemsInCombination(itemId, getTradesForCurrentView());
     }
 
     @Subscribe

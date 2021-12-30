@@ -31,6 +31,7 @@ import com.flippingutilities.utilities.Constants;
 import com.google.gson.annotations.SerializedName;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
@@ -50,6 +51,7 @@ import java.util.UUID;
 @NoArgsConstructor
 public class OfferEvent
 {
+	@Getter
 	private String uuid;
 	@SerializedName("b")
 	private boolean buy;

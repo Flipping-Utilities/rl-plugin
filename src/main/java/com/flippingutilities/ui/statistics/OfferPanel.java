@@ -3,15 +3,20 @@ package com.flippingutilities.ui.statistics;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.ui.MasterPanel;
+import com.flippingutilities.ui.combinationflips.CombinationFlipPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
+import com.flippingutilities.ui.uiutilities.UIUtilities;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.util.QuantityFormatter;
 
 import javax.swing.*;
+import javax.swing.border.Border;
+import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
@@ -20,25 +25,63 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 
+/**
+ * The offer panel displays an offer's price, quantity, time bought, total cost,
+ * and gives the option to delete it.
+ */
 public class OfferPanel extends JPanel {
-    private JLabel title;
-    private String offerDescription;
-    private OfferEvent offer;
+    private final JLabel title;
+    private final String offerDescription;
+    private final OfferEvent offer;
+    private final FlippingPlugin plugin;
+    //flag used to decide whether the icons such as the delete icon and combination flip icon should be shown.
+    //when these panels are being displayed in the CombinationFlipPanel, we don't want to show those icons.
+    private boolean plainMode;
 
-    public OfferPanel(OfferEvent offer, FlippingItem item, FlippingPlugin plugin) {
+    public OfferPanel(OfferEvent offer, FlippingPlugin plugin, boolean plainMode) {
         setLayout(new BorderLayout());
         this.offer = offer;
+        this.plugin = plugin;
+        this.plainMode = plainMode;
 
         this.offerDescription = getOfferDescription();
-        this.title = new JLabel(QuantityFormatter.formatNumber(offer.getCurrentQuantityInTrade()) + " " + offerDescription
+        this.title = createTitleLabel();
+
+        add(title, BorderLayout.NORTH);
+        add(createBodyPanel(createIconPanel()), BorderLayout.CENTER);
+
+        setBackground(CustomColors.DARK_GRAY);
+        setBorder(createBorder(false));
+    }
+
+    /**
+     * Is called by a background task to continuously update the time display
+     */
+    public void updateTimeDisplay() {
+        title.setText(QuantityFormatter.formatNumber(offer.getCurrentQuantityInTrade()) + " " + offerDescription
+                + " " + "(" + TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago)");
+    }
+
+    private JLabel createTitleLabel() {
+        JLabel title = new JLabel(QuantityFormatter.formatNumber(offer.getCurrentQuantityInTrade()) + " " + offerDescription
                 + " " + "(" + TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago)", SwingConstants.CENTER);
 
+        title.setBorder(new EmptyBorder(0,0,2,0));
+        title.setBackground(CustomColors.DARK_GRAY);
         title.setOpaque(true);
-        title.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         title.setFont(FontManager.getRunescapeSmallFont());
         title.setForeground(offer.isBuy() ? CustomColors.OUTDATED_COLOR : ColorScheme.GRAND_EXCHANGE_PRICE);
+        return title;
+    }
 
+    /**
+     * The body panel contains everything but the title, currently this means
+     * it holds the prices and the icons
+     * @param iconPanel the panel which holds the delete and combination flips icon
+     */
+    private JPanel createBodyPanel(JPanel iconPanel) {
         JPanel body = new JPanel(new DynamicGridLayout(3, 0, 0, 2));
+        body.setBackground(CustomColors.DARK_GRAY);
         body.setBorder(new EmptyBorder(0, 2, 1, 2));
 
         JLabel priceLabel = new JLabel("Price:");
@@ -60,15 +103,64 @@ public class OfferPanel extends JPanel {
             valLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 
             JPanel infoPanel = new JPanel(new BorderLayout());
+            infoPanel.setBackground(CustomColors.DARK_GRAY);
             infoPanel.add(descriptionLabel, BorderLayout.WEST);
             infoPanel.add(valLabel, BorderLayout.EAST);
             body.add(infoPanel);
         }
 
-        JPanel deleteIconPanel = new JPanel(new BorderLayout());
-        JLabel trashIcon = new JLabel(Icons.TRASH_CAN_OFF);
-        deleteIconPanel.add(trashIcon, BorderLayout.CENTER);
-        trashIcon.addMouseListener(new MouseAdapter() {
+        if (!plainMode) {
+            body.add(iconPanel);
+        }
+
+        return body;
+    }
+
+    /**
+     * Creates the panel which holds the delete icon and combination flip
+     * icon (if needed)
+     */
+    private JPanel createIconPanel() {
+        JPanel iconPanel = new JPanel(new BorderLayout());
+        iconPanel.setBackground(CustomColors.DARK_GRAY);
+        if (plugin.combinationFlipFinder.isCombinationSource(offer.getItemId())) {
+            JLabel deleteIcon = createDeleteIcon();
+            deleteIcon.setBorder(new EmptyBorder(0,5,0,0));
+            iconPanel.add(createCombinationFlipIcon(), BorderLayout.EAST);
+            iconPanel.add(deleteIcon, BorderLayout.WEST);
+        }
+        else {
+            iconPanel.add(createDeleteIcon(), BorderLayout.CENTER);
+        }
+
+        return iconPanel;
+    }
+
+    private JButton createCombinationFlipIcon() {
+        JButton combinationFlipButton = new JButton("Combination Flip +");
+        combinationFlipButton.setFocusPainted(false);
+        combinationFlipButton.setFont(new Font("Whitney", Font.PLAIN, 10));
+        combinationFlipButton.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+        combinationFlipButton.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                MasterPanel m = plugin.getMasterPanel();
+                CombinationFlipPanel combinationFlipPanel = new CombinationFlipPanel(plugin, offer);
+                JDialog loginModal = UIUtilities.createModalFromPanel(m, combinationFlipPanel);
+                loginModal.pack();
+                loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, Math.max(m.getLocationOnScreen().y - loginModal.getHeight()/2,0) + 100);
+                loginModal.setVisible(true);
+            }
+        });
+        return combinationFlipButton;
+    }
+
+    /**
+     * Creates the panel which holds the delete icon to delete that specific offer
+     */
+    private JLabel createDeleteIcon() {
+        JLabel deleteIcon = new JLabel(Icons.TRASH_CAN_OFF);
+        deleteIcon.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
@@ -76,39 +168,29 @@ public class OfferPanel extends JPanel {
                     return;
                 }
                 //Display warning message
-                final int result = JOptionPane.showOptionDialog(trashIcon, "Are you sure you want to delete this offer?",
+                final int result = JOptionPane.showOptionDialog(deleteIcon, "Are you sure you want to delete this offer?",
                         "Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
                         null, new String[]{"Yes", "No"}, "No");
 
                 //If the user pressed "Yes"
                 if (result == JOptionPane.YES_OPTION) {
-                    item.invalidateOffers(Collections.singletonList(offer));
+                    offer.setValidOfferEvent(false);
                     plugin.getStatPanel().rebuild(plugin.getTradesForCurrentView());
                 }
             }
 
             @Override
             public void mouseEntered(MouseEvent e) {
-                trashIcon.setIcon(Icons.TRASH_CAN_ON);
+                deleteIcon.setIcon(Icons.TRASH_CAN_ON);
             }
 
             @Override
             public void mouseExited(MouseEvent e) {
-                trashIcon.setIcon(Icons.TRASH_CAN_OFF);
+                deleteIcon.setIcon(Icons.TRASH_CAN_OFF);
             }
         });
 
-
-        body.add(deleteIconPanel);
-
-        add(title, BorderLayout.NORTH);
-        add(body, BorderLayout.CENTER);
-    }
-
-
-    public void updateTimeDisplay() {
-        title.setText(QuantityFormatter.formatNumber(offer.getCurrentQuantityInTrade()) + " " + offerDescription
-                + " " + "(" + TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago)");
+        return deleteIcon;
     }
 
     private String getOfferDescription() {
@@ -123,5 +205,19 @@ public class OfferPanel extends JPanel {
         } else {
             return "";
         }
+    }
+
+    /**
+     * Used in the CombinationFlipPanel to show that this offer panel is selected or not
+     */
+    public void setSelected(boolean selected) {
+        setBorder(createBorder(selected));
+    }
+
+    private Border createBorder(boolean selected) {
+        Color outerBorderColor = selected? ColorScheme.GRAND_EXCHANGE_PRICE:ColorScheme.DARKER_GRAY_COLOR.darker();
+        return new CompoundBorder(
+                BorderFactory.createMatteBorder(1,1,1,1, outerBorderColor),
+                new EmptyBorder(4,3,3,3));
     }
 }

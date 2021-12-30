@@ -115,6 +115,9 @@ public class Icons {
 
     public static final ImageIcon FLASH;
 
+    public static final ImageIcon RIGHT_ARROW_LARGE;
+    public static final ImageIcon LEFT_ARROW_LARGE;
+
     static
     {
         final BufferedImage openIcon = ImageUtil
@@ -147,7 +150,7 @@ public class Icons {
 
         final BufferedImage starOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/star-gold.png");
         final BufferedImage sortByRecentOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/clock-gold.png");
-        final BufferedImage sortByRoiOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/roi-gold.png");
+        final BufferedImage sortByRoiOn = ImageUtil.loadImageResource(FlippingPlugin.class, "/toolbar-icons/roi-gold.png");
         final BufferedImage sortByProfitOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/profit-gold.png");
         final BufferedImage starOff = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/star_off_white.png");
         final BufferedImage sortByRecentOff = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/clock_white.png");
@@ -199,7 +202,7 @@ public class Icons {
         GITHUB_ICON_ON = new ImageIcon(githubIconOn);
 
         final BufferedImage twitterIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/twitter-alch.png");
-        final BufferedImage twitterIconOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/twitteron.png");
+        final BufferedImage twitterIconOn = ImageUtil.loadImageResource(FlippingPlugin.class, "/twitteron.png");
         TWITTER_ICON = new ImageIcon(twitterIcon);
         TWITTER_ICON_ON = new ImageIcon(twitterIconOn);
 
@@ -286,5 +289,11 @@ public class Icons {
 
         final BufferedImage flashIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/flash-cheese.png");
         FLASH = new ImageIcon(flashIcon);
+
+        final BufferedImage rightArrowLarge = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/right-arrow-large.png");
+        RIGHT_ARROW_LARGE = new ImageIcon(rightArrowLarge);
+
+        final BufferedImage leftArrowLarge = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/left-arrow-large.png");
+        LEFT_ARROW_LARGE = new ImageIcon(leftArrowLarge);
     }
 }
