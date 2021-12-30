@@ -61,8 +61,8 @@ import java.util.stream.Collectors;
 public class StatItemPanel extends JPanel
 {
 	private static final Border ITEM_HISTORY_BORDER = new CompoundBorder(
-		BorderFactory.createLineBorder(ColorScheme.DARKER_GRAY_COLOR.darker(), 3),
-		BorderFactory.createEmptyBorder(3, 0, 0, 0));
+		BorderFactory.createLineBorder(ColorScheme.DARKER_GRAY_COLOR.darker(), 1),
+		BorderFactory.createEmptyBorder(0, 0, 0, 0));
 
 	private FlippingPlugin plugin;
 	@Getter
@@ -125,13 +125,12 @@ public class StatItemPanel extends JPanel
 		this.offerPaginator = new Paginator(this::buildAllOffersPanels);
 		flipPaginator.setPageSize(10);
 		offerPaginator.setPageSize(10);
-		flipPaginator.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		offerPaginator.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+		flipPaginator.setBackground(CustomColors.DARK_GRAY);
+		offerPaginator.setBackground(CustomColors.DARK_GRAY);
 		offerPaginator.getStatusText().setFont(FontManager.getRunescapeSmallFont());
-		offerPaginator.setBorder(new EmptyBorder(0,0,0,0));
 		flipPaginator.getStatusText().setFont(FontManager.getRunescapeSmallFont());
-		flipPaginator.setBorder(BorderFactory.createMatteBorder(0,0,3,0, ColorScheme.DARKER_GRAY_HOVER_COLOR));
-		offerPaginator.setBorder(BorderFactory.createMatteBorder(0,0,3,0, ColorScheme.DARKER_GRAY_HOVER_COLOR));
+		flipPaginator.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		offerPaginator.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 
 		startOfInterval = statsPanel.getStartOfInterval();
 		tradeHistory = flippingItem.getIntervalHistory(startOfInterval);
@@ -185,12 +184,17 @@ public class StatItemPanel extends JPanel
 			List<OfferEvent> reversedHistory = new ArrayList<>(tradeHistory);
 			Collections.reverse(reversedHistory);
 			List<OfferEvent> offersOnCurrentPage = offerPaginator.getCurrentPageItems(reversedHistory);
-			offerPanels = offersOnCurrentPage.stream().map(offerEvent -> new OfferPanel(offerEvent, flippingItem, plugin)).collect(Collectors.toList());
+			offerPanels = offersOnCurrentPage.stream().map(
+					offerEvent -> new OfferPanel(
+							offerEvent, plugin ,false))
+					.collect(Collectors.toList());
 			List<JPanel> panels = new ArrayList<>();
-			panels.add(offerPaginator);
+			JPanel paginatorWrapper = new JPanel();
+			paginatorWrapper.add(offerPaginator);
+			panels.add(paginatorWrapper);
 			panels.addAll(offerPanels);
 			allOffersPanel.removeAll();
-			UIUtilities.stackPanelsVertically(panels, allOffersPanel,0);
+			UIUtilities.stackPanelsVertically(panels, allOffersPanel,2);
 			repaint();
 			revalidate();
 		});
@@ -201,10 +205,12 @@ public class StatItemPanel extends JPanel
 			List<Flip> flipsOnCurrentPage = flipPaginator.getCurrentPageItems(flips);
 			flipPanels = flipsOnCurrentPage.stream().map(FlipPanel::new).collect(Collectors.toList());
 			List<JPanel> panels = new ArrayList<>();
-			panels.add(flipPaginator);
+			JPanel paginatorWrapper = new JPanel();
+			paginatorWrapper.add(flipPaginator);
+			panels.add(paginatorWrapper);
 			panels.addAll(flipPanels);
 			allFlipsPanel.removeAll();
-			UIUtilities.stackPanelsVertically(panels, allFlipsPanel,0);
+			UIUtilities.stackPanelsVertically(panels, allFlipsPanel,2);
 			repaint();
 			revalidate();
 		});
@@ -317,12 +323,8 @@ public class StatItemPanel extends JPanel
 				statsPanel.getItemsWithOffersTabSelected().remove(flippingItem.getItemId());
 			}
 		});
-		Arrays.asList(offersPanel, flipsPanel).forEach(panel -> {
-			panel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-			panel.setBorder(ITEM_HISTORY_BORDER);
-		});
 
-		tabGroup.setBorder(new EmptyBorder(5, 0, 2, 0));
+		tabGroup.setBorder(new EmptyBorder(5, 0, 7, 0));
 		tabGroup.addTab(offersTab);
 		tabGroup.addTab(flipsTab);
 

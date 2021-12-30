@@ -95,12 +95,13 @@ public class FlippingPanel extends JPanel
 	@Getter
 	private OfferEditorContainerPanel offerEditorContainerPanel;
 
-	public FlippingPanel(final FlippingPlugin plugin, final ItemManager itemManager, ScheduledExecutorService executor)
+	public FlippingPanel(final FlippingPlugin plugin)
 	{
 		super(false);
 
 		this.plugin = plugin;
-		this.itemManager = itemManager;
+		this.itemManager = plugin.getItemManager();
+
 
 		setLayout(new BorderLayout());
 		setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -132,7 +133,7 @@ public class FlippingPanel extends JPanel
 		flippingItemContainer.add(scrollPane, ITEMS_PANEL);
 		flippingItemContainer.add(welcomeWrapper, WELCOME_PANEL);
 
-		IconTextField searchBar = UIUtilities.createSearchBar(executor,
+		IconTextField searchBar = UIUtilities.createSearchBar(plugin.getExecutor(),
 				(sBar) -> plugin.getClientThread().invoke(() -> this.updateSearch(sBar)));
 		searchBar.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 

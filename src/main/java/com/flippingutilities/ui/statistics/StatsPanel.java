@@ -136,15 +136,14 @@ public class StatsPanel extends JPanel
 	 * This represents the front-end Statistics Tab.
 	 * It is shown when it has been selected by the tab manager.
 	 *
-	 * @param plugin      Used to access the config and list of trades.
-	 * @param itemManager Accesses the RuneLite item cache.
+	 * @param plugin  Used to access the config and list of trades.
 	 */
-	public StatsPanel(final FlippingPlugin plugin, final ItemManager itemManager, ScheduledExecutorService executor)
+	public StatsPanel(final FlippingPlugin plugin)
 	{
 		super(false);
 		this.plugin = plugin;
-		this.itemManager = itemManager;
-		this.executor = executor;
+		this.itemManager = plugin.getItemManager();
+		this.executor = plugin.getExecutor();
 		this.startOfInterval = plugin.viewStartOfSessionForCurrentView();
 		this.prepareLabels();
 
