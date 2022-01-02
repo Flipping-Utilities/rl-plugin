@@ -39,6 +39,7 @@ import net.runelite.api.events.GrandExchangeOfferChanged;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -82,6 +83,7 @@ public class OfferEvent
 	@SerializedName("vSQ")
 	private boolean validOfferEvent;
 	private Instant tradeStartedAt;
+	private boolean beforeLogin;
 	/**
 	 * a offer always belongs to a flipping item. Every flipping item was flipped by an account and only one account and
 	 * has a flipped by attribute. So, the reason this attribute is here is because during the process of creating
@@ -92,7 +94,6 @@ public class OfferEvent
 	 */
 	private transient String madeBy;
 
-	private boolean beforeLogin;
 	//only used in theGeHistoryTabOfferPanel cause i don't want to pass the itemmanager down that far just to resolve item name from an id.
 	private transient String itemName;
 	//used in the live slot view to show what price something was listed at
@@ -203,8 +204,8 @@ public class OfferEvent
 				totalQuantityInTrade,
 				validOfferEvent,
 				tradeStartedAt,
-				madeBy,
 				beforeLogin,
+				madeBy,
 				itemName,
 				listedPrice,
 				spent
@@ -272,9 +273,9 @@ public class OfferEvent
 			0,
 			offer.getTotalQuantity(),
 			true,
-			null,
-			null,
+				null,
 			false,
+			null,
 			null,
 				offer.getPrice(),
 				offer.getSpent());
@@ -307,8 +308,8 @@ public class OfferEvent
 				1,
 				false,
 				null,
-				"",
 				false,
+				"",
 				itemName,
 				0,
 				0);

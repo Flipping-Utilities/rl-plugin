@@ -28,7 +28,6 @@
 package com.flippingutilities.model;
 
 import com.flippingutilities.utilities.ListUtils;
-import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -68,6 +67,19 @@ public class HistoryManager
 
 	@SerializedName("pIB")
 	private int itemsBoughtThroughCompleteOffers;
+
+	//put this in the offer event i think it would be easier
+
+
+//	//the parent combinations of this item. So if this item was a guthan platebody, and was part of a combination
+//	//flip with a guthan set, that combination flip would show up here.
+//	private Map<String, CombinationFlip> combinationParents;
+//
+//	//the children combinations of this item. So if this item was a guthan set and the user had combined a guthan
+//	//set offer with the guthan pieces, the combination flip would show up here.
+//	private Map<String, CombinationFlip> combinationChildren;
+
+
 
 
 
@@ -202,25 +214,25 @@ public class HistoryManager
 	 * determines if we calculate from buyList or sellList.
 	 *
 	 * @param tradeList  The list of standardized offers whose cashflow we want the value of.
-	 * @param getExpense Options parameter that calculates, if true, the total expenses accrued
+	 * @param buyState Options parameter that calculates, if true, the total expenses accrued
 	 *                   and, if false, the total revenues accrued from the trades.
 	 * @return Returns a long value based on the boolean parameter provided.
 	 */
-	public static long getFlippedCashFlow(List<OfferEvent> tradeList, boolean getExpense)
+	public static long getFlippedCashFlow(List<OfferEvent> tradeList, boolean buyState)
 	{
-		return getValueOfTrades(getSaleList(tradeList, getExpense), countItemsFlipped(tradeList));
+		return getValueOfTrades(filterTradeList(tradeList, buyState), countItemsFlipped(tradeList));
 	}
 
 	/**
 	 * Calculates the total value of the sell or buy offers in a trade list.
 	 *
 	 * @param tradeList
-	 * @param getExpense whether sell offers or buy offers should be looked at.
+	 * @param buyState whether sell offers or buy offers should be looked at.
 	 * @return
 	 */
-	public static long getTotalCashFlow(List<OfferEvent> tradeList, boolean getExpense)
+	public static long getTotalCashFlow(List<OfferEvent> tradeList, boolean buyState)
 	{
-		return getValueOfTrades(getSaleList(tradeList, getExpense), -1);
+		return getValueOfTrades(filterTradeList(tradeList, buyState), -1);
 	}
 
 	/**
@@ -256,13 +268,15 @@ public class HistoryManager
 	}
 
 	/**
+	 * TODO this method should probably just take a predicate, it is too specific right now and can be
+	 * TODO replaced by stream + filter
 	 * Gets the list of trades of either buy or sell states from a list of trades.
 	 *
 	 * @param tradeList The list of trades that will be checked.
 	 * @param buyState  true will return offers that have been bought and false will return offers that have been sold.
 	 * @return A list of items either sold or bought over a period of time.
 	 */
-	private static ArrayList<OfferEvent> getSaleList(List<OfferEvent> tradeList, boolean buyState)
+	private static List<OfferEvent> filterTradeList(List<OfferEvent> tradeList, boolean buyState)
 	{
 		ArrayList<OfferEvent> results = new ArrayList<>();
 

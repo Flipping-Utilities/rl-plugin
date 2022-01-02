@@ -163,6 +163,7 @@ public class FlippingPanel extends JPanel
 	{
 		SwingUtilities.invokeLater(() ->
 		{
+			activePanels.forEach(p -> p.popup.setVisible(false));
 			activePanels.clear();
 			flippingItemsPanel.removeAll();
 			if (flippingItems == null)

@@ -6,8 +6,7 @@ import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.statistics.OfferPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import com.flippingutilities.model.PartialOffer;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.util.AsyncBufferedImage;
@@ -20,13 +19,6 @@ import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@Data
-@AllArgsConstructor
-class SelectedOffer {
-    OfferEvent offer;
-    int amountConsumed;
-}
-
 /**
  * The panel the user interacts with when creating a combination flip
  */
@@ -34,27 +26,30 @@ public class CombinationFlipPanel extends JPanel {
     FlippingPlugin plugin;
     //the offer the user clicked on to bring up this panel. This will be the "parent" offer such
     //as the set that was sold after buying the individual pieces and constructing the set and selling it.
-    OfferEvent sourceOffer;
+    OfferEvent parentOffer;
+    FlippingItem item;
     //used to track which offers a user has selected to be in the combination flip and how much of the
     //offer is contributed.
-    LinkedHashMap<Integer, Map<String, SelectedOffer>> selectedOffers;
+    //This is a map of item id to a map of offer id to selected offer.
+    LinkedHashMap<Integer, Map<String, PartialOffer>> selectedOffers;
     JButton finishButton;
     
-    public CombinationFlipPanel(FlippingPlugin plugin, OfferEvent sourceOffer) {
+    public CombinationFlipPanel(FlippingPlugin plugin, FlippingItem item, OfferEvent parentOffer) {
         this.plugin = plugin;
-        this.sourceOffer = sourceOffer;
+        this.parentOffer = parentOffer;
+        this.item = item;
 
         selectedOffers = new LinkedHashMap<>();
 
-        //putting the source offer in the selected offers map from the beginning as it will always be "selected"
+        //putting the parent offer in the selected offers map from the beginning as it will always be "selected"
         //by virtue of it being what caused the combination flip
-        Map<String, SelectedOffer> sourceOfferMap = new HashMap<>();
-        sourceOfferMap.put(sourceOffer.getUuid(), new SelectedOffer(sourceOffer, sourceOffer.getCurrentQuantityInTrade()));
+        Map<String, PartialOffer> parentOfferMap = new HashMap<>();
+        parentOfferMap.put(parentOffer.getUuid(), new PartialOffer(parentOffer, parentOffer.getCurrentQuantityInTrade()));
 
-        selectedOffers.put(sourceOffer.getItemId(), sourceOfferMap);
+        selectedOffers.put(parentOffer.getItemId(), parentOfferMap);
 
         //initializing the selected offers map with empty hashmaps for the constituent parts of the combination flip
-        Map<Integer, Optional<FlippingItem>> itemsInCombination = plugin.getItemsInCombination(sourceOffer.getItemId());
+        Map<Integer, Optional<FlippingItem>> itemsInCombination = plugin.getItemsInCombination(parentOffer.getItemId());
         itemsInCombination.keySet().forEach(id -> selectedOffers.put(id, new HashMap<>()));
 
         setBackground(Color.BLACK);
@@ -102,14 +97,14 @@ public class CombinationFlipPanel extends JPanel {
             scrollPane.setPreferredSize(new Dimension(230, 350));
             for (int i = 0; i < Math.min(offers.size(), 10); i++) {
                 OfferEvent offer = offers.get(i);
-                OfferPanel offerPanel = new OfferPanel(offer, plugin, true);
+                OfferPanel offerPanel = new OfferPanel(plugin,item, parentOffer, true);
                 JPanel offerPanelWithPicker = new JPanel(new BorderLayout());
                 offerPanelWithPicker.setBackground(Color.BLACK);
-                boolean isSourceOffer = offer.equals(sourceOffer);
+                boolean isParentOffer = offer.equals(parentOffer);
                 JSpinner numberPicker = new JSpinner(
                         new SpinnerNumberModel(
-                            isSourceOffer? offer.getCurrentQuantityInTrade(): 0,
-                            isSourceOffer? 1:0, offer.getCurrentQuantityInTrade(),
+                            isParentOffer? offer.getCurrentQuantityInTrade(): 0,
+                            isParentOffer? 1:0, offer.getCurrentQuantityInTrade(),
                             1));
                 numberPicker.setForeground(CustomColors.CHEESE);
                 numberPicker.setSize(new Dimension(0, 70));
@@ -129,7 +124,7 @@ public class CombinationFlipPanel extends JPanel {
         }
 
         else {
-            String type = sourceOffer.isBuy()? "sell": "buy";
+            String type = parentOffer.isBuy()? "sell": "buy";
             JLabel noTradesLabel = new JLabel(String.format("No recorded %s for this item", type));
             noTradesLabel.setForeground(Color.RED);
             offersPanel.add(noTradesLabel);
@@ -141,7 +136,7 @@ public class CombinationFlipPanel extends JPanel {
      * Creates all the item icons and text for the first row in the dynamic grid layout
      * @return a mapping of item id to a label which contains the item icon and multiplier text.
      *         We use a linked hashmap so we can preserve insertion order when reading, thus ensuring
-     *         the first element retrieved from the map is always the source offer.
+     *         the first element retrieved from the map is always the parent offer.
      */
     private LinkedHashMap<Integer, JLabel> createItemIcons() {
         Set<Integer> allIds = selectedOffers.keySet();
@@ -154,8 +149,8 @@ public class CombinationFlipPanel extends JPanel {
             iconLabel.setFont(new Font("Whitney", Font.PLAIN, 20));
             iconLabel.setText("x0");
             idToIconLabel.put(id, iconLabel);
-            if (id == sourceOffer.getItemId()) {
-                iconLabel.setText(String.format("x%d", sourceOffer.getCurrentQuantityInTrade()));
+            if (id == parentOffer.getItemId()) {
+                iconLabel.setText(String.format("x%d", parentOffer.getCurrentQuantityInTrade()));
                 iconLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
             }
         });
@@ -173,9 +168,9 @@ public class CombinationFlipPanel extends JPanel {
         idToLabel.keySet().forEach(itemId -> {
             JLabel itemLabel = idToLabel.get(itemId);
             bodyPanel.add(itemLabel);
-            if (itemId == sourceOffer.getItemId()) {
+            if (itemId == parentOffer.getItemId()) {
                 //adding the arrow in the next column
-                ImageIcon arrowIcon = sourceOffer.isBuy()? Icons.RIGHT_ARROW_LARGE: Icons.LEFT_ARROW_LARGE;
+                ImageIcon arrowIcon = parentOffer.isBuy()? Icons.RIGHT_ARROW_LARGE: Icons.LEFT_ARROW_LARGE;
                 bodyPanel.add(new JLabel(arrowIcon));
             }
         });
@@ -186,14 +181,14 @@ public class CombinationFlipPanel extends JPanel {
      * @param bodyPanel the panel the offer panels are being added to
      * @param idToLabel a mapping of item id to label which contains the icon and the multiplier text. We need
      *                  a reference to this label in this method so we can change the multiplier text
-     * @param itemsInCombination the items in the combination (excluding the source item)
+     * @param itemsInCombination the items in the combination (excluding the parent item)
      */
     private void addOfferPanelRow(JPanel bodyPanel,
                                   LinkedHashMap<Integer, JLabel> idToLabel,
                                   Map<Integer, Optional<FlippingItem>> itemsInCombination) {
         idToLabel.keySet().forEach(id -> {
-            if (id == sourceOffer.getItemId()) {
-                bodyPanel.add(createOffersPanel(Collections.singletonList(sourceOffer), idToLabel.get(id)));
+            if (id == parentOffer.getItemId()) {
+                bodyPanel.add(createOffersPanel(Collections.singletonList(parentOffer), idToLabel.get(id)));
                 JPanel emptyPanel = new JPanel();
                 emptyPanel.setBackground(Color.BLACK);
                 bodyPanel.add(emptyPanel);
@@ -204,10 +199,10 @@ public class CombinationFlipPanel extends JPanel {
                 List<OfferEvent> offers = item.map(fitem -> {
                     List<OfferEvent> history = new ArrayList<>(fitem.getHistory().getCompressedOfferEvents());
                     Collections.reverse(history);
-                    //if the source offer is a sell, it means the user created it from its constituent parts and
+                    //if the parent offer is a sell, it means the user created it from its constituent parts and
                     //so we should only look for buys of the constituent parts. Hence, if there are no offers passed in to this
                     //method, it means there were no buys.
-                    return history.stream().filter(o -> o.isBuy() != sourceOffer.isBuy()).collect(Collectors.toList());
+                    return history.stream().filter(o -> o.isBuy() != parentOffer.isBuy()).collect(Collectors.toList());
                 }).orElse(new ArrayList<>());
 
                 bodyPanel.add(createOffersPanel(offers, idToLabel.get(id)));
@@ -227,7 +222,7 @@ public class CombinationFlipPanel extends JPanel {
 
         offerPanel.setSelected(numberPickerValue > 0);
 
-        Map<String, SelectedOffer> selectedOffersForThisItem = selectedOffers.get(itemId);
+        Map<String, PartialOffer> selectedOffersForThisItem = selectedOffers.get(itemId);
 
         //if the user has already selected this offer, just make the amount consumed for that offer what they
         //just selected
@@ -235,25 +230,25 @@ public class CombinationFlipPanel extends JPanel {
             selectedOffersForThisItem.get(offer.getUuid()).amountConsumed = numberPickerValue;
         }
         else {
-            selectedOffersForThisItem.put(offer.getUuid(), new SelectedOffer(offer, numberPickerValue));
+            selectedOffersForThisItem.put(offer.getUuid(), new PartialOffer(offer, numberPickerValue));
         }
 
         int totalConsumedAmount = selectedOffersForThisItem.values().stream().mapToInt(o -> o.amountConsumed).sum();
         iconLabel.setText("x" + totalConsumedAmount);
 
-        //if amount consumed for this item is the same as the source offer, make the multiplier text green
-        int sourceOfferConsumedAmount = selectedOffers.get(sourceOffer.getItemId()).get(sourceOffer.getUuid()).amountConsumed;
-        if (totalConsumedAmount == sourceOfferConsumedAmount) {
+        //if amount consumed for this item is the same as the parent offer, make the multiplier text green
+        int parentOfferConsumedAmount = selectedOffers.get(parentOffer.getItemId()).get(parentOffer.getUuid()).amountConsumed;
+        if (totalConsumedAmount == parentOfferConsumedAmount) {
             iconLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
         }
         else {
             iconLabel.setForeground(CustomColors.CHEESE);
         }
 
-        //if all items have the same amount consumed as the source offer, enable the finish button
+        //if all items have the same amount consumed as the parent offer, enable the finish button
         long itemsWithoutCorrectSelectedAmount = selectedOffers.values().stream().
                 map(m -> m.values().stream().mapToInt(o -> o.amountConsumed).sum()).
-                filter(sum -> sum != sourceOfferConsumedAmount).count();
+                filter(sum -> sum != parentOfferConsumedAmount).count();
         if (itemsWithoutCorrectSelectedAmount == 0) {
             finishButton.setEnabled(true);
             finishButton.setForeground(Color.GREEN);
@@ -275,6 +270,9 @@ public class CombinationFlipPanel extends JPanel {
         finishButton.setFont(new Font("Whitney", Font.PLAIN, 16));
         finishButton.setFocusPainted(false);
         finishButton.setEnabled(false);
+        finishButton.addActionListener(e -> {
+            item.createCombinationFlip(parentOffer, selectedOffers);
+        });
 
         bottomPanel.add(finishButton);
 
@@ -282,9 +280,9 @@ public class CombinationFlipPanel extends JPanel {
     }
 
     private JLabel createTitle() {
-        String action = sourceOffer.isBuy()? "Breaking": "Constructing";
+        String action = parentOffer.isBuy()? "Breaking": "Constructing";
         JLabel title = new JLabel(action, JLabel.CENTER);
-        ImageIcon itemIcon = new ImageIcon(plugin.getItemManager().getImage(sourceOffer.getItemId()));
+        ImageIcon itemIcon = new ImageIcon(plugin.getItemManager().getImage(parentOffer.getItemId()));
         title.setBorder(new EmptyBorder(0,0,20,0));
         title.setFont(new Font("Whitney", Font.PLAIN, 20));
         title.setIcon(itemIcon);
