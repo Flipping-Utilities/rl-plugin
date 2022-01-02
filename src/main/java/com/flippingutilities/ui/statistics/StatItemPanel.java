@@ -186,7 +186,7 @@ public class StatItemPanel extends JPanel
 			List<OfferEvent> offersOnCurrentPage = offerPaginator.getCurrentPageItems(reversedHistory);
 			offerPanels = offersOnCurrentPage.stream().map(
 					offerEvent -> new OfferPanel(
-							offerEvent, plugin ,false))
+							plugin, flippingItem, offerEvent, false))
 					.collect(Collectors.toList());
 			List<JPanel> panels = new ArrayList<>();
 			JPanel paginatorWrapper = new JPanel();

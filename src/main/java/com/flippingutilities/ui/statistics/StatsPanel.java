@@ -936,7 +936,7 @@ public class StatsPanel extends JPanel
 			rebuildStatItemContainer(plugin.viewTradesForCurrentView());
 			revalidate();
 			repaint();
-			log.info("page change took {}", Duration.between(rebuildStart, Instant.now()).toMillis());
+			log.debug("page change took {}", Duration.between(rebuildStart, Instant.now()).toMillis());
 		}));
 		paginator.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
 		paginator.setBorder(new EmptyBorder(0, 0, 0, 10));

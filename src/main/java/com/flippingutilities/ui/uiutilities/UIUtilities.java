@@ -205,6 +205,7 @@ public class UIUtilities
 		//can't really achieve this well with a modal (Jdialog) cause it opens up a window with an "X" button
 		//and so on. Whereas this just opens up popup menu with no border so this is more suited for the on hover
 		//popups.
+		//TODO why does thus even have to be a popup menu? Can't this just be a jlabel or jpanel?
 		component.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseEntered(MouseEvent e) {

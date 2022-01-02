@@ -34,10 +34,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * This class is the representation of an item that a user is flipping. It contains information about the
@@ -242,19 +239,19 @@ public class FlippingItem
 		return tradeList.stream().mapToInt(OfferEvent::getTaxPaid).sum();
 	}
 
-	public long getFlippedCashFlow(List<OfferEvent> tradeList, boolean getExpense)
+	public long getFlippedCashFlow(List<OfferEvent> tradeList, boolean buyState)
 	{
-		return history.getFlippedCashFlow(tradeList, getExpense);
+		return history.getFlippedCashFlow(tradeList, buyState);
 	}
 
-	public long getFlippedCashFlow(Instant earliestTime, boolean getExpense)
+	public long getFlippedCashFlow(Instant earliestTime, boolean buyState)
 	{
-		return history.getFlippedCashFlow(getIntervalHistory(earliestTime), getExpense);
+		return history.getFlippedCashFlow(getIntervalHistory(earliestTime), buyState);
 	}
 
-	public long getTotalCashFlow(List<OfferEvent> tradeList, boolean getExpense)
+	public long getTotalCashFlow(List<OfferEvent> tradeList, boolean buyState)
 	{
-		return history.getTotalCashFlow(tradeList, getExpense);
+		return history.getTotalCashFlow(tradeList, buyState);
 	}
 
 	public int countItemsFlipped(List<OfferEvent> tradeList)
@@ -372,8 +369,7 @@ public class FlippingItem
 		});
 	}
 
-	public void resetGeLimit() {
-		history.resetGeLimit();
-	}
+	public void createCombinationFlip(OfferEvent sourceOffer, Map<Integer, Map<String, PartialOffer>> selectedOffers) {
 
+	}
 }

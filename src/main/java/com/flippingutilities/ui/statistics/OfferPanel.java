@@ -30,24 +30,23 @@ import java.util.Collections;
  * and gives the option to delete it.
  */
 public class OfferPanel extends JPanel {
-    private final JLabel title;
-    private final String offerDescription;
+    private final JLabel timeDisplay;
     private final OfferEvent offer;
     private final FlippingPlugin plugin;
+    private final FlippingItem item;
     //flag used to decide whether the icons such as the delete icon and combination flip icon should be shown.
     //when these panels are being displayed in the CombinationFlipPanel, we don't want to show those icons.
     private boolean plainMode;
 
-    public OfferPanel(OfferEvent offer, FlippingPlugin plugin, boolean plainMode) {
+    public OfferPanel( FlippingPlugin plugin, FlippingItem item, OfferEvent offer, boolean plainMode) {
         setLayout(new BorderLayout());
         this.offer = offer;
         this.plugin = plugin;
+        this.item = item;
         this.plainMode = plainMode;
+        this.timeDisplay = createTimeDisplayLabel();
 
-        this.offerDescription = getOfferDescription();
-        this.title = createTitleLabel();
-
-        add(title, BorderLayout.NORTH);
+        add(createTitlePanel(createOfferDescriptionLabel(), timeDisplay), BorderLayout.NORTH);
         add(createBodyPanel(createIconPanel()), BorderLayout.CENTER);
 
         setBackground(CustomColors.DARK_GRAY);
@@ -58,20 +57,67 @@ public class OfferPanel extends JPanel {
      * Is called by a background task to continuously update the time display
      */
     public void updateTimeDisplay() {
-        title.setText(QuantityFormatter.formatNumber(offer.getCurrentQuantityInTrade()) + " " + offerDescription
-                + " " + "(" + TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago)");
+        if (offer.isComplete()) {
+            timeDisplay.setText("(" + TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago)");
+        }
+        else {
+            timeDisplay.setText(TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago");
+        }
     }
 
-    private JLabel createTitleLabel() {
-        JLabel title = new JLabel(QuantityFormatter.formatNumber(offer.getCurrentQuantityInTrade()) + " " + offerDescription
-                + " " + "(" + TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago)", SwingConstants.CENTER);
+    private JPanel createTitlePanel(JLabel offerDescription, JLabel timeDisplay) {
+        JPanel titlePanel = new JPanel();
+        titlePanel.setBorder(new EmptyBorder(0,0,2,0));
+        titlePanel.setBackground(CustomColors.DARK_GRAY);
+        if (!offer.isComplete()) {
+            //idk why but when i set the dynamic grid layout the offer description label has
+            //no distance from the top, but this doesn't happen when the title panel is the default layout (flowlayout)
+            titlePanel.setBorder(new EmptyBorder(5,0,2,0));
+            titlePanel.setLayout(new DynamicGridLayout(2, 1));
+        }
 
-        title.setBorder(new EmptyBorder(0,0,2,0));
-        title.setBackground(CustomColors.DARK_GRAY);
-        title.setOpaque(true);
-        title.setFont(FontManager.getRunescapeSmallFont());
-        title.setForeground(offer.isBuy() ? CustomColors.OUTDATED_COLOR : ColorScheme.GRAND_EXCHANGE_PRICE);
-        return title;
+        titlePanel.add(offerDescription);
+        titlePanel.add(timeDisplay);
+        return titlePanel;
+    }
+
+    private JLabel createTimeDisplayLabel() {
+        JLabel timeDisplay = new JLabel("", SwingConstants.CENTER);
+        timeDisplay.setBackground(CustomColors.DARK_GRAY);
+        timeDisplay.setOpaque(true);
+        timeDisplay.setFont(FontManager.getRunescapeSmallFont());
+        timeDisplay.setForeground(offer.isBuy() ? CustomColors.OUTDATED_COLOR : ColorScheme.GRAND_EXCHANGE_PRICE);
+        if (!offer.isComplete()) {
+            timeDisplay.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+        }
+
+        if (offer.isComplete()) {
+            timeDisplay.setText("(" + TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago)");
+        }
+        else {
+            timeDisplay.setText(TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago");
+        }
+
+        return timeDisplay;
+    }
+    private JLabel createOfferDescriptionLabel() {
+        JLabel offerDescriptionLabel = new JLabel("", SwingConstants.CENTER);
+        offerDescriptionLabel.setBackground(CustomColors.DARK_GRAY);
+        offerDescriptionLabel.setOpaque(true);
+        offerDescriptionLabel.setFont(FontManager.getRunescapeSmallFont());
+
+        if (!offer.isComplete()) {
+            offerDescriptionLabel.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+            offerDescriptionLabel.setText(
+                    QuantityFormatter.formatNumber(offer.getCurrentQuantityInTrade()) + " " + getOfferDescription() + " (ongoing)");
+        }
+        else {
+            offerDescriptionLabel.setForeground(offer.isBuy() ? CustomColors.OUTDATED_COLOR : ColorScheme.GRAND_EXCHANGE_PRICE);
+            offerDescriptionLabel.setText(
+                    QuantityFormatter.formatNumber(offer.getCurrentQuantityInTrade()) + " " + getOfferDescription()
+            );
+        }
+        return offerDescriptionLabel;
     }
 
     /**
@@ -145,7 +191,7 @@ public class OfferPanel extends JPanel {
             @Override
             public void mouseClicked(MouseEvent e) {
                 MasterPanel m = plugin.getMasterPanel();
-                CombinationFlipPanel combinationFlipPanel = new CombinationFlipPanel(plugin, offer);
+                CombinationFlipPanel combinationFlipPanel = new CombinationFlipPanel(plugin, item, offer);
                 JDialog loginModal = UIUtilities.createModalFromPanel(m, combinationFlipPanel);
                 loginModal.pack();
                 loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, Math.max(m.getLocationOnScreen().y - loginModal.getHeight()/2,0) + 100);
@@ -218,6 +264,6 @@ public class OfferPanel extends JPanel {
         Color outerBorderColor = selected? ColorScheme.GRAND_EXCHANGE_PRICE:ColorScheme.DARKER_GRAY_COLOR.darker();
         return new CompoundBorder(
                 BorderFactory.createMatteBorder(1,1,1,1, outerBorderColor),
-                new EmptyBorder(4,3,3,3));
+                new EmptyBorder(1,3,3,3));
     }
 }
