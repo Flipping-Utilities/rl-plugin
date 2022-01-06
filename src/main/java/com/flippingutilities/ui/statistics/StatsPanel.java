@@ -296,9 +296,9 @@ public class StatsPanel extends JPanel
 				continue;
 			}
 			taxPaid += item.getTaxPaid(intervalHistory);
-			totalProfit += item.currentProfit(intervalHistory);
-			totalExpenses += item.getFlippedCashFlow(startOfInterval, true);
-			int flips = item.getFlips(startOfInterval).size();
+			totalProfit += item.getNonCombinationProfit(intervalHistory);
+			totalExpenses += item.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory, true);
+			int flips = item.getNonCombinationFlips(startOfInterval).size();
 			totalFlips += flips;
 		}
 
@@ -546,11 +546,11 @@ public class StatsPanel extends JPanel
 					ArrayList<OfferEvent> intervalHistory1 = item1.getIntervalHistory(startOfInterval);
 					ArrayList<OfferEvent> intervalHistory2 = item2.getIntervalHistory(startOfInterval);
 
-					long totalExpense1 = item1.getFlippedCashFlow(intervalHistory1, true);
-					long totalRevenue1 = item1.getFlippedCashFlow(intervalHistory1, false);
+					long totalExpense1 = item1.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory1, true);
+					long totalRevenue1 = item1.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory1, false);
 
-					long totalExpense2 = item2.getFlippedCashFlow(intervalHistory2, true);
-					long totalRevenue2 = item2.getFlippedCashFlow(intervalHistory2, false);
+					long totalExpense2 = item2.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory2, true);
+					long totalRevenue2 = item2.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory2, false);
 
 					if ((totalExpense1 != 0 && totalRevenue1 != 0) && (totalExpense2 == 0 || totalRevenue2 == 0))
 					{
@@ -567,7 +567,7 @@ public class StatsPanel extends JPanel
 						return 0;
 					}
 
-					return Long.compare(item1.currentProfit(intervalHistory1), item2.currentProfit(intervalHistory2));
+					return Long.compare(item1.getNonCombinationProfit(intervalHistory1), item2.getNonCombinationProfit(intervalHistory2));
 				});
 				break;
 
@@ -575,14 +575,14 @@ public class StatsPanel extends JPanel
 				result.sort(Comparator.comparing(item ->
 				{
 					ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-					int quantity = item.countItemsFlipped(intervalHistory);
+					int quantity = item.countNonCombinationFlipQuantity(intervalHistory);
 
 					if (quantity == 0)
 					{
 						return 0;
 					}
 
-					return (int) item.currentProfit(intervalHistory) / quantity;
+					return (int) item.getNonCombinationProfit(intervalHistory) / quantity;
 				}));
 				break;
 			case "Highest ROI":
@@ -591,11 +591,11 @@ public class StatsPanel extends JPanel
 					ArrayList<OfferEvent> intervalHistory1 = item1.getIntervalHistory(startOfInterval);
 					ArrayList<OfferEvent> intervalHistory2 = item2.getIntervalHistory(startOfInterval);
 
-					long totalExpense1 = item1.getFlippedCashFlow(intervalHistory1, true);
-					long totalRevenue1 = item1.getFlippedCashFlow(intervalHistory1, false);
+					long totalExpense1 = item1.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory1, true);
+					long totalRevenue1 = item1.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory1, false);
 
-					long totalExpense2 = item2.getFlippedCashFlow(intervalHistory2, true);
-					long totalRevenue2 = item2.getFlippedCashFlow(intervalHistory2, false);
+					long totalExpense2 = item2.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory2, true);
+					long totalRevenue2 = item2.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory2, false);
 
 					if ((totalExpense1 != 0 && totalRevenue1 != 0) && (totalExpense2 == 0 || totalRevenue2 == 0))
 					{
@@ -612,12 +612,12 @@ public class StatsPanel extends JPanel
 						return 0;
 					}
 
-					return Float.compare((float) item1.currentProfit(intervalHistory1) / totalExpense1, (float) item2.currentProfit(intervalHistory2) / totalExpense2);
+					return Float.compare((float) item1.getNonCombinationProfit(intervalHistory1) / totalExpense1, (float) item2.getNonCombinationProfit(intervalHistory2) / totalExpense2);
 				});
 				break;
 
 			case "Highest Quantity":
-				result.sort(Comparator.comparing(item -> item.countItemsFlipped(item.getIntervalHistory(startOfInterval))));
+				result.sort(Comparator.comparing(item -> item.countNonCombinationFlipQuantity(item.getIntervalHistory(startOfInterval))));
 				break;
 
 			default:

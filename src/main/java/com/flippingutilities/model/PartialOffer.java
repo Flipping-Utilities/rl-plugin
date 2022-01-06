@@ -5,13 +5,16 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 
 @Data
+@AllArgsConstructor
 public class PartialOffer {
     public OfferEvent offer;
     public int amountConsumed;
 
-    public PartialOffer(OfferEvent offer, int amountConsumed) {
-//        OfferEvent clonedOffer = offer.clone();
-//        clonedOffer.se
+    public PartialOffer clone() {
+        return new PartialOffer(
+                offer.clone(),
+                amountConsumed
+        );
     }
 }
 

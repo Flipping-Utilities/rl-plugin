@@ -4,7 +4,7 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.MasterPanel;
-import com.flippingutilities.ui.combinationflips.CombinationFlipPanel;
+import com.flippingutilities.ui.combinationflips.CombinationFlipCreationPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
@@ -21,9 +21,6 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 
 /**
  * The offer panel displays an offer's price, quantity, time bought, total cost,
@@ -191,7 +188,7 @@ public class OfferPanel extends JPanel {
             @Override
             public void mouseClicked(MouseEvent e) {
                 MasterPanel m = plugin.getMasterPanel();
-                CombinationFlipPanel combinationFlipPanel = new CombinationFlipPanel(plugin, item, offer);
+                CombinationFlipCreationPanel combinationFlipPanel = new CombinationFlipCreationPanel(plugin, item, offer);
                 JDialog loginModal = UIUtilities.createModalFromPanel(m, combinationFlipPanel);
                 loginModal.pack();
                 loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, Math.max(m.getLocationOnScreen().y - loginModal.getHeight()/2,0) + 100);

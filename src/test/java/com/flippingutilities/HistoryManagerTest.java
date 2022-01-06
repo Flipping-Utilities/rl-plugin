@@ -109,17 +109,17 @@ public class HistoryManagerTest
 	{
 		List<OfferEvent> tradesList;
 		tradesList = historyManager.getIntervalsHistory(baseTime.minus(1, ChronoUnit.HOURS));
-		assertEquals(200, historyManager.currentProfit(tradesList));
+		assertEquals(200, historyManager.getNonCombinationProfit(tradesList));
 
 		//sell 5 more of the item
 		historyManager.updateHistory(Utils.offer(false, 5, 105, baseTime.minus(4, ChronoUnit.MINUTES), 1, GrandExchangeOfferState.SOLD, 5, 0));
 
 		tradesList = historyManager.getIntervalsHistory(baseTime.minus(1, ChronoUnit.HOURS));
-		assertEquals(225, historyManager.currentProfit(tradesList)); //47 buys and 45 sells, so looks for 45 items and profit is 5 gp ea.
+		assertEquals(225, historyManager.getNonCombinationProfit(tradesList)); //47 buys and 45 sells, so looks for 45 items and profit is 5 gp ea.
 
 		//when no trades are present given the interval
 		tradesList = historyManager.getIntervalsHistory(baseTime);
-		assertEquals(0, historyManager.currentProfit(tradesList));
+		assertEquals(0, historyManager.getNonCombinationProfit(tradesList));
 	}
 
 	@Test
