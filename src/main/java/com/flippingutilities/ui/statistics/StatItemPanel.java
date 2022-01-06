@@ -52,7 +52,6 @@ import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -134,7 +133,7 @@ public class StatItemPanel extends JPanel
 
 		startOfInterval = statsPanel.getStartOfInterval();
 		tradeHistory = flippingItem.getIntervalHistory(startOfInterval);
-		flips = flippingItem.getFlips(startOfInterval);
+		flips = flippingItem.getNonCombinationFlips(startOfInterval);
 		offerPaginator.updateTotalPages(tradeHistory.size());
 		flipPaginator.updateTotalPages(flips.size());
 
@@ -309,7 +308,7 @@ public class StatItemPanel extends JPanel
 
 		JPanel mainDisplay = new JPanel();
 		MaterialTabGroup tabGroup = new MaterialTabGroup(mainDisplay);
-		MaterialTab offersTab = new MaterialTab("Buys/Sells", tabGroup, offersPanel);
+		MaterialTab offersTab = new MaterialTab("Trades", tabGroup, offersPanel);
 		offersTab.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
@@ -324,9 +323,12 @@ public class StatItemPanel extends JPanel
 			}
 		});
 
+		MaterialTab combinationFlipsTab = new MaterialTab("Combos", tabGroup, new JPanel());
+
 		tabGroup.setBorder(new EmptyBorder(5, 0, 7, 0));
 		tabGroup.addTab(offersTab);
 		tabGroup.addTab(flipsTab);
+		tabGroup.add(combinationFlipsTab);
 
 		tabGroup.select(shouldSelectOffersTab? offersTab: flipsTab);
 		mainDisplay.setVisible(shouldExpandTradeHistory);
@@ -477,11 +479,11 @@ public class StatItemPanel extends JPanel
 				numItemsSold += offer.getCurrentQuantityInTrade();
 			}
 		}
-		long revenueFromFlippedItems = flippingItem.getFlippedCashFlow(tradeHistory, false);
-		long expenseFromFlippedItems = flippingItem.getFlippedCashFlow(tradeHistory, true);
-		long totalRevenue = flippingItem.getTotalCashFlow(tradeHistory, false);
-		long totalExpense = flippingItem.getTotalCashFlow(tradeHistory, true);
-		int itemCountFlipped = flippingItem.countItemsFlipped(tradeHistory);
+		long revenueFromFlippedItems = flippingItem.getValueOfOnlyMatchedNonCombinationOffers(tradeHistory, false);
+		long expenseFromFlippedItems = flippingItem.getValueOfOnlyMatchedNonCombinationOffers(tradeHistory, true);
+		long totalRevenue = flippingItem.getTotalRevenueOrExpense(tradeHistory, false);
+		long totalExpense = flippingItem.getTotalRevenueOrExpense(tradeHistory, true);
+		int itemCountFlipped = flippingItem.countNonCombinationFlipQuantity(tradeHistory);
 
 		updateTitleLabels(revenueFromFlippedItems - expenseFromFlippedItems, itemCountFlipped);
 		updateFlippingLabels(expenseFromFlippedItems, revenueFromFlippedItems, itemCountFlipped);
@@ -516,7 +518,6 @@ public class StatItemPanel extends JPanel
 		profitEachValLabel.setToolTipText(QuantityFormatter.formatNumber(itemsFlipped > 0 ? profitFromFlips / itemsFlipped : 0) + " gp/ea");
 
 		quantityFlipped.setText(QuantityFormatter.formatNumber(itemsFlipped) + " Items");
-
 
 		float roi = (float) flippingExpense >0? (float) profitFromFlips / flippingExpense * 100: 0;
 

@@ -230,33 +230,28 @@ public class FlippingItem
 		}
 	}
 
-	public long currentProfit(List<OfferEvent> tradeList)
+	public long getNonCombinationProfit(List<OfferEvent> tradeList)
 	{
-		return history.currentProfit(tradeList);
+		return history.getNonCombinationProfit(tradeList);
 	}
 
 	public long getTaxPaid(List<OfferEvent> tradeList) {
 		return tradeList.stream().mapToInt(OfferEvent::getTaxPaid).sum();
 	}
 
-	public long getFlippedCashFlow(List<OfferEvent> tradeList, boolean buyState)
+	public long getValueOfOnlyMatchedNonCombinationOffers(List<OfferEvent> tradeList, boolean buyState)
 	{
-		return history.getFlippedCashFlow(tradeList, buyState);
+		return history.getValueOfOnlyMatchedNonCombinationOffers(tradeList, buyState);
 	}
 
-	public long getFlippedCashFlow(Instant earliestTime, boolean buyState)
+	public long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean buyState)
 	{
-		return history.getFlippedCashFlow(getIntervalHistory(earliestTime), buyState);
+		return history.getTotalRevenueOrExpense(tradeList, buyState);
 	}
 
-	public long getTotalCashFlow(List<OfferEvent> tradeList, boolean buyState)
+	public int countNonCombinationFlipQuantity(List<OfferEvent> tradeList)
 	{
-		return history.getTotalCashFlow(tradeList, buyState);
-	}
-
-	public int countItemsFlipped(List<OfferEvent> tradeList)
-	{
-		return history.countItemsFlipped(tradeList);
+		return history.countNonCombinationFlipQuantity(tradeList);
 	}
 
 	public ArrayList<OfferEvent> getIntervalHistory(Instant earliestTime)
@@ -284,9 +279,9 @@ public class FlippingItem
 		history.validateGeProperties();
 	}
 
-	public List<Flip> getFlips(Instant earliestTime)
+	public List<Flip> getNonCombinationFlips(Instant earliestTime)
 	{
-		return history.getFlips(earliestTime);
+		return history.getNonCombinationFlips(earliestTime);
 	}
 
 	public boolean hasValidOffers()
@@ -369,7 +364,11 @@ public class FlippingItem
 		});
 	}
 
-	public void createCombinationFlip(OfferEvent sourceOffer, Map<Integer, Map<String, PartialOffer>> selectedOffers) {
+	public void addCombinationFlip(CombinationFlip combinationFlip) {
+		history.addCombinationFlip(combinationFlip);
+	}
 
+	public void addCombinationFlipThatDependsOnThisItem(CombinationFlip combinationFlip) {
+		history.addCombinationFlipThatDependsOnThisItem(combinationFlip);
 	}
 }

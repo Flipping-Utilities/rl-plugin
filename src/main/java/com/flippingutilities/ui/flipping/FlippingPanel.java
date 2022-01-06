@@ -201,6 +201,11 @@ public class FlippingPanel extends JPanel
 
 	}
 
+	/**
+	 * Handles rebuilding the flipping panel when a new offer event comes in. There are several cases
+	 * where we don't want to rebuild either because it is unnecessary or visually annoying for a user.
+	 * @param offerEvent the new offer that just came in
+	 */
 	public void onNewOfferEventRebuild(OfferEvent offerEvent) {
 		boolean currentlySortedByTime = selectedSort == SORT.TIME || selectedSort == SORT.FAVORITE;
 		boolean newOfferEventAlreadyAtTop = activePanels.size() > 0 && activePanels.get(0).getFlippingItem().getItemId() == offerEvent.getItemId();
@@ -208,7 +213,11 @@ public class FlippingPanel extends JPanel
 			refreshPricesForFlippingItemPanel(offerEvent.getItemId());
 			return;
 		}
-		rebuild(plugin.viewTradesForCurrentView());
+		//it's annoying when you have searched an item up or for whatever other reason an item is
+		//highlighted and then the panel is rebuilt due to an offer coming in. This clause prevents that.
+		if (!isItemHighlighted()) {
+			rebuild(plugin.viewTradesForCurrentView());
+		}
 	}
 
 	public List<FlippingItem> sortTradeList(List<FlippingItem> tradeList)
