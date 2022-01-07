@@ -23,14 +23,29 @@ public class CombinationFlipFinder {
 
     private Gson gson;
     private final Optional<Map<String, List<Integer>>> sets;
+    private Set<Integer> itemIdsInCombinations;
 
     public CombinationFlipFinder(Gson gson) {
         this.gson = gson;
         this.sets = this.loadClassFromResourceJson("/data/raw_sets.json", new TypeToken<Map<String, List<Integer>>>() {
         });
+        this.itemIdsInCombinations = getAllItemIdsInCombinations(sets);
         if (sets.isPresent()) {
             log.info("Successfully loaded combinations - sets count: {}", this.sets.get().size());
         }
+    }
+
+    private Set<Integer> getAllItemIdsInCombinations(Optional<Map<String, List<Integer>>> sets) {
+        Set<Integer> itemIdsInCombination = new HashSet<>();
+        if (sets.isEmpty()) {
+            return itemIdsInCombination;
+        }
+        sets.get().values().forEach(itemIdsInCombination::addAll);
+        return itemIdsInCombination;
+    }
+
+    public boolean isInCombination(int itemId) {
+        return this.itemIdsInCombinations.contains(itemId);
     }
 
     public boolean isCombinationSource(int itemId) {
