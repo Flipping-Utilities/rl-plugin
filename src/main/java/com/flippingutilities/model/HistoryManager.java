@@ -431,9 +431,33 @@ public class HistoryManager
 		groupedOffers.values().forEach(offers -> flips.addAll(createFlips(offers)));
 
 		flips.sort(Comparator.comparing(Flip::getTime));
-		Collections.reverse(flips);
 
 		return flips;
+	}
+
+	public List<CombinationFlip> getCombinationFlips(Instant earliestTime) {
+		//I could also simply go through the combination flips and see which one
+		//has all of its offers past earliestTime. The problem with that is that
+		//the offers in a CombinationFlip may have been deleted or invalidated and because we don't
+		//update the offers within a CombinationFlip, it will be outdated.
+		//So, reason i am getting the offers and then checking which combination flip
+		//has all of its offers in the list is because the offer list is always up to date, if
+		//offers are misisng, it means they have been deleted and any invalidated offers will
+		//be marked as such.
+		Set<String> offersInCombinationFlips = getOffersInCombinationFlips();
+		Set<String> combinationOffersIds = filterTradeList(
+				getIntervalsHistory(earliestTime),
+				offerEvent -> offersInCombinationFlips.contains(offerEvent.getUuid())).
+				stream().map(OfferEvent::getUuid).collect(Collectors.toSet());
+		List<CombinationFlip> combinationFlips = new ArrayList<>();
+		combinationFlips.addAll(combinationFlipsForThisItem.values());
+		combinationFlips.addAll(combinationFlipsThatUseThisItem.values());
+
+		return combinationFlips.stream().
+				filter(
+						cf -> cf.getOffers().stream().allMatch(o -> combinationOffersIds.contains(o.getUuid()))).
+				sorted(Comparator.comparing(c -> c.parent.offer.getTime())).
+				collect(Collectors.toList());
 	}
 
 	/**

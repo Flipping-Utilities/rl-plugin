@@ -210,7 +210,7 @@ public class CombinationFlipCreationPanel extends JPanel {
                 //if the parent offer is a sell, it means the user created it from its constituent parts and
                 //so we should only look for buys of the constituent parts. Hence, if there are no offers passed in to this
                 //method, it means there were no buys.
-                return history.stream().filter(o -> o.isBuy() != parentOffer.isBuy()).collect(Collectors.toList());
+                return history.stream().filter(o -> o.isBuy() != parentOffer.isBuy() & o.isValidOfferEvent()).collect(Collectors.toList());
             }).orElse(new ArrayList<>());
             itemIdToOffers.put(entry.getKey(), offers);
         });

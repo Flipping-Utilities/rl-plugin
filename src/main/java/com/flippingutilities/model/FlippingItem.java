@@ -284,6 +284,10 @@ public class FlippingItem
 		return history.getNonCombinationFlips(earliestTime);
 	}
 
+	public List<CombinationFlip> getCombinationFlips(Instant earliestTime) {
+		return history.getCombinationFlips(earliestTime);
+	}
+
 	public boolean hasValidOffers()
 	{
 		return history.hasValidOffers();

@@ -61,7 +61,7 @@ public class FlipPanel extends JPanel
 		title.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		title.setFont(FontManager.getRunescapeSmallFont());
 		title.setBorder(new EmptyBorder(0,0,2,0));
-		updateTitle();
+		updateTitleAndTimeDisplay();
 
 		JLabel buyPriceText = new JLabel("Buy Price:");
 		JLabel sellPriceText = new JLabel("Sell Price:");
@@ -117,7 +117,7 @@ public class FlipPanel extends JPanel
 		add(infoContainer, BorderLayout.CENTER);
 	}
 
-	public void updateTitle()
+	public void updateTitleAndTimeDisplay()
 	{
 		if (flip.isMarginCheck())
 		{
