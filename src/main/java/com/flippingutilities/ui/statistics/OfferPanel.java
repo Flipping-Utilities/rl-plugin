@@ -21,6 +21,7 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.List;
 
 /**
  * The offer panel displays an offer's price, quantity, time bought, total cost,
@@ -217,8 +218,8 @@ public class OfferPanel extends JPanel {
 
                 //If the user pressed "Yes"
                 if (result == JOptionPane.YES_OPTION) {
-                    offer.setValidOfferEvent(false);
-                    plugin.getStatPanel().rebuild(plugin.getTradesForCurrentView());
+                    item.invalidateOffers(List.of(offer), plugin.getTradesForCurrentView());
+                    plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
                 }
             }
 

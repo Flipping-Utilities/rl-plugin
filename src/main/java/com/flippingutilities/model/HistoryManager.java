@@ -27,6 +27,7 @@
 
 package com.flippingutilities.model;
 
+import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.utilities.ListUtils;
 import com.google.gson.annotations.SerializedName;
 import lombok.AllArgsConstructor;
@@ -387,24 +388,71 @@ public class HistoryManager
 		return compressedOfferEvents.stream().anyMatch(OfferEvent::isValidOfferEvent);
 	}
 
-	public void invalidateOffers(List<OfferEvent> offerList)
+	/**
+	 * See documentation of FlippingItem.invalidateOffers
+	 */
+	public void invalidateOffers(List<OfferEvent> offerList, List<FlippingItem> items)
 	{
+		if (offerList.isEmpty()) {
+			return;
+		}
+		int thisItemsId = offerList.get(0).getItemId();
+		Map<Integer, FlippingItem> itemIdToItem = items.stream().
+				map(item -> Map.entry(item.getItemId(), item)).
+				collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+		Set<String> idsOfOffersToBeDeleted = offerList.stream().map(OfferEvent::getUuid).collect(Collectors.toSet());
+
+		//delete any combination flips for this item that are used in its children
+		combinationFlipsForThisItem.forEach((offerId, cf) -> {
+			if (idsOfOffersToBeDeleted.contains(offerId)) {
+				Set<Integer> childFlippingItemIds = cf.children.keySet();
+				childFlippingItemIds.forEach(id -> {
+					FlippingItem childItem = itemIdToItem.get(id);
+					if (childItem != null) {
+						childItem.deleteParentCombinationFlip(cf);
+					}
+				});
+			}
+		});
+		//now delete combination flips for this item
+		combinationFlipsForThisItem.keySet().removeIf(idsOfOffersToBeDeleted::contains);
+
+		//delete the cf entries in the parent and siblings
+		Set<String> parentIdsToDelete = new HashSet<>();
+		combinationFlipsThatUseThisItem.forEach((offerId, cf) -> {
+			List<FlippingItem> siblingItems = cf.children.keySet().stream().
+					filter(id -> id != thisItemsId).
+					map(id -> itemIdToItem.get(id))
+					.filter(Objects::nonNull).
+					collect(Collectors.toList());
+			boolean shouldDelete = cf.getChildrenOffers().stream().anyMatch(o -> idsOfOffersToBeDeleted.contains(o.getUuid()));
+			if (shouldDelete) {
+				parentIdsToDelete.add(offerId);
+				FlippingItem parentItem = itemIdToItem.get(cf.parent.offer.getItemId());
+				if (parentItem != null) {
+					parentItem.deleteCombinationFlipForThisItem(cf);
+				}
+				siblingItems.forEach(item -> item.deleteCombinationFlipForThisItem(cf));
+			}
+		});
+		//delete the entry from the parent.
+		combinationFlipsThatUseThisItem.keySet().removeIf(parentIdsToDelete::contains);
+
 		offerList.forEach(offer -> offer.setValidOfferEvent(false));
 		removeInvalidatedOfferEvents();
 	}
 
+	public void deleteParentCombinationFlip(CombinationFlip combinationFlip) {
+		combinationFlipsThatUseThisItem.remove(combinationFlip.parent.offer.getUuid());
+	}
+
+	public void deleteCombinationFlipForThisItem(CombinationFlip combinationFlip) {
+		combinationFlipsForThisItem.remove(combinationFlip.parent.offer.getUuid());
+	}
+
 	public void removeInvalidatedOfferEvents()
 	{
-		if (nextGeLimitRefresh == null)
-		{
-			compressedOfferEvents.removeIf(offer -> !offer.isValidOfferEvent());
-			return;
-		}
-
-		Instant startOfRefresh = nextGeLimitRefresh.minus(4, ChronoUnit.HOURS);
-
-		compressedOfferEvents.removeIf(offer -> !offer.isValidOfferEvent() &&
-			(offer.getTime().isAfter(nextGeLimitRefresh) || offer.getTime().isBefore(startOfRefresh)));
+		compressedOfferEvents.removeIf(offer -> !offer.isValidOfferEvent());
 	}
 
 	/**
@@ -436,28 +484,19 @@ public class HistoryManager
 	}
 
 	public List<CombinationFlip> getCombinationFlips(Instant earliestTime) {
-		//I could also simply go through the combination flips and see which one
-		//has all of its offers past earliestTime. The problem with that is that
-		//the offers in a CombinationFlip may have been deleted or invalidated and because we don't
-		//update the offers within a CombinationFlip, it will be outdated.
-		//So, reason i am getting the offers and then checking which combination flip
-		//has all of its offers in the list is because the offer list is always up to date, if
-		//offers are misisng, it means they have been deleted and any invalidated offers will
-		//be marked as such.
-		Set<String> offersInCombinationFlips = getOffersInCombinationFlips();
-		Set<String> combinationOffersIds = filterTradeList(
-				getIntervalsHistory(earliestTime),
-				offerEvent -> offersInCombinationFlips.contains(offerEvent.getUuid())).
-				stream().map(OfferEvent::getUuid).collect(Collectors.toSet());
+		List<CombinationFlip> combinationFlips = getCombinationFlips();
+		//get only the combination flips that have all their offers after earliestTime
+		return combinationFlips.stream().
+				filter(cf -> cf.getOffers().stream().allMatch(o -> o.getTime().isAfter(earliestTime))).
+				sorted(Comparator.comparing(cf -> cf.parent.getOffer().getTime())).
+				collect(Collectors.toList());
+	}
+
+	private List<CombinationFlip> getCombinationFlips() {
 		List<CombinationFlip> combinationFlips = new ArrayList<>();
 		combinationFlips.addAll(combinationFlipsForThisItem.values());
 		combinationFlips.addAll(combinationFlipsThatUseThisItem.values());
-
-		return combinationFlips.stream().
-				filter(
-						cf -> cf.getOffers().stream().allMatch(o -> combinationOffersIds.contains(o.getUuid()))).
-				sorted(Comparator.comparing(c -> c.parent.offer.getTime())).
-				collect(Collectors.toList());
+		return combinationFlips;
 	}
 
 	/**

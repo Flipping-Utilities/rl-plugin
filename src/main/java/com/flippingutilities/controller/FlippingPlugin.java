@@ -789,10 +789,10 @@ public class FlippingPlugin extends Plugin {
     public void invalidateOffers(Instant startOfInterval) {
         if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
             for (AccountData accountData : dataHandler.getAllAccountData()) {
-                accountData.getTrades().forEach(item -> item.invalidateOffers(item.getIntervalHistory(startOfInterval)));
+                accountData.getTrades().forEach(item -> item.invalidateOffers(item.getIntervalHistory(startOfInterval), viewTradesForCurrentView()));
             }
         } else {
-            getTradesForCurrentView().forEach(item -> item.invalidateOffers(item.getIntervalHistory(startOfInterval)));
+            getTradesForCurrentView().forEach(item -> item.invalidateOffers(item.getIntervalHistory(startOfInterval), viewTradesForCurrentView()));
         }
 
         updateSinceLastAccountWideBuild = true;

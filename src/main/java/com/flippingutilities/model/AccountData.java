@@ -74,10 +74,11 @@ public class AccountData
 			ItemStats itemStats = plugin.getItemManager().getItemStats(tradeItemId, false);
 			int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
 
-			item.setOfferMadeBy();
 			item.setTotalGELimit(geLimit);
 			item.syncState();
 			item.setOfferIds();
+			item.setOfferNames();
+			item.setOfferMadeBy();
 			//when this change was made the field will not exist and will be null
 			if (item.getValidFlippingPanelItem() == null)
 			{

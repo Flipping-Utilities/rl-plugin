@@ -321,6 +321,7 @@ public class CombinationFlipCreationPanel extends JPanel {
             CombinationFlip combinationFlip = new CombinationFlip(parentOffer.getItemId(), parentOffer.getUuid(), selectedOffers);
             parentItem.addCombinationFlip(combinationFlip);
             itemsInCombination.values().forEach(item -> item.get().addCombinationFlipThatDependsOnThisItem(combinationFlip));
+            plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
         });
 
         bottomPanel.add(finishButton);

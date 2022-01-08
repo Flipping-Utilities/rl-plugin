@@ -29,6 +29,7 @@ package com.flippingutilities.ui.statistics;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.uiutilities.*;
 import com.google.common.base.Strings;
 import lombok.Getter;
@@ -130,6 +131,7 @@ public class StatsPanel extends JPanel
 
 	private Paginator paginator;
 	private ScheduledExecutorService executor;
+	private boolean currentlySearching;
 
 	/**
 	 * The statistics panel shows various stats about trades the user has made over a selectable time interval.
@@ -158,6 +160,12 @@ public class StatsPanel extends JPanel
 		setBorder(new EmptyBorder(5,7,0,7));
 	}
 
+	public void onNewOfferEventRebuild() {
+		if (!currentlySearching) {
+			rebuild(plugin.viewTradesForCurrentView());
+		}
+	}
+
 	/**
 	 * Removes old stat items and builds new ones based on the passed trade list.
 	 * Items are initialized with their sub info containers collapsed.
@@ -178,7 +186,7 @@ public class StatsPanel extends JPanel
 		});
 	}
 
-	public void rebuildStatItemContainer(List<FlippingItem> flippingItems)
+	private void rebuildStatItemContainer(List<FlippingItem> flippingItems)
 	{
 		activePanels.clear();
 		statItemPanelsContainer.removeAll();
@@ -196,11 +204,10 @@ public class StatsPanel extends JPanel
 	{
 		String lookup = searchBar.getText().toLowerCase();
 
-		//Just so we don't mess with the highlight.
-
 		//When the clear button is pressed, this is run.
 		if (Strings.isNullOrEmpty(lookup))
 		{
+			currentlySearching = false;
 			rebuild(plugin.viewTradesForCurrentView());
 			return;
 		}
@@ -218,10 +225,12 @@ public class StatsPanel extends JPanel
 		if (result.isEmpty())
 		{
 			searchBar.setIcon(IconTextField.Icon.ERROR);
+			currentlySearching = false;
 			rebuild(plugin.viewTradesForCurrentView());
 			return;
 		}
 
+		currentlySearching = true;
 		searchBar.setIcon(IconTextField.Icon.SEARCH);
 		rebuild(result);
 	}
@@ -449,7 +458,7 @@ public class StatsPanel extends JPanel
 		}
 
 		FlippingItem item = itemPanel.getFlippingItem();
-		item.invalidateOffers(item.getIntervalHistory(startOfInterval));
+		item.invalidateOffers(item.getIntervalHistory(startOfInterval), plugin.viewTradesForCurrentView());
 		if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
 			plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 		}
