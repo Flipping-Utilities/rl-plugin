@@ -67,9 +67,14 @@ public class CombinationFlip {
     public List<OfferEvent> getOffers() {
         List<OfferEvent> offers = new ArrayList<>();
         offers.add(parent.offer);
-        children.values().forEach(
-                offerIdToOfferMap -> offerIdToOfferMap.values().forEach(partialOffer -> offers.add(partialOffer.offer))
-        );
+        offers.addAll(getChildrenOffers());
         return offers;
+    }
+
+    public List<OfferEvent> getChildrenOffers() {
+        return children.values().stream().
+                flatMap(
+                        m -> m.values().stream().map(po -> po.offer)).
+                collect(Collectors.toList());
     }
 }

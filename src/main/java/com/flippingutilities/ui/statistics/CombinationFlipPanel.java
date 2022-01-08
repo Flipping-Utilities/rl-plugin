@@ -31,13 +31,18 @@ public class CombinationFlipPanel extends JPanel {
     private JPanel createTitlePanel() {
         JPanel titlePanel = new JPanel();
         titlePanel.setLayout(new DynamicGridLayout(2,1));
+        titlePanel.setBackground(CustomColors.DARK_GRAY);
 
         String actionText = combinationFlip.getParent().offer.isBuy()? "Broke" : "Constructed";
-        String parentName = "placeholder";
+        String parentName = combinationFlip.getParent().getOffer().getItemName();
         String quantityInCombination = QuantityFormatter.formatNumber(combinationFlip.getParent().offer.getCurrentQuantityInTrade());
 
+        JLabel quantityLabel = new JLabel(quantityInCombination + "x");
+        quantityLabel.setFont(FontManager.getRunescapeSmallFont());
+
         JPanel quantityAndTimePanel = new JPanel();
-        quantityAndTimePanel.add(new JLabel(quantityInCombination + "x"));
+        quantityAndTimePanel.setBackground(CustomColors.DARK_GRAY);
+        quantityAndTimePanel.add(quantityLabel);
         quantityAndTimePanel.add(timeDisplay);
 
         titlePanel.add(new JLabel(actionText + " " +  parentName, SwingConstants.CENTER));

@@ -171,10 +171,13 @@ public class StatItemPanel extends JPanel
 		backgroundPanel.removeAll();
 		UIUtilities.stackPanelsVertically(panelsAndPaginator, backgroundPanel, 2);
 		if (panels.isEmpty()) {
-			JLabel noDataLabel = new JLabel("Nothing here :(", SwingConstants.CENTER);
+			//if i don't wrap the label, the box layout places it weird....
+			JPanel labelWrapper = new JPanel();
+			JLabel noDataLabel = new JLabel("Nothing here...", SwingConstants.CENTER);
 			noDataLabel.setForeground(CustomColors.TOMATO);
 			noDataLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
-			backgroundPanel.add(noDataLabel);
+			labelWrapper.add(noDataLabel);
+			backgroundPanel.add(labelWrapper);
 		}
 		repaint();
 		revalidate();

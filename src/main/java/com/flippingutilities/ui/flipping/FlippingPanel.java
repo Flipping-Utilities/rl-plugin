@@ -95,6 +95,8 @@ public class FlippingPanel extends JPanel
 	@Getter
 	private OfferEditorContainerPanel offerEditorContainerPanel;
 
+	private boolean currentlySearching;
+
 	public FlippingPanel(final FlippingPlugin plugin)
 	{
 		super(false);
@@ -213,9 +215,9 @@ public class FlippingPanel extends JPanel
 			refreshPricesForFlippingItemPanel(offerEvent.getItemId());
 			return;
 		}
-		//it's annoying when you have searched an item up or for whatever other reason an item is
-		//highlighted and then the panel is rebuilt due to an offer coming in. This clause prevents that.
-		if (!isItemHighlighted()) {
+		//it's annoying when you have searched an item up or an item is
+		//highlighted and then the panel is rebuilt due to an offer coming in. This guard prevents that.
+		if (!isItemHighlighted() && !currentlySearching) {
 			rebuild(plugin.viewTradesForCurrentView());
 		}
 	}
@@ -403,12 +405,14 @@ public class FlippingPanel extends JPanel
 		//Just so we don't mess with the highlight.
 		if (isItemHighlighted())
 		{
+			currentlySearching = false;
 			return;
 		}
 
 		//When the clear button is pressed, this is run.
 		if (Strings.isNullOrEmpty(lookup))
 		{
+			currentlySearching = false;
 			rebuild(plugin.viewTradesForCurrentView());
 			return;
 		}
@@ -438,11 +442,13 @@ public class FlippingPanel extends JPanel
 		if (allMatches.isEmpty())
 		{
 			searchBar.setIcon(IconTextField.Icon.ERROR);
+			currentlySearching = false;
 			rebuild(plugin.viewTradesForCurrentView());
 			return;
 		}
-
+		log.info("{}", allMatches.size());
 		searchBar.setIcon(IconTextField.Icon.SEARCH);
+		currentlySearching = true;
 		rebuild(allMatches);
 	}
 
