@@ -295,20 +295,12 @@ public class FlippingItem
 	}
 
 	/**
-	 * Used to mark offers as invalid. These offers are then pruned later. This is the mechanism
-	 * by which offers are deleted.
-	 * @param offerList the offers being invalidated
-	 *
-	 * @param items    The other items in the account's trade list. These items are needed because
-	 * 	               the offer list that we are invalidating may be used in the combination flips of other
-	 * 	               items, so we have to delete all combination flips that use these offers, both in this item
-	 * 	               and in all other items.
+	 * see the documentation for HistoryManager.invalidateOffers
 	 */
 	public void invalidateOffers(List<OfferEvent> offerList, List<FlippingItem> items)
 	{
 		history.invalidateOffers(offerList, items);
 	}
-
 	public void setValidFlippingPanelItem(boolean isValid)
 	{
 		validFlippingPanelItem = isValid;
@@ -387,15 +379,15 @@ public class FlippingItem
 		history.addCombinationFlip(combinationFlip);
 	}
 
-	public void addCombinationFlipThatDependsOnThisItem(CombinationFlip combinationFlip) {
-		history.addCombinationFlipThatDependsOnThisItem(combinationFlip);
+	public void addParentCombinationFlip(CombinationFlip combinationFlip) {
+		history.addParentCombinationFlip(combinationFlip);
 	}
 
 	public void deleteParentCombinationFlip(CombinationFlip combinationFlip) {
 		history.deleteParentCombinationFlip(combinationFlip);
 	}
 
-	public void deleteCombinationFlipForThisItem(CombinationFlip combinationFlip) {
-		history.deleteCombinationFlipForThisItem(combinationFlip);
+	public void deleteCombinationFlip(CombinationFlip combinationFlip) {
+		history.deleteCombinationFlip(combinationFlip);
 	}
 }
