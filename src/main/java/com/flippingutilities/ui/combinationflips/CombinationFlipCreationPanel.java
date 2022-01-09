@@ -8,6 +8,7 @@ import com.flippingutilities.ui.statistics.OfferPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.model.PartialOffer;
+import com.flippingutilities.ui.uiutilities.UIUtilities;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.util.AsyncBufferedImage;
@@ -17,6 +18,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.ChangeEvent;
 import java.awt.*;
+import java.time.Instant;
 import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -60,13 +62,13 @@ public class CombinationFlipCreationPanel extends JPanel {
         setLayout(new BorderLayout());
 
         add(createTitle(), BorderLayout.NORTH);
-        add(createBody(childItemsInCombination), BorderLayout.CENTER);
+        add(createBody(childItemsInCombination, plugin.getStatPanel().getStartOfInterval()), BorderLayout.CENTER);
         add(createBottomPanel(childItemsInCombination), BorderLayout.SOUTH);
 
         setBorder(new EmptyBorder(8, 8, 8, 8));
     }
 
-    private JPanel createBody(Map<Integer, Optional<FlippingItem>> itemsInCombination) {
+    private JPanel createBody(Map<Integer, Optional<FlippingItem>> itemsInCombination, Instant startOfInterval) {
         Set<Integer> allIds = selectedOffers.keySet();
 
         JPanel bodyPanel = new JPanel();
@@ -76,7 +78,7 @@ public class CombinationFlipCreationPanel extends JPanel {
         LinkedHashMap<Integer, JLabel> idToIconLabel = createItemIcons();
 
         addItemLabelRow(bodyPanel, idToIconLabel);
-        addOfferPanelRow(bodyPanel, idToIconLabel, createItemIdToOffers(itemsInCombination));
+        addOfferPanelRow(bodyPanel, idToIconLabel, createItemIdToOffers(itemsInCombination, startOfInterval));
 
         return bodyPanel;
     }
@@ -98,16 +100,15 @@ public class CombinationFlipCreationPanel extends JPanel {
             scrollPane.setBackground(Color.BLACK);
             scrollPane.getVerticalScrollBar().setPreferredSize(new Dimension(2, 0));
             scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-            //Prevents scoll pane from being too large if there are few panels
-            int scrollPaneHeight = Math.min(350, offers.size() * 65);
+            //Prevents scoll pane from being unnecessarily large if there are few panels
+            int scrollPaneHeight = Math.min(350, (offers.size() * 65) + 40);
             scrollPane.setPreferredSize(new Dimension(230, scrollPaneHeight));
 
-            for (int i = 0; i < Math.min(offers.size(), 10); i++) {
+            for (int i = 0; i < offers.size(); i++) {
                 OfferEvent offer = offers.get(i);
                 OfferPanel offerPanel = new OfferPanel(plugin, null, offer, true);
                 JPanel offerPanelWithPicker = new JPanel(new BorderLayout());
                 offerPanelWithPicker.setBackground(Color.BLACK);
-                boolean isParentOffer = offer.equals(parentOffer);
                 int amountToSelect;
                 if (offer.getCurrentQuantityInTrade() <= targetSelectionValue) {
                     amountToSelect = offer.getCurrentQuantityInTrade();
@@ -116,11 +117,10 @@ public class CombinationFlipCreationPanel extends JPanel {
                     amountToSelect = targetSelectionValue;
                     targetSelectionValue = 0;
                 }
-
                 JSpinner numberPicker = new JSpinner(
                         new SpinnerNumberModel(
                                 amountToSelect,
-                                isParentOffer ? 1 : 0, //min val
+                                0, //min val
                                 offer.getCurrentQuantityInTrade(), //max val
                                 1));
                 numberPicker.setForeground(CustomColors.CHEESE);
@@ -145,6 +145,7 @@ public class CombinationFlipCreationPanel extends JPanel {
             JLabel noTradesLabel = new JLabel(String.format("No recorded %s for this item", type));
             noTradesLabel.setForeground(Color.RED);
             offersPanel.add(noTradesLabel);
+            iconLabel.setForeground(CustomColors.TOMATO);
             return offersPanel;
         }
     }
@@ -198,21 +199,23 @@ public class CombinationFlipCreationPanel extends JPanel {
      * @param childItemsInCombination the child items in the combination
      * @return a map of all the items in the combination and the offers that should be rendered
      */
-    private Map<Integer, List<OfferEvent>> createItemIdToOffers(Map<Integer, Optional<FlippingItem>> childItemsInCombination) {
+    private Map<Integer, List<OfferEvent>> createItemIdToOffers(
+            Map<Integer, Optional<FlippingItem>> childItemsInCombination,
+            Instant startOfInterval
+    ) {
         Map<Integer, List<OfferEvent>> itemIdToOffers = new HashMap<>();
         itemIdToOffers.put(parentOffer.getItemId(), Collections.singletonList(parentOffer));
 
-        childItemsInCombination.entrySet().forEach(entry -> {
-            Optional<FlippingItem> item = entry.getValue();
+        childItemsInCombination.forEach((key, item) -> {
             List<OfferEvent> offers = item.map(fitem -> {
-                List<OfferEvent> history = new ArrayList<>(fitem.getHistory().getCompressedOfferEvents());
+                List<OfferEvent> history = fitem.getIntervalHistory(startOfInterval);
                 Collections.reverse(history);
                 //if the parent offer is a sell, it means the user created it from its constituent parts and
                 //so we should only look for buys of the constituent parts. Hence, if there are no offers passed in to this
                 //method, it means there were no buys.
-                return history.stream().filter(o -> o.isBuy() != parentOffer.isBuy() & o.isValidOfferEvent()).collect(Collectors.toList());
+                return history.stream().filter(o -> o.isBuy() != parentOffer.isBuy()).collect(Collectors.toList());
             }).orElse(new ArrayList<>());
-            itemIdToOffers.put(entry.getKey(), offers);
+            itemIdToOffers.put(key, offers);
         });
 
         return itemIdToOffers;
@@ -233,6 +236,8 @@ public class CombinationFlipCreationPanel extends JPanel {
                 mapToInt(offerEvents -> offerEvents.stream().
                                 mapToInt(offerEvent -> offerEvent.getCurrentQuantityInTrade()).sum()).
                 min().orElse(0);
+
+        System.out.println(leastItemCount);
 
         idToLabel.keySet().forEach(id -> {
             List<OfferEvent> offers = itemIdToOffers.get(id);
@@ -279,7 +284,7 @@ public class CombinationFlipCreationPanel extends JPanel {
 
         //if amount consumed for this item is the same as the parent offer, make the multiplier text green
         int parentOfferConsumedAmount = selectedOffers.get(parentOffer.getItemId()).get(parentOffer.getUuid()).amountConsumed;
-        if (totalConsumedAmount == parentOfferConsumedAmount) {
+        if (totalConsumedAmount == parentOfferConsumedAmount && parentOfferConsumedAmount != 0) {
             iconLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
         } else {
             iconLabel.setForeground(CustomColors.CHEESE);
@@ -292,7 +297,7 @@ public class CombinationFlipCreationPanel extends JPanel {
         long itemsWithoutCorrectSelectedAmount = selectedOffers.values().stream().
                 map(m -> m.values().stream().mapToInt(o -> o.amountConsumed).sum()).
                 filter(sum -> sum != parentOfferConsumedAmount).count();
-        if (itemsWithoutCorrectSelectedAmount == 0) {
+        if (itemsWithoutCorrectSelectedAmount == 0 && parentOfferConsumedAmount != 0) {
             finishButton.setEnabled(true);
             finishButton.setForeground(Color.GREEN);
             long profit = Math.round(calculateProfit());
@@ -320,8 +325,35 @@ public class CombinationFlipCreationPanel extends JPanel {
         finishButton.addActionListener(e -> {
             CombinationFlip combinationFlip = new CombinationFlip(parentOffer.getItemId(), parentOffer.getUuid(), selectedOffers);
             parentItem.addCombinationFlip(combinationFlip);
-            itemsInCombination.values().forEach(item -> item.get().addCombinationFlipThatDependsOnThisItem(combinationFlip));
+            itemsInCombination.values().forEach(item -> item.get().addParentCombinationFlip(combinationFlip));
             plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
+            bottomPanel.removeAll();
+
+            JPanel successPanel = new JPanel(new DynamicGridLayout(2, 1));
+            successPanel.setBackground(Color.BLACK);
+
+            JLabel successLabel = new JLabel("Success!", SwingConstants.CENTER);
+            successLabel.setBorder(new EmptyBorder(0,0,10,0));
+            successLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+            successLabel.setFont(new Font("Whitney", Font.PLAIN, 16));
+
+            JLabel helpTextLabel = new JLabel("" +
+                    "<html><body style='text-align: center'>" +
+                    "You can find the flip under the \"combos tab\" of the trade history" +
+                    "<br>" +
+                    "section of <b>ANY</b> of the items seen here, <u><b>" +
+                    UIUtilities.colorText("provided you are in a time ", CustomColors.SOFT_ALCH) +
+                    "<br>" +
+                    UIUtilities.colorText("interval that contains all the offers you selected here", CustomColors.SOFT_ALCH) +
+                    "</b><u> <html>", SwingConstants.CENTER);
+            helpTextLabel.setFont(new Font("Whitney", Font.PLAIN, 12));
+
+            successPanel.add(successLabel);
+            successPanel.add(helpTextLabel);
+
+            bottomPanel.add(successPanel);
+            revalidate();
+            repaint();
         });
 
         bottomPanel.add(finishButton);
@@ -330,7 +362,11 @@ public class CombinationFlipCreationPanel extends JPanel {
         return bottomPanel;
     }
 
-    private JLabel createTitle() {
+    private JPanel createTitle() {
+        JPanel titlePanel = new JPanel(new BorderLayout());
+        titlePanel.setBorder(new EmptyBorder(5,0,15,0));
+        titlePanel.setBackground(Color.BLACK);
+
         String action = parentOffer.isBuy() ? "Breaking" : "Constructing";
         JLabel title = new JLabel(action, JLabel.CENTER);
         ImageIcon itemIcon = new ImageIcon(plugin.getItemManager().getImage(parentOffer.getItemId()));
@@ -339,7 +375,27 @@ public class CombinationFlipCreationPanel extends JPanel {
         title.setIcon(itemIcon);
         title.setHorizontalTextPosition(SwingConstants.LEFT);
         title.setIconTextGap(8);
-        return title;
+
+        JPanel intervalPanel = new JPanel();
+        intervalPanel.setBackground(Color.BLACK);
+
+        String intervalName = plugin.getStatPanel().getStartOfIntervalName();
+
+        JLabel intervalDescLabel  = new JLabel("You are looking at offers from the interval: ");
+        intervalDescLabel.setFont(new Font("Whitney", Font.PLAIN, 14));
+
+        JLabel intervalNameLabel =  new JLabel(intervalName);
+        intervalNameLabel.setFont(new Font("Whitney", Font.PLAIN, 16));
+        intervalNameLabel.setForeground(CustomColors.CHEESE);
+        UIUtilities.makeLabelUnderlined(intervalNameLabel);
+
+        intervalPanel.add(intervalDescLabel);
+        intervalPanel.add(intervalNameLabel);
+
+        titlePanel.add(title, BorderLayout.NORTH);
+        titlePanel.add(intervalPanel, BorderLayout.CENTER);
+
+        return titlePanel;
     }
 
     private long calculateProfit() {

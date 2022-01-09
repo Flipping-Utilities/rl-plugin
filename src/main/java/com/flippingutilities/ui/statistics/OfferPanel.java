@@ -36,7 +36,7 @@ public class OfferPanel extends JPanel {
     //when these panels are being displayed in the CombinationFlipPanel, we don't want to show those icons.
     private boolean plainMode;
 
-    public OfferPanel( FlippingPlugin plugin, FlippingItem item, OfferEvent offer, boolean plainMode) {
+    public OfferPanel(FlippingPlugin plugin, FlippingItem item, OfferEvent offer, boolean plainMode) {
         setLayout(new BorderLayout());
         this.offer = offer;
         this.plugin = plugin;
