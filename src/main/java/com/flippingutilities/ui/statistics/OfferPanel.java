@@ -21,7 +21,10 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The offer panel displays an offer's price, quantity, time bought, total cost,
@@ -45,7 +48,7 @@ public class OfferPanel extends JPanel {
         this.timeDisplay = createTimeDisplayLabel();
 
         add(createTitlePanel(createOfferDescriptionLabel(), timeDisplay), BorderLayout.NORTH);
-        add(createBodyPanel(createIconPanel()), BorderLayout.CENTER);
+        add(createBodyPanel(), BorderLayout.CENTER);
 
         setBackground(CustomColors.DARK_GRAY);
         setBorder(createBorder(false));
@@ -121,9 +124,8 @@ public class OfferPanel extends JPanel {
     /**
      * The body panel contains everything but the title, currently this means
      * it holds the prices and the icons
-     * @param iconPanel the panel which holds the delete and combination flips icon
      */
-    private JPanel createBodyPanel(JPanel iconPanel) {
+    private JPanel createBodyPanel() {
         JPanel body = new JPanel(new DynamicGridLayout(3, 0, 0, 2));
         body.setBackground(CustomColors.DARK_GRAY);
         body.setBorder(new EmptyBorder(0, 2, 1, 2));
@@ -154,7 +156,7 @@ public class OfferPanel extends JPanel {
         }
 
         if (!plainMode) {
-            body.add(iconPanel);
+            body.add(createIconPanel());
         }
 
         return body;
@@ -180,14 +182,27 @@ public class OfferPanel extends JPanel {
         return iconPanel;
     }
 
-    private JButton createCombinationFlipIcon() {
+    private JComponent createCombinationFlipIcon() {
+        boolean offerAlreadyInCombinationFlip = item.getOfferIdsContributingToPersonalComboFlips().contains(offer.getUuid());
+        if (offerAlreadyInCombinationFlip) {
+            JLabel combinationFlipLabel = new JLabel("Already in a combo flip");
+            combinationFlipLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
+            combinationFlipLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+            return combinationFlipLabel;
+        }
         JButton combinationFlipButton = new JButton("Combination Flip +");
+        combinationFlipButton.setToolTipText("<html>A combo flip is when you combine several items into one to sell it, <br>" +
+                "or break apart an item into parts to sell them. <br>If that's what you did with this trade, click me!</html>");
         combinationFlipButton.setFocusPainted(false);
         combinationFlipButton.setFont(new Font("Whitney", Font.PLAIN, 10));
         combinationFlipButton.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
         combinationFlipButton.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+                    JOptionPane.showMessageDialog(null, "You cannot create combo flips in the Accountwide view");
+                    return;
+                }
                 MasterPanel m = plugin.getMasterPanel();
                 CombinationFlipCreationPanel combinationFlipPanel = new CombinationFlipCreationPanel(plugin, item, offer);
                 JDialog loginModal = UIUtilities.createModalFromPanel(m, combinationFlipPanel);

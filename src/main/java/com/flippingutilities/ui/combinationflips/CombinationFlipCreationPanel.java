@@ -68,6 +68,10 @@ public class CombinationFlipCreationPanel extends JPanel {
         setBorder(new EmptyBorder(8, 8, 8, 8));
     }
 
+    /**
+     * The body holds the item icons and multiplier labels in the first row and the offer panels with the number
+     * pickers in the second row.
+     */
     private JPanel createBody(Map<Integer, Optional<FlippingItem>> itemsInCombination, Instant startOfInterval) {
         Set<Integer> allIds = selectedOffers.keySet();
 
@@ -78,7 +82,12 @@ public class CombinationFlipCreationPanel extends JPanel {
         LinkedHashMap<Integer, JLabel> idToIconLabel = createItemIcons();
 
         addItemLabelRow(bodyPanel, idToIconLabel);
-        addOfferPanelRow(bodyPanel, idToIconLabel, createItemIdToOffers(itemsInCombination, startOfInterval));
+        addOfferPanelRow(
+                bodyPanel,
+                idToIconLabel,
+                createItemIdToOffers(itemsInCombination, startOfInterval),
+                createItemIdToOfferIdsAlreadyUsed(itemsInCombination)
+        );
 
         return bodyPanel;
     }
@@ -86,7 +95,11 @@ public class CombinationFlipCreationPanel extends JPanel {
     /**
      * Creates the offer panels with the number picker for all the offers passed in
      */
-    private JComponent createOffersPanel(List<OfferEvent> offers, JLabel iconLabel, int targetSelectionValue) {
+    private JComponent createOffersPanel(
+            List<OfferEvent> offers,
+            Set<String> offerIdsAlreadyUsed,
+            JLabel iconLabel,
+            int targetSelectionValue) {
         JPanel offersPanel = new JPanel();
         offersPanel.setBackground(Color.BLACK);
         if (offers.size() > 0) {
@@ -107,31 +120,25 @@ public class CombinationFlipCreationPanel extends JPanel {
             for (int i = 0; i < offers.size(); i++) {
                 OfferEvent offer = offers.get(i);
                 OfferPanel offerPanel = new OfferPanel(plugin, null, offer, true);
-                JPanel offerPanelWithPicker = new JPanel(new BorderLayout());
-                offerPanelWithPicker.setBackground(Color.BLACK);
+                boolean offerAlreadyUsedInCombinationFlip = offerIdsAlreadyUsed.contains(offer.getUuid());
                 int amountToSelect;
                 if (offer.getCurrentQuantityInTrade() <= targetSelectionValue) {
                     amountToSelect = offer.getCurrentQuantityInTrade();
-                    targetSelectionValue -= amountToSelect;
                 } else {
                     amountToSelect = targetSelectionValue;
-                    targetSelectionValue = 0;
                 }
-                JSpinner numberPicker = new JSpinner(
-                        new SpinnerNumberModel(
-                                amountToSelect,
-                                0, //min val
-                                offer.getCurrentQuantityInTrade(), //max val
-                                1));
-                numberPicker.setForeground(CustomColors.CHEESE);
-                numberPicker.setSize(new Dimension(0, 70));
-                numberPicker.addChangeListener(e -> {
-                    this.numberPickerHandler(e, offer, offerPanel, iconLabel);
-                });
+                amountToSelect = offerAlreadyUsedInCombinationFlip? 0 : amountToSelect;
+                targetSelectionValue -= amountToSelect;
 
-                offerPanelWithPicker.add(numberPicker, BorderLayout.WEST);
-                offerPanelWithPicker.add(offerPanel, BorderLayout.CENTER);
+                JPanel offerPanelWithPicker = createOfferPanelWithPicker(
+                        offerPanel,
+                        iconLabel,
+                        offer,
+                        amountToSelect,
+                        offerAlreadyUsedInCombinationFlip
+                        );
                 offersPanel.add(offerPanelWithPicker);
+
                 if (i < Math.min(offers.size(), 10) - 1) {
                     offersPanel.add(Box.createVerticalStrut(4));
                 }
@@ -148,6 +155,45 @@ public class CombinationFlipCreationPanel extends JPanel {
             iconLabel.setForeground(CustomColors.TOMATO);
             return offersPanel;
         }
+    }
+
+    private JPanel createOfferPanelWithPicker(
+            OfferPanel offerPanel,
+            JLabel iconLabel,
+            OfferEvent offer,
+            int amountToSelect,
+            boolean alreadyInCombinationFlip) {
+        JPanel offerPanelWithPicker = new JPanel(new BorderLayout());
+        offerPanelWithPicker.setBackground(Color.BLACK);
+        JSpinner numberPicker = new JSpinner(
+                new SpinnerNumberModel(
+                        amountToSelect,
+                        0, //min val
+                        offer.getCurrentQuantityInTrade(), //max val
+                        1));
+        numberPicker.setForeground(CustomColors.CHEESE);
+        numberPicker.setSize(new Dimension(0, 70));
+        numberPicker.addChangeListener(e -> {
+            this.numberPickerHandler(e, offer, offerPanel, iconLabel);
+        });
+
+        offerPanelWithPicker.add(numberPicker, BorderLayout.WEST);
+        offerPanelWithPicker.add(offerPanel, BorderLayout.CENTER);
+        if (alreadyInCombinationFlip) {
+            numberPicker.setEnabled(false);
+            JPanel alreadyUsedPanel = new JPanel();
+            alreadyUsedPanel.setBackground(Color.BLACK);
+
+            JLabel alreadyUsedLabel = new JLabel("This offer is already in a combination flip", SwingConstants.CENTER);
+            alreadyUsedLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
+            alreadyUsedLabel.setForeground(CustomColors.TOMATO);
+
+            alreadyUsedPanel.add(alreadyUsedLabel);
+
+            offerPanelWithPicker.add(alreadyUsedPanel, BorderLayout.SOUTH);
+        }
+        return offerPanelWithPicker;
+
     }
 
     /**
@@ -197,7 +243,7 @@ public class CombinationFlipCreationPanel extends JPanel {
 
     /**
      * @param childItemsInCombination the child items in the combination
-     * @return a map of all the items in the combination and the offers that should be rendered
+     * @return a map of ALL the items in the combination and the offers that should be rendered
      */
     private Map<Integer, List<OfferEvent>> createItemIdToOffers(
             Map<Integer, Optional<FlippingItem>> childItemsInCombination,
@@ -206,7 +252,7 @@ public class CombinationFlipCreationPanel extends JPanel {
         Map<Integer, List<OfferEvent>> itemIdToOffers = new HashMap<>();
         itemIdToOffers.put(parentOffer.getItemId(), Collections.singletonList(parentOffer));
 
-        childItemsInCombination.forEach((key, item) -> {
+        childItemsInCombination.forEach((itemId, item) -> {
             List<OfferEvent> offers = item.map(fitem -> {
                 List<OfferEvent> history = fitem.getIntervalHistory(startOfInterval);
                 Collections.reverse(history);
@@ -215,39 +261,53 @@ public class CombinationFlipCreationPanel extends JPanel {
                 //method, it means there were no buys.
                 return history.stream().filter(o -> o.isBuy() != parentOffer.isBuy()).collect(Collectors.toList());
             }).orElse(new ArrayList<>());
-            itemIdToOffers.put(key, offers);
+            itemIdToOffers.put(itemId, offers);
         });
 
         return itemIdToOffers;
     }
 
     /**
+     * @param childItemsInCombination childItemsInCombination the child items in the combination
+     * @return A map of the child items ids to their offers which are currently already being used in combination flips
+     */
+    private Map<Integer, Set<String>> createItemIdToOfferIdsAlreadyUsed(Map<Integer, Optional<FlippingItem>> childItemsInCombination) {
+        Map<Integer, Set<String>> itemIdToOfferIdsAlreadyUsed = new HashMap<>();
+        childItemsInCombination.forEach((itemId, item) -> {
+            Set<String> offerIds = item.map(FlippingItem::getOfferIdsContributingToComboFlips).orElse(new HashSet<>());
+            itemIdToOfferIdsAlreadyUsed.put(itemId, offerIds);
+        });
+        return itemIdToOfferIdsAlreadyUsed;
+    }
+
+    /**
      * Adds the second row to the body panel. The second row contains all the offer panels
      *
-     * @param bodyPanel          the panel the offer panels are being added to
-     * @param idToLabel          a mapping of item id to label which contains the icon and the multiplier text. We need
-     *                           a reference to this label in this method so we can change the multiplier text
-     * @param itemIdToOffers     a map of all the items in the combination and the offers that should be rendered
+     * @param bodyPanel                   the panel the offer panels are being added to
+     * @param idToLabel                   a mapping of item id to label which contains the icon and the multiplier text. We need
+     *                                    a reference to this label in this method so we can change the multiplier text
+     * @param itemIdToOffers              a map of all the items in the combination and the offers that should be rendered
+     * @param itemIdToOfferIdsAlreadyUsed map of item id to a set of offer ids that are already used in a combination flip.
      */
     private void addOfferPanelRow(JPanel bodyPanel,
                                   LinkedHashMap<Integer, JLabel> idToLabel,
-                                  Map<Integer, List<OfferEvent>> itemIdToOffers) {
+                                  Map<Integer, List<OfferEvent>> itemIdToOffers,
+                                  Map<Integer, Set<String>> itemIdToOfferIdsAlreadyUsed) {
         int leastItemCount = itemIdToOffers.values().stream().
                 mapToInt(offerEvents -> offerEvents.stream().
-                                mapToInt(offerEvent -> offerEvent.getCurrentQuantityInTrade()).sum()).
+                        mapToInt(OfferEvent::getCurrentQuantityInTrade).sum()).
                 min().orElse(0);
-
-        System.out.println(leastItemCount);
 
         idToLabel.keySet().forEach(id -> {
             List<OfferEvent> offers = itemIdToOffers.get(id);
+            Set<String> offerIdsAlreadyUsed = itemIdToOfferIdsAlreadyUsed.getOrDefault(id, new HashSet<>());
             if (id == parentOffer.getItemId()) {
-                bodyPanel.add(createOffersPanel(offers, idToLabel.get(id), leastItemCount));
+                bodyPanel.add(createOffersPanel(offers, offerIdsAlreadyUsed, idToLabel.get(id), leastItemCount));
                 JPanel emptyPanel = new JPanel();
                 emptyPanel.setBackground(Color.BLACK);
                 bodyPanel.add(emptyPanel);
             } else {
-                bodyPanel.add(createOffersPanel(offers, idToLabel.get(id), leastItemCount));
+                bodyPanel.add(createOffersPanel(offers, offerIdsAlreadyUsed, idToLabel.get(id), leastItemCount));
             }
         });
 
@@ -265,6 +325,10 @@ public class CombinationFlipCreationPanel extends JPanel {
         setDisplaysOnCompletion();
     }
 
+    /**
+     * Sets the multiplier and the selected offers based on the the number picker value. This is used in the
+     * number picker handler method too.
+     */
     private void setDisplaysAndStateBasedOnSelection(int numberPickerValue, OfferEvent offer, OfferPanel offerPanel, JLabel iconLabel) {
         int itemId = offer.getItemId();
 
@@ -324,7 +388,7 @@ public class CombinationFlipCreationPanel extends JPanel {
         finishButton.setFocusPainted(false);
         finishButton.addActionListener(e -> {
             CombinationFlip combinationFlip = new CombinationFlip(parentOffer.getItemId(), parentOffer.getUuid(), selectedOffers);
-            parentItem.addCombinationFlip(combinationFlip);
+            parentItem.addPersonalCombinationFlip(combinationFlip);
             itemsInCombination.values().forEach(item -> item.get().addParentCombinationFlip(combinationFlip));
             plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
             bottomPanel.removeAll();
@@ -333,13 +397,13 @@ public class CombinationFlipCreationPanel extends JPanel {
             successPanel.setBackground(Color.BLACK);
 
             JLabel successLabel = new JLabel("Success!", SwingConstants.CENTER);
-            successLabel.setBorder(new EmptyBorder(0,0,10,0));
+            successLabel.setBorder(new EmptyBorder(0, 0, 10, 0));
             successLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
             successLabel.setFont(new Font("Whitney", Font.PLAIN, 16));
 
             JLabel helpTextLabel = new JLabel("" +
                     "<html><body style='text-align: center'>" +
-                    "You can find the flip under the \"combos tab\" of the trade history" +
+                    "You can find the flip under the \"combos\" tab of the trade history" +
                     "<br>" +
                     "section of <b>ANY</b> of the items seen here, <u><b>" +
                     UIUtilities.colorText("provided you are in a time ", CustomColors.SOFT_ALCH) +
@@ -364,7 +428,7 @@ public class CombinationFlipCreationPanel extends JPanel {
 
     private JPanel createTitle() {
         JPanel titlePanel = new JPanel(new BorderLayout());
-        titlePanel.setBorder(new EmptyBorder(5,0,15,0));
+        titlePanel.setBorder(new EmptyBorder(5, 0, 15, 0));
         titlePanel.setBackground(Color.BLACK);
 
         String action = parentOffer.isBuy() ? "Breaking" : "Constructing";
@@ -381,10 +445,10 @@ public class CombinationFlipCreationPanel extends JPanel {
 
         String intervalName = plugin.getStatPanel().getStartOfIntervalName();
 
-        JLabel intervalDescLabel  = new JLabel("You are looking at offers from the interval: ");
+        JLabel intervalDescLabel = new JLabel("You are looking at offers from the interval: ");
         intervalDescLabel.setFont(new Font("Whitney", Font.PLAIN, 14));
 
-        JLabel intervalNameLabel =  new JLabel(intervalName);
+        JLabel intervalNameLabel = new JLabel(intervalName);
         intervalNameLabel.setFont(new Font("Whitney", Font.PLAIN, 16));
         intervalNameLabel.setForeground(CustomColors.CHEESE);
         UIUtilities.makeLabelUnderlined(intervalNameLabel);

@@ -1,6 +1,5 @@
 package com.flippingutilities.model;
 
-import com.flippingutilities.model.OfferEvent;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 

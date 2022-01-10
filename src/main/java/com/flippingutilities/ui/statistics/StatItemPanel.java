@@ -328,7 +328,9 @@ public class StatItemPanel extends JPanel
 		tabGroup.setBorder(new EmptyBorder(5, 0, 7, 0));
 		tabGroup.addTab(offersTab);
 		tabGroup.addTab(flipsTab);
-		tabGroup.addTab(combinationFlipsTab);
+		if (plugin.isInCombination(flippingItem.getItemId())) {
+			tabGroup.addTab(combinationFlipsTab);
+		}
 
 		tabGroup.select(shouldSelectOffersTab? offersTab: flipsTab);
 		mainDisplay.setVisible(shouldExpandTradeHistory);

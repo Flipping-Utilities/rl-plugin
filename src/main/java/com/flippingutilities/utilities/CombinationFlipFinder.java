@@ -41,6 +41,7 @@ public class CombinationFlipFinder {
             return itemIdsInCombination;
         }
         sets.get().values().forEach(itemIdsInCombination::addAll);
+        sets.get().keySet().stream().map(Integer::parseInt).forEach(itemIdsInCombination::add);
         return itemIdsInCombination;
     }
 

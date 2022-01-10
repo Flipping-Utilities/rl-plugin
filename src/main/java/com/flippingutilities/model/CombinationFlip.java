@@ -76,4 +76,13 @@ public class CombinationFlip {
                         m -> m.values().stream().map(po -> po.offer)).
                 collect(Collectors.toList());
     }
+
+    public List<OfferEvent> getChildrenOffers(int childItemId) {
+        if (!children.containsKey(childItemId)) {
+            return new ArrayList<>();
+        }
+        return children.get(childItemId).values().stream().
+                map(po -> po.offer).
+                collect(Collectors.toList());
+    }
 }

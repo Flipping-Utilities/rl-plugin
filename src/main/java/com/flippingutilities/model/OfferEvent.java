@@ -94,7 +94,7 @@ public class OfferEvent
 	 */
 	private transient String madeBy;
 
-	//only used in theGeHistoryTabOfferPanel cause i don't want to pass the itemmanager down that far just to resolve item name from an id.
+	//Used in theGeHistoryTabOfferPanel and CombinationFlipPanel
 	private transient String itemName;
 	//used in the live slot view to show what price something was listed at
 	private transient int listedPrice;
@@ -254,7 +254,6 @@ public class OfferEvent
 	public static OfferEvent fromGrandExchangeEvent(GrandExchangeOfferChanged event)
 	{
 		GrandExchangeOffer offer = event.getOffer();
-
 
 		boolean isBuy = offer.getState() == GrandExchangeOfferState.BOUGHT
 			|| offer.getState() == GrandExchangeOfferState.CANCELLED_BUY
