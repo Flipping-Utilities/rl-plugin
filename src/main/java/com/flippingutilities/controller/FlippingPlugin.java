@@ -916,6 +916,10 @@ public class FlippingPlugin extends Plugin {
         return combinationFlipFinder.getItemsInCombination(itemId, getTradesForCurrentView());
     }
 
+    public boolean isInCombination(int itemId) {
+        return combinationFlipFinder.isInCombination(itemId);
+    }
+
     @Subscribe
     public void onGrandExchangeSearched(GrandExchangeSearched event) {
         final String input = client.getVar(VarClientStr.INPUT_TEXT);

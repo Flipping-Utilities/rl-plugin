@@ -280,15 +280,6 @@ public class FlippingItem
 		history.validateGeProperties();
 	}
 
-	public List<Flip> getNonCombinationFlips(Instant earliestTime)
-	{
-		return history.getNonCombinationFlips(earliestTime);
-	}
-
-	public List<CombinationFlip> getCombinationFlips(Instant earliestTime) {
-		return history.getCombinationFlips(earliestTime);
-	}
-
 	public boolean hasValidOffers()
 	{
 		return history.hasValidOffers();
@@ -375,8 +366,8 @@ public class FlippingItem
 		history.getCompressedOfferEvents().forEach(o -> o.setItemName(itemName));
 	}
 
-	public void addCombinationFlip(CombinationFlip combinationFlip) {
-		history.addCombinationFlip(combinationFlip);
+	public void addPersonalCombinationFlip(CombinationFlip combinationFlip) {
+		history.addPersonalCombinationFlip(combinationFlip);
 	}
 
 	public void addParentCombinationFlip(CombinationFlip combinationFlip) {
@@ -387,7 +378,24 @@ public class FlippingItem
 		history.deleteParentCombinationFlip(combinationFlip);
 	}
 
-	public void deleteCombinationFlip(CombinationFlip combinationFlip) {
-		history.deleteCombinationFlip(combinationFlip);
+	public void deletePersonalCombinationFlip(CombinationFlip combinationFlip) {
+		history.deletePersonalCombinationFlip(combinationFlip);
+	}
+
+	public Set<String> getOfferIdsContributingToPersonalComboFlips() {
+		return history.getOfferIdsContributingToPersonalComboFlips();
+	}
+
+	public Set<String> getOfferIdsContributingToComboFlips() {
+		return history.getOfferIdsContributingToComboFlips();
+	}
+
+	public List<Flip> getNonCombinationFlips(Instant earliestTime)
+	{
+		return history.getNonCombinationFlips(earliestTime);
+	}
+
+	public List<CombinationFlip> getCombinationFlips(Instant earliestTime) {
+		return history.getCombinationFlips(earliestTime);
 	}
 }

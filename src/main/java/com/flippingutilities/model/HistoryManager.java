@@ -29,10 +29,7 @@ package com.flippingutilities.model;
 
 import com.flippingutilities.utilities.ListUtils;
 import com.google.gson.annotations.SerializedName;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
@@ -70,28 +67,30 @@ public class HistoryManager
 
 	//If this item was a guthan set and the user had combined a guthan
 	//set offer with the guthan pieces, the combination flip would show up here.
-	private List<CombinationFlip> combinationFlipsForThisItem = new ArrayList<>();
+	private List<CombinationFlip> personalCombinationFlips = new ArrayList<>();
 
 	//If this item was a guthan platebody and was part of a combination
 	//flip with a guthan set, that combination flip would show up here.
-	private List<CombinationFlip> combinationFlipsThatUseThisItem = new ArrayList<>();
+	private List<CombinationFlip> parentCombinationFlips = new ArrayList<>();
 
-	private transient Set<String> combinationFlipOfferIdCache;
+	private transient Set<String> offerIdsContributingToCombinationFlips;
+	private transient Set<String> offerIdsContributingToPersonalCombinationFlips;
 
 	public HistoryManager clone()
 	{
 		List<OfferEvent> clonedCompressedOfferEvents = compressedOfferEvents.stream().map(OfferEvent::clone).collect(Collectors.toList());
 		Instant clonedGeLimitRefresh = nextGeLimitRefresh == null ? null : Instant.ofEpochMilli(nextGeLimitRefresh.toEpochMilli());
-		List<CombinationFlip> clonedCombinationParents = combinationFlipsThatUseThisItem.stream().map(CombinationFlip::clone).collect(Collectors.toList());
-		List<CombinationFlip> clonedCombinationChildren = combinationFlipsForThisItem.stream().map(CombinationFlip::clone).collect(Collectors.toList());
+		List<CombinationFlip> clonedCombinationParents = parentCombinationFlips.stream().map(CombinationFlip::clone).collect(Collectors.toList());
+		List<CombinationFlip> clonedPersonalCombinations = personalCombinationFlips.stream().map(CombinationFlip::clone).collect(Collectors.toList());
 		return new HistoryManager(
 				clonedCompressedOfferEvents,
 				clonedGeLimitRefresh,
 				itemsBoughtThisLimitWindow,
 				itemsBoughtThroughCompleteOffers,
 				clonedCombinationParents,
-				clonedCombinationChildren,
-				combinationFlipOfferIdCache);
+				clonedPersonalCombinations,
+				offerIdsContributingToCombinationFlips,
+				offerIdsContributingToPersonalCombinationFlips);
 	}
 
 	public void updateHistory(OfferEvent newOffer)
@@ -220,7 +219,7 @@ public class HistoryManager
 	 */
 	public long getValueOfOnlyMatchedNonCombinationOffers(List<OfferEvent> tradeList, boolean buyState)
 	{
-		Set<String> offerIdsInCombinationFlips = getCombinationFlipOfferIdCache();
+		Set<String> offerIdsInCombinationFlips = getOfferIdsContributingToComboFlips();
 		return getValueOfTrades(
 				filterTradeList(tradeList, o -> o.isBuy() == buyState && !offerIdsInCombinationFlips.contains(o.getUuid())),
 				countNonCombinationFlipQuantity(tradeList));
@@ -249,7 +248,7 @@ public class HistoryManager
 		int numBoughtItems = 0;
 		int numSoldItems = 0;
 
-		Set<String> offerIdsInCombinationFlips = getCombinationFlipOfferIdCache();
+		Set<String> offerIdsInCombinationFlips = getOfferIdsContributingToComboFlips();
 		for (OfferEvent offer : tradeList)
 		{
 			if (!offer.isValidOfferEvent() || offerIdsInCombinationFlips.contains(offer.getUuid()))
@@ -286,10 +285,6 @@ public class HistoryManager
 			if (conditions.test(offer) && offer.isValidOfferEvent()) {
 				results.add(offer);
 			}
-//			if (offer.isBuy() == buyState && offer.isValidOfferEvent())
-//			{
-//				results.add(offer);
-//			}
 		}
 
 		return results;
@@ -631,17 +626,34 @@ public class HistoryManager
 	}
 
 	/**
-	 * Maintains a cache of offer ids for offers in any combination flips associated
-	 * with this item.
+	 * Maintains a cache of offer ids from THIS item that contributes to personal combination
+	 * flips or parent combination flips
 	 */
-	private Set<String> getCombinationFlipOfferIdCache() {
-		if (combinationFlipOfferIdCache == null) {
-			combinationFlipOfferIdCache = new HashSet<>();
-			combinationFlipsThatUseThisItem.forEach(cf -> cf.getOffers().forEach(o -> combinationFlipOfferIdCache.add(o.getUuid())));
-			combinationFlipsForThisItem.forEach(cf -> cf.getOffers().forEach(o -> combinationFlipOfferIdCache.add(o.getUuid())));
+	public Set<String> getOfferIdsContributingToComboFlips() {
+		if (compressedOfferEvents.isEmpty()) {
+			return new HashSet<>();
+		}
+		if (offerIdsContributingToCombinationFlips == null) {
+			int thisItemsId = compressedOfferEvents.get(0).getItemId();
+			offerIdsContributingToCombinationFlips = new HashSet<>();
+			parentCombinationFlips.forEach(cf -> cf.getChildrenOffers(thisItemsId).forEach(o -> offerIdsContributingToCombinationFlips.add(o.getUuid())));
+			personalCombinationFlips.forEach(cf -> offerIdsContributingToCombinationFlips.add(cf.parent.offer.getUuid()));
 		}
 
-		return combinationFlipOfferIdCache;
+		return offerIdsContributingToCombinationFlips;
+	}
+
+	/**
+	 * Maintains a cache of offer ids from THIS item that contributes to only personal
+	 * combination flips
+	 */
+	public Set<String> getOfferIdsContributingToPersonalComboFlips() {
+		if (offerIdsContributingToPersonalCombinationFlips == null) {
+			offerIdsContributingToPersonalCombinationFlips = personalCombinationFlips.stream().
+					map(cf -> cf.parent.offer.getUuid()).
+					collect(Collectors.toSet());
+		}
+		return offerIdsContributingToPersonalCombinationFlips;
 	}
 
 	/**
@@ -653,7 +665,7 @@ public class HistoryManager
 	 * @param itemIdToItem a mapping of item id to FlippingItem for quick lookup
 	 */
 	private void deleteInvalidatedCombinationFlips(Set<String> idsOfOffersToBeDeleted, Map<Integer, FlippingItem> itemIdToItem) {
-		Iterator<CombinationFlip> iterator = combinationFlipsForThisItem.iterator();
+		Iterator<CombinationFlip> iterator = personalCombinationFlips.iterator();
 		while (iterator.hasNext()) {
 			CombinationFlip cf = iterator.next();
 			String offerId = cf.parent.offer.getUuid();
@@ -684,7 +696,7 @@ public class HistoryManager
 			Set<String> idsOfOffersToBeDeleted,
 			Map<Integer, FlippingItem> itemIdToItem) {
 		//delete the cf entries in the parent and siblings
-		Iterator<CombinationFlip> iterator = combinationFlipsThatUseThisItem.iterator();
+		Iterator<CombinationFlip> iterator = parentCombinationFlips.iterator();
 		while (iterator.hasNext()) {
 			CombinationFlip cf = iterator.next();
 			//this item has contributed offers to the parent's cf that are now about to be deleted
@@ -697,28 +709,30 @@ public class HistoryManager
 						collect(Collectors.toList());
 				FlippingItem parentItem = itemIdToItem.get(cf.parent.offer.getItemId());
 				siblingItems.forEach(item -> item.deleteParentCombinationFlip(cf)); //delete from siblings
-				parentItem.deleteCombinationFlip(cf); //delete from parent
+				parentItem.deletePersonalCombinationFlip(cf); //delete from parent
 				iterator.remove(); //delete from this item
 			}
 		}
 	}
 
-	public void addCombinationFlip(CombinationFlip combinationFlip) {
-		combinationFlipsForThisItem.add(combinationFlip);
-		combinationFlipOfferIdCache = null;
+	public void addPersonalCombinationFlip(CombinationFlip combinationFlip) {
+		personalCombinationFlips.add(combinationFlip);
+		offerIdsContributingToCombinationFlips = null;
+		offerIdsContributingToPersonalCombinationFlips = null;
 	}
 
 	public void addParentCombinationFlip(CombinationFlip combinationFlip) {
-		combinationFlipsThatUseThisItem.add(combinationFlip);
-		combinationFlipOfferIdCache = null;
+		parentCombinationFlips.add(combinationFlip);
+		offerIdsContributingToCombinationFlips = null;
 	}
 
-	public void deleteCombinationFlip(CombinationFlip combinationFlip) {
-		combinationFlipsForThisItem.remove(combinationFlip);
+	public void deletePersonalCombinationFlip(CombinationFlip combinationFlip) {
+		personalCombinationFlips.remove(combinationFlip);
+		offerIdsContributingToPersonalCombinationFlips = null;
 	}
 
 	public void deleteParentCombinationFlip(CombinationFlip combinationFlip) {
-		combinationFlipsThatUseThisItem.remove(combinationFlip);
+		parentCombinationFlips.remove(combinationFlip);
 	}
 
 	/**
@@ -730,7 +744,7 @@ public class HistoryManager
 	 */
 	public List<Flip> getNonCombinationFlips(Instant earliestTime)
 	{
-		Set<String> offerIdsInCombinationFlips = getCombinationFlipOfferIdCache();
+		Set<String> offerIdsInCombinationFlips = getOfferIdsContributingToComboFlips();
 		List<OfferEvent> nonCombinationOffers = filterTradeList(
 				getIntervalsHistory(earliestTime),
 				offerEvent -> !offerIdsInCombinationFlips.contains(offerEvent.getUuid())
@@ -766,8 +780,8 @@ public class HistoryManager
 	 */
 	private List<CombinationFlip> getCombinationFlips() {
 		List<CombinationFlip> combinationFlips = new ArrayList<>();
-		combinationFlips.addAll(combinationFlipsForThisItem);
-		combinationFlips.addAll(combinationFlipsThatUseThisItem);
+		combinationFlips.addAll(personalCombinationFlips);
+		combinationFlips.addAll(parentCombinationFlips);
 		return combinationFlips;
 	}
 }
