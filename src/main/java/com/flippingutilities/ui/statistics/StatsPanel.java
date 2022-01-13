@@ -132,6 +132,7 @@ public class StatsPanel extends JPanel
 	private Paginator paginator;
 	private ScheduledExecutorService executor;
 	private boolean currentlySearching;
+	private IconTextField searchBar;
 
 	/**
 	 * The statistics panel shows various stats about trades the user has made over a selectable time interval.
@@ -149,12 +150,14 @@ public class StatsPanel extends JPanel
 		this.startOfInterval = plugin.viewStartOfSessionForCurrentView();
 		this.prepareLabels();
 
+		searchBar = createSearchBar();
+
 		JPanel middlePanel = new JPanel(new BorderLayout());
 		middlePanel.add(this.createProfitAndSubInfoContainer(), BorderLayout.NORTH);
 		middlePanel.add(this.createSortAndScrollContainer(), BorderLayout.CENTER);
 
 		setLayout(new BorderLayout());
-		add(this.createTopPanel(), BorderLayout.NORTH);
+		add(this.createTopPanel(searchBar), BorderLayout.NORTH);
 		add(middlePanel, BorderLayout.CENTER);
 		add(this.createPaginator(), BorderLayout.SOUTH);
 		setBorder(new EmptyBorder(5,7,0,7));
@@ -176,20 +179,19 @@ public class StatsPanel extends JPanel
 	{
 		//Remove old stats
 		activePanels = new ArrayList<>();
-
-		SwingUtilities.invokeLater(() ->
-		{
-			rebuildStatItemContainer(flippingItems);
-			updateDisplays(flippingItems);
+		List<FlippingItem> searchedItems = getSearchedItems(flippingItems);
+		SwingUtilities.invokeLater(() -> {
+			rebuildStatItemContainer(searchedItems);
+			updateDisplays(searchedItems);
 			revalidate();
 			repaint();
 		});
 	}
 
-	private void rebuildStatItemContainer(List<FlippingItem> flippingItems)
-	{
+	private void rebuildStatItemContainer(List<FlippingItem> flippingItems) {
 		activePanels.clear();
 		statItemPanelsContainer.removeAll();
+
 		List<FlippingItem> sortedItems = sortTradeList(flippingItems);
 		List<FlippingItem> itemsThatShouldHavePanels = sortedItems.stream().filter(item -> item.hasOfferInInterval(startOfInterval)).collect(Collectors.toList());
 		sortDropdown.setVisible(itemsThatShouldHavePanels.size() > 0);
@@ -198,6 +200,24 @@ public class StatsPanel extends JPanel
 		List<StatItemPanel> newPanels = itemsOnCurrentPage.stream().map(item -> new StatItemPanel(plugin, itemManager, item)).collect(Collectors.toList());
 		UIUtilities.stackPanelsVertically((List) newPanels, statItemPanelsContainer, 5);
 		activePanels.addAll(newPanels);
+		if (flippingItems.isEmpty() && currentlySearching) {
+			statItemPanelsContainer.add(createEmptySearchPanel());
+		}
+	}
+
+	private JPanel createEmptySearchPanel() {
+		JPanel emptySearchPanel = new JPanel(new DynamicGridLayout(2,1));
+		String lookup = searchBar.getText().toLowerCase();
+		JLabel searchLabel = new JLabel(String.format(
+				"<html><body style='text-align: center'>The search for <br> <u>%s</u> <br> yielded no results :(</html>", lookup),
+				SwingConstants.CENTER);
+		searchLabel.setFont(new Font("Whitney", Font.PLAIN, 12));
+		searchLabel.setBorder(new EmptyBorder(0,0,10,0));
+
+		emptySearchPanel.add(searchLabel);
+		emptySearchPanel.add(new JLabel(Icons.GNOME_CHILD));
+
+		return emptySearchPanel;
 	}
 
 	private void updateSearch(IconTextField searchBar)
@@ -205,34 +225,49 @@ public class StatsPanel extends JPanel
 		String lookup = searchBar.getText().toLowerCase();
 
 		//When the clear button is pressed, this is run.
-		if (Strings.isNullOrEmpty(lookup))
-		{
+		if (Strings.isNullOrEmpty(lookup)) {
+			searchBar.setIcon(IconTextField.Icon.SEARCH);
 			currentlySearching = false;
 			rebuild(plugin.viewTradesForCurrentView());
 			return;
 		}
 
-		ArrayList<FlippingItem> result = new ArrayList<>();
-		for (FlippingItem item : plugin.viewTradesForCurrentView())
-		{
-			//Contains makes it a little more forgiving when searching.
-			if (item.getItemName().toLowerCase().contains(lookup))
-			{
-				result.add(item);
-			}
-		}
+		List<FlippingItem> result = getSearchResults(plugin.viewTradesForCurrentView(), lookup);
 
-		if (result.isEmpty())
-		{
+		if (result.isEmpty()) {
 			searchBar.setIcon(IconTextField.Icon.ERROR);
-			currentlySearching = false;
-			rebuild(plugin.viewTradesForCurrentView());
-			return;
 		}
-
+		else {
+			searchBar.setIcon(IconTextField.Icon.SEARCH);
+		}
 		currentlySearching = true;
-		searchBar.setIcon(IconTextField.Icon.SEARCH);
 		rebuild(result);
+	}
+
+	private List<FlippingItem> getSearchResults(List<FlippingItem> items, String lookup) {
+		return items.stream().filter(
+				item ->
+						item.getItemName().toLowerCase().contains(lookup) && item.hasOfferInInterval(startOfInterval)).
+				collect(Collectors.toList());
+	}
+
+	/**
+	 * Filters the items based on what is currently being searched for. If nothing is being searched
+	 * for, it just returns the original list
+	 * @param items all the items that could be in the current view
+	 */
+	private List<FlippingItem> getSearchedItems(List<FlippingItem> items) {
+		String lookup = searchBar.getText().toLowerCase();
+		if (currentlySearching && !Strings.isNullOrEmpty(lookup)) {
+			return getSearchResults(items, lookup);
+		}
+		return items;
+	}
+
+	private IconTextField createSearchBar() {
+		IconTextField searchBar = UIUtilities.createSearchBar(this.executor, this::updateSearch);
+		searchBar.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		return searchBar;
 	}
 
 	private JComboBox createTimeIntervalDropdown() {
@@ -276,14 +311,6 @@ public class StatsPanel extends JPanel
 	 */
 	public void updateDisplays(List<FlippingItem> tradesList)
 	{
-		//subInfoPanel.removeAll();
-//		for (JPanel panel : subInfoPanelArray)
-//		{
-//			panel.setBorder(new EmptyBorder(4, 2, 4, 2));
-//			subInfoPanel.add(panel);
-//			panel.setBackground(CustomColors.DARK_GRAY);
-//		}
-
 		if (!Objects.equals(timeIntervalDropdown.getSelectedItem(), "Session"))
 		{
 			subInfoPanel.remove(sessionTimePanel);
@@ -557,7 +584,7 @@ public class StatsPanel extends JPanel
 				result.sort(Comparator.comparing(item -> {
 					ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
 					List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
-					return item.getProfit(adjustedOffers) + item.getCombinationFlips(startOfInterval).stream().mapToLong(CombinationFlip::getProfit).sum();
+					return item.getProfit(adjustedOffers) + item.getPersonalCombinationFlips(startOfInterval).stream().mapToLong(CombinationFlip::getProfit).sum();
 				}));
 				break;
 
@@ -696,10 +723,8 @@ public class StatsPanel extends JPanel
 		return downloadIcon;
 	}
 
-	private JPanel createTopPanel() {
+	private JPanel createTopPanel(IconTextField searchBar) {
 		JPanel topPanel = new JPanel(new BorderLayout());
-		IconTextField searchBar = UIUtilities.createSearchBar(this.executor, this::updateSearch);
-		searchBar.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 
 		JPanel searchAndDownloadPanel = new JPanel(new BorderLayout());
 		searchAndDownloadPanel.add(searchBar, BorderLayout.CENTER);
@@ -924,8 +949,11 @@ public class StatsPanel extends JPanel
 
 	private Paginator createPaginator() {
 		paginator = new Paginator(() -> SwingUtilities.invokeLater(() -> {
+			//we only want to rebuildStatItemContainer and not updateDisplays bc the display
+			//is built based on every item on every page and so it shouldn't change if you
+			//switch pages.
 			Instant rebuildStart = Instant.now();
-			rebuildStatItemContainer(plugin.viewTradesForCurrentView());
+			rebuildStatItemContainer(getSearchedItems(plugin.viewTradesForCurrentView()));
 			revalidate();
 			repaint();
 			log.debug("page change took {}", Duration.between(rebuildStart, Instant.now()).toMillis());

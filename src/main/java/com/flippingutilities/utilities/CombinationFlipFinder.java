@@ -85,7 +85,6 @@ public class CombinationFlipFinder {
             log.warn("could not find resource json at path {}", path);
             return Optional.empty();
         }
-
         Reader reader = new InputStreamReader(inputStream);
         return Optional.of(gson.fromJson(reader, typeToken.getType()));
     }

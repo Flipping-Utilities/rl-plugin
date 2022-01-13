@@ -24,7 +24,7 @@ public class Icons {
     public static final ImageIcon SETTINGS_ICON;
     public static final ImageIcon SETTINGS_ICON_OFF;
 
-    public static final ImageIcon ACCOUNT_ICON;
+    public static final ImageIcon GNOME_CHILD;
 
     public static final ImageIcon DELETE_BUTTON;
 
@@ -139,7 +139,7 @@ public class Icons {
         SETTINGS_ICON_OFF = new ImageIcon(ImageUtil.alphaOffset(settingsIcon, 0.53f));
 
         final BufferedImage accountIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/gnome.png");
-        ACCOUNT_ICON = new ImageIcon(accountIcon);
+        GNOME_CHILD = new ImageIcon(accountIcon);
 
         final BufferedImage deleteButton = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/deleteButton.png");
         DELETE_BUTTON = new ImageIcon(deleteButton);
