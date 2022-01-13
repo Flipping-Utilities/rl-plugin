@@ -274,7 +274,7 @@ public class CombinationFlipCreationPanel extends JPanel {
     private Map<Integer, Set<String>> createItemIdToOfferIdsAlreadyUsed(Map<Integer, Optional<FlippingItem>> childItemsInCombination) {
         Map<Integer, Set<String>> itemIdToOfferIdsAlreadyUsed = new HashMap<>();
         childItemsInCombination.forEach((itemId, item) -> {
-            Set<String> offerIds = item.map(FlippingItem::getOfferIdsContributingToComboFlips).orElse(new HashSet<>());
+            Set<String> offerIds = item.map(fitem -> fitem.getOfferIdsContributingToComboFlips().keySet()).orElse(new HashSet<>());
             itemIdToOfferIdsAlreadyUsed.put(itemId, offerIds);
         });
         return itemIdToOfferIdsAlreadyUsed;

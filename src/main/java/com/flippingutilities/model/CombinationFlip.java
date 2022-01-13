@@ -42,6 +42,31 @@ public class CombinationFlip {
         return CombinationFlip.calculateProfit(parent, children);
     }
 
+    private long getExpenseOrRevenue(boolean getRevenue) {
+        long totalValueOfChildren = children.values().stream().
+                flatMap(m -> m.values().stream()).
+                mapToLong(po -> po.offer.getPrice() * po.amountConsumed).
+                sum();
+        long totalValueOfParent = (long) parent.offer.getPrice() * parent.amountConsumed;
+        boolean parentIsBuy = parent.offer.isBuy();
+        if ((parentIsBuy && getRevenue) || (!parentIsBuy && !getRevenue)) {
+            return totalValueOfChildren;
+        }
+        return totalValueOfParent;
+    }
+
+    public long getExpense() {
+        return getExpenseOrRevenue(false);
+    }
+
+    public long getRevenue() {
+        return getExpenseOrRevenue(true);
+    }
+
+    public long getTaxPaid() {
+        return getOffers().stream().mapToLong(po -> po.getOffer().getTaxPaid()).sum();
+    }
+
     public static long calculateProfit(PartialOffer parent, Map<Integer, Map<String, PartialOffer>> children) {
         long totalValueOfChildren = children.values().stream().
                 flatMap(m -> m.values().stream()).
@@ -63,26 +88,24 @@ public class CombinationFlip {
     /**
      * Gets all the offers contained in this combination flip.
      */
-    public List<OfferEvent> getOffers() {
-        List<OfferEvent> offers = new ArrayList<>();
-        offers.add(parent.offer);
+    public List<PartialOffer> getOffers() {
+        List<PartialOffer> offers = new ArrayList<>();
+        offers.add(parent);
         offers.addAll(getChildrenOffers());
         return offers;
     }
 
-    public List<OfferEvent> getChildrenOffers() {
+    public List<PartialOffer> getChildrenOffers() {
         return children.values().stream().
                 flatMap(
-                        m -> m.values().stream().map(po -> po.offer)).
+                        m -> m.values().stream()).
                 collect(Collectors.toList());
     }
 
-    public List<OfferEvent> getChildrenOffers(int childItemId) {
+    public List<PartialOffer> getChildrenOffers(int childItemId) {
         if (!children.containsKey(childItemId)) {
             return new ArrayList<>();
         }
-        return children.get(childItemId).values().stream().
-                map(po -> po.offer).
-                collect(Collectors.toList());
+        return new ArrayList<>(children.get(childItemId).values());
     }
 }

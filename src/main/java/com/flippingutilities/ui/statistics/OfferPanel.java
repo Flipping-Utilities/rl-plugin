@@ -183,7 +183,7 @@ public class OfferPanel extends JPanel {
     }
 
     private JComponent createCombinationFlipIcon() {
-        boolean offerAlreadyInCombinationFlip = item.getOfferIdsContributingToPersonalComboFlips().contains(offer.getUuid());
+        boolean offerAlreadyInCombinationFlip = item.getOfferIdsContributingToPersonalComboFlips().containsKey(offer.getUuid());
         if (offerAlreadyInCombinationFlip) {
             JLabel combinationFlipLabel = new JLabel("Already in a combo flip");
             combinationFlipLabel.setFont(new Font("Whitney", Font.PLAIN, 10));

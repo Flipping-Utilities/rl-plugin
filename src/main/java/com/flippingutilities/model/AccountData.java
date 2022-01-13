@@ -37,6 +37,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Data
@@ -67,6 +69,10 @@ public class AccountData
 	 */
 	public void prepareForUse(FlippingPlugin plugin)
 	{
+		Map<Integer, String> idToItemName = trades.stream().
+				map(item -> Map.entry(item.getItemId(), item.getItemName())).
+				collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
 		for (FlippingItem item : trades)
 		{
 			//in case ge limits have been updated
@@ -74,16 +80,8 @@ public class AccountData
 			ItemStats itemStats = plugin.getItemManager().getItemStats(tradeItemId, false);
 			int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
 
-			item.setTotalGELimit(geLimit);
-			item.syncState();
-			item.setOfferIds();
-			item.setOfferNames();
-			item.setOfferMadeBy();
-			//when this change was made the field will not exist and will be null
-			if (item.getValidFlippingPanelItem() == null)
-			{
-				item.setValidFlippingPanelItem(true);
-			}
+			item.hydrate(idToItemName, geLimit);
+			item.removeInvalidOffers();
 		}
 
 		if (slotTimers == null)
