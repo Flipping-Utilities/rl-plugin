@@ -63,7 +63,7 @@ import java.util.stream.Collectors;
 public class StatsPanel extends JPanel
 {
 	private static final String[] TIME_INTERVAL_STRINGS = {"-1h (Past Hour)", "-4h (Past 4 Hours)", "-12h (Past 12 Hours)", "-1d (Past Day)", "-1w (Past Week)", "-1m (Past Month)", "Session", "All"};
-	private static final String[] SORT_BY_STRINGS = {"Most Recent", "Most Total Profit", "Most Profit Each", "Highest ROI", "Highest Quantity"};
+	private static final String[] SORT_BY_STRINGS = {"Most Recent", "Most Total Profit", "Most Profit Each", "Highest ROI", "Most Flips"};
 	private static final Dimension ICON_SIZE = new Dimension(16, 16);
 
 	private static final Font BIG_PROFIT_FONT = StyleContext.getDefaultStyleContext()
@@ -118,7 +118,7 @@ public class StatsPanel extends JPanel
 	private String startOfIntervalName = "Session";
 
 	@Getter
-	private String selectedSort;
+	private String selectedSort = "Most Recent";
 
 	private ArrayList<StatItemPanel> activePanels = new ArrayList<>();
 
@@ -535,111 +535,76 @@ public class StatsPanel extends JPanel
 	}
 
 	/**
-	 * Clones and sorts the to-be-built tradeList items according to the selectedSort string.
+	 * Shallow clones and sorts the to-be-built tradeList items according to the selectedSort string.
 	 *
 	 * @param tradeList The soon-to-be drawn tradeList whose items are getting sorted.
 	 * @return Returns a cloned and sorted tradeList as specified by the selectedSort string.
 	 */
-	if this is to be accurate i need to use the adjusted view
 	public List<FlippingItem> sortTradeList(List<FlippingItem> tradeList)
 	{
 		List<FlippingItem> result = new ArrayList<>(tradeList);
 
-		if (selectedSort == null || result.isEmpty())
-		{
+		if (selectedSort == null || result.isEmpty()) {
 			return result;
 		}
 
-		switch (selectedSort)
-		{
+		switch (selectedSort) {
 			case "Most Recent":
 				result.sort(Comparator.comparing(FlippingItem::getLatestActivityTime));
 				break;
 
 			case "Most Total Profit":
-				result.sort((item1, item2) -> {
-					ArrayList<OfferEvent> intervalHistory1 = item1.getIntervalHistory(startOfInterval);
-					ArrayList<OfferEvent> intervalHistory2 = item2.getIntervalHistory(startOfInterval);
-
-					long totalExpense1 = item1.getValueOfMatchedOffers(intervalHistory1, true);
-					long totalRevenue1 = item1.getValueOfMatchedOffers(intervalHistory1, false);
-
-					long totalExpense2 = item2.getValueOfMatchedOffers(intervalHistory2, true);
-					long totalRevenue2 = item2.getValueOfMatchedOffers(intervalHistory2, false);
-
-					if ((totalExpense1 != 0 && totalRevenue1 != 0) && (totalExpense2 == 0 || totalRevenue2 == 0))
-					{
-						return 1;
-					}
-
-					if ((totalExpense1 == 0 || totalRevenue1 == 0) && (totalExpense2 != 0 && totalRevenue2 != 0))
-					{
-						return -1;
-					}
-
-					if ((totalExpense1 == 0 || totalRevenue1 == 0) && (totalExpense2 == 0 || totalRevenue2 == 0))
-					{
-						return 0;
-					}
-
-					return Long.compare(item1.getProfit(intervalHistory1), item2.getProfit(intervalHistory2));
-				});
+				result.sort(Comparator.comparing(item -> {
+					ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
+					List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
+					return item.getProfit(adjustedOffers) + item.getCombinationFlips(startOfInterval).stream().mapToLong(CombinationFlip::getProfit).sum();
+				}));
 				break;
 
 			case "Most Profit Each":
-				result.sort(Comparator.comparing(item ->
-				{
+				result.sort(Comparator.comparing(item -> {
+					List<CombinationFlip> personalCombinationFlips = item.getPersonalCombinationFlips(startOfInterval);
 					ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-					int quantity = item.countFlipQuantity(intervalHistory);
-
-					if (quantity == 0)
-					{
-						return 0;
+					List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
+					long quantity =
+							item.countFlipQuantity(adjustedOffers) +
+							personalCombinationFlips.stream().mapToInt(cf -> cf.getParent().amountConsumed).sum();
+					if (quantity == 0) {
+						return Long.MIN_VALUE;
 					}
 
-					return (int) item.getProfit(intervalHistory) / quantity;
+					long profit = item.getProfit(adjustedOffers) + personalCombinationFlips.stream().mapToLong(CombinationFlip::getProfit).sum();
+					return profit / quantity;
 				}));
 				break;
 			case "Highest ROI":
-				result.sort((item1, item2) ->
-				{
-					ArrayList<OfferEvent> intervalHistory1 = item1.getIntervalHistory(startOfInterval);
-					ArrayList<OfferEvent> intervalHistory2 = item2.getIntervalHistory(startOfInterval);
+				result.sort(Comparator.comparing(item -> {
+					List<CombinationFlip> personalCombinationFlips = item.getPersonalCombinationFlips(startOfInterval);
+					List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
+					List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
 
-					long totalExpense1 = item1.getValueOfMatchedOffers(intervalHistory1, true);
-					long totalRevenue1 = item1.getValueOfMatchedOffers(intervalHistory1, false);
-
-					long totalExpense2 = item2.getValueOfMatchedOffers(intervalHistory2, true);
-					long totalRevenue2 = item2.getValueOfMatchedOffers(intervalHistory2, false);
-
-					if ((totalExpense1 != 0 && totalRevenue1 != 0) && (totalExpense2 == 0 || totalRevenue2 == 0))
-					{
-						return 1;
+					long profit = item.getProfit(adjustedOffers) + personalCombinationFlips.stream().mapToLong(CombinationFlip::getProfit).sum();
+					long expense = item.getValueOfMatchedOffers(adjustedOffers, true) +
+							personalCombinationFlips.stream().mapToLong(CombinationFlip::getExpense).sum();
+					if (expense == 0) {
+						return Float.MIN_VALUE;
 					}
 
-					if ((totalExpense1 == 0 || totalRevenue1 == 0) && (totalExpense2 != 0 && totalRevenue2 != 0))
-					{
-						return -1;
-					}
-
-					if ((totalExpense1 == 0 || totalRevenue1 == 0) && (totalExpense2 == 0 || totalRevenue2 == 0))
-					{
-						return 0;
-					}
-
-					return Float.compare((float) item1.getProfit(intervalHistory1) / totalExpense1, (float) item2.getProfit(intervalHistory2) / totalExpense2);
-				});
+					return (float) profit / expense * 100;
+				}));
 				break;
-
-			case "Highest Quantity":
-				result.sort(Comparator.comparing(item -> item.countFlipQuantity(item.getIntervalHistory(startOfInterval))));
+			case "Most Flips":
+				result.sort(Comparator.comparing(
+						item -> {
+							List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
+							List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
+							return item.countFlipQuantity(adjustedOffers) + item.getPersonalCombinationFlips(startOfInterval).size();
+						}));
 				break;
-
 			default:
-				throw new IllegalStateException("Unexpected value: " + selectedSort);
+				throw new IllegalStateException("Unexpected sort value: " + selectedSort);
 		}
 		Collections.reverse(result);
-
 		return result;
 	}
 

@@ -169,7 +169,7 @@ public class OfferPanel extends JPanel {
     private JPanel createIconPanel() {
         JPanel iconPanel = new JPanel(new BorderLayout());
         iconPanel.setBackground(CustomColors.DARK_GRAY);
-        if (plugin.combinationFlipFinder.isCombinationSource(offer.getItemId())) {
+        if (plugin.combinationFlipFinder.isCombinationSource(offer.getItemId()) && offer.isComplete()) {
             JLabel deleteIcon = createDeleteIcon();
             deleteIcon.setBorder(new EmptyBorder(0,5,0,0));
             iconPanel.add(createCombinationFlipIcon(), BorderLayout.EAST);

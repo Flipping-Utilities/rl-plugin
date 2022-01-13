@@ -241,9 +241,9 @@ public class FlippingItem
 		return history.getValueOfMatchedOffers(tradeList, buyState);
 	}
 
-	public long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean buyState)
+	public long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean isBuy)
 	{
-		return history.getTotalRevenueOrExpense(tradeList, buyState);
+		return history.getTotalRevenueOrExpense(tradeList, isBuy);
 	}
 
 	public int countFlipQuantity(List<OfferEvent> tradeList)
@@ -372,7 +372,7 @@ public class FlippingItem
 	}
 
 	private void setOfferMadeBy() {
-		history.getCompressedOfferEvents().forEach(o -> o.setMadeBy(flippedBy));
+		history.setOfferMadeBy(flippedBy);
 	}
 
 	private void setOfferIds() {

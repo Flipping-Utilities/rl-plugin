@@ -726,6 +726,11 @@ public class HistoryManager
 	{
 		//group offers based on which account those offers belong to (this is really only relevant when getting the flips
 		//of the account wide tradelist as you don't want to match offers from diff accounts.
+		tradeList.forEach(o -> {
+			if (o.getMadeBy() == null) {
+				System.out.println(o);
+			}
+		});
 		Map<String, List<OfferEvent>> groupedOffers = tradeList.stream().collect(Collectors.groupingBy(OfferEvent::getMadeBy));
 
 		//take each offer list and create flips out of them, then put those flips into one list.
@@ -800,5 +805,10 @@ public class HistoryManager
 	 */
 	public void setOfferNames(String itemName) {
 		compressedOfferEvents.forEach(o -> o.setItemName(itemName));
+	}
+
+	public void setOfferMadeBy(String name) {
+		compressedOfferEvents.forEach(o -> o.setMadeBy(name));
+		getCombinationFlips().forEach(cf -> cf.getOffers().forEach(o -> o.getOffer().setMadeBy(name)));
 	}
 }
