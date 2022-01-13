@@ -231,18 +231,14 @@ public class FlippingItem
 		}
 	}
 
-	public long getNonCombinationProfit(List<OfferEvent> tradeList)
+	public long getProfit(List<OfferEvent> tradeList)
 	{
-		return history.getNonCombinationProfit(tradeList);
+		return history.getProfit(tradeList);
 	}
 
-	public long getTaxPaid(List<OfferEvent> tradeList) {
-		return tradeList.stream().mapToInt(OfferEvent::getTaxPaid).sum();
-	}
-
-	public long getValueOfOnlyMatchedNonCombinationOffers(List<OfferEvent> tradeList, boolean buyState)
+	public long getValueOfMatchedOffers(List<OfferEvent> tradeList, boolean buyState)
 	{
-		return history.getValueOfOnlyMatchedNonCombinationOffers(tradeList, buyState);
+		return history.getValueOfMatchedOffers(tradeList, buyState);
 	}
 
 	public long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean buyState)
@@ -250,9 +246,26 @@ public class FlippingItem
 		return history.getTotalRevenueOrExpense(tradeList, buyState);
 	}
 
-	public int countNonCombinationFlipQuantity(List<OfferEvent> tradeList)
+	public int countFlipQuantity(List<OfferEvent> tradeList)
 	{
-		return history.countNonCombinationFlipQuantity(tradeList);
+		return history.countFlipQuantity(tradeList);
+	}
+
+	public List<Flip> getFlips(List<OfferEvent> tradeList)
+	{
+		return history.getFlips(tradeList);
+	}
+
+	public List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> tradeList) {
+		return history.getPartialOfferAdjustedView(tradeList);
+	}
+
+	public List<CombinationFlip> getCombinationFlips(Instant earliestTime) {
+		return history.getCombinationFlips(earliestTime);
+	}
+
+	public List<CombinationFlip> getPersonalCombinationFlips(Instant earliestTime) {
+		return history.getPersonalCombinationFlips(earliestTime);
 	}
 
 	public ArrayList<OfferEvent> getIntervalHistory(Instant earliestTime)
@@ -283,6 +296,14 @@ public class FlippingItem
 	public boolean hasValidOffers()
 	{
 		return history.hasValidOffers();
+	}
+
+	public boolean hasOfferInInterval(Instant earliestTime) {
+		return history.hasOfferInInterval(earliestTime);
+	}
+
+	public void removeInvalidOffers() {
+		history.removeInvalidOffers();
 	}
 
 	/**
@@ -342,7 +363,7 @@ public class FlippingItem
 	 * can be constructed using the history that is already persisted. The downside is that I have to
 	 * manually sync state when flipping items are created at plugin startup.
 	 */
-	public void syncState() {
+	private void syncState() {
 		latestBuy = history.getLatestOfferThatMatchesPredicate(offer -> offer.isBuy());
 		latestSell = history.getLatestOfferThatMatchesPredicate(offer -> !offer.isBuy());
 		latestInstaBuy = history.getLatestOfferThatMatchesPredicate(offer -> offer.isBuy() & offer.isMarginCheck());
@@ -350,11 +371,11 @@ public class FlippingItem
 		latestActivityTime = history.getCompressedOfferEvents().size() == 0? Instant.now() : history.getCompressedOfferEvents().get(history.getCompressedOfferEvents().size()-1).getTime();
 	}
 
-	public void setOfferMadeBy() {
+	private void setOfferMadeBy() {
 		history.getCompressedOfferEvents().forEach(o -> o.setMadeBy(flippedBy));
 	}
 
-	public void setOfferIds() {
+	private void setOfferIds() {
 		history.getCompressedOfferEvents().forEach(o -> {
 			if (o.getUuid() == null) {
 				o.setUuid(UUID.randomUUID().toString());
@@ -362,8 +383,9 @@ public class FlippingItem
 		});
 	}
 
-	public void setOfferNames() {
-		history.getCompressedOfferEvents().forEach(o -> o.setItemName(itemName));
+	private void setOfferNames(Map<Integer, String> idToItemName) {
+		history.setOfferNames(itemName);
+		history.setCombinationFlipOfferNames(idToItemName);
 	}
 
 	public void addPersonalCombinationFlip(CombinationFlip combinationFlip) {
@@ -382,20 +404,30 @@ public class FlippingItem
 		history.deletePersonalCombinationFlip(combinationFlip);
 	}
 
-	public Set<String> getOfferIdsContributingToPersonalComboFlips() {
+	public Map<String, PartialOffer> getOfferIdsContributingToPersonalComboFlips() {
 		return history.getOfferIdsContributingToPersonalComboFlips();
 	}
 
-	public Set<String> getOfferIdsContributingToComboFlips() {
+	public Map<String, PartialOffer> getOfferIdsContributingToComboFlips() {
 		return history.getOfferIdsContributingToComboFlips();
 	}
 
-	public List<Flip> getNonCombinationFlips(Instant earliestTime)
-	{
-		return history.getNonCombinationFlips(earliestTime);
-	}
-
-	public List<CombinationFlip> getCombinationFlips(Instant earliestTime) {
-		return history.getCombinationFlips(earliestTime);
+	/**
+	 * There are several fields we don't persist in offer events, so we need to fill them in
+	 * at plugin start. Additionally, due to schema evolution such as fields being added, we have to
+	 * fill those new fields with default values. I think gson should do this when deserializing already, but
+	 * I ran into some issues with it some time ago and am too lazy to re-explore...
+	 */
+	public void hydrate(Map<Integer, String> idToItemName, int geLimit) {
+		setTotalGELimit(geLimit);
+		syncState();
+		setOfferIds();
+		setOfferNames(idToItemName);
+		setOfferMadeBy();
+		//when this change was made the field will not exist and will be null
+		if (validFlippingPanelItem == null)
+		{
+			validFlippingPanelItem = true;
+		}
 	}
 }

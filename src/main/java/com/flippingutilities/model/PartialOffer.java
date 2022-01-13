@@ -15,6 +15,16 @@ public class PartialOffer {
                 amountConsumed
         );
     }
+
+    /**
+     * Returns an offer event that represents this partial offer.
+     */
+    public OfferEvent toAdjustedOfferEvent() {
+        int remainingAmount = offer.getCurrentQuantityInTrade() - amountConsumed;
+        OfferEvent adjustedOfferEvent = offer.clone();
+        adjustedOfferEvent.setCurrentQuantityInTrade(remainingAmount);
+        return adjustedOfferEvent;
+    }
 }
 
 

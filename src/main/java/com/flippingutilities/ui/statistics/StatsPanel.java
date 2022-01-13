@@ -27,9 +27,9 @@
 package com.flippingutilities.ui.statistics;
 
 import com.flippingutilities.controller.FlippingPlugin;
+import com.flippingutilities.model.CombinationFlip;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
-import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.uiutilities.*;
 import com.google.common.base.Strings;
 import lombok.Getter;
@@ -191,7 +191,7 @@ public class StatsPanel extends JPanel
 		activePanels.clear();
 		statItemPanelsContainer.removeAll();
 		List<FlippingItem> sortedItems = sortTradeList(flippingItems);
-		List<FlippingItem> itemsThatShouldHavePanels = sortedItems.stream().filter(item -> item.getIntervalHistory(startOfInterval).stream().anyMatch(OfferEvent::isValidOfferEvent)).collect(Collectors.toList());
+		List<FlippingItem> itemsThatShouldHavePanels = sortedItems.stream().filter(item -> item.hasOfferInInterval(startOfInterval)).collect(Collectors.toList());
 		sortDropdown.setVisible(itemsThatShouldHavePanels.size() > 0);
 		paginator.updateTotalPages(itemsThatShouldHavePanels.size());
 		List<FlippingItem> itemsOnCurrentPage = paginator.getCurrentPageItems(itemsThatShouldHavePanels);
@@ -276,18 +276,22 @@ public class StatsPanel extends JPanel
 	 */
 	public void updateDisplays(List<FlippingItem> tradesList)
 	{
-		subInfoPanel.removeAll();
-		for (JPanel panel : subInfoPanelArray)
-		{
-			panel.setBorder(new EmptyBorder(4, 2, 4, 2));
-			subInfoPanel.add(panel);
-			panel.setBackground(CustomColors.DARK_GRAY);
-		}
+		//subInfoPanel.removeAll();
+//		for (JPanel panel : subInfoPanelArray)
+//		{
+//			panel.setBorder(new EmptyBorder(4, 2, 4, 2));
+//			subInfoPanel.add(panel);
+//			panel.setBackground(CustomColors.DARK_GRAY);
+//		}
 
 		if (!Objects.equals(timeIntervalDropdown.getSelectedItem(), "Session"))
 		{
 			subInfoPanel.remove(sessionTimePanel);
 			subInfoPanel.remove(hourlyProfitPanel);
+		}
+		else {
+			subInfoPanel.add(sessionTimePanel);
+			subInfoPanel.add(hourlyProfitPanel);
 		}
 
 		//TODO why are these instance variables....
@@ -300,19 +304,20 @@ public class StatsPanel extends JPanel
 		for (FlippingItem item : tradesList)
 		{
 			List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-			if (intervalHistory.isEmpty())
-			{
+			List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
+			if (intervalHistory.isEmpty()) {
 				continue;
 			}
-			taxPaid += item.getTaxPaid(intervalHistory);
-			totalProfit += item.getNonCombinationProfit(intervalHistory);
-			totalExpenses += item.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory, true);
-			int flips = item.getNonCombinationFlips(startOfInterval).size();
-			totalFlips += flips;
+
+			List<CombinationFlip> combinationFlips = item.getPersonalCombinationFlips(startOfInterval);
+
+			taxPaid += adjustedOffers.stream().mapToInt(OfferEvent::getTaxPaid).sum() + combinationFlips.stream().mapToLong(CombinationFlip::getTaxPaid).sum();;
+			totalProfit += item.getProfit(adjustedOffers) + combinationFlips.stream().mapToLong(CombinationFlip::getProfit).sum();
+			totalExpenses += item.getValueOfMatchedOffers(adjustedOffers, true) + combinationFlips.stream().mapToLong(CombinationFlip::getExpense).sum();
+			totalFlips += item.getFlips(adjustedOffers).size() + combinationFlips.size();
 		}
 
 		updateTotalProfitDisplay();
-		updateSubInfoFont();
 		if (Objects.equals(timeIntervalDropdown.getSelectedItem(), "Session"))
 		{
 			Duration accumulatedTime = plugin.viewAccumulatedTimeForCurrentView();
@@ -535,6 +540,7 @@ public class StatsPanel extends JPanel
 	 * @param tradeList The soon-to-be drawn tradeList whose items are getting sorted.
 	 * @return Returns a cloned and sorted tradeList as specified by the selectedSort string.
 	 */
+	if this is to be accurate i need to use the adjusted view
 	public List<FlippingItem> sortTradeList(List<FlippingItem> tradeList)
 	{
 		List<FlippingItem> result = new ArrayList<>(tradeList);
@@ -555,11 +561,11 @@ public class StatsPanel extends JPanel
 					ArrayList<OfferEvent> intervalHistory1 = item1.getIntervalHistory(startOfInterval);
 					ArrayList<OfferEvent> intervalHistory2 = item2.getIntervalHistory(startOfInterval);
 
-					long totalExpense1 = item1.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory1, true);
-					long totalRevenue1 = item1.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory1, false);
+					long totalExpense1 = item1.getValueOfMatchedOffers(intervalHistory1, true);
+					long totalRevenue1 = item1.getValueOfMatchedOffers(intervalHistory1, false);
 
-					long totalExpense2 = item2.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory2, true);
-					long totalRevenue2 = item2.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory2, false);
+					long totalExpense2 = item2.getValueOfMatchedOffers(intervalHistory2, true);
+					long totalRevenue2 = item2.getValueOfMatchedOffers(intervalHistory2, false);
 
 					if ((totalExpense1 != 0 && totalRevenue1 != 0) && (totalExpense2 == 0 || totalRevenue2 == 0))
 					{
@@ -576,7 +582,7 @@ public class StatsPanel extends JPanel
 						return 0;
 					}
 
-					return Long.compare(item1.getNonCombinationProfit(intervalHistory1), item2.getNonCombinationProfit(intervalHistory2));
+					return Long.compare(item1.getProfit(intervalHistory1), item2.getProfit(intervalHistory2));
 				});
 				break;
 
@@ -584,14 +590,14 @@ public class StatsPanel extends JPanel
 				result.sort(Comparator.comparing(item ->
 				{
 					ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-					int quantity = item.countNonCombinationFlipQuantity(intervalHistory);
+					int quantity = item.countFlipQuantity(intervalHistory);
 
 					if (quantity == 0)
 					{
 						return 0;
 					}
 
-					return (int) item.getNonCombinationProfit(intervalHistory) / quantity;
+					return (int) item.getProfit(intervalHistory) / quantity;
 				}));
 				break;
 			case "Highest ROI":
@@ -600,11 +606,11 @@ public class StatsPanel extends JPanel
 					ArrayList<OfferEvent> intervalHistory1 = item1.getIntervalHistory(startOfInterval);
 					ArrayList<OfferEvent> intervalHistory2 = item2.getIntervalHistory(startOfInterval);
 
-					long totalExpense1 = item1.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory1, true);
-					long totalRevenue1 = item1.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory1, false);
+					long totalExpense1 = item1.getValueOfMatchedOffers(intervalHistory1, true);
+					long totalRevenue1 = item1.getValueOfMatchedOffers(intervalHistory1, false);
 
-					long totalExpense2 = item2.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory2, true);
-					long totalRevenue2 = item2.getValueOfOnlyMatchedNonCombinationOffers(intervalHistory2, false);
+					long totalExpense2 = item2.getValueOfMatchedOffers(intervalHistory2, true);
+					long totalRevenue2 = item2.getValueOfMatchedOffers(intervalHistory2, false);
 
 					if ((totalExpense1 != 0 && totalRevenue1 != 0) && (totalExpense2 == 0 || totalRevenue2 == 0))
 					{
@@ -621,12 +627,12 @@ public class StatsPanel extends JPanel
 						return 0;
 					}
 
-					return Float.compare((float) item1.getNonCombinationProfit(intervalHistory1) / totalExpense1, (float) item2.getNonCombinationProfit(intervalHistory2) / totalExpense2);
+					return Float.compare((float) item1.getProfit(intervalHistory1) / totalExpense1, (float) item2.getProfit(intervalHistory2) / totalExpense2);
 				});
 				break;
 
 			case "Highest Quantity":
-				result.sort(Comparator.comparing(item -> item.countNonCombinationFlipQuantity(item.getIntervalHistory(startOfInterval))));
+				result.sort(Comparator.comparing(item -> item.countFlipQuantity(item.getIntervalHistory(startOfInterval))));
 				break;
 
 			default:
@@ -756,6 +762,8 @@ public class StatsPanel extends JPanel
 		totalProfitVal.setFont(BIG_PROFIT_FONT);
 		totalProfitVal.setHorizontalAlignment(SwingConstants.CENTER);
 		totalProfitVal.setToolTipText("");
+
+		updateSubInfoFont();
 	}
 
 	private JComboBox createSortDropdown() {
@@ -862,6 +870,16 @@ public class StatsPanel extends JPanel
 		JPanel subInfoPanel = new JPanel();
 		/* Subinfo represents the less-used general historical stats */
 		subInfoPanel.setLayout(new DynamicGridLayout(subInfoPanelArray.length, 1));
+
+		for (JPanel panel : subInfoPanelArray)
+		{
+			panel.setBorder(new EmptyBorder(4, 2, 4, 2));
+			panel.setBackground(CustomColors.DARK_GRAY);
+			//these are added in update displays if the time interval is set to "Session"
+			if (panel != hourlyProfitPanel && panel != sessionTimePanel) {
+				subInfoPanel.add(panel);
+			}
+		}
 
 		//All labels should already be sorted in their arrays.
 		for (int i = 0; i < subInfoPanelArray.length; i++)

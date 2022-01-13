@@ -73,8 +73,9 @@ public class HistoryManager
 	//flip with a guthan set, that combination flip would show up here.
 	private List<CombinationFlip> parentCombinationFlips = new ArrayList<>();
 
-	private transient Set<String> offerIdsContributingToCombinationFlips;
-	private transient Set<String> offerIdsContributingToPersonalCombinationFlips;
+	//Used as caches
+	private transient Map<String, PartialOffer> offerIdsContributingToCombinationFlips;
+	private transient Map<String, PartialOffer> offerIdsContributingToPersonalCombinationFlips;
 
 	public HistoryManager clone()
 	{
@@ -115,7 +116,6 @@ public class HistoryManager
 	 */
 	private void updateGeLimitProperties(OfferEvent newOfferEvent)
 	{
-
 		//there is a small bug in this method. Basically, when we get non-complete offers from different slots it will
 		//only take one of the slots buys into account. When the offer completes or is cancelled things are fine.
 
@@ -193,49 +193,47 @@ public class HistoryManager
 
 	/**
 	 * Calculates profit for a list of trades made with this item by counting the expenses and revenues
-	 * accrued over these trades and figuring out the difference in value. This ONLY counts the profit
-	 * from non combinations.
+	 * accrued over these trades and figuring out the difference in value.
 	 *
 	 * @param tradeList The list of trades whose total profits will be calculated.
 	 * @return profit
 	 */
-	public long getNonCombinationProfit(List<OfferEvent> tradeList)
+	public long getProfit(List<OfferEvent> tradeList)
 	{
 		//return the value of the sell list - the value of the buy list. This is the profit.
-		return getValueOfOnlyMatchedNonCombinationOffers(tradeList, false) -
-				getValueOfOnlyMatchedNonCombinationOffers(tradeList, true);
+		return getValueOfMatchedOffers(tradeList, false) -
+				getValueOfMatchedOffers(tradeList, true);
 	}
 
 	/**
 	 * This method finds the value of all the offers with the buyState that are
 	 * contributing to flips. As such, this is NOT the value of the entire trade list, or the value of
 	 * ALL the buys/sells. It is only the value of buys OR sells that are contributing to flips, meaning
-	 * they would be matched to another buy/sell when constructing flips. This also excludes offers that are
-	 * in combination flips.
+	 * they would be matched to another buy/sell when constructing flips.
 	 *
 	 * @param tradeList  A list of offers
 	 * @param buyState Refers to whether buys or sells should be looked at
 	 * @return Returns the value of flips
 	 */
-	public long getValueOfOnlyMatchedNonCombinationOffers(List<OfferEvent> tradeList, boolean buyState)
+	public long getValueOfMatchedOffers(List<OfferEvent> tradeList, boolean buyState)
 	{
-		Set<String> offerIdsInCombinationFlips = getOfferIdsContributingToComboFlips();
-		return getValueOfTrades(
-				filterTradeList(tradeList, o -> o.isBuy() == buyState && !offerIdsInCombinationFlips.contains(o.getUuid())),
-				countNonCombinationFlipQuantity(tradeList));
+		return getValueOfOffersUpToLimit(
+				tradeList.stream().filter(o -> o.isBuy() == buyState).collect(Collectors.toList()),
+				countFlipQuantity(tradeList));
 	}
 
 	/**
 	 * Calculates the total value of the sell or buy offers in a trade list.
 	 */
-	public static long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean buyState)
+	public static long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean isBuy)
 	{
-		return getValueOfTrades(filterTradeList(tradeList, o -> o.isBuy() == buyState), -1);
+		return tradeList.stream().
+				filter( o -> o.isBuy() == isBuy).
+				mapToLong(o -> (long) o.getCurrentQuantityInTrade() * o.getPrice()).sum();
 	}
 
 	/**
-	 * Gets the amount of items in a given tradelist that have been "flipped". This excludes offer events
-	 * marked as invalid (Deleted, waiting to be pruned) and offer events that are in combination flips. We take
+	 * Gets the amount of items in a given tradelist that have been "flipped". We take
 	 * min(itemsBought, itemsSold) bc we only want the amount of items that will actually be matched against each
 	 * other to create flips and if either buys or sells has a surplus relative to the other, that surplus won't be
 	 * matched.
@@ -243,19 +241,13 @@ public class HistoryManager
 	 * @param tradeList The list of items that the item count is based on
 	 * @return An integer representing the total currentQuantityInTrade of items flipped in the list of offers
 	 */
-	public int countNonCombinationFlipQuantity(List<OfferEvent> tradeList)
+	public int countFlipQuantity(List<OfferEvent> tradeList)
 	{
 		int numBoughtItems = 0;
 		int numSoldItems = 0;
 
-		Set<String> offerIdsInCombinationFlips = getOfferIdsContributingToComboFlips();
 		for (OfferEvent offer : tradeList)
 		{
-			if (!offer.isValidOfferEvent() || offerIdsInCombinationFlips.contains(offer.getUuid()))
-			{
-				continue;
-			}
-
 			if (offer.isBuy())
 			{
 				numBoughtItems += offer.getCurrentQuantityInTrade();
@@ -270,27 +262,6 @@ public class HistoryManager
 	}
 
 	/**
-	 * Gets the list of trades of either buy or sell states from a list of trades.
-	 *
-	 * @param tradeList The list of trades that will be checked.
-	 * @param conditions predicate that contains conditions which an offer event must fulfill
-	 * @return A list of items either sold or bought over a period of time.
-	 */
-	private static List<OfferEvent> filterTradeList(List<OfferEvent> tradeList, Predicate<OfferEvent> conditions)
-	{
-		ArrayList<OfferEvent> results = new ArrayList<>();
-
-		for (OfferEvent offer : tradeList)
-		{
-			if (conditions.test(offer) && offer.isValidOfferEvent()) {
-				results.add(offer);
-			}
-		}
-
-		return results;
-	}
-
-	/**
 	 * Calculates the amount of money spent on either a buy or sell list, up to the amount of items
 	 * specified by the limit.
 	 *
@@ -302,7 +273,7 @@ public class HistoryManager
 	 * @return the amount of money spent on the offer list, up to the amount of items specified by the
 	 * limit
 	 */
-	private static long getValueOfTrades(List<OfferEvent> tradeList, long itemLimit)
+	private static long getValueOfOffersUpToLimit(List<OfferEvent> tradeList, long itemLimit)
 	{
 		int itemsSeen = 0;
 		long moneySpent = 0;
@@ -311,11 +282,6 @@ public class HistoryManager
 
 		for (OfferEvent offer : tradeList)
 		{
-			if (!offer.isValidOfferEvent())
-			{
-				continue;
-			}
-
 			if (itemsSeen + offer.getCurrentQuantityInTrade() >= itemLimit)
 			{
 				moneySpent += (itemLimit - itemsSeen) * offer.getPrice();
@@ -344,7 +310,7 @@ public class HistoryManager
 
 		for (OfferEvent offer : compressedOfferEvents)
 		{
-			if (offer.getTime().isAfter(earliestTime) && offer.isValidOfferEvent())
+			if (offer.getTime().isAfter(earliestTime))
 			{
 				result.add(offer);
 			}
@@ -375,7 +341,15 @@ public class HistoryManager
 
 	public boolean hasValidOffers()
 	{
-		return compressedOfferEvents.stream().anyMatch(OfferEvent::isValidOfferEvent);
+		return compressedOfferEvents.size() > 0;
+	}
+
+	public boolean hasOfferInInterval(Instant earliestTime) {
+		if (!hasValidOffers()) {
+			return false;
+		}
+		OfferEvent lastOffer = compressedOfferEvents.get(compressedOfferEvents.size()-1);
+		return lastOffer.getTime().isAfter(earliestTime);
 	}
 
 	/**
@@ -405,6 +379,10 @@ public class HistoryManager
 		//TODO just delete the events, no need to mark them as invalid. I want to eventually get rid of the
 		//validOfferEvent field..but it's annoying cause it is already persisted.
 		offerList.forEach(offer -> offer.setValidOfferEvent(false));
+		removeInvalidOffers();
+	}
+
+	public void removeInvalidOffers() {
 		compressedOfferEvents.removeIf(offer -> !offer.isValidOfferEvent());
 	}
 
@@ -629,15 +607,17 @@ public class HistoryManager
 	 * Maintains a cache of offer ids from THIS item that contributes to personal combination
 	 * flips or parent combination flips
 	 */
-	public Set<String> getOfferIdsContributingToComboFlips() {
+	public Map<String, PartialOffer> getOfferIdsContributingToComboFlips() {
 		if (compressedOfferEvents.isEmpty()) {
-			return new HashSet<>();
+			return new HashMap<>();
 		}
 		if (offerIdsContributingToCombinationFlips == null) {
 			int thisItemsId = compressedOfferEvents.get(0).getItemId();
-			offerIdsContributingToCombinationFlips = new HashSet<>();
-			parentCombinationFlips.forEach(cf -> cf.getChildrenOffers(thisItemsId).forEach(o -> offerIdsContributingToCombinationFlips.add(o.getUuid())));
-			personalCombinationFlips.forEach(cf -> offerIdsContributingToCombinationFlips.add(cf.parent.offer.getUuid()));
+			offerIdsContributingToCombinationFlips = new HashMap<>();
+			parentCombinationFlips.forEach(
+					cf -> cf.getChildrenOffers(thisItemsId).forEach(po -> offerIdsContributingToCombinationFlips.put(po.offer.getUuid(), po)));
+			personalCombinationFlips.forEach(
+					cf -> offerIdsContributingToCombinationFlips.put(cf.parent.offer.getUuid(), cf.parent));
 		}
 
 		return offerIdsContributingToCombinationFlips;
@@ -647,11 +627,11 @@ public class HistoryManager
 	 * Maintains a cache of offer ids from THIS item that contributes to only personal
 	 * combination flips
 	 */
-	public Set<String> getOfferIdsContributingToPersonalComboFlips() {
+	public Map<String, PartialOffer> getOfferIdsContributingToPersonalComboFlips() {
 		if (offerIdsContributingToPersonalCombinationFlips == null) {
 			offerIdsContributingToPersonalCombinationFlips = personalCombinationFlips.stream().
-					map(cf -> cf.parent.offer.getUuid()).
-					collect(Collectors.toSet());
+					map(cf -> Map.entry(cf.parent.offer.getUuid(), cf.parent)).
+					collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 		}
 		return offerIdsContributingToPersonalCombinationFlips;
 	}
@@ -739,20 +719,14 @@ public class HistoryManager
 	 * Creates Flips from offers. Flips represent a buy trade followed by a sell trade. A trade is a collection
 	 * of offers from the empty offer to the completed offer. A completed offer marks the end of a trade.
 	 *
-	 * @param earliestTime the time after which trades should be looked at
+	 * @param tradeList offers
 	 * @return flips
 	 */
-	public List<Flip> getNonCombinationFlips(Instant earliestTime)
+	public List<Flip> getFlips(List<OfferEvent> tradeList)
 	{
-		Set<String> offerIdsInCombinationFlips = getOfferIdsContributingToComboFlips();
-		List<OfferEvent> nonCombinationOffers = filterTradeList(
-				getIntervalsHistory(earliestTime),
-				offerEvent -> !offerIdsInCombinationFlips.contains(offerEvent.getUuid())
-		);
-
 		//group offers based on which account those offers belong to (this is really only relevant when getting the flips
 		//of the account wide tradelist as you don't want to match offers from diff accounts.
-		Map<String, List<OfferEvent>> groupedOffers = nonCombinationOffers.stream().collect(Collectors.groupingBy(OfferEvent::getMadeBy));
+		Map<String, List<OfferEvent>> groupedOffers = tradeList.stream().collect(Collectors.groupingBy(OfferEvent::getMadeBy));
 
 		//take each offer list and create flips out of them, then put those flips into one list.
 		List<Flip> flips = new ArrayList<>();
@@ -764,15 +738,37 @@ public class HistoryManager
 	}
 
 	/**
-	 * Returns combinations flips that have all their offers after earliestTime
+	 * Returns combinations flips that have all their offers after earliestTime. We don't rely on a
+	 * offer list as an input bc to figure out whether a combination flip is in the offer list, you really
+	 * need the offer list of the same time range from every item that contributed to the combination flip.
 	 */
 	public List<CombinationFlip> getCombinationFlips(Instant earliestTime) {
 		List<CombinationFlip> combinationFlips = getCombinationFlips();
 		//get only the combination flips that have all their offers after earliestTime
 		return combinationFlips.stream().
-				filter(cf -> cf.getOffers().stream().allMatch(o -> o.getTime().isAfter(earliestTime))).
+				filter(cf -> cf.getOffers().stream().allMatch(po -> po.getOffer().getTime().isAfter(earliestTime))).
 				sorted(Comparator.comparing(cf -> cf.parent.getOffer().getTime())).
 				collect(Collectors.toList());
+	}
+
+	public List<CombinationFlip> getPersonalCombinationFlips(Instant earliestTime) {
+		return personalCombinationFlips.stream()
+				.filter(cf -> cf.getOffers().stream().allMatch(po -> po.getOffer().getTime().isAfter(earliestTime)))
+				.collect(Collectors.toList());
+	}
+
+	/**
+	 * Returns a view of the offer events that accounts for the amount consumed by partial offers
+	 * in the combination flips
+	 */
+	List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> offers) {
+		Map<String, PartialOffer> offerIdsInCombinationFlips = getOfferIdsContributingToComboFlips();
+		return offers.stream().map(o -> {
+			if (offerIdsInCombinationFlips.containsKey(o.getUuid())) {
+				return offerIdsInCombinationFlips.get(o.getUuid()).toAdjustedOfferEvent();
+			}
+			return o;
+		}).collect(Collectors.toList());
 	}
 
 	/**
@@ -783,5 +779,26 @@ public class HistoryManager
 		combinationFlips.addAll(personalCombinationFlips);
 		combinationFlips.addAll(parentCombinationFlips);
 		return combinationFlips;
+	}
+
+	/**
+	 * Because we don't persist the itemName field in an OfferEvent, we need to hydrate every
+	 * OfferEvent with it, which includes the offer events in combination flips
+	 * @param idToItemName a map of item id to item name for quick lookup
+	 */
+	public void setCombinationFlipOfferNames(Map<Integer, String> idToItemName) {
+		getCombinationFlips().forEach(cf -> cf.getOffers().forEach(po -> {
+			OfferEvent o = po.getOffer();
+			String itemName = idToItemName.getOrDefault(o.getItemId(), "");
+			o.setItemName(itemName);
+		}));
+	}
+
+	/**
+	 * Because we don't persist the itemName field in an OfferEvent, we need to hydrate every
+	 * OfferEvent with it
+	 */
+	public void setOfferNames(String itemName) {
+		compressedOfferEvents.forEach(o -> o.setItemName(itemName));
 	}
 }

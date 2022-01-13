@@ -89,7 +89,7 @@ public class OfferEvent
 	 * has a flipped by attribute. So, the reason this attribute is here is because during the process of creating
 	 * the account wide trade list, we merge flipping items flipped by several different accounts into one. Thus, in that
 	 * case, a flipping item would have been flipped by multiple accounts so each offer needs to be marked to
-	 * differentiate offer. This functionality is currently only used in getNonCombinationFlips as, when getting the flips for the
+	 * differentiate offer. This functionality is currently only used in getFlips as, when getting the flips for the
 	 * account wide list, you don't want to match offers from different accounts!
 	 */
 	private transient String madeBy;

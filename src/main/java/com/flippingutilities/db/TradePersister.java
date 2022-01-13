@@ -211,7 +211,7 @@ public class TradePersister
 						offer.getState()
 				);
 			}
-			csvWriter.printComment(String.format("Total profit: %d", item.getNonCombinationProfit(item.getHistory().getCompressedOfferEvents())));
+			csvWriter.printComment(String.format("Total profit: %d", item.getProfit(item.getHistory().getCompressedOfferEvents())));
 			csvWriter.println();
 		}
 		csvWriter.close();
