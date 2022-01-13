@@ -553,6 +553,9 @@ public class HistoryManager
 		int buyIdx = 0;
 		for (OfferEvent sell : sells)
 		{
+			if (sell.getCurrentQuantityInTrade() == 0) {
+				continue;
+			}
 			int numBuysSeen = 0;
 			int totalRevenue = 0;
 			while (buyIdx < buys.size())
