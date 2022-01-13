@@ -139,7 +139,7 @@ public class StatItemPanel extends JPanel
 		JPanel subInfoAndHistoryContainer = createSubInfoAndHistoryContainer(subInfoPanel, tradeHistoryPanel);
         JPanel titlePanel = createTitlePanel(createIconPanel(itemManager), createNameAndProfitPanel(), createCollapseIcon(), subInfoAndHistoryContainer);
 
-        updateLabels(adjustedOffers, personalCombinationFlips);
+        updateLabels(offers, adjustedOffers, personalCombinationFlips);
 
         add(titlePanel, BorderLayout.NORTH);
         add(subInfoAndHistoryContainer, BorderLayout.CENTER);
@@ -477,7 +477,7 @@ public class StatItemPanel extends JPanel
 		return collapseIconLabel;
 	}
 
-	public void updateLabels(List<OfferEvent> adjustedOffers, List<CombinationFlip> personalCombinationFlips)
+	public void updateLabels(List<OfferEvent> offers, List<OfferEvent> adjustedOffers, List<CombinationFlip> personalCombinationFlips)
 	{
         quantityFlipped.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         avgBuyPriceValLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
@@ -485,36 +485,34 @@ public class StatItemPanel extends JPanel
         quantityBoughtLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         quantitySoldLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 
-		long numItemsBought = 0;
-		long numItemsSold = 0;
-		for (OfferEvent offer : adjustedOffers)
+		long totalItemsBought = 0;
+		long totalItemsSold = 0;
+		for (OfferEvent offer : offers)
 		{
 			if (offer.isBuy())
 			{
-				numItemsBought += offer.getCurrentQuantityInTrade();
+				totalItemsBought += offer.getCurrentQuantityInTrade();
 			}
 			else
 			{
-				numItemsSold += offer.getCurrentQuantityInTrade();
+				totalItemsSold += offer.getCurrentQuantityInTrade();
 			}
 		}
+		int itemCountFlipped = flippingItem.countFlipQuantity(adjustedOffers);
 		long revenueFromFlippedItems = flippingItem.getValueOfMatchedOffers(adjustedOffers, false);
 		long expenseFromFlippedItems = flippingItem.getValueOfMatchedOffers(adjustedOffers, true);
-		long totalRevenue = flippingItem.getTotalRevenueOrExpense(adjustedOffers, false);
-		long totalExpense = flippingItem.getTotalRevenueOrExpense(adjustedOffers, true);
-		int itemCountFlipped = flippingItem.countFlipQuantity(adjustedOffers);
+		long totalRevenue = flippingItem.getTotalRevenueOrExpense(offers, false);
+		long totalExpense = flippingItem.getTotalRevenueOrExpense(offers, true);
 
-		if (plugin.combinationFlipFinder.isCombinationSource(flippingItem.getItemId())) {
+		revenueFromFlippedItems +=  personalCombinationFlips.stream().mapToLong(CombinationFlip::getRevenue).sum();
+		expenseFromFlippedItems += personalCombinationFlips.stream().mapToLong(CombinationFlip::getExpense).sum();
+		itemCountFlipped += personalCombinationFlips.stream().mapToInt(cf -> cf.getParent().amountConsumed).sum();
 
-			revenueFromFlippedItems +=  personalCombinationFlips.stream().mapToLong(CombinationFlip::getRevenue).sum();
-			expenseFromFlippedItems += personalCombinationFlips.stream().mapToLong(CombinationFlip::getExpense).sum();
-			itemCountFlipped += personalCombinationFlips.stream().mapToInt(cf -> cf.getParent().amountConsumed).sum();
-		}
 		long profit = revenueFromFlippedItems - expenseFromFlippedItems;
 
 		updateTitleLabels(profit, itemCountFlipped);
 		updateFlippingLabels(expenseFromFlippedItems, revenueFromFlippedItems, itemCountFlipped);
-		updateGeneralLabels(totalRevenue, totalExpense, numItemsBought, numItemsSold);
+		updateGeneralLabels(totalRevenue, totalExpense, totalItemsBought, totalItemsSold);
 		updateTimeLabels();
 	}
 
