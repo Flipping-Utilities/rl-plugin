@@ -9,6 +9,7 @@ import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
+import com.flippingutilities.utilities.Recipe;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.util.AsyncBufferedImage;
@@ -21,6 +22,7 @@ import java.awt.*;
 import java.time.Instant;
 import java.util.*;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -38,25 +40,18 @@ public class CombinationFlipCreationPanel extends JPanel {
     LinkedHashMap<Integer, Map<String, PartialOffer>> selectedOffers;
     JButton finishButton = new JButton("Combine!");
     JLabel profitNumberLabel = new JLabel("+0");
-    ;
+    Recipe recipe;
+    LinkedHashMap<Integer, CombinationItemHeaderPanel> idToHeader;
 
     public CombinationFlipCreationPanel(FlippingPlugin plugin, FlippingItem item, OfferEvent parentOffer) {
         this.plugin = plugin;
         this.parentOffer = parentOffer;
         this.parentItem = item;
 
-        selectedOffers = new LinkedHashMap<>();
-
-        //putting the parent offer in the selected offers map from the beginning as it will always be "selected"
-        //by virtue of it being what caused the combination flip
-        Map<String, PartialOffer> parentOfferMap = new HashMap<>();
-        parentOfferMap.put(parentOffer.getUuid(), new PartialOffer(parentOffer, parentOffer.getCurrentQuantityInTrade()));
-
-        selectedOffers.put(parentOffer.getItemId(), parentOfferMap);
-
-        //initializing the selected offers map with empty hashmaps for the constituent parts of the combination flip
-        Map<Integer, Optional<FlippingItem>> childItemsInCombination = plugin.getItemsInCombination(parentOffer.getItemId());
-        childItemsInCombination.keySet().forEach(id -> selectedOffers.put(id, new HashMap<>()));
+        Map<Integer, Optional<FlippingItem>> childItemsInCombination = plugin.getChildCombinationItems(parentOffer.getItemId(), parentOffer.isBuy());
+        recipe = plugin.getApplicableRecipe(parentOffer.getItemId(), parentOffer.isBuy());
+        selectedOffers = initSelectedOffers(childItemsInCombination);
+        idToHeader = createItemIcons(selectedOffers);
 
         setBackground(Color.BLACK);
         setLayout(new BorderLayout());
@@ -66,6 +61,16 @@ public class CombinationFlipCreationPanel extends JPanel {
         add(createBottomPanel(childItemsInCombination), BorderLayout.SOUTH);
 
         setBorder(new EmptyBorder(8, 8, 8, 8));
+    }
+
+    private LinkedHashMap<Integer, Map<String, PartialOffer>> initSelectedOffers(Map<Integer, Optional<FlippingItem>> childItemsInCombination) {
+        selectedOffers = new LinkedHashMap<>();
+        //putting the parent offer in the selected offers map from the beginning as it will always be "selected"
+        //by virtue of it being what caused the combination flip
+        selectedOffers.put(parentOffer.getItemId(), Map.of(parentOffer.getUuid(), new PartialOffer(parentOffer, parentOffer.getCurrentQuantityInTrade())));
+        //initializing the selected offers map with empty hashmaps for the constituent parts of the combination flip
+        childItemsInCombination.keySet().forEach(id -> selectedOffers.put(id, new HashMap<>()));
+        return selectedOffers;
     }
 
     /**
@@ -79,12 +84,9 @@ public class CombinationFlipCreationPanel extends JPanel {
         bodyPanel.setBackground(Color.BLACK);
         bodyPanel.setLayout(new DynamicGridLayout(2, allIds.size() + 1, 10, 5));
 
-        LinkedHashMap<Integer, JLabel> idToIconLabel = createItemIcons();
-
-        addItemLabelRow(bodyPanel, idToIconLabel);
+        addItemLabelRow(bodyPanel);
         addOfferPanelRow(
                 bodyPanel,
-                idToIconLabel,
                 createItemIdToOffers(itemsInCombination, startOfInterval),
                 createItemIdToOfferIdsAlreadyUsed(itemsInCombination)
         );
@@ -98,7 +100,7 @@ public class CombinationFlipCreationPanel extends JPanel {
     private JComponent createOffersPanel(
             List<OfferEvent> offers,
             Set<String> offerIdsAlreadyUsed,
-            JLabel iconLabel,
+            CombinationItemHeaderPanel headerPanel,
             int targetSelectionValue) {
         JPanel offersPanel = new JPanel();
         offersPanel.setBackground(Color.BLACK);
@@ -132,7 +134,7 @@ public class CombinationFlipCreationPanel extends JPanel {
 
                 JPanel offerPanelWithPicker = createOfferPanelWithPicker(
                         offerPanel,
-                        iconLabel,
+                        headerPanel,
                         offer,
                         amountToSelect,
                         offerAlreadyUsedInCombinationFlip
@@ -143,7 +145,7 @@ public class CombinationFlipCreationPanel extends JPanel {
                     offersPanel.add(Box.createVerticalStrut(4));
                 }
 
-                setDisplaysAndStateBasedOnSelection(amountToSelect, offer, offerPanel, iconLabel);
+                setDisplaysAndStateBasedOnSelection(amountToSelect, offer, offerPanel, headerPanel);
             }
 
             return scrollPane;
@@ -152,14 +154,14 @@ public class CombinationFlipCreationPanel extends JPanel {
             JLabel noTradesLabel = new JLabel(String.format("No recorded %s for this item", type));
             noTradesLabel.setForeground(Color.RED);
             offersPanel.add(noTradesLabel);
-            iconLabel.setForeground(CustomColors.TOMATO);
+            headerPanel.setForeground(CustomColors.TOMATO);
             return offersPanel;
         }
     }
 
     private JPanel createOfferPanelWithPicker(
             OfferPanel offerPanel,
-            JLabel iconLabel,
+            CombinationItemHeaderPanel headerPanel,
             OfferEvent offer,
             int amountToSelect,
             boolean alreadyInCombinationFlip) {
@@ -174,7 +176,7 @@ public class CombinationFlipCreationPanel extends JPanel {
         numberPicker.setForeground(CustomColors.CHEESE);
         numberPicker.setSize(new Dimension(0, 70));
         numberPicker.addChangeListener(e -> {
-            this.numberPickerHandler(e, offer, offerPanel, iconLabel);
+            this.numberPickerHandler(e, offer, offerPanel, headerPanel);
         });
 
         offerPanelWithPicker.add(numberPicker, BorderLayout.WEST);
@@ -203,21 +205,12 @@ public class CombinationFlipCreationPanel extends JPanel {
      * We use a linked hashmap so we can preserve insertion order when reading, thus ensuring
      * the first element retrieved from the map is always the parent offer.
      */
-    private LinkedHashMap<Integer, JLabel> createItemIcons() {
+    private LinkedHashMap<Integer, CombinationItemHeaderPanel> createItemIcons(LinkedHashMap<Integer, Map<String, PartialOffer>> selectedOffers) {
         Set<Integer> allIds = selectedOffers.keySet();
-        LinkedHashMap<Integer, JLabel> idToIconLabel = new LinkedHashMap<>();
+        LinkedHashMap<Integer, CombinationItemHeaderPanel> idToIconLabel = new LinkedHashMap<>();
         allIds.forEach(id -> {
             AsyncBufferedImage itemImage = plugin.getItemManager().getImage(id);
-            Icon itemIcon = new ImageIcon(itemImage);
-            JLabel iconLabel = new JLabel(itemIcon);
-            iconLabel.setHorizontalTextPosition(SwingConstants.RIGHT);
-            iconLabel.setFont(new Font("Whitney", Font.PLAIN, 20));
-            iconLabel.setText("x0");
-            idToIconLabel.put(id, iconLabel);
-            if (id == parentOffer.getItemId()) {
-                iconLabel.setText(String.format("x%d", parentOffer.getCurrentQuantityInTrade()));
-                iconLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-            }
+            idToIconLabel.put(id, new CombinationItemHeaderPanel(itemImage));
         });
 
         return idToIconLabel;
@@ -227,11 +220,10 @@ public class CombinationFlipCreationPanel extends JPanel {
      * Adds the labels containing the item icon and multiplier text to the body panel
      *
      * @param bodyPanel the panel which the item labels are being added to
-     * @param idToLabel a mapping of item id to label containing the item icon and multiplier text
      */
-    private void addItemLabelRow(JPanel bodyPanel, LinkedHashMap<Integer, JLabel> idToLabel) {
-        idToLabel.keySet().forEach(itemId -> {
-            JLabel itemLabel = idToLabel.get(itemId);
+    private void addItemLabelRow(JPanel bodyPanel) {
+        idToHeader.keySet().forEach(itemId -> {
+            JPanel itemLabel = idToHeader.get(itemId);
             bodyPanel.add(itemLabel);
             if (itemId == parentOffer.getItemId()) {
                 //adding the arrow in the next column
@@ -284,52 +276,96 @@ public class CombinationFlipCreationPanel extends JPanel {
      * Adds the second row to the body panel. The second row contains all the offer panels
      *
      * @param bodyPanel                   the panel the offer panels are being added to
-     * @param idToLabel                   a mapping of item id to label which contains the icon and the multiplier text. We need
      *                                    a reference to this label in this method so we can change the multiplier text
      * @param itemIdToOffers              a map of all the items in the combination and the offers that should be rendered
      * @param itemIdToOfferIdsAlreadyUsed map of item id to a set of offer ids that are already used in a combination flip.
      */
     private void addOfferPanelRow(JPanel bodyPanel,
-                                  LinkedHashMap<Integer, JLabel> idToLabel,
                                   Map<Integer, List<OfferEvent>> itemIdToOffers,
                                   Map<Integer, Set<String>> itemIdToOfferIdsAlreadyUsed) {
-        int leastItemCount = itemIdToOffers.values().stream().
-                mapToInt(offerEvents -> offerEvents.stream().
-                        mapToInt(OfferEvent::getCurrentQuantityInTrade).sum()).
-                min().orElse(0);
+        Map<Integer, Integer> targetValues = getMaxTargetValues(itemIdToOffers);
 
-        idToLabel.keySet().forEach(id -> {
+        idToHeader.keySet().forEach(id -> {
+            int targetValue = targetValues.get(id);
             List<OfferEvent> offers = itemIdToOffers.get(id);
             Set<String> offerIdsAlreadyUsed = itemIdToOfferIdsAlreadyUsed.getOrDefault(id, new HashSet<>());
+            CombinationItemHeaderPanel combinationItemHeaderPanel = idToHeader.get(id);
+            combinationItemHeaderPanel.setTargetValueDisplay(targetValue);
+            bodyPanel.add(createOffersPanel(offers, offerIdsAlreadyUsed, combinationItemHeaderPanel, targetValue));
             if (id == parentOffer.getItemId()) {
-                bodyPanel.add(createOffersPanel(offers, offerIdsAlreadyUsed, idToLabel.get(id), leastItemCount));
+                //empty panel occupies the space under the arrow
                 JPanel emptyPanel = new JPanel();
                 emptyPanel.setBackground(Color.BLACK);
                 bodyPanel.add(emptyPanel);
-            } else {
-                bodyPanel.add(createOffersPanel(offers, offerIdsAlreadyUsed, idToLabel.get(id), leastItemCount));
             }
         });
 
-        setDisplaysOnCompletion();
+        handleItemsHittingTargetConsumptionValues();
+    }
+
+    /**
+     * This method computes the initial target values for each of the items when the panel
+     * first shows up. This is so that the user doesn't have to manually input them (tho they can still
+     * adjust them if they want). The target values are selected such that the max amount of
+     * combinations/recipes can be made. Here is an example:
+     *
+     * Lets say there is a recipe where for every item C you need 3 of item A and 5 of item B. We
+     * can shorten it by saying the recipe is 1C, 3A, and 5B. Now, lets say we have a quantity of 5 for item C,
+     * quantity of 9 for item A and a quantity of 25 for item B. What is the max amount of this recipe you can make?
+     * The max amount is only 3 because it is limited by that fact you only have 9 A items, even though the amount
+     * of C and B items you have can support more recipes.
+     *
+     * Once we know the max amount of recipes the offers can support, we can multiply the max amount by the
+     * amount the recipe needs of each item to know how much of each item we will need to make the max amount of
+     * recipes. Continuing with the example above, our max recipes is 3. To get the amount of C items, we would do
+     * 1 * 3. To get the amount of B items, we would do 5 * 3. To get the amount of A items, we would do 3 * 3.
+     *
+     * In short:
+     * recipe = 3A, 5B, 1C
+     * quantities = 9A 25B 5C
+     * max # of this recipe supported per item: A=3, B=5, C=5
+     * # of recipe supported in actuality: 3, cause A is constraining it.
+     * target values: A = 9(3 * 3), B = 15(3 * 5), C = 3(3 * 1)
+     *
+     * @param itemIdToOffers all the offers for each item
+     */
+    private Map<Integer, Integer> getMaxTargetValues(
+            Map<Integer, List<OfferEvent>> itemIdToOffers) {
+        Map<Integer, Integer> itemIdToQuantity = recipe.getItemIdToQuantity();
+
+        Map<Integer, Integer> itemIdToMaxRecipesThatCanBeMade = itemIdToOffers.entrySet().stream().map(e -> {
+                    int itemId = e.getKey();
+                    long totalQuantity = e.getValue().stream().mapToLong(OfferEvent::getCurrentQuantityInTrade).sum();
+                    long quantityNeededForRecipe = itemIdToQuantity.get(itemId);
+                    int maxRecipesThatCanBeMade = (int) (totalQuantity / quantityNeededForRecipe);
+                    return Map.entry(itemId, maxRecipesThatCanBeMade);
+                }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        int lowestRecipeCountThatCanBeMade = itemIdToMaxRecipesThatCanBeMade.values().stream().mapToInt(i -> i).min().getAsInt();
+
+        return itemIdToQuantity.entrySet().stream().
+                map(e -> Map.entry(e.getKey(), e.getValue() * lowestRecipeCountThatCanBeMade)).
+                collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     /**
      * Handles the what happens when the number picker's value changes.
      */
-    private void numberPickerHandler(ChangeEvent e, OfferEvent offer, OfferPanel offerPanel, JLabel iconLabel) {
+    private void numberPickerHandler(ChangeEvent e, OfferEvent offer, OfferPanel offerPanel,
+                                     CombinationItemHeaderPanel headerPanel) {
         JSpinner numberPicker = (JSpinner) e.getSource();
         int numberPickerValue = (int) numberPicker.getValue();
 
-        setDisplaysAndStateBasedOnSelection(numberPickerValue, offer, offerPanel, iconLabel);
-        setDisplaysOnCompletion();
+        setDisplaysAndStateBasedOnSelection(numberPickerValue, offer, offerPanel, headerPanel);
+        handleItemsHittingTargetConsumptionValues();
     }
 
     /**
-     * Sets the multiplier and the selected offers based on the the number picker value. This is used in the
+     * Sets the consumed amount and the selected offers based on the the number picker value. This is used in the
      * number picker handler method too.
      */
-    private void setDisplaysAndStateBasedOnSelection(int numberPickerValue, OfferEvent offer, OfferPanel offerPanel, JLabel iconLabel) {
+    private void setDisplaysAndStateBasedOnSelection(int numberPickerValue, OfferEvent offer, OfferPanel offerPanel,
+                                                     CombinationItemHeaderPanel headerPanel) {
         int itemId = offer.getItemId();
 
         offerPanel.setSelected(numberPickerValue > 0);
@@ -344,31 +380,43 @@ public class CombinationFlipCreationPanel extends JPanel {
         }
 
         int totalConsumedAmount = selectedOffersForThisItem.values().stream().mapToInt(o -> o.amountConsumed).sum();
-        iconLabel.setText("x" + totalConsumedAmount);
-
-        //if amount consumed for this item is the same as the parent offer, make the multiplier text green
-        int parentOfferConsumedAmount = selectedOffers.get(parentOffer.getItemId()).get(parentOffer.getUuid()).amountConsumed;
-        if (totalConsumedAmount == parentOfferConsumedAmount && parentOfferConsumedAmount != 0) {
-            iconLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-        } else {
-            iconLabel.setForeground(CustomColors.CHEESE);
-        }
+        headerPanel.setConsumedAmountDisplay(totalConsumedAmount);
     }
 
-    private void setDisplaysOnCompletion() {
-        //if all items have the same amount consumed as the parent offer, enable the finish button
+    /**
+     * Enables/disables the finish button based on all items have hit their targets along with adjusting the
+     * target value display.
+     */
+    private void handleItemsHittingTargetConsumptionValues() {
         int parentOfferConsumedAmount = selectedOffers.get(parentOffer.getItemId()).get(parentOffer.getUuid()).amountConsumed;
-        long itemsWithoutCorrectSelectedAmount = selectedOffers.values().stream().
-                map(m -> m.values().stream().mapToInt(o -> o.amountConsumed).sum()).
-                filter(sum -> sum != parentOfferConsumedAmount).count();
-        if (itemsWithoutCorrectSelectedAmount == 0 && parentOfferConsumedAmount != 0) {
+        //if the parent quantity in the recipe is not 1, gonna have to do the modding and stuff
+        Map<Integer, Integer> idToTargetValues = recipe.getTargetValues(parentOfferConsumedAmount);
+
+        AtomicBoolean allMatchTargetValues = new AtomicBoolean(true);
+        selectedOffers.forEach((itemId, partialOfferMap) -> {
+            CombinationItemHeaderPanel itemHeaderPanel = idToHeader.get(itemId);
+            int amountConsumed = partialOfferMap.values().stream().mapToInt(o -> o.amountConsumed).sum();
+            int targetConsumedAmount = idToTargetValues.get(itemId);
+
+            itemHeaderPanel.setTargetValueDisplay(targetConsumedAmount);
+
+            if (amountConsumed == targetConsumedAmount && targetConsumedAmount != 0) {
+                itemHeaderPanel.setConsumedAmountDisplayColor(ColorScheme.GRAND_EXCHANGE_PRICE);
+            } else {
+                allMatchTargetValues.set(false);
+                itemHeaderPanel.setConsumedAmountDisplayColor(CustomColors.CHEESE);
+            }
+        });
+
+        if (allMatchTargetValues.get()) {
             finishButton.setEnabled(true);
             finishButton.setForeground(Color.GREEN);
             long profit = Math.round(calculateProfit());
             String prefix = profit < 0 ? "" : "+";
             profitNumberLabel.setText(prefix + QuantityFormatter.formatNumber(profit) + " gp");
             profitNumberLabel.setForeground(profit < 0 ? Color.RED : Color.GREEN);
-        } else {
+        }
+        else {
             finishButton.setEnabled(false);
             finishButton.setForeground(Color.GRAY);
             profitNumberLabel.setText("+0");
