@@ -2337,5 +2337,18 @@
         "quantity": 1
       }
     ]
+  },
+  {
+    "relationshipType": "buyParent",
+    "parent": {
+      "id": "12924",
+      "quantity": 1
+    },
+    "children": [
+      {
+        "id": 12934,
+        "quantity": 20000
+      }
+    ]
   }
 ]

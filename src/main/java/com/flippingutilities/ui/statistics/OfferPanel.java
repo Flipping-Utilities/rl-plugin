@@ -35,6 +35,7 @@ public class OfferPanel extends JPanel {
     //flag used to decide whether the icons such as the delete icon and combination flip icon should be shown.
     //when these panels are being displayed in the CombinationFlipPanel, we don't want to show those icons.
     private boolean plainMode;
+    private JLabel offerDescriptionLabel;
 
     public OfferPanel(FlippingPlugin plugin, FlippingItem item, OfferEvent offer, boolean plainMode) {
         setLayout(new BorderLayout());
@@ -43,8 +44,8 @@ public class OfferPanel extends JPanel {
         this.item = item;
         this.plainMode = plainMode;
         this.timeDisplay = createTimeDisplayLabel();
-
-        add(createTitlePanel(createOfferDescriptionLabel(), timeDisplay), BorderLayout.NORTH);
+        this.offerDescriptionLabel = createOfferDescriptionLabel();
+        add(createTitlePanel(offerDescriptionLabel, timeDisplay), BorderLayout.NORTH);
         add(createBodyPanel(), BorderLayout.CENTER);
 
         setBackground(CustomColors.DARK_GRAY);
@@ -275,5 +276,16 @@ public class OfferPanel extends JPanel {
         return new CompoundBorder(
                 BorderFactory.createMatteBorder(1,1,1,1, outerBorderColor),
                 new EmptyBorder(1,3,3,3));
+    }
+
+    /**
+     * I really hate java swing, having to approximate the damn width of this using this really stupid code. For
+     * some reason the layout manager is not respecting sizes and i have to set it manually on the scrollpane.
+     */
+    public int getHackySize() {
+        int timeDisplayWidth = (timeDisplay.getText().length() * 6) + 5;
+        int gapBetweenDescAndTimeDisplays = 10;
+        int descriptionDisplayWidth = (offerDescriptionLabel.getText().length() * 6) + 5;
+        return timeDisplayWidth + gapBetweenDescAndTimeDisplays + descriptionDisplayWidth;
     }
 }

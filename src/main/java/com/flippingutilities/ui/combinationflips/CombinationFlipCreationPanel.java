@@ -61,6 +61,7 @@ public class CombinationFlipCreationPanel extends JPanel {
         add(createBottomPanel(childItemsInCombination), BorderLayout.SOUTH);
 
         setBorder(new EmptyBorder(8, 8, 8, 8));
+
     }
 
     private LinkedHashMap<Integer, Map<String, PartialOffer>> initSelectedOffers(Map<Integer, Optional<FlippingItem>> childItemsInCombination) {
@@ -115,10 +116,8 @@ public class CombinationFlipCreationPanel extends JPanel {
             scrollPane.setBackground(Color.BLACK);
             scrollPane.getVerticalScrollBar().setPreferredSize(new Dimension(2, 0));
             scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-            //Prevents scoll pane from being unnecessarily large if there are few panels
-            int scrollPaneHeight = Math.min(350, (offers.size() * 65) + 40);
-            scrollPane.setPreferredSize(new Dimension(230, scrollPaneHeight));
 
+            int maxHackySize = 0;
             for (int i = 0; i < offers.size(); i++) {
                 OfferEvent offer = offers.get(i);
                 OfferPanel offerPanel = new OfferPanel(plugin, null, offer, true);
@@ -132,6 +131,9 @@ public class CombinationFlipCreationPanel extends JPanel {
                 amountToSelect = offerAlreadyUsedInCombinationFlip? 0 : amountToSelect;
                 targetSelectionValue -= amountToSelect;
 
+                int numPickerSize = 40 + (String.valueOf(offer.getCurrentQuantityInTrade()).length() * 10);
+                maxHackySize = Math.max(maxHackySize, offerPanel.getHackySize() + numPickerSize);
+
                 JPanel offerPanelWithPicker = createOfferPanelWithPicker(
                         offerPanel,
                         headerPanel,
@@ -144,6 +146,10 @@ public class CombinationFlipCreationPanel extends JPanel {
                 if (i < Math.min(offers.size(), 10) - 1) {
                     offersPanel.add(Box.createVerticalStrut(4));
                 }
+
+                //Prevents scoll pane from being unnecessarily large if there are few panels
+                int scrollPaneHeight = Math.min(350, (offers.size() * 65) + 40);
+                scrollPane.setPreferredSize(new Dimension(maxHackySize, scrollPaneHeight));
 
                 setDisplaysAndStateBasedOnSelection(amountToSelect, offer, offerPanel, headerPanel);
             }
