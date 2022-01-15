@@ -1,6 +1,7 @@
 package com.flippingutilities.ui.combinationflips;
 
 import net.runelite.client.util.AsyncBufferedImage;
+import net.runelite.client.util.QuantityFormatter;
 
 import javax.swing.*;
 import java.awt.*;
@@ -30,11 +31,11 @@ public class CombinationItemHeaderPanel extends JPanel {
     }
 
     public void setConsumedAmountDisplay(int amount) {
-        itemIconAndConsumedAmountLabel.setText("x" + amount);
+        itemIconAndConsumedAmountLabel.setText("x" + QuantityFormatter.formatNumber(amount));
     }
 
     public void setTargetValueDisplay(int targetValue) {
-        targetValueLabel.setText("/" + targetValue);
+        targetValueLabel.setText("/" + QuantityFormatter.formatNumber(targetValue));
     }
 
     public void setConsumedAmountDisplayColor(Color color) {

@@ -26,7 +26,7 @@ public class RecipeHandler {
 
     public RecipeHandler(Gson gson) {
         this.gson = gson;
-        this.parentIdToRecipes = getParentIdToRecipes(loadRecipes("/data/raw_sets.json"));
+        this.parentIdToRecipes = getParentIdToRecipes(loadRecipes("/data/recipes.json"));
         this.itemIdsInRecipes = getAllItemIdsInRecipes(parentIdToRecipes);
         if (parentIdToRecipes.isPresent()) {
             log.info("Successfully loaded combinations");
