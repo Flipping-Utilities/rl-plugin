@@ -21,10 +21,7 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Set;
 
 /**
  * The offer panel displays an offer's price, quantity, time bought, total cost,
@@ -169,7 +166,7 @@ public class OfferPanel extends JPanel {
     private JPanel createIconPanel() {
         JPanel iconPanel = new JPanel(new BorderLayout());
         iconPanel.setBackground(CustomColors.DARK_GRAY);
-        if (plugin.combinationFlipFinder.isCombinationSource(offer.getItemId()) && offer.isComplete()) {
+        if (plugin.isCombinationParent(offer.getItemId()) && offer.isComplete()) {
             JLabel deleteIcon = createDeleteIcon();
             deleteIcon.setBorder(new EmptyBorder(0,5,0,0));
             iconPanel.add(createCombinationFlipIcon(), BorderLayout.EAST);

@@ -209,7 +209,7 @@ public class StatsPanel extends JPanel
 		JPanel emptySearchPanel = new JPanel(new DynamicGridLayout(2,1));
 		String lookup = searchBar.getText().toLowerCase();
 		JLabel searchLabel = new JLabel(String.format(
-				"<html><body style='text-align: center'>The search for <br> <u>%s</u> <br> yielded no results :(</html>", lookup),
+				"<html><body style='text-align: center'>The search for <br> <b><u>%s</u></b> <br> yielded no results :(</html>", lookup),
 				SwingConstants.CENTER);
 		searchLabel.setFont(new Font("Whitney", Font.PLAIN, 12));
 		searchLabel.setBorder(new EmptyBorder(0,0,10,0));

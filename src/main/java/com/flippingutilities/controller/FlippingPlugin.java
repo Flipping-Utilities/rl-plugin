@@ -39,11 +39,8 @@ import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.jobs.CacheUpdaterJob;
-import com.flippingutilities.utilities.CombinationFlipFinder;
-import com.flippingutilities.utilities.GeHistoryTabExtractor;
-import com.flippingutilities.utilities.InvalidOptionException;
+import com.flippingutilities.utilities.*;
 import com.flippingutilities.jobs.WikiDataFetcherJob;
-import com.flippingutilities.utilities.WikiRequest;
 import com.google.common.primitives.Shorts;
 import com.google.gson.Gson;
 import com.google.inject.Provides;
@@ -196,14 +193,14 @@ public class FlippingPlugin extends Plugin {
     public Gson gson;
 
     public TradePersister tradePersister;
-    public CombinationFlipFinder combinationFlipFinder;
+    private RecipeHandler recipeHandler;
 
     @Override
     protected void startUp() {
         accountCurrentlyViewed = ACCOUNT_WIDE;
 
         tradePersister = new TradePersister(gson);
-        combinationFlipFinder = new CombinationFlipFinder(gson);
+        recipeHandler = new RecipeHandler(gson);
 
         optionHandler = new OptionHandler(this);
         dataHandler = new DataHandler(this);
@@ -912,12 +909,20 @@ public class FlippingPlugin extends Plugin {
                         })), 1000, 1000, TimeUnit.MILLISECONDS);
     }
 
-    public Map<Integer, Optional<FlippingItem>> getItemsInCombination(int itemId) {
-        return combinationFlipFinder.getItemsInCombination(itemId, getTradesForCurrentView());
+    public Map<Integer, Optional<FlippingItem>> getChildCombinationItems(int parentId, boolean isBuy) {
+        return recipeHandler.getChildRecipeItems(parentId, isBuy, getTradesForCurrentView());
     }
 
     public boolean isInCombination(int itemId) {
-        return combinationFlipFinder.isInCombination(itemId);
+        return recipeHandler.isInRecipe(itemId);
+    }
+
+    public boolean isCombinationParent(int itemId) {
+        return recipeHandler.isRecipeParent(itemId);
+    }
+
+    public Recipe getApplicableRecipe(int parentId, boolean isBuy) {
+        return recipeHandler.getApplicableRecipe(parentId, isBuy);
     }
 
     @Subscribe
