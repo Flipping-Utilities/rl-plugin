@@ -5,7 +5,12 @@ import com.flippingutilities.model.FlippingItem;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -23,13 +28,15 @@ public class RecipeHandler {
     private Gson gson;
     private final Optional<Map<Integer, List<Recipe>>> parentIdToRecipes;
     private Set<Integer> itemIdsInRecipes;
+    private OkHttpClient httpClient;
 
-    public RecipeHandler(Gson gson) {
+    public RecipeHandler(Gson gson, OkHttpClient httpClient) {
         this.gson = gson;
-        this.parentIdToRecipes = getParentIdToRecipes(loadRecipes("/data/recipes.json"));
+        this.httpClient = httpClient;
+        this.parentIdToRecipes = getParentIdToRecipes(loadRecipes());
         this.itemIdsInRecipes = getAllItemIdsInRecipes(parentIdToRecipes);
         if (parentIdToRecipes.isPresent()) {
-            log.info("Successfully loaded combinations");
+            log.info("Successfully loaded recipes");
         }
     }
 
@@ -37,7 +44,6 @@ public class RecipeHandler {
      * Gets all item ids in the combinations, both parents and children.
      */
     private Set<Integer> getAllItemIdsInRecipes(Optional<Map<Integer, List<Recipe>>> combinationMetadata) {
-
         if (combinationMetadata.isEmpty()) {
             return new HashSet<>();
         }
@@ -115,15 +121,26 @@ public class RecipeHandler {
         return Optional.of(parentToCombinationMetadata);
     }
 
-    private Optional<List<Recipe>> loadRecipes(String path) {
-        InputStream inputStream = FlippingPlugin.class.getResourceAsStream(path);
+    private Optional<List<Recipe>> loadRecipes() {
+        Request request = new Request.Builder()
+                .url("https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/data/recipes.json")
+                .build();
 
-        if (inputStream == null) {
-            log.warn("could not find resource json at path {}", path);
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                log.error("Recipe fetch returned unsuccessful response: " + response);
+                return Optional.empty();
+            }
+            if (response.body() == null) {
+                log.error("Recipe response body was null: " + response);
+                return Optional.empty();
+            }
+
+            Type type = new TypeToken<List<Recipe>>() {}.getType();
+            return Optional.of(gson.fromJson(response.body().string(), type));
+        } catch (IOException e) {
+            log.warn("IOException when trying to fetch recipes: {}", ExceptionUtils.getStackTrace(e));
             return Optional.empty();
         }
-        Reader reader = new InputStreamReader(inputStream);
-        Type type = new TypeToken<List<Recipe>>() {}.getType();
-        return Optional.of(gson.fromJson(reader, type));
     }
 }
