@@ -49,7 +49,7 @@ public class CombinationFlipCreationPanel extends JPanel {
         this.parentItem = item;
 
         Map<Integer, Optional<FlippingItem>> childItemsInCombination = plugin.getChildCombinationItems(parentOffer.getItemId(), parentOffer.isBuy());
-        recipe = plugin.getApplicableRecipe(parentOffer.getItemId(), parentOffer.isBuy());
+        recipe = plugin.getApplicableRecipe(parentOffer.getItemId(), parentOffer.isBuy()).get();
         selectedOffers = initSelectedOffers(childItemsInCombination);
         idToHeader = createItemIcons(selectedOffers);
 
@@ -85,11 +85,10 @@ public class CombinationFlipCreationPanel extends JPanel {
         bodyPanel.setBackground(Color.BLACK);
         bodyPanel.setLayout(new DynamicGridLayout(2, allIds.size() + 1, 10, 5));
 
-        addItemLabelRow(bodyPanel);
+        addHeaderPanelRow(bodyPanel);
         addOfferPanelRow(
                 bodyPanel,
-                createItemIdToOffers(itemsInCombination, startOfInterval),
-                createItemIdToOfferIdsAlreadyUsed(itemsInCombination)
+                createItemIdToPartialOffers(itemsInCombination, startOfInterval)
         );
 
         return bodyPanel;
@@ -99,13 +98,12 @@ public class CombinationFlipCreationPanel extends JPanel {
      * Creates the offer panels with the number picker for all the offers passed in
      */
     private JComponent createOffersPanel(
-            List<OfferEvent> offers,
-            Set<String> offerIdsAlreadyUsed,
+            List<PartialOffer> partialOffers,
             CombinationItemHeaderPanel headerPanel,
             int targetSelectionValue) {
         JPanel offersPanel = new JPanel();
         offersPanel.setBackground(Color.BLACK);
-        if (offers.size() > 0) {
+        if (partialOffers.size() > 0) {
             offersPanel.setLayout(new BoxLayout(offersPanel, BoxLayout.Y_AXIS));
 
             JPanel wrapper = new JPanel(new BorderLayout());
@@ -118,40 +116,34 @@ public class CombinationFlipCreationPanel extends JPanel {
             scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
             int maxHackySize = 0;
-            for (int i = 0; i < offers.size(); i++) {
-                OfferEvent offer = offers.get(i);
-                OfferPanel offerPanel = new OfferPanel(plugin, null, offer, true);
-                boolean offerAlreadyUsedInCombinationFlip = offerIdsAlreadyUsed.contains(offer.getUuid());
+            for (int i = 0; i < partialOffers.size(); i++) {
+                PartialOffer partialOffer = partialOffers.get(i);
+                OfferPanel offerPanel = new OfferPanel(plugin, null, partialOffer.getOffer(), true);
                 int amountToSelect;
-                if (offer.getCurrentQuantityInTrade() <= targetSelectionValue) {
-                    amountToSelect = offer.getCurrentQuantityInTrade();
-                } else {
-                    amountToSelect = targetSelectionValue;
-                }
-                amountToSelect = offerAlreadyUsedInCombinationFlip? 0 : amountToSelect;
+                int actualQuantityInOffer = partialOffer.getOffer().getCurrentQuantityInTrade() - partialOffer.amountConsumed;
+                amountToSelect = Math.min(actualQuantityInOffer, targetSelectionValue);
                 targetSelectionValue -= amountToSelect;
 
-                int numPickerSize = 40 + (String.valueOf(offer.getCurrentQuantityInTrade()).length() * 10);
+                int numPickerSize = 40 + (String.valueOf(actualQuantityInOffer).length() * 10);
                 maxHackySize = Math.max(maxHackySize, offerPanel.getHackySize() + numPickerSize);
 
                 JPanel offerPanelWithPicker = createOfferPanelWithPicker(
                         offerPanel,
                         headerPanel,
-                        offer,
-                        amountToSelect,
-                        offerAlreadyUsedInCombinationFlip
+                        partialOffer,
+                        amountToSelect
                         );
                 offersPanel.add(offerPanelWithPicker);
 
-                if (i < Math.min(offers.size(), 10) - 1) {
+                if (i < Math.min(partialOffers.size(), 10) - 1) {
                     offersPanel.add(Box.createVerticalStrut(4));
                 }
 
                 //Prevents scoll pane from being unnecessarily large if there are few panels
-                int scrollPaneHeight = Math.min(350, (offers.size() * 65) + 40);
+                int scrollPaneHeight = Math.min(350, (partialOffers.size() * 65) + 40);
                 scrollPane.setPreferredSize(new Dimension(maxHackySize, scrollPaneHeight));
 
-                setDisplaysAndStateBasedOnSelection(amountToSelect, offer, offerPanel, headerPanel);
+                setDisplaysAndStateBasedOnSelection(amountToSelect, partialOffer.getOffer(), offerPanel, headerPanel);
             }
 
             return scrollPane;
@@ -168,34 +160,37 @@ public class CombinationFlipCreationPanel extends JPanel {
     private JPanel createOfferPanelWithPicker(
             OfferPanel offerPanel,
             CombinationItemHeaderPanel headerPanel,
-            OfferEvent offer,
-            int amountToSelect,
-            boolean alreadyInCombinationFlip) {
+            PartialOffer partialOffer,
+            int amountToSelect) {
         JPanel offerPanelWithPicker = new JPanel(new BorderLayout());
         offerPanelWithPicker.setBackground(Color.BLACK);
         JSpinner numberPicker = new JSpinner(
                 new SpinnerNumberModel(
                         amountToSelect,
                         0, //min val
-                        offer.getCurrentQuantityInTrade(), //max val
+                        partialOffer.getOffer().getCurrentQuantityInTrade() - partialOffer.amountConsumed, //max val
                         1));
         numberPicker.setForeground(CustomColors.CHEESE);
         numberPicker.setSize(new Dimension(0, 70));
         numberPicker.addChangeListener(e -> {
-            this.numberPickerHandler(e, offer, offerPanel, headerPanel);
+            this.numberPickerHandler(e, partialOffer.getOffer(), offerPanel, headerPanel);
         });
 
         offerPanelWithPicker.add(numberPicker, BorderLayout.WEST);
         offerPanelWithPicker.add(offerPanel, BorderLayout.CENTER);
-        if (alreadyInCombinationFlip) {
-            numberPicker.setEnabled(false);
+        if (partialOffer.amountConsumed > 0) {
+            boolean completelyConsumed = partialOffer.amountConsumed == partialOffer.getOffer().getCurrentQuantityInTrade();
             JPanel alreadyUsedPanel = new JPanel();
             alreadyUsedPanel.setBackground(Color.BLACK);
 
-            JLabel alreadyUsedLabel = new JLabel("This offer is already in a combination flip", SwingConstants.CENTER);
+            JLabel alreadyUsedLabel = new JLabel(
+                    String.format("<html><body width='150' style='text-align:center;'> " +
+                                    "%d/%d items in this offer already used in other combo flips</body></html>",
+                            partialOffer.amountConsumed,
+                            partialOffer.getOffer().getCurrentQuantityInTrade())
+                    , SwingConstants.CENTER);
             alreadyUsedLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
-            alreadyUsedLabel.setForeground(CustomColors.TOMATO);
-
+            alreadyUsedLabel.setForeground(completelyConsumed? CustomColors.TOMATO.darker():CustomColors.CHEESE.darker());
             alreadyUsedPanel.add(alreadyUsedLabel);
 
             offerPanelWithPicker.add(alreadyUsedPanel, BorderLayout.SOUTH);
@@ -223,14 +218,14 @@ public class CombinationFlipCreationPanel extends JPanel {
     }
 
     /**
-     * Adds the labels containing the item icon and multiplier text to the body panel
+     * Adds the labels containing the item icon and selected amount amount to the body panel
      *
      * @param bodyPanel the panel which the item labels are being added to
      */
-    private void addItemLabelRow(JPanel bodyPanel) {
+    private void addHeaderPanelRow(JPanel bodyPanel) {
         idToHeader.keySet().forEach(itemId -> {
-            JPanel itemLabel = idToHeader.get(itemId);
-            bodyPanel.add(itemLabel);
+            JPanel headerPanel = idToHeader.get(itemId);
+            bodyPanel.add(headerPanel);
             if (itemId == parentOffer.getItemId()) {
                 //adding the arrow in the next column
                 ImageIcon arrowIcon = parentOffer.isBuy() ? Icons.RIGHT_ARROW_LARGE : Icons.LEFT_ARROW_LARGE;
@@ -241,41 +236,47 @@ public class CombinationFlipCreationPanel extends JPanel {
 
     /**
      * @param childItemsInCombination the child items in the combination
-     * @return a map of ALL the items in the combination and the offers that should be rendered
+     * @return a map of ALL the items in the combination and the partial offers that should be rendered. We don't
+     * simply return OfferEvents because we want to know if any of the OfferEvents have some of their quantity
+     * already consumed by other combination flips for these items. If that is the case, we want to render them as
+     * such.
      */
-    private Map<Integer, List<OfferEvent>> createItemIdToOffers(
+    private Map<Integer, List<PartialOffer>> createItemIdToPartialOffers(
             Map<Integer, Optional<FlippingItem>> childItemsInCombination,
             Instant startOfInterval
     ) {
-        Map<Integer, List<OfferEvent>> itemIdToOffers = new HashMap<>();
-        itemIdToOffers.put(parentOffer.getItemId(), Collections.singletonList(parentOffer));
+        Map<Integer, List<PartialOffer>> itemIdToPartialOffers = new HashMap<>();
+
+        Map<String, PartialOffer> parentItemPartialOffers = parentItem.getOfferIdToPartialOfferInComboFlips();
+        if (parentItemPartialOffers.containsKey(parentOffer.getUuid())) {
+            PartialOffer parentPartialOffer = parentItemPartialOffers.get(parentOffer.getUuid());
+            itemIdToPartialOffers.put(parentOffer.getItemId(), List.of(parentPartialOffer));
+        }
+        else {
+            itemIdToPartialOffers.put(parentOffer.getItemId(), List.of(new PartialOffer(parentOffer, 0)));
+        }
 
         childItemsInCombination.forEach((itemId, item) -> {
-            List<OfferEvent> offers = item.map(fitem -> {
+            List<PartialOffer> offers = item.map(fitem -> {
+                Map<String, PartialOffer> itemPartialOffers = fitem.getOfferIdToPartialOfferInComboFlips();
                 List<OfferEvent> history = fitem.getIntervalHistory(startOfInterval);
                 Collections.reverse(history);
                 //if the parent offer is a sell, it means the user created it from its constituent parts and
                 //so we should only look for buys of the constituent parts. Hence, if there are no offers passed in to this
                 //method, it means there were no buys.
-                return history.stream().filter(o -> o.isBuy() != parentOffer.isBuy() && o.isComplete()).collect(Collectors.toList());
+                return history.stream().filter(o -> o.isBuy() != parentOffer.isBuy() && o.isComplete()).
+                        map(o -> {
+                            if (itemPartialOffers.containsKey(o.getUuid())) {
+                                return itemPartialOffers.get(o.getUuid());
+                            }
+                            return new PartialOffer(o, 0);
+                        }).
+                        collect(Collectors.toList());
             }).orElse(new ArrayList<>());
-            itemIdToOffers.put(itemId, offers);
+            itemIdToPartialOffers.put(itemId, offers);
         });
 
-        return itemIdToOffers;
-    }
-
-    /**
-     * @param childItemsInCombination childItemsInCombination the child items in the combination
-     * @return A map of the child items ids to their offers which are currently already being used in combination flips
-     */
-    private Map<Integer, Set<String>> createItemIdToOfferIdsAlreadyUsed(Map<Integer, Optional<FlippingItem>> childItemsInCombination) {
-        Map<Integer, Set<String>> itemIdToOfferIdsAlreadyUsed = new HashMap<>();
-        childItemsInCombination.forEach((itemId, item) -> {
-            Set<String> offerIds = item.map(fitem -> fitem.getOfferIdsContributingToComboFlips().keySet()).orElse(new HashSet<>());
-            itemIdToOfferIdsAlreadyUsed.put(itemId, offerIds);
-        });
-        return itemIdToOfferIdsAlreadyUsed;
+        return itemIdToPartialOffers;
     }
 
     /**
@@ -283,21 +284,18 @@ public class CombinationFlipCreationPanel extends JPanel {
      *
      * @param bodyPanel                   the panel the offer panels are being added to
      *                                    a reference to this label in this method so we can change the multiplier text
-     * @param itemIdToOffers              a map of all the items in the combination and the offers that should be rendered
-     * @param itemIdToOfferIdsAlreadyUsed map of item id to a set of offer ids that are already used in a combination flip.
+     * @param itemIdToPartialOffers              a map of all the items in the combination and the offers that should be rendered
      */
     private void addOfferPanelRow(JPanel bodyPanel,
-                                  Map<Integer, List<OfferEvent>> itemIdToOffers,
-                                  Map<Integer, Set<String>> itemIdToOfferIdsAlreadyUsed) {
-        Map<Integer, Integer> targetValues = getMaxTargetValues(itemIdToOffers);
+                                  Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
+        Map<Integer, Integer> targetValues = getMaxTargetValues(itemIdToPartialOffers);
 
         idToHeader.keySet().forEach(id -> {
             int targetValue = targetValues.get(id);
-            List<OfferEvent> offers = itemIdToOffers.get(id);
-            Set<String> offerIdsAlreadyUsed = itemIdToOfferIdsAlreadyUsed.getOrDefault(id, new HashSet<>());
+            List<PartialOffer> partialOffers = itemIdToPartialOffers.get(id);
             CombinationItemHeaderPanel combinationItemHeaderPanel = idToHeader.get(id);
             combinationItemHeaderPanel.setTargetValueDisplay(targetValue);
-            bodyPanel.add(createOffersPanel(offers, offerIdsAlreadyUsed, combinationItemHeaderPanel, targetValue));
+            bodyPanel.add(createOffersPanel(partialOffers, combinationItemHeaderPanel, targetValue));
             if (id == parentOffer.getItemId()) {
                 //empty panel occupies the space under the arrow
                 JPanel emptyPanel = new JPanel();
@@ -333,15 +331,16 @@ public class CombinationFlipCreationPanel extends JPanel {
      * # of recipe supported in actuality: 3, cause A is constraining it.
      * target values: A = 9(3 * 3), B = 15(3 * 5), C = 3(3 * 1)
      *
-     * @param itemIdToOffers all the offers for each item
+     * @param itemIdToPartialOffers all the suitable partial offers for each item
      */
     private Map<Integer, Integer> getMaxTargetValues(
-            Map<Integer, List<OfferEvent>> itemIdToOffers) {
+            Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
         Map<Integer, Integer> itemIdToQuantity = recipe.getItemIdToQuantity();
 
-        Map<Integer, Integer> itemIdToMaxRecipesThatCanBeMade = itemIdToOffers.entrySet().stream().map(e -> {
+        Map<Integer, Integer> itemIdToMaxRecipesThatCanBeMade = itemIdToPartialOffers.entrySet().stream().map(e -> {
                     int itemId = e.getKey();
-                    long totalQuantity = e.getValue().stream().mapToLong(OfferEvent::getCurrentQuantityInTrade).sum();
+                    long totalQuantity = e.getValue().stream().
+                            mapToLong(po -> po.getOffer().getCurrentQuantityInTrade() - po.amountConsumed).sum();
                     long quantityNeededForRecipe = itemIdToQuantity.get(itemId);
                     int maxRecipesThatCanBeMade = (int) (totalQuantity / quantityNeededForRecipe);
                     return Map.entry(itemId, maxRecipesThatCanBeMade);
@@ -433,11 +432,15 @@ public class CombinationFlipCreationPanel extends JPanel {
     private JPanel createBottomPanel(Map<Integer, Optional<FlippingItem>> itemsInCombination) {
         JPanel bottomPanel = new JPanel();
         bottomPanel.setBorder(new EmptyBorder(5, 0, 0, 0));
+        bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS));
         bottomPanel.setBackground(Color.BLACK);
 
         profitNumberLabel.setFont(new Font("Whitney", Font.PLAIN, 16));
+        profitNumberLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        profitNumberLabel.setBorder(new EmptyBorder(10,0,5,0));
 
         finishButton.setBorder(new EmptyBorder(10, 10, 10, 10));
+        finishButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         finishButton.setFont(new Font("Whitney", Font.PLAIN, 16));
         finishButton.setFocusPainted(false);
         finishButton.addActionListener(e -> {
@@ -474,15 +477,15 @@ public class CombinationFlipCreationPanel extends JPanel {
             repaint();
         });
 
-        bottomPanel.add(finishButton);
         bottomPanel.add(profitNumberLabel);
+        bottomPanel.add(finishButton);
 
         return bottomPanel;
     }
 
     private JPanel createTitle() {
         JPanel titlePanel = new JPanel(new BorderLayout());
-        titlePanel.setBorder(new EmptyBorder(5, 0, 15, 0));
+        titlePanel.setBorder(new EmptyBorder(5, 0, 25, 0));
         titlePanel.setBackground(Color.BLACK);
 
         String action = parentOffer.isBuy() ? "Breaking" : "Constructing";

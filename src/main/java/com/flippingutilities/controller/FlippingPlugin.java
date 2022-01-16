@@ -921,7 +921,7 @@ public class FlippingPlugin extends Plugin {
         return recipeHandler.isRecipeParent(itemId);
     }
 
-    public Recipe getApplicableRecipe(int parentId, boolean isBuy) {
+    public Optional<Recipe> getApplicableRecipe(int parentId, boolean isBuy) {
         return recipeHandler.getApplicableRecipe(parentId, isBuy);
     }
 

@@ -59,11 +59,11 @@ public class RecipeHandler {
     }
 
     public Map<Integer, Optional<FlippingItem>> getChildRecipeItems(int parentId, boolean isBuy, List<FlippingItem> items) {
-        if (!isRecipeParent(parentId)) {
+        Optional<Recipe> recipe = getApplicableRecipe(parentId, isBuy);
+        if (recipe.isEmpty()) {
             return new HashMap<>();
         }
-        Recipe recipe = getApplicableRecipe(parentId, isBuy);
-        Set<Integer> childrenIds = recipe.children.stream().map(recipeItem -> recipeItem.id).collect(Collectors.toSet());
+        Set<Integer> childrenIds = recipe.get().children.stream().map(recipeItem -> recipeItem.id).collect(Collectors.toSet());
 
         Map<Integer, Optional<FlippingItem>> itemIdToChildren = new HashMap<>();
         for (FlippingItem item : items) {
@@ -81,11 +81,14 @@ public class RecipeHandler {
         return itemIdToChildren;
     }
 
-    public Recipe getApplicableRecipe(int parentId, boolean isBuy) {
+    public Optional<Recipe> getApplicableRecipe(int parentId, boolean isBuy) {
+        if (!isRecipeParent(parentId)) {
+            return Optional.empty();
+        }
         List<Recipe> combinationComponentsList = parentIdToRecipes.get().get(parentId);
         RelationshipType relationshipType = isBuy? RelationshipType.BUY_PARENT: RelationshipType.SELL_PARENT;
         return combinationComponentsList.stream().filter(cm ->
-                cm.relationshipType == RelationshipType.BIDIRECTIONAL || cm.relationshipType == relationshipType).findFirst().get();
+                cm.relationshipType == RelationshipType.BIDIRECTIONAL || cm.relationshipType == relationshipType).findFirst();
     }
 
     /**
