@@ -404,12 +404,12 @@ public class FlippingItem
 		history.deletePersonalCombinationFlip(combinationFlip);
 	}
 
-	public Map<String, PartialOffer> getOfferIdsContributingToPersonalComboFlips() {
-		return history.getOfferIdsContributingToPersonalComboFlips();
+	public Map<String, PartialOffer> getOfferIdToPartialOfferInPersonalComboFlips() {
+		return history.getOfferIdToPartialOfferInPersonalComboFlips();
 	}
 
-	public Map<String, PartialOffer> getOfferIdsContributingToComboFlips() {
-		return history.getOfferIdsContributingToComboFlips();
+	public Map<String, PartialOffer> getOfferIdToPartialOfferInComboFlips() {
+		return history.getOfferIdToPartialOfferInComboFlips();
 	}
 
 	/**

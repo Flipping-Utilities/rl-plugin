@@ -74,8 +74,8 @@ public class HistoryManager
 	private List<CombinationFlip> parentCombinationFlips = new ArrayList<>();
 
 	//Used as caches
-	private transient Map<String, PartialOffer> offerIdsContributingToCombinationFlips;
-	private transient Map<String, PartialOffer> offerIdsContributingToPersonalCombinationFlips;
+	private transient Map<String, PartialOffer> offerIdToPartialInCombinationFlips;
+	private transient Map<String, PartialOffer> offerIdToPartialInPersonalCombinationFlips;
 
 	public HistoryManager clone()
 	{
@@ -90,8 +90,8 @@ public class HistoryManager
 				itemsBoughtThroughCompleteOffers,
 				clonedCombinationParents,
 				clonedPersonalCombinations,
-				offerIdsContributingToCombinationFlips,
-				offerIdsContributingToPersonalCombinationFlips);
+				offerIdToPartialInCombinationFlips,
+				offerIdToPartialInPersonalCombinationFlips);
 	}
 
 	public void updateHistory(OfferEvent newOffer)
@@ -607,36 +607,59 @@ public class HistoryManager
 	}
 
 	/**
-	 * Maintains a cache of offer ids from THIS item that contributes to personal combination
-	 * flips or parent combination flips
+	 * Maintains a cache of offer ids to partial offers from THIS item that contributes to personal combination
+	 * flips or parent combination flips. Since an offer id can be referenced by multiple combination flips, this
+	 * combines the partial offers into one partial offer such that the resulting partial offer has the amount
+	 * consumed from both the partial offers. This allows us to get the total amount consumed from an offer event
+	 * corresponding to a certain offer id.
 	 */
-	public Map<String, PartialOffer> getOfferIdsContributingToComboFlips() {
+	public Map<String, PartialOffer> getOfferIdToPartialOfferInComboFlips() {
 		if (compressedOfferEvents.isEmpty()) {
 			return new HashMap<>();
 		}
-		if (offerIdsContributingToCombinationFlips == null) {
-			int thisItemsId = compressedOfferEvents.get(0).getItemId();
-			offerIdsContributingToCombinationFlips = new HashMap<>();
-			parentCombinationFlips.forEach(
-					cf -> cf.getChildrenOffers(thisItemsId).forEach(po -> offerIdsContributingToCombinationFlips.put(po.offer.getUuid(), po)));
-			personalCombinationFlips.forEach(
-					cf -> offerIdsContributingToCombinationFlips.put(cf.parent.offer.getUuid(), cf.parent));
+		if (offerIdToPartialInCombinationFlips == null) {
+			offerIdToPartialInCombinationFlips = new HashMap<>();
+			List<PartialOffer> partialOffers = getPartialOffers();
+			partialOffers.forEach(po -> {
+				String offerId =  po.offer.getUuid();
+				if (offerIdToPartialInCombinationFlips.containsKey(offerId)) {
+					PartialOffer currentPartialOffer = offerIdToPartialInCombinationFlips.get(offerId);
+					currentPartialOffer.amountConsumed += po.amountConsumed;
+				}
+				else {
+					offerIdToPartialInCombinationFlips.put(po.offer.getUuid(), po);
+				}
+			});
 		}
 
-		return offerIdsContributingToCombinationFlips;
+		return offerIdToPartialInCombinationFlips;
 	}
 
 	/**
 	 * Maintains a cache of offer ids from THIS item that contributes to only personal
 	 * combination flips
 	 */
-	public Map<String, PartialOffer> getOfferIdsContributingToPersonalComboFlips() {
-		if (offerIdsContributingToPersonalCombinationFlips == null) {
-			offerIdsContributingToPersonalCombinationFlips = personalCombinationFlips.stream().
-					map(cf -> Map.entry(cf.parent.offer.getUuid(), cf.parent)).
+	public Map<String, PartialOffer> getOfferIdToPartialOfferInPersonalComboFlips() {
+		if (offerIdToPartialInPersonalCombinationFlips == null) {
+			Set<String> offerIdsInPersonalComboFlips = personalCombinationFlips.stream().
+					map(cf -> cf.parent.getOffer().getUuid()).
+					collect(Collectors.toSet());
+			offerIdToPartialInPersonalCombinationFlips = getOfferIdToPartialOfferInComboFlips().entrySet().stream().
+					filter(e -> offerIdsInPersonalComboFlips.contains(e.getKey())).
 					collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 		}
-		return offerIdsContributingToPersonalCombinationFlips;
+		return offerIdToPartialInPersonalCombinationFlips;
+	}
+
+	/**
+	 * Gets all partial offers for THIS item, from both personal combination flips and parent combination flips
+	 */
+	private List<PartialOffer> getPartialOffers() {
+		int thisItemsId = compressedOfferEvents.get(0).getItemId();
+		List<PartialOffer> partialOffers = new ArrayList<>();
+		parentCombinationFlips.forEach(cf -> partialOffers.addAll(cf.getChildrenOffers(thisItemsId)));
+		personalCombinationFlips.forEach(cf -> partialOffers.add(cf.parent));
+		return partialOffers;
 	}
 
 	/**
@@ -700,18 +723,18 @@ public class HistoryManager
 
 	public void addPersonalCombinationFlip(CombinationFlip combinationFlip) {
 		personalCombinationFlips.add(combinationFlip);
-		offerIdsContributingToCombinationFlips = null;
-		offerIdsContributingToPersonalCombinationFlips = null;
+		offerIdToPartialInCombinationFlips = null;
+		offerIdToPartialInPersonalCombinationFlips = null;
 	}
 
 	public void addParentCombinationFlip(CombinationFlip combinationFlip) {
 		parentCombinationFlips.add(combinationFlip);
-		offerIdsContributingToCombinationFlips = null;
+		offerIdToPartialInCombinationFlips = null;
 	}
 
 	public void deletePersonalCombinationFlip(CombinationFlip combinationFlip) {
 		personalCombinationFlips.remove(combinationFlip);
-		offerIdsContributingToPersonalCombinationFlips = null;
+		offerIdToPartialInPersonalCombinationFlips = null;
 	}
 
 	public void deleteParentCombinationFlip(CombinationFlip combinationFlip) {
@@ -770,7 +793,7 @@ public class HistoryManager
 	 * in the combination flips
 	 */
 	List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> offers) {
-		Map<String, PartialOffer> offerIdsInCombinationFlips = getOfferIdsContributingToComboFlips();
+		Map<String, PartialOffer> offerIdsInCombinationFlips = getOfferIdToPartialOfferInComboFlips();
 		return offers.stream().map(o -> {
 			if (offerIdsInCombinationFlips.containsKey(o.getUuid())) {
 				return offerIdsInCombinationFlips.get(o.getUuid()).toAdjustedOfferEvent();

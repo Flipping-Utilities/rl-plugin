@@ -167,7 +167,8 @@ public class OfferPanel extends JPanel {
     private JPanel createIconPanel() {
         JPanel iconPanel = new JPanel(new BorderLayout());
         iconPanel.setBackground(CustomColors.DARK_GRAY);
-        if (plugin.isCombinationParent(offer.getItemId()) && offer.isComplete()) {
+        boolean hasRecipe = plugin.getApplicableRecipe(offer.getItemId(), offer.isBuy()).isPresent();
+        if (plugin.isCombinationParent(offer.getItemId()) && hasRecipe && offer.isComplete()) {
             JLabel deleteIcon = createDeleteIcon();
             deleteIcon.setBorder(new EmptyBorder(0,5,0,0));
             iconPanel.add(createCombinationFlipIcon(), BorderLayout.EAST);
@@ -181,7 +182,7 @@ public class OfferPanel extends JPanel {
     }
 
     private JComponent createCombinationFlipIcon() {
-        boolean offerAlreadyInCombinationFlip = item.getOfferIdsContributingToPersonalComboFlips().containsKey(offer.getUuid());
+        boolean offerAlreadyInCombinationFlip = item.getOfferIdToPartialOfferInPersonalComboFlips().containsKey(offer.getUuid());
         if (offerAlreadyInCombinationFlip) {
             JLabel combinationFlipLabel = new JLabel("Already in a combo flip");
             combinationFlipLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
@@ -272,7 +273,7 @@ public class OfferPanel extends JPanel {
     }
 
     private Border createBorder(boolean selected) {
-        Color outerBorderColor = selected? ColorScheme.GRAND_EXCHANGE_PRICE:ColorScheme.DARKER_GRAY_COLOR.darker();
+        Color outerBorderColor = selected? ColorScheme.GRAND_EXCHANGE_PRICE.darker():ColorScheme.DARKER_GRAY_COLOR.darker();
         return new CompoundBorder(
                 BorderFactory.createMatteBorder(1,1,1,1, outerBorderColor),
                 new EmptyBorder(1,3,3,3));
@@ -281,9 +282,10 @@ public class OfferPanel extends JPanel {
     /**
      * I really hate java swing, having to approximate the damn width of this using this really stupid code. For
      * some reason the layout manager is not respecting sizes and i have to set it manually on the scrollpane.
+     * I'm probably doing something wrong, but don't feel like going any deeper into java swing....
      */
     public int getHackySize() {
-        int timeDisplayWidth = (timeDisplay.getText().length() * 6) + 5;
+        int timeDisplayWidth = (timeDisplay.getText().length() * 8) + 5;
         int gapBetweenDescAndTimeDisplays = 10;
         int descriptionDisplayWidth = (offerDescriptionLabel.getText().length() * 6) + 5;
         return timeDisplayWidth + gapBetweenDescAndTimeDisplays + descriptionDisplayWidth;
