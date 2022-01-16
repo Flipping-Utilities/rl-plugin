@@ -59,6 +59,7 @@ public class MasterPanel extends PluginPanel
 	private JComboBox<String> accountSelector;
 	private FlippingPlugin plugin;
 	private FastTabGroup tabGroup;
+	private JDialog loginModal;
 
 	/**
 	 * THe master panel is always present. The components added to it are components that should always be visible
@@ -83,7 +84,7 @@ public class MasterPanel extends PluginPanel
 
 		JPanel mainDisplay = new JPanel();
 
-		JDialog loginModal = UIUtilities.createModalFromPanel(this, loginPanel);
+		loginModal = UIUtilities.createModalFromPanel(this, loginPanel);
 		loginPanel.addOnViewChange(() -> {
 			if (loginModal.isVisible()) {
 				loginModal.pack();
@@ -286,5 +287,12 @@ public class MasterPanel extends PluginPanel
 		} else {
 			accountSelector.setVisible(false);
 		}
+	}
+
+	/**
+	* Use to dispose the underlying login dialog on shutdown.
+	*/
+	public void dispose() {
+		loginModal.dispose();
 	}
 }
