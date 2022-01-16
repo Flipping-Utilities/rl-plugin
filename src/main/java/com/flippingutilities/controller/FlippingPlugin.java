@@ -200,7 +200,7 @@ public class FlippingPlugin extends Plugin {
         accountCurrentlyViewed = ACCOUNT_WIDE;
 
         tradePersister = new TradePersister(gson);
-        recipeHandler = new RecipeHandler(gson);
+        recipeHandler = new RecipeHandler(gson, httpClient);
 
         optionHandler = new OptionHandler(this);
         dataHandler = new DataHandler(this);
