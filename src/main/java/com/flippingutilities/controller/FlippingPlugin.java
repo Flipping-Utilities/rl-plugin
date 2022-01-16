@@ -262,6 +262,8 @@ public class FlippingPlugin extends Plugin {
             slotTimersTask = null;
         }
 
+        masterPanel.dispose();
+
         clientToolbar.removeNavigation(navButton);
     }
 
