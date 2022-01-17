@@ -344,6 +344,10 @@ public class FlippingPlugin extends Plugin {
             masterPanel.getAccountSelector().addItem(displayName);
         }
 
+        if (client.getWorldType().contains(WorldType.MEMBERS)) {
+            dataHandler.viewAccountData(displayName).fixIncorrectItemNames(itemManager);
+        }
+
         loginTickCount = client.getTickCount();
         currentlyLoggedInAccount = displayName;
 
