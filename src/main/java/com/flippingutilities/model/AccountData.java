@@ -30,6 +30,7 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.game.ItemManager;
 import net.runelite.http.api.item.ItemStats;
 
 import java.time.Instant;
@@ -37,7 +38,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -69,6 +69,8 @@ public class AccountData
 	 */
 	public void prepareForUse(FlippingPlugin plugin)
 	{
+		fixIncorrectItemNames(plugin.getItemManager());
+
 		Map<Integer, String> idToItemName = trades.stream().
 				map(item -> Map.entry(item.getItemId(), item.getItemName())).
 				collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -95,6 +97,15 @@ public class AccountData
 				timer.setPlugin(plugin);
 			});
 		}
+	}
+
+	public void fixIncorrectItemNames(ItemManager itemManager) {
+		trades.forEach(item -> {
+			if (item.getItemName().equals("Members object")) {
+				String actualName = itemManager.getItemComposition(item.getItemId()).getName();
+				item.setItemName(actualName);
+			}
+		});
 	}
 
 	private List<SlotActivityTimer> setupSlotTimers(FlippingPlugin plugin)
