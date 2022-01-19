@@ -221,12 +221,16 @@ public class FlippingItem
 		{
 			item1.getHistory().getCompressedOfferEvents().addAll(item2.getHistory().getCompressedOfferEvents());
 			item1.setFavorite(item1.isFavorite() || item2.isFavorite());
+			item1.getHistory().getPersonalCombinationFlips().addAll(item2.getHistory().getPersonalCombinationFlips());
+			item1.getHistory().getParentCombinationFlips().addAll(item2.getHistory().getParentCombinationFlips());
 			return item1;
 		}
 		else
 		{
 			item2.getHistory().getCompressedOfferEvents().addAll(item1.getHistory().getCompressedOfferEvents());
 			item2.setFavorite(item2.isFavorite() || item1.isFavorite());
+			item2.getHistory().getPersonalCombinationFlips().addAll(item1.getHistory().getPersonalCombinationFlips());
+			item2.getHistory().getParentCombinationFlips().addAll(item1.getHistory().getParentCombinationFlips());
 			return item2;
 		}
 	}

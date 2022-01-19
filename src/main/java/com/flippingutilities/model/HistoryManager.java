@@ -67,10 +67,12 @@ public class HistoryManager
 
 	//If this item was a guthan set and the user had combined a guthan
 	//set offer with the guthan pieces, the combination flip would show up here.
+	@Getter
 	private List<CombinationFlip> personalCombinationFlips = new ArrayList<>();
 
 	//If this item was a guthan platebody and was part of a combination
 	//flip with a guthan set, that combination flip would show up here.
+	@Getter
 	private List<CombinationFlip> parentCombinationFlips = new ArrayList<>();
 
 	//Used as caches

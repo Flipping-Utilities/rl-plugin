@@ -175,6 +175,7 @@ public class FlippingPlugin extends Plugin {
     private int loginTickCount;
 
     private OptionHandler optionHandler;
+
     @Getter
     private DataHandler dataHandler;
     private GameUiChangesHandler gameUiChangesHandler;
