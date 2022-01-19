@@ -56,9 +56,12 @@ public class CombinationFlipCreationPanel extends JPanel {
         setBackground(Color.BLACK);
         setLayout(new BorderLayout());
 
+        Map<Integer, List<PartialOffer>> itemIdToPartialOffers = createItemIdToPartialOffers(
+                childItemsInCombination,
+                plugin.getStatPanel().getStartOfInterval());
         add(createTitle(), BorderLayout.NORTH);
-        add(createBody(childItemsInCombination, plugin.getStatPanel().getStartOfInterval()), BorderLayout.CENTER);
-        add(createBottomPanel(childItemsInCombination), BorderLayout.SOUTH);
+        add(createBody(itemIdToPartialOffers), BorderLayout.CENTER);
+        add(createBottomPanel(childItemsInCombination, itemIdToPartialOffers), BorderLayout.SOUTH);
 
         setBorder(new EmptyBorder(8, 8, 8, 8));
 
@@ -78,7 +81,9 @@ public class CombinationFlipCreationPanel extends JPanel {
      * The body holds the item icons and multiplier labels in the first row and the offer panels with the number
      * pickers in the second row.
      */
-    private JPanel createBody(Map<Integer, Optional<FlippingItem>> itemsInCombination, Instant startOfInterval) {
+    private JPanel createBody(
+            Map<Integer, List<PartialOffer>> itemIdToPartialOffers
+    ) {
         Set<Integer> allIds = selectedOffers.keySet();
 
         JPanel bodyPanel = new JPanel();
@@ -88,7 +93,7 @@ public class CombinationFlipCreationPanel extends JPanel {
         addHeaderPanelRow(bodyPanel);
         addOfferPanelRow(
                 bodyPanel,
-                createItemIdToPartialOffers(itemsInCombination, startOfInterval)
+                itemIdToPartialOffers
         );
 
         return bodyPanel;
@@ -288,7 +293,7 @@ public class CombinationFlipCreationPanel extends JPanel {
      */
     private void addOfferPanelRow(JPanel bodyPanel,
                                   Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
-        Map<Integer, Integer> targetValues = getMaxTargetValues(itemIdToPartialOffers);
+        Map<Integer, Integer> targetValues = getTargetValuesForMaxRecipeCount(itemIdToPartialOffers);
 
         idToHeader.keySet().forEach(id -> {
             int targetValue = targetValues.get(id);
@@ -333,24 +338,29 @@ public class CombinationFlipCreationPanel extends JPanel {
      *
      * @param itemIdToPartialOffers all the suitable partial offers for each item
      */
-    private Map<Integer, Integer> getMaxTargetValues(
+    private Map<Integer, Integer> getTargetValuesForMaxRecipeCount(
             Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
         Map<Integer, Integer> itemIdToQuantity = recipe.getItemIdToQuantity();
 
-        Map<Integer, Integer> itemIdToMaxRecipesThatCanBeMade = itemIdToPartialOffers.entrySet().stream().map(e -> {
-                    int itemId = e.getKey();
-                    long totalQuantity = e.getValue().stream().
-                            mapToLong(po -> po.getOffer().getCurrentQuantityInTrade() - po.amountConsumed).sum();
-                    long quantityNeededForRecipe = itemIdToQuantity.get(itemId);
-                    int maxRecipesThatCanBeMade = (int) (totalQuantity / quantityNeededForRecipe);
-                    return Map.entry(itemId, maxRecipesThatCanBeMade);
-                }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        Map<Integer, Integer> itemIdToMaxRecipesThatCanBeMade = getItemIdToMaxRecipesThatCanBeMade(itemIdToPartialOffers);
 
         int lowestRecipeCountThatCanBeMade = itemIdToMaxRecipesThatCanBeMade.values().stream().mapToInt(i -> i).min().getAsInt();
 
         return itemIdToQuantity.entrySet().stream().
                 map(e -> Map.entry(e.getKey(), e.getValue() * lowestRecipeCountThatCanBeMade)).
                 collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    private Map<Integer, Integer> getItemIdToMaxRecipesThatCanBeMade(Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
+        Map<Integer, Integer> itemIdToQuantity = recipe.getItemIdToQuantity();
+        return itemIdToPartialOffers.entrySet().stream().map(e -> {
+            int itemId = e.getKey();
+            long totalQuantity = e.getValue().stream().
+                    mapToLong(po -> po.getOffer().getCurrentQuantityInTrade() - po.amountConsumed).sum();
+            long quantityNeededForRecipe = itemIdToQuantity.get(itemId);
+            int maxRecipesThatCanBeMade = (int) (totalQuantity / quantityNeededForRecipe);
+            return Map.entry(itemId, maxRecipesThatCanBeMade);
+        }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     /**
@@ -429,11 +439,26 @@ public class CombinationFlipCreationPanel extends JPanel {
         }
     }
 
-    private JPanel createBottomPanel(Map<Integer, Optional<FlippingItem>> itemsInCombination) {
+    private JPanel createBottomPanel(
+            Map<Integer, Optional<FlippingItem>> itemsInCombination,
+            Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
         JPanel bottomPanel = new JPanel();
         bottomPanel.setBorder(new EmptyBorder(5, 0, 0, 0));
         bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS));
         bottomPanel.setBackground(Color.BLACK);
+
+        int itemsThatCanMakeZeroRecipes = (int) getItemIdToMaxRecipesThatCanBeMade(itemIdToPartialOffers).entrySet().stream().
+                filter(e -> e.getValue() == 0).count();
+
+        if (itemsThatCanMakeZeroRecipes > 0) {
+            JLabel missingItemsLabel = new JLabel("No combination flip can be made as some items don't have enough" +
+                    " trades", SwingConstants.CENTER);
+            missingItemsLabel.setForeground(CustomColors.TOMATO);
+            missingItemsLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+            missingItemsLabel.setFont(new Font("Whitney", Font.PLAIN, 16));
+            missingItemsLabel.setBorder(new EmptyBorder(0,0,10,0));
+            bottomPanel.add(missingItemsLabel);
+        }
 
         profitNumberLabel.setFont(new Font("Whitney", Font.PLAIN, 16));
         profitNumberLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
