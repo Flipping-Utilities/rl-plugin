@@ -1,9 +1,12 @@
 package com.flippingutilities.ui.statistics;
 
+import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.CombinationFlip;
+import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.ui.uiutilities.CustomColors;
+import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import net.runelite.client.ui.ColorScheme;
@@ -20,12 +23,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * The visual representation of a CombinationFlip. CombinationFlipPanels
+ * are shown in the "combos" tab of the trade history section of an item in the
+ * statistics tab.
+ */
 public class CombinationFlipPanel extends JPanel {
     private JLabel timeDisplay;
     private CombinationFlip combinationFlip;
+    private FlippingPlugin plugin;
+    private FlippingItem item;
 
-    public CombinationFlipPanel(CombinationFlip combinationFlip) {
+    public CombinationFlipPanel(CombinationFlip combinationFlip, FlippingPlugin plugin, FlippingItem item) {
         this.combinationFlip = combinationFlip;
+        this.plugin = plugin;
+        this.item = item;
         setBackground(CustomColors.DARK_GRAY);
         setBorder(new EmptyBorder(5,5,5,5));
         setLayout(new BorderLayout());
@@ -110,13 +122,51 @@ public class CombinationFlipPanel extends JPanel {
             }
         });
 
+        JPanel expandDetailsPanel = new JPanel(new BorderLayout());
+        expandDetailsPanel.setBackground(CustomColors.DARK_GRAY);
+        expandDetailsPanel.add(expandDetailsLabel, BorderLayout.CENTER);
+        expandDetailsPanel.add(createDeleteIcon(), BorderLayout.WEST);
+
         JPanel detailsPanel = new JPanel(new BorderLayout());
         detailsPanel.setBackground(CustomColors.DARK_GRAY);
         detailsPanel.setBorder(new EmptyBorder(5,0,0,0));
-        detailsPanel.add(expandDetailsLabel, BorderLayout.NORTH);
+        detailsPanel.add(expandDetailsPanel, BorderLayout.NORTH);
         detailsPanel.add(extraDetailsPanel, BorderLayout.CENTER);
 
         return detailsPanel;
+    }
+
+    private JLabel createDeleteIcon() {
+        JLabel deleteIcon = new JLabel(Icons.TRASH_CAN_OFF);
+        deleteIcon.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+                    JOptionPane.showMessageDialog(null, "You cannot delete combo flips in the Accountwide view");
+                    return;
+                }
+                final int result = JOptionPane.showOptionDialog(deleteIcon, "Are you sure you want to delete this combo flip?",
+                        "Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
+                        null, new String[]{"Yes", "No"}, "No");
+
+                if (result == JOptionPane.YES_OPTION) {
+                    item.deleteCombinationFlip(combinationFlip, plugin.viewTradesForCurrentView());
+                    plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
+                }
+            }
+
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                deleteIcon.setIcon(Icons.TRASH_CAN_ON);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                deleteIcon.setIcon(Icons.TRASH_CAN_OFF);
+            }
+        });
+
+        return deleteIcon;
     }
 
     private JPanel createPartialOfferPanel(List<PartialOffer> partialOffers) {

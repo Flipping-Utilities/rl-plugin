@@ -35,6 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * This class is the representation of an item that a user is flipping. It contains information about the
@@ -206,7 +207,9 @@ public class FlippingItem
 
 	/**
 	 * combines two flipping items together (this only makes sense if they are for the same item) by adding
-	 * their histories together and retaining the other properties of the latest active item.
+	 * their histories together and retaining the other properties of the latest active item. This is used to
+	 * construct the account wide view as flipping items (referencing the same item) from different accounts need
+	 * to be merged into one.
 	 *
 	 * @return merged flipping item
 	 */
@@ -240,9 +243,9 @@ public class FlippingItem
 		return history.getProfit(tradeList);
 	}
 
-	public long getValueOfMatchedOffers(List<OfferEvent> tradeList, boolean buyState)
+	public long getValueOfMatchedOffers(List<OfferEvent> tradeList, boolean isBuy)
 	{
-		return history.getValueOfMatchedOffers(tradeList, buyState);
+		return history.getValueOfMatchedOffers(tradeList, isBuy);
 	}
 
 	public long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean isBuy)
@@ -311,11 +314,11 @@ public class FlippingItem
 	}
 
 	/**
-	 * see the documentation for HistoryManager.invalidateOffers
+	 * see the documentation for HistoryManager.deleteOffers
 	 */
-	public void invalidateOffers(List<OfferEvent> offerList, List<FlippingItem> items)
+	public void deleteOffers(List<OfferEvent> offerList, List<FlippingItem> items)
 	{
-		history.invalidateOffers(offerList, items);
+		history.deleteOffers(offerList, items);
 	}
 	public void setValidFlippingPanelItem(boolean isValid)
 	{
@@ -380,13 +383,10 @@ public class FlippingItem
 	}
 
 	private void setOfferIds() {
-		history.getCompressedOfferEvents().forEach(o -> {
-			if (o.getUuid() == null) {
-				o.setUuid(UUID.randomUUID().toString());
-			}
-		});
+		history.setOfferIds();
 	}
 
+	//see documentation for HistoryManager.setOfferNames or HistoryManager.setCombinationFlipOfferNames
 	private void setOfferNames(Map<Integer, String> idToItemName) {
 		history.setOfferNames(itemName);
 		history.setCombinationFlipOfferNames(idToItemName);
@@ -400,12 +400,8 @@ public class FlippingItem
 		history.addParentCombinationFlip(combinationFlip);
 	}
 
-	public void deleteParentCombinationFlip(CombinationFlip combinationFlip) {
-		history.deleteParentCombinationFlip(combinationFlip);
-	}
-
-	public void deletePersonalCombinationFlip(CombinationFlip combinationFlip) {
-		history.deletePersonalCombinationFlip(combinationFlip);
+	public void deleteCombinationFlip(CombinationFlip combinationFlip, List<FlippingItem> items) {
+		history.deleteCombinationFlips(List.of(combinationFlip), items);
 	}
 
 	public Map<String, PartialOffer> getOfferIdToPartialOfferInPersonalComboFlips() {

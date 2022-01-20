@@ -163,12 +163,6 @@ public class StatsPanel extends JPanel
 		setBorder(new EmptyBorder(5,7,0,7));
 	}
 
-	public void onNewOfferEventRebuild() {
-		if (!currentlySearching) {
-			rebuild(plugin.viewTradesForCurrentView());
-		}
-	}
-
 	/**
 	 * Removes old stat items and builds new ones based on the passed trade list.
 	 * Items are initialized with their sub info containers collapsed.
@@ -179,7 +173,7 @@ public class StatsPanel extends JPanel
 	{
 		//Remove old stats
 		activePanels = new ArrayList<>();
-		List<FlippingItem> searchedItems = getSearchedItems(flippingItems);
+		List<FlippingItem> searchedItems = getResultsForCurrentSearchQuery(flippingItems);
 		SwingUtilities.invokeLater(() -> {
 			rebuildStatItemContainer(searchedItems);
 			updateDisplays(searchedItems);
@@ -205,6 +199,9 @@ public class StatsPanel extends JPanel
 		}
 	}
 
+	/**
+	 * The panel shown when a user's search query returns no results.
+	 */
 	private JPanel createEmptySearchPanel() {
 		JPanel emptySearchPanel = new JPanel(new DynamicGridLayout(2,1));
 		String lookup = searchBar.getText().toLowerCase();
@@ -256,7 +253,7 @@ public class StatsPanel extends JPanel
 	 * for, it just returns the original list
 	 * @param items all the items that could be in the current view
 	 */
-	private List<FlippingItem> getSearchedItems(List<FlippingItem> items) {
+	private List<FlippingItem> getResultsForCurrentSearchQuery(List<FlippingItem> items) {
 		String lookup = searchBar.getText().toLowerCase();
 		if (currentlySearching && !Strings.isNullOrEmpty(lookup)) {
 			return getSearchResults(items, lookup);
@@ -490,7 +487,7 @@ public class StatsPanel extends JPanel
 		}
 
 		FlippingItem item = itemPanel.getFlippingItem();
-		item.invalidateOffers(item.getIntervalHistory(startOfInterval), plugin.viewTradesForCurrentView());
+		item.deleteOffers(item.getIntervalHistory(startOfInterval), plugin.viewTradesForCurrentView());
 		if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
 			plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 		}
@@ -953,7 +950,8 @@ public class StatsPanel extends JPanel
 			//is built based on every item on every page and so it shouldn't change if you
 			//switch pages.
 			Instant rebuildStart = Instant.now();
-			rebuildStatItemContainer(getSearchedItems(plugin.viewTradesForCurrentView()));
+			rebuildStatItemContainer(getResultsForCurrentSearchQuery(plugin.viewTradesForCurrentView()));
+			rebuildStatItemContainer(getResultsForCurrentSearchQuery(plugin.viewTradesForCurrentView()));
 			revalidate();
 			repaint();
 			log.debug("page change took {}", Duration.between(rebuildStart, Instant.now()).toMillis());

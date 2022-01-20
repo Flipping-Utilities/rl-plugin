@@ -19,8 +19,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * This class is responsible for loading all the various combinations data such as sets
- * and allowing other components to query it for information on combinations.
+ * This class is responsible for loading all the recipes and providing an api
+ * for other components to get info on recipes.
  */
 @Slf4j
 public class RecipeHandler {

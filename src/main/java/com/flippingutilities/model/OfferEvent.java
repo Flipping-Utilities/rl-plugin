@@ -227,6 +227,7 @@ public class OfferEvent
 		OfferEvent otherOffer = (OfferEvent) other;
 
 		return isDuplicate(otherOffer)
+				&& uuid.equals(otherOffer.uuid)
 			&& tickArrivedAt == otherOffer.tickArrivedAt
 			&& ticksSinceFirstOffer == otherOffer.ticksSinceFirstOffer
 			&& time.equals(otherOffer.time)

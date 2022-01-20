@@ -48,7 +48,7 @@ public class CombinationFlipCreationPanel extends JPanel {
         this.parentOffer = parentOffer;
         this.parentItem = item;
 
-        Map<Integer, Optional<FlippingItem>> childItemsInCombination = plugin.getChildCombinationItems(parentOffer.getItemId(), parentOffer.isBuy());
+        Map<Integer, Optional<FlippingItem>> childItemsInCombination = plugin.getRecipeChildItems(parentOffer.getItemId(), parentOffer.isBuy());
         recipe = plugin.getApplicableRecipe(parentOffer.getItemId(), parentOffer.isBuy()).get();
         selectedOffers = initSelectedOffers(childItemsInCombination);
         idToHeader = createItemIcons(selectedOffers);
@@ -162,6 +162,10 @@ public class CombinationFlipCreationPanel extends JPanel {
         }
     }
 
+    /**
+     * Creates the offer panel with the number selector used to select how much of
+     * an offer you want to consume
+     */
     private JPanel createOfferPanelWithPicker(
             OfferPanel offerPanel,
             CombinationItemHeaderPanel headerPanel,
@@ -351,6 +355,10 @@ public class CombinationFlipCreationPanel extends JPanel {
                 collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
+    /**
+     * Gets a mapping of item id to the max amount of recipes that can be contributed to for each item in the given
+     * partial offers
+     */
     private Map<Integer, Integer> getItemIdToMaxRecipesThatCanBeMade(Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
         Map<Integer, Integer> itemIdToQuantity = recipe.getItemIdToQuantity();
         return itemIdToPartialOffers.entrySet().stream().map(e -> {
@@ -376,8 +384,8 @@ public class CombinationFlipCreationPanel extends JPanel {
     }
 
     /**
-     * Sets the consumed amount and the selected offers based on the the number picker value. This is used in the
-     * number picker handler method too.
+     * Sets the consumed amount display and the selected offers based on the the number picker value.
+     * This is used in the number picker handler method too.
      */
     private void setDisplaysAndStateBasedOnSelection(int numberPickerValue, OfferEvent offer, OfferPanel offerPanel,
                                                      CombinationItemHeaderPanel headerPanel) {
@@ -439,8 +447,12 @@ public class CombinationFlipCreationPanel extends JPanel {
         }
     }
 
+    /**
+     * The bottom panel holds the "Combine!" button, the profit label, and the text that
+     * shows when a combination flip can't be created due to insufficient items.
+     */
     private JPanel createBottomPanel(
-            Map<Integer, Optional<FlippingItem>> itemsInCombination,
+            Map<Integer, Optional<FlippingItem>> childItemsInCombination,
             Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
         JPanel bottomPanel = new JPanel();
         bottomPanel.setBorder(new EmptyBorder(5, 0, 0, 0));
@@ -471,7 +483,7 @@ public class CombinationFlipCreationPanel extends JPanel {
         finishButton.addActionListener(e -> {
             CombinationFlip combinationFlip = new CombinationFlip(parentOffer.getItemId(), parentOffer.getUuid(), selectedOffers);
             parentItem.addPersonalCombinationFlip(combinationFlip);
-            itemsInCombination.values().forEach(item -> item.get().addParentCombinationFlip(combinationFlip));
+            childItemsInCombination.values().forEach(item -> item.get().addParentCombinationFlip(combinationFlip));
             plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
             bottomPanel.removeAll();
 

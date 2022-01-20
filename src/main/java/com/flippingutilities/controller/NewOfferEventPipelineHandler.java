@@ -74,28 +74,16 @@ public class NewOfferEventPipelineHandler {
 
         plugin.setUpdateSinceLastAccountWideBuild(true);
 
-        rebuildDisplayAfterOfferEvent(flippingItem, finalizedOfferEvent);
+        rebuildDisplayAfterOfferEvent(finalizedOfferEvent);
     }
 
     /**
      * There is no point rebuilding either the stats panel or flipping panel when the user is looking at the trades list of
      * one of their accounts that isn't logged in as that trades list won't be being updated anyway.
-     * <p>
-     * Only rebuild flipping panel if the FlippingItem is not already present or if the offer is a margin check. We need to rebuild
-     * when the item isn't present as that means a new FlippingItemPanel had to be created to represent the
-     * new FlippingItem. We also need to rebuild if the offer is a margin check because a margin check offer causes
-     * a reordering of the FlippingItemPanels as the FlippingItemPanel representing the recently margin checked item
-     * floats to the top.
-     * <p>
-     * In the case when the FlippingItem is present and the offer is not a margin check, we don't have to do a full
-     * flipping panel rebuild as we only update the Jlabels that specify the latest buy/sell price. No new panels
-     * are created and nothing is reordered, hence a full rebuild would be wasteful.
      *
-     * @param flippingItem represents whether the FlippingItem existed in the currently logged in account's tradeslist when
-     *                     the offer came in.
      * @param offerEvent   offer event just received
      */
-    private void rebuildDisplayAfterOfferEvent(Optional<FlippingItem> flippingItem, OfferEvent offerEvent) {
+    private void rebuildDisplayAfterOfferEvent(OfferEvent offerEvent) {
 
         if (!(plugin.getAccountCurrentlyViewed().equals(plugin.getCurrentlyLoggedInAccount()) ||
                 plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE))) {
@@ -103,7 +91,7 @@ public class NewOfferEventPipelineHandler {
         }
 
         plugin.getFlippingPanel().onNewOfferEventRebuild(offerEvent);
-        plugin.getStatPanel().onNewOfferEventRebuild();
+        plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
     }
 
     /**

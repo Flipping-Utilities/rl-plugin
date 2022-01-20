@@ -71,6 +71,7 @@ public class AccountData
 	{
 		fixIncorrectItemNames(plugin.getItemManager());
 
+		//eventually used in HistoryManager.setCombinationFlipOfferNames
 		Map<Integer, String> idToItemName = trades.stream().
 				map(item -> Map.entry(item.getItemId(), item.getItemName())).
 				collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -99,6 +100,12 @@ public class AccountData
 		}
 	}
 
+	/**
+	 * When a user is an f2p world and recieves events for members items (cause they were already in the GE),
+	 * the item manager retrieves the item's name as "Members object". The item manager returns the correct
+	 * name when the user is on a member's world or logged out. As such, this method is called when the plugin starts
+	 * and whenever the user logs into a members world to clean up any "Members object" item names.
+	 */
 	public void fixIncorrectItemNames(ItemManager itemManager) {
 		trades.forEach(item -> {
 			if (item.getItemName().equals("Members object")) {
