@@ -446,7 +446,6 @@ public class FlippingPanel extends JPanel
 			rebuild(plugin.viewTradesForCurrentView());
 			return;
 		}
-		log.info("{}", allMatches.size());
 		searchBar.setIcon(IconTextField.Icon.SEARCH);
 		currentlySearching = true;
 		rebuild(allMatches);

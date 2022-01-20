@@ -189,7 +189,9 @@ public class StatItemPanel extends JPanel
 		List<CombinationFlip> combinationFlipsCopy = new ArrayList<>(combinationFlips);
 		Collections.reverse(combinationFlipsCopy);
 		List<CombinationFlip> combinationFlipsOnCurrentPage = combinationFlipPaginator.getCurrentPageItems(combinationFlipsCopy);
-		combinationFlipPanels = combinationFlipsOnCurrentPage.stream().map(CombinationFlipPanel::new).collect(Collectors.toList());
+		combinationFlipPanels = combinationFlipsOnCurrentPage.stream().
+				map(cf -> new CombinationFlipPanel(cf, plugin, flippingItem)).
+				collect(Collectors.toList());
 		putPanelsOnBackgroundPanel(new ArrayList<>(combinationFlipPanels), combinationFlipsBackgroundPanel, combinationFlipPaginator);
     }
 
@@ -336,7 +338,7 @@ public class StatItemPanel extends JPanel
 		tabGroup.setBorder(new EmptyBorder(5, 0, 7, 0));
 		tabGroup.addTab(offersTab);
 		tabGroup.addTab(flipsTab);
-		if (plugin.isInCombination(flippingItem.getItemId())) {
+		if (plugin.isInRecipe(flippingItem.getItemId())) {
 			tabGroup.addTab(combinationFlipsTab);
 		}
 

@@ -168,7 +168,7 @@ public class OfferPanel extends JPanel {
         JPanel iconPanel = new JPanel(new BorderLayout());
         iconPanel.setBackground(CustomColors.DARK_GRAY);
         boolean hasRecipe = plugin.getApplicableRecipe(offer.getItemId(), offer.isBuy()).isPresent();
-        if (plugin.isCombinationParent(offer.getItemId()) && hasRecipe && offer.isComplete()) {
+        if (plugin.isRecipeParent(offer.getItemId()) && hasRecipe && offer.isComplete()) {
             JLabel deleteIcon = createDeleteIcon();
             deleteIcon.setBorder(new EmptyBorder(0,5,0,0));
             iconPanel.add(createCombinationFlipIcon(), BorderLayout.EAST);
@@ -232,7 +232,7 @@ public class OfferPanel extends JPanel {
 
                 //If the user pressed "Yes"
                 if (result == JOptionPane.YES_OPTION) {
-                    item.invalidateOffers(List.of(offer), plugin.getTradesForCurrentView());
+                    item.deleteOffers(List.of(offer), plugin.getTradesForCurrentView());
                     plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
                 }
             }

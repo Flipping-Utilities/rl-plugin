@@ -344,7 +344,7 @@ public class FlippingPlugin extends Plugin {
             dataHandler.addAccount(displayName);
             masterPanel.getAccountSelector().addItem(displayName);
         }
-
+        //see documentation for AccountData.fixIncorrectItemNames
         if (client.getWorldType().contains(WorldType.MEMBERS)) {
             dataHandler.viewAccountData(displayName).fixIncorrectItemNames(itemManager);
         }
@@ -787,16 +787,14 @@ public class FlippingPlugin extends Plugin {
 
     /**
      * Used by the stats panel to invalidate all offers for a certain interval when a user hits the reset button.
-     *
-     * @param startOfInterval
      */
     public void invalidateOffers(Instant startOfInterval) {
         if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
             for (AccountData accountData : dataHandler.getAllAccountData()) {
-                accountData.getTrades().forEach(item -> item.invalidateOffers(item.getIntervalHistory(startOfInterval), viewTradesForCurrentView()));
+                accountData.getTrades().forEach(item -> item.deleteOffers(item.getIntervalHistory(startOfInterval), accountData.getTrades()));
             }
         } else {
-            getTradesForCurrentView().forEach(item -> item.invalidateOffers(item.getIntervalHistory(startOfInterval), viewTradesForCurrentView()));
+            getTradesForCurrentView().forEach(item -> item.deleteOffers(item.getIntervalHistory(startOfInterval), viewTradesForCurrentView()));
         }
 
         updateSinceLastAccountWideBuild = true;
@@ -916,18 +914,22 @@ public class FlippingPlugin extends Plugin {
                         })), 1000, 1000, TimeUnit.MILLISECONDS);
     }
 
-    public Map<Integer, Optional<FlippingItem>> getChildCombinationItems(int parentId, boolean isBuy) {
+    //see RecipeHandler.getChildRecipeItems
+    public Map<Integer, Optional<FlippingItem>> getRecipeChildItems(int parentId, boolean isBuy) {
         return recipeHandler.getChildRecipeItems(parentId, isBuy, getTradesForCurrentView());
     }
 
-    public boolean isInCombination(int itemId) {
+    //see RecipeHandler.isInRecipe
+    public boolean isInRecipe(int itemId) {
         return recipeHandler.isInRecipe(itemId);
     }
 
-    public boolean isCombinationParent(int itemId) {
+    //see RecipeHandler.isRecipeParent
+    public boolean isRecipeParent(int itemId) {
         return recipeHandler.isRecipeParent(itemId);
     }
 
+    //see RecipeHandler.getApplicableRecipe
     public Optional<Recipe> getApplicableRecipe(int parentId, boolean isBuy) {
         return recipeHandler.getApplicableRecipe(parentId, isBuy);
     }
