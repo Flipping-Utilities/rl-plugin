@@ -78,10 +78,6 @@ public class OfferEvent
 	private int ticksSinceFirstOffer;
 	@SerializedName("tQIT")
 	private int totalQuantityInTrade;
-	//States that determine if the offer is appurtenant to the current scope of the panel.
-	//The states change dependent on user-selected removals.
-	@SerializedName("vSQ")
-	private boolean validOfferEvent;
 	private Instant tradeStartedAt;
 	private boolean beforeLogin;
 	/**
@@ -202,7 +198,6 @@ public class OfferEvent
 				tickArrivedAt,
 				ticksSinceFirstOffer,
 				totalQuantityInTrade,
-				validOfferEvent,
 				tradeStartedAt,
 				beforeLogin,
 				madeBy,
@@ -231,8 +226,7 @@ public class OfferEvent
 			&& uuid.equals(otherOffer.uuid)
 			&& tickArrivedAt == otherOffer.tickArrivedAt
 			&& ticksSinceFirstOffer == otherOffer.ticksSinceFirstOffer
-			&& time.equals(otherOffer.time)
-			&& validOfferEvent == otherOffer.validOfferEvent;
+			&& time.equals(otherOffer.time);
 	}
 
 	/**
@@ -273,7 +267,6 @@ public class OfferEvent
 			0,
 			0,
 			offer.getTotalQuantity(),
-			true,
 			null,
 			false,
 			null,
@@ -307,7 +300,6 @@ public class OfferEvent
 				1,
 				marginCheck? 1 : 10,
 				1,
-				false,
 				null,
 				false,
 				"",

@@ -84,7 +84,6 @@ public class AccountData
 			int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
 
 			item.hydrate(idToItemName, geLimit);
-			item.removeInvalidOffers();
 		}
 
 		if (slotTimers == null)

@@ -372,11 +372,7 @@ public class HistoryManager
 		Set<String> idsOfOffersToBeDeleted = offerList.stream().map(OfferEvent::getUuid).collect(Collectors.toSet());
 		List<CombinationFlip> combinationFlipsToBeDeleted = getInvalidatedCombinationFlips(idsOfOffersToBeDeleted);
 		deleteCombinationFlips(combinationFlipsToBeDeleted, items);
-
-		//TODO just delete the events, no need to mark them as invalid. I want to eventually get rid of the
-		//validOfferEvent field..but it's annoying cause it is already persisted.
-		offerList.forEach(offer -> offer.setValidOfferEvent(false));
-		removeInvalidOffers();
+		compressedOfferEvents.removeIf(o -> idsOfOffersToBeDeleted.contains(o.getUuid()));
 	}
 
 	/**
@@ -397,12 +393,6 @@ public class HistoryManager
 				}
 			});
 		});
-	}
-
-
-
-	public void removeInvalidOffers() {
-		compressedOfferEvents.removeIf(offer -> !offer.isValidOfferEvent());
 	}
 
 	/**

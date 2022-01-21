@@ -788,7 +788,7 @@ public class FlippingPlugin extends Plugin {
     /**
      * Used by the stats panel to invalidate all offers for a certain interval when a user hits the reset button.
      */
-    public void invalidateOffers(Instant startOfInterval) {
+    public void deleteOffers(Instant startOfInterval) {
         if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
             for (AccountData accountData : dataHandler.getAllAccountData()) {
                 accountData.getTrades().forEach(item -> item.deleteOffers(item.getIntervalHistory(startOfInterval), accountData.getTrades()));
