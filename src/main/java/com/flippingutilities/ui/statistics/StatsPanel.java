@@ -652,7 +652,7 @@ public class StatsPanel extends JPanel
 					//If the user pressed "Yes"
 					if (result == JOptionPane.YES_OPTION)
 					{
-						plugin.invalidateOffers(startOfInterval);
+						plugin.deleteOffers(startOfInterval);
 						rebuild(plugin.viewTradesForCurrentView());
 					}
 				}

@@ -309,10 +309,6 @@ public class FlippingItem
 		return history.hasOfferInInterval(earliestTime);
 	}
 
-	public void removeInvalidOffers() {
-		history.removeInvalidOffers();
-	}
-
 	/**
 	 * see the documentation for HistoryManager.deleteOffers
 	 */
