@@ -914,9 +914,9 @@ public class FlippingPlugin extends Plugin {
                         })), 1000, 1000, TimeUnit.MILLISECONDS);
     }
 
-    //see RecipeHandler.getChildRecipeItems
+    //see RecipeHandler.getRecipeChildItems
     public Map<Integer, Optional<FlippingItem>> getRecipeChildItems(int parentId, boolean isBuy) {
-        return recipeHandler.getChildRecipeItems(parentId, isBuy, getTradesForCurrentView());
+        return recipeHandler.getRecipeChildItems(parentId, isBuy, getTradesForCurrentView());
     }
 
     //see RecipeHandler.isInRecipe
