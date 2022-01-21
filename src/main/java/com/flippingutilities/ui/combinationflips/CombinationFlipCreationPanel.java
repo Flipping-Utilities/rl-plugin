@@ -108,58 +108,75 @@ public class CombinationFlipCreationPanel extends JPanel {
             int targetSelectionValue) {
         JPanel offersPanel = new JPanel();
         offersPanel.setBackground(Color.BLACK);
+
         if (partialOffers.size() > 0) {
-            offersPanel.setLayout(new BoxLayout(offersPanel, BoxLayout.Y_AXIS));
+            return createOffersScrollPane(partialOffers, headerPanel, targetSelectionValue, offersPanel);
+        }
 
-            JPanel wrapper = new JPanel(new BorderLayout());
-            wrapper.setBackground(Color.BLACK);
-            wrapper.add(offersPanel, BorderLayout.NORTH);
+        String type = parentOffer.isBuy() ? "sell" : "buy";
+        JLabel noTradesLabel = new JLabel(String.format("No recorded %s for this item", type));
+        noTradesLabel.setForeground(Color.RED);
+        offersPanel.add(noTradesLabel);
+        headerPanel.setForeground(CustomColors.TOMATO);
+        return offersPanel;
+    }
 
-            JScrollPane scrollPane = new JScrollPane(wrapper);
-            scrollPane.setBackground(Color.BLACK);
-            scrollPane.getVerticalScrollBar().setPreferredSize(new Dimension(2, 0));
-            scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+    /**
+     * Creates the scroll pane which contains the offer panels with the number pickers.
+     * @param partialOffers the item's offers
+     * @param headerPanel the panel containing the item icon, consumed amount, and target value.
+     * @param targetSelectionValue the initial amount to select
+     * @param offersPanel the panel the offer panels are placed on
+     */
+    private JScrollPane createOffersScrollPane(
+        List<PartialOffer> partialOffers,
+        CombinationItemHeaderPanel headerPanel,
+        int targetSelectionValue,
+        JPanel offersPanel
+    ) {
+        offersPanel.setLayout(new BoxLayout(offersPanel, BoxLayout.Y_AXIS));
 
-            int maxHackySize = 0;
-            for (int i = 0; i < partialOffers.size(); i++) {
-                PartialOffer partialOffer = partialOffers.get(i);
-                OfferPanel offerPanel = new OfferPanel(plugin, null, partialOffer.getOffer(), true);
-                int amountToSelect;
-                int actualQuantityInOffer = partialOffer.getOffer().getCurrentQuantityInTrade() - partialOffer.amountConsumed;
-                amountToSelect = Math.min(actualQuantityInOffer, targetSelectionValue);
-                targetSelectionValue -= amountToSelect;
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.setBackground(Color.BLACK);
+        wrapper.add(offersPanel, BorderLayout.NORTH);
 
-                int numPickerSize = 40 + (String.valueOf(actualQuantityInOffer).length() * 10);
-                maxHackySize = Math.max(maxHackySize, offerPanel.getHackySize() + numPickerSize);
+        JScrollPane scrollPane = new JScrollPane(wrapper);
+        scrollPane.setBackground(Color.BLACK);
+        scrollPane.getVerticalScrollBar().setPreferredSize(new Dimension(2, 0));
+        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
-                JPanel offerPanelWithPicker = createOfferPanelWithPicker(
-                        offerPanel,
-                        headerPanel,
-                        partialOffer,
-                        amountToSelect
-                        );
-                offersPanel.add(offerPanelWithPicker);
+        int maxHackySize = 0;
+        for (int i = 0; i < partialOffers.size(); i++) {
+            PartialOffer partialOffer = partialOffers.get(i);
+            OfferPanel offerPanel = new OfferPanel(plugin, null, partialOffer.getOffer(), true);
+            int amountToSelect;
+            int actualQuantityInOffer = partialOffer.getOffer().getCurrentQuantityInTrade() - partialOffer.amountConsumed;
+            amountToSelect = Math.min(actualQuantityInOffer, targetSelectionValue);
+            targetSelectionValue -= amountToSelect;
 
-                if (i < Math.min(partialOffers.size(), 10) - 1) {
-                    offersPanel.add(Box.createVerticalStrut(4));
-                }
+            int numPickerSize = 40 + (String.valueOf(actualQuantityInOffer).length() * 10);
+            maxHackySize = Math.max(maxHackySize, offerPanel.getHackySize() + numPickerSize);
 
-                //Prevents scoll pane from being unnecessarily large if there are few panels
-                int scrollPaneHeight = Math.min(350, (partialOffers.size() * 65) + 40);
-                scrollPane.setPreferredSize(new Dimension(maxHackySize, scrollPaneHeight));
+            JPanel offerPanelWithPicker = createOfferPanelWithPicker(
+                offerPanel,
+                headerPanel,
+                partialOffer,
+                amountToSelect
+            );
+            offersPanel.add(offerPanelWithPicker);
 
-                setDisplaysAndStateBasedOnSelection(amountToSelect, partialOffer.getOffer(), offerPanel, headerPanel);
+            if (i < Math.min(partialOffers.size(), 10) - 1) {
+                offersPanel.add(Box.createVerticalStrut(4));
             }
 
-            return scrollPane;
-        } else {
-            String type = parentOffer.isBuy() ? "sell" : "buy";
-            JLabel noTradesLabel = new JLabel(String.format("No recorded %s for this item", type));
-            noTradesLabel.setForeground(Color.RED);
-            offersPanel.add(noTradesLabel);
-            headerPanel.setForeground(CustomColors.TOMATO);
-            return offersPanel;
+            //Prevents scoll pane from being unnecessarily large if there are few panels
+            int scrollPaneHeight = Math.min(350, (partialOffers.size() * 65) + 40);
+            scrollPane.setPreferredSize(new Dimension(maxHackySize, scrollPaneHeight));
+
+            setDisplaysAndStateBasedOnSelection(amountToSelect, partialOffer.getOffer(), offerPanel, headerPanel);
         }
+
+        return scrollPane;
     }
 
     /**

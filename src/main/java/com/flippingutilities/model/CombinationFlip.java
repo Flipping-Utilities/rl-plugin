@@ -86,9 +86,9 @@ public class CombinationFlip {
         if (parent.offer.isBuy()) {
             return totalValueOfChildren - totalValueOfParent;
         }
-        //if you sell a parent, you must have constructed it from its children. Ex, buy the guthan set pieces to
-        //construct a set to sell it.
         else {
+            //if you sell a parent, you must have constructed it from its children. Ex, buy the guthan set pieces to
+            //construct a set to sell it.
             return totalValueOfParent - totalValueOfChildren;
         }
     }

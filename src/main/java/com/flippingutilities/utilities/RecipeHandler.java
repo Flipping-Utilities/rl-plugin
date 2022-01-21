@@ -64,7 +64,7 @@ public class RecipeHandler {
         return false;
     }
 
-    public Map<Integer, Optional<FlippingItem>> getChildRecipeItems(int parentId, boolean isBuy, List<FlippingItem> items) {
+    public Map<Integer, Optional<FlippingItem>> getRecipeChildItems(int parentId, boolean isBuy, List<FlippingItem> items) {
         Optional<Recipe> recipe = getApplicableRecipe(parentId, isBuy);
         if (recipe.isEmpty()) {
             return new HashMap<>();
