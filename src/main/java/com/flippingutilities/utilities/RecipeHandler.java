@@ -53,6 +53,9 @@ public class RecipeHandler {
                 collect(Collectors.toSet());
     }
 
+    /**
+     * @return whether the given item id is in a recipe, as a parent or child.
+     */
     public boolean isInRecipe(int itemId) {
         return this.itemIdsInRecipes.contains(itemId);
     }
@@ -64,6 +67,9 @@ public class RecipeHandler {
         return false;
     }
 
+    /**
+     * @return the child items in the recipe associated with the given parent item id
+     */
     public Map<Integer, Optional<FlippingItem>> getRecipeChildItems(int parentId, boolean isBuy, List<FlippingItem> items) {
         Optional<Recipe> recipe = getApplicableRecipe(parentId, isBuy);
         if (recipe.isEmpty()) {
@@ -87,6 +93,12 @@ public class RecipeHandler {
         return itemIdToChildren;
     }
 
+    /**
+     * Gets the possible recipe given a parent item id and whether you want the recipe that means you have to
+     * buy the parent item or sell the parent item. For example, a toxic blowpipe can have to recipes associated with it.
+     * In one recipe, you would sell BUY the toxic blowpipe and dismantle it into zulrah scaled.
+     * In another recipe, you would SELL the toxic blowpipe after creating it from a tanzanite fang.
+     */
     public Optional<Recipe> getApplicableRecipe(int parentId, boolean isBuy) {
         if (!isRecipeParent(parentId)) {
             return Optional.empty();
