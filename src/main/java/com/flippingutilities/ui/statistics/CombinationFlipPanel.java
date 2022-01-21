@@ -123,6 +123,7 @@ public class CombinationFlipPanel extends JPanel {
         });
 
         JPanel expandDetailsPanel = new JPanel(new BorderLayout());
+        expandDetailsPanel.setBorder(new EmptyBorder(8,0,0,0));
         expandDetailsPanel.setBackground(CustomColors.DARK_GRAY);
         expandDetailsPanel.add(expandDetailsLabel, BorderLayout.CENTER);
         expandDetailsPanel.add(createDeleteIcon(), BorderLayout.WEST);

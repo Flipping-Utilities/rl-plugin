@@ -792,7 +792,7 @@ public class HistoryManager
 		Map<String, PartialOffer> offerIdsInCombinationFlips = getOfferIdToPartialOfferInComboFlips();
 		return offers.stream().map(o -> {
 			if (offerIdsInCombinationFlips.containsKey(o.getUuid())) {
-				return offerIdsInCombinationFlips.get(o.getUuid()).toAdjustedOfferEvent();
+				return offerIdsInCombinationFlips.get(o.getUuid()).toRemainingOfferEvent();
 			}
 			return o;
 		}).collect(Collectors.toList());
