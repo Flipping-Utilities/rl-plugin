@@ -348,7 +348,7 @@ public class CombinationFlipCreationPanel extends JPanel {
 
         Map<Integer, Integer> itemIdToMaxRecipesThatCanBeMade = getItemIdToMaxRecipesThatCanBeMade(itemIdToPartialOffers);
 
-        int lowestRecipeCountThatCanBeMade = itemIdToMaxRecipesThatCanBeMade.values().stream().mapToInt(i -> i).min().getAsInt();
+        int lowestRecipeCountThatCanBeMade = itemIdToMaxRecipesThatCanBeMade.values().stream().min(Comparator.comparingInt(i -> i)).get();
 
         return itemIdToQuantity.entrySet().stream().
                 map(e -> Map.entry(e.getKey(), e.getValue() * lowestRecipeCountThatCanBeMade)).

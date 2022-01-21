@@ -22,10 +22,10 @@ public class PartialOffer {
     }
 
     /**
-     * Returns an offer event that represents this partial offer (quantity deducted by the amount this partial
-     * offer consumed).
+     * Returns an OfferEvent that represents the offer left after taking into account the amount the PartialOffer
+     * consumed.
      */
-    public OfferEvent toAdjustedOfferEvent() {
+    public OfferEvent toRemainingOfferEvent() {
         int remainingAmount = offer.getCurrentQuantityInTrade() - amountConsumed;
         OfferEvent adjustedOfferEvent = offer.clone();
         adjustedOfferEvent.setCurrentQuantityInTrade(remainingAmount);

@@ -226,8 +226,9 @@ public class OfferEvent
 
 		OfferEvent otherOffer = (OfferEvent) other;
 
-		return isDuplicate(otherOffer)
-				&& uuid.equals(otherOffer.uuid)
+		return
+			isDuplicate(otherOffer)
+			&& uuid.equals(otherOffer.uuid)
 			&& tickArrivedAt == otherOffer.tickArrivedAt
 			&& ticksSinceFirstOffer == otherOffer.ticksSinceFirstOffer
 			&& time.equals(otherOffer.time)
@@ -273,12 +274,12 @@ public class OfferEvent
 			0,
 			offer.getTotalQuantity(),
 			true,
-				null,
+			null,
 			false,
 			null,
 			null,
-				offer.getPrice(),
-				offer.getSpent());
+			offer.getPrice(),
+			offer.getSpent());
 	}
 
 	/**
