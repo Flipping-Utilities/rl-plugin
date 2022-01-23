@@ -40,6 +40,7 @@ import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.components.ComboBoxListRenderer;
 import net.runelite.client.ui.components.IconTextField;
+import net.runelite.client.ui.components.materialtabs.MaterialTab;
 import net.runelite.client.util.QuantityFormatter;
 
 import javax.swing.*;
@@ -156,11 +157,36 @@ public class StatsPanel extends JPanel
 		middlePanel.add(this.createProfitAndSubInfoContainer(), BorderLayout.NORTH);
 		middlePanel.add(this.createSortAndScrollContainer(), BorderLayout.CENTER);
 
+		JPanel mainDisplay = new JPanel();
+		FastTabGroup tabGroup = createTabGroup(mainDisplay, new StatItemTabPanel(), new RecipeTabPanel());
+
 		setLayout(new BorderLayout());
 		add(this.createTopPanel(searchBar), BorderLayout.NORTH);
-		add(middlePanel, BorderLayout.CENTER);
+		add(createTabGroupContainer(tabGroup, mainDisplay), BorderLayout.CENTER);
 		add(this.createPaginator(), BorderLayout.SOUTH);
 		setBorder(new EmptyBorder(5,7,0,7));
+	}
+
+	private JPanel createTabGroupContainer(FastTabGroup tabGroup, JPanel mainDisplay) {
+		JPanel tabGroupContainer = new JPanel(new BorderLayout());
+		tabGroupContainer.setBackground(CustomColors.DARK_GRAY);
+
+		tabGroupContainer.add(tabGroup, BorderLayout.NORTH);
+		tabGroupContainer.add(mainDisplay, BorderLayout.CENTER);
+
+		return tabGroupContainer;
+	}
+
+	private FastTabGroup createTabGroup(JPanel mainDisplay, StatItemTabPanel statItemTabPanel, RecipeTabPanel recipeTabPanel) {
+		FastTabGroup tabGroup = new FastTabGroup(mainDisplay);
+		MaterialTab statItemTab = new MaterialTab("Items", tabGroup, statItemTabPanel);
+		MaterialTab RecipeTab = new MaterialTab("Recipes", tabGroup, recipeTabPanel);
+
+		tabGroup.addTab(statItemTab);
+		tabGroup.addTab(RecipeTab);
+		tabGroup.select(statItemTab);
+
+		return tabGroup;
 	}
 
 	/**
@@ -950,7 +976,6 @@ public class StatsPanel extends JPanel
 			//is built based on every item on every page and so it shouldn't change if you
 			//switch pages.
 			Instant rebuildStart = Instant.now();
-			rebuildStatItemContainer(getResultsForCurrentSearchQuery(plugin.viewTradesForCurrentView()));
 			rebuildStatItemContainer(getResultsForCurrentSearchQuery(plugin.viewTradesForCurrentView()));
 			revalidate();
 			repaint();
