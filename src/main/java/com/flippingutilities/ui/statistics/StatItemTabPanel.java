@@ -1,5 +1,6 @@
 package com.flippingutilities.ui.statistics;
 
+import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
@@ -8,6 +9,7 @@ import net.runelite.client.ui.ColorScheme;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.MatteBorder;
 import java.awt.*;
 import java.time.Duration;
 import java.time.Instant;
@@ -21,20 +23,37 @@ public class StatItemTabPanel extends JPanel {
     private JPanel statItemPanelsContainer;
     private ArrayList<StatItemPanel> activePanels = new ArrayList<>();
     private Paginator paginator;
+    private FlippingPlugin plugin;
 
-    public StatItemTabPanel() {
+    public StatItemTabPanel(FlippingPlugin flippingPlugin) {
+        plugin = flippingPlugin;
         statItemPanelsContainer = createStatItemsPanelContainer();
+        paginator = createPaginator();
+
+        JScrollPane scrollPane = createScrollPane(statItemPanelsContainer);
+
+        setLayout(new BorderLayout());
+
+        add(scrollPane, BorderLayout.CENTER);
+        add(paginator, BorderLayout.SOUTH);
     }
 
-
-    private void rebuild(List<FlippingItem> flippingItems) {
+    public void rebuild(List<FlippingItem> flippingItems) {
         activePanels.clear();
         statItemPanelsContainer.removeAll();
+
         paginator.updateTotalPages(flippingItems.size());
+
         List<FlippingItem> itemsOnCurrentPage = paginator.getCurrentPageItems(flippingItems);
-        List<StatItemPanel> newPanels = itemsOnCurrentPage.stream().map(item -> new StatItemPanel(plugin, itemManager, item)).collect(Collectors.toList());
+        List<StatItemPanel> newPanels = itemsOnCurrentPage.stream().map(item -> new StatItemPanel(plugin, item)).collect(Collectors.toList());
         UIUtilities.stackPanelsVertically((List) newPanels, statItemPanelsContainer, 5);
         activePanels.addAll(newPanels);
+    }
+
+    public void showPanel(JPanel panel) {
+        activePanels.clear();
+        statItemPanelsContainer.removeAll();
+        statItemPanelsContainer.add(panel);
     }
 
     private JPanel createStatItemsPanelContainer() {
@@ -58,17 +77,15 @@ public class StatItemTabPanel extends JPanel {
 
     private Paginator createPaginator() {
         paginator = new Paginator(() -> SwingUtilities.invokeLater(() -> {
-            //we only want to rebuildStatItemContainer and not updateDisplays bc the display
-            //is built based on every item on every page and so it shouldn't change if you
-            //switch pages.
+            StatsPanel statsPanel = plugin.getStatPanel();
             Instant rebuildStart = Instant.now();
-            rebuild(getResultsForCurrentSearchQuery(plugin.viewTradesForCurrentView()));
+            rebuild(statsPanel.getItemsToDisplay(plugin.viewTradesForCurrentView()));
             revalidate();
             repaint();
             log.debug("page change took {}", Duration.between(rebuildStart, Instant.now()).toMillis());
         }));
-        paginator.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
-        paginator.setBorder(new EmptyBorder(0, 0, 0, 10));
+        paginator.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        paginator.setBorder(new MatteBorder(1,0,0,0, ColorScheme.DARK_GRAY_COLOR.darker()));
         return paginator;
     }
 }

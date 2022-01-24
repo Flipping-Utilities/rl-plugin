@@ -34,7 +34,6 @@ import com.flippingutilities.ui.uiutilities.*;
 import com.google.common.base.Strings;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
@@ -57,30 +56,30 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.*;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 public class StatsPanel extends JPanel
 {
+	public enum SORT {
+		TIME,
+		TOTAL_PROFIT,
+		PROFIT_EACH,
+		ROI,
+		FLIP_COUNT
+	}
+
 	private static final String[] TIME_INTERVAL_STRINGS = {"-1h (Past Hour)", "-4h (Past 4 Hours)", "-12h (Past 12 Hours)", "-1d (Past Day)", "-1w (Past Week)", "-1m (Past Month)", "Session", "All"};
-	private static final String[] SORT_BY_STRINGS = {"Most Recent", "Most Total Profit", "Most Profit Each", "Highest ROI", "Most Flips"};
 	private static final Dimension ICON_SIZE = new Dimension(16, 16);
 
-	private static final Font BIG_PROFIT_FONT = StyleContext.getDefaultStyleContext()
-		.getFont(FontManager.getRunescapeBoldFont().getName(), Font.PLAIN, 28);
-
 	private FlippingPlugin plugin;
-	private ItemManager itemManager;
 
 	//Holds the sub info labels.
 	private JPanel subInfoPanel;
 
-	private JPanel statItemPanelsContainer = new JPanel();
-
 	//Combo box that selects the time interval that startOfInterval contains.
 	private JComboBox<String> timeIntervalDropdown = this.createTimeIntervalDropdown();
-	private JComboBox<String> sortDropdown = this.createSortDropdown();
 
 	//Represents the total profit made in the selected time interval.
 	private JLabel totalProfitVal = new JLabel();
@@ -119,7 +118,7 @@ public class StatsPanel extends JPanel
 	private String startOfIntervalName = "Session";
 
 	@Getter
-	private String selectedSort = "Most Recent";
+	private SORT selectedSort = SORT.TIME;
 
 	private ArrayList<StatItemPanel> activePanels = new ArrayList<>();
 
@@ -130,11 +129,10 @@ public class StatsPanel extends JPanel
 	@Getter
 	private Set<Integer> itemsWithOffersTabSelected = new HashSet<>();
 
-	private Paginator paginator;
-	private ScheduledExecutorService executor;
 	private boolean currentlySearching;
 	private IconTextField searchBar;
-
+	private StatItemTabPanel statItemTabPanel;
+	private RecipeTabPanel recipeTabPanel;
 	/**
 	 * The statistics panel shows various stats about trades the user has made over a selectable time interval.
 	 * This represents the front-end Statistics Tab.
@@ -146,39 +144,84 @@ public class StatsPanel extends JPanel
 	{
 		super(false);
 		this.plugin = plugin;
-		this.itemManager = plugin.getItemManager();
-		this.executor = plugin.getExecutor();
 		this.startOfInterval = plugin.viewStartOfSessionForCurrentView();
 		this.prepareLabels();
 
 		searchBar = createSearchBar();
-
-		JPanel middlePanel = new JPanel(new BorderLayout());
-		middlePanel.add(this.createProfitAndSubInfoContainer(), BorderLayout.NORTH);
-		middlePanel.add(this.createSortAndScrollContainer(), BorderLayout.CENTER);
+		statItemTabPanel = new StatItemTabPanel(plugin);
+		recipeTabPanel = new RecipeTabPanel();
 
 		JPanel mainDisplay = new JPanel();
-		FastTabGroup tabGroup = createTabGroup(mainDisplay, new StatItemTabPanel(), new RecipeTabPanel());
+		FastTabGroup tabGroup = createTabGroup(mainDisplay, statItemTabPanel, recipeTabPanel);
 
 		setLayout(new BorderLayout());
-		add(this.createTopPanel(searchBar), BorderLayout.NORTH);
+		add(createTopPanel(searchBar), BorderLayout.NORTH);
 		add(createTabGroupContainer(tabGroup, mainDisplay), BorderLayout.CENTER);
-		add(this.createPaginator(), BorderLayout.SOUTH);
 		setBorder(new EmptyBorder(5,7,0,7));
 	}
 
 	private JPanel createTabGroupContainer(FastTabGroup tabGroup, JPanel mainDisplay) {
 		JPanel tabGroupContainer = new JPanel(new BorderLayout());
-		tabGroupContainer.setBackground(CustomColors.DARK_GRAY);
 
-		tabGroupContainer.add(tabGroup, BorderLayout.NORTH);
+		JPanel tabGroupPanel = new JPanel(new BorderLayout());
+		tabGroupPanel.add(tabGroup, BorderLayout.CENTER);
+		tabGroupPanel.add(createSortIcon(), BorderLayout.EAST);
+
+		tabGroupContainer.add(tabGroupPanel, BorderLayout.NORTH);
 		tabGroupContainer.add(mainDisplay, BorderLayout.CENTER);
 
 		return tabGroupContainer;
 	}
 
+	private JLabel createSortIcon() {
+		JLabel sortIcon = new JLabel(Icons.SORT);
+		sortIcon.setBorder(new EmptyBorder(0,0,0,15));
+		sortIcon.setToolTipText("Use this to sort the list!");
+
+		JPopupMenu popupMenu = new JPopupMenu("Sort");
+		//handles deselecting the other buttons when one is selected
+		ButtonGroup group = new ButtonGroup();
+		Stream.of(SORT.values()).forEach(sortEnum -> {
+			JMenuItem menuItem = new JRadioButtonMenuItem(sortEnum.name().replace("_", " "));
+			menuItem.setFont(new Font("Whitney", Font.PLAIN, 12));
+			group.add(menuItem);
+			if (sortEnum == SORT.TIME) {
+				menuItem.setSelected(true);
+			}
+			menuItem.addItemListener(i -> {
+				if (i.getStateChange() == ItemEvent.SELECTED) {
+					selectedSort = sortEnum;
+					rebuild(plugin.viewTradesForCurrentView());
+				}
+			});
+			popupMenu.add(menuItem);
+		});
+
+		sortIcon.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				if (SwingUtilities.isLeftMouseButton(e)) {
+					popupMenu.show(sortIcon, e.getX(), e.getY());
+				}
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				sortIcon.setIcon(Icons.SORT_HOVER);
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				sortIcon.setIcon(Icons.SORT);
+			}
+		});
+		return sortIcon;
+	}
+
 	private FastTabGroup createTabGroup(JPanel mainDisplay, StatItemTabPanel statItemTabPanel, RecipeTabPanel recipeTabPanel) {
 		FastTabGroup tabGroup = new FastTabGroup(mainDisplay);
+		tabGroup.setBorder(new EmptyBorder(0,16 + 15,0,0));
+
 		MaterialTab statItemTab = new MaterialTab("Items", tabGroup, statItemTabPanel);
 		MaterialTab RecipeTab = new MaterialTab("Recipes", tabGroup, recipeTabPanel);
 
@@ -197,32 +240,17 @@ public class StatsPanel extends JPanel
 	 */
 	public void rebuild(List<FlippingItem> flippingItems)
 	{
-		//Remove old stats
 		activePanels = new ArrayList<>();
-		List<FlippingItem> searchedItems = getResultsForCurrentSearchQuery(flippingItems);
+		List<FlippingItem> items = getItemsToDisplay(flippingItems);
 		SwingUtilities.invokeLater(() -> {
-			rebuildStatItemContainer(searchedItems);
-			updateDisplays(searchedItems);
+			statItemTabPanel.rebuild(items);
+			updateDisplays(items);
+			if (flippingItems.isEmpty() && currentlySearching) {
+				if (statItemTabPanel.isVisible()) statItemTabPanel.showPanel(createEmptySearchPanel());
+			}
 			revalidate();
 			repaint();
 		});
-	}
-
-	private void rebuildStatItemContainer(List<FlippingItem> flippingItems) {
-		activePanels.clear();
-		statItemPanelsContainer.removeAll();
-
-		List<FlippingItem> sortedItems = sortTradeList(flippingItems);
-		List<FlippingItem> itemsThatShouldHavePanels = sortedItems.stream().filter(item -> item.hasOfferInInterval(startOfInterval)).collect(Collectors.toList());
-		sortDropdown.setVisible(itemsThatShouldHavePanels.size() > 0);
-		paginator.updateTotalPages(itemsThatShouldHavePanels.size());
-		List<FlippingItem> itemsOnCurrentPage = paginator.getCurrentPageItems(itemsThatShouldHavePanels);
-		List<StatItemPanel> newPanels = itemsOnCurrentPage.stream().map(item -> new StatItemPanel(plugin, itemManager, item)).collect(Collectors.toList());
-		UIUtilities.stackPanelsVertically((List) newPanels, statItemPanelsContainer, 5);
-		activePanels.addAll(newPanels);
-		if (flippingItems.isEmpty() && currentlySearching) {
-			statItemPanelsContainer.add(createEmptySearchPanel());
-		}
 	}
 
 	/**
@@ -230,6 +258,7 @@ public class StatsPanel extends JPanel
 	 */
 	private JPanel createEmptySearchPanel() {
 		JPanel emptySearchPanel = new JPanel(new DynamicGridLayout(2,1));
+		emptySearchPanel.setBorder(new EmptyBorder(10,0,0,0));
 		String lookup = searchBar.getText().toLowerCase();
 		JLabel searchLabel = new JLabel(String.format(
 				"<html><body style='text-align: center'>The search for <br> <b><u>%s</u></b> <br> yielded no results :(</html>", lookup),
@@ -287,8 +316,12 @@ public class StatsPanel extends JPanel
 		return items;
 	}
 
+	public List<FlippingItem> getItemsToDisplay(List<FlippingItem> items) {
+		return sortItems(getResultsForCurrentSearchQuery(getItemsInInterval(items)));
+	}
+
 	private IconTextField createSearchBar() {
-		IconTextField searchBar = UIUtilities.createSearchBar(this.executor, this::updateSearch);
+		IconTextField searchBar = UIUtilities.createSearchBar(plugin.getExecutor(), this::updateSearch);
 		searchBar.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 		return searchBar;
 	}
@@ -568,7 +601,6 @@ public class StatsPanel extends JPanel
 				return;
 			}
 		}
-		paginator.setPageNumber(1);
 		rebuild(plugin.viewTradesForCurrentView());
 	}
 
@@ -584,26 +616,30 @@ public class StatsPanel extends JPanel
 		}
 	}
 
+	private List<FlippingItem> getItemsInInterval(List<FlippingItem> items) {
+		return items.stream().filter(item -> item.hasOfferInInterval(startOfInterval)).collect(Collectors.toList());
+	}
+
 	/**
 	 * Shallow clones and sorts the to-be-built tradeList items according to the selectedSort string.
 	 *
-	 * @param tradeList The soon-to-be drawn tradeList whose items are getting sorted.
+	 * @param items The soon-to-be drawn tradeList whose items are getting sorted.
 	 * @return Returns a cloned and sorted tradeList as specified by the selectedSort string.
 	 */
-	public List<FlippingItem> sortTradeList(List<FlippingItem> tradeList)
+	private List<FlippingItem> sortItems(List<FlippingItem> items)
 	{
-		List<FlippingItem> result = new ArrayList<>(tradeList);
+		List<FlippingItem> result = new ArrayList<>(items);
 
 		if (selectedSort == null || result.isEmpty()) {
 			return result;
 		}
 
 		switch (selectedSort) {
-			case "Most Recent":
+			case TIME:
 				result.sort(Comparator.comparing(FlippingItem::getLatestActivityTime));
 				break;
 
-			case "Most Total Profit":
+			case TOTAL_PROFIT:
 				result.sort(Comparator.comparing(item -> {
 					ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
 					List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
@@ -611,7 +647,7 @@ public class StatsPanel extends JPanel
 				}));
 				break;
 
-			case "Most Profit Each":
+			case PROFIT_EACH:
 				result.sort(Comparator.comparing(item -> {
 					List<CombinationFlip> personalCombinationFlips = item.getPersonalCombinationFlips(startOfInterval);
 					ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
@@ -627,7 +663,7 @@ public class StatsPanel extends JPanel
 					return profit / quantity;
 				}));
 				break;
-			case "Highest ROI":
+			case ROI:
 				result.sort(Comparator.comparing(item -> {
 					List<CombinationFlip> personalCombinationFlips = item.getPersonalCombinationFlips(startOfInterval);
 					List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
@@ -643,7 +679,7 @@ public class StatsPanel extends JPanel
 					return (float) profit / expense * 100;
 				}));
 				break;
-			case "Most Flips":
+			case FLIP_COUNT:
 				result.sort(Comparator.comparing(
 						item -> {
 							List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
@@ -754,52 +790,32 @@ public class StatsPanel extends JPanel
 		searchAndDownloadPanel.add(this.createDownloadButton(), BorderLayout.EAST);
 		searchAndDownloadPanel.setBorder(new EmptyBorder(5,0,0,0));
 
-		topPanel.add(searchAndDownloadPanel, BorderLayout.SOUTH);
-		topPanel.add(timeIntervalDropdown, BorderLayout.CENTER);
-		topPanel.add(this.createResetButton(), BorderLayout.EAST);
+		JPanel timeIntervalDropdownAndResetPanel = new JPanel(new BorderLayout());
+		timeIntervalDropdownAndResetPanel.add(timeIntervalDropdown, BorderLayout.CENTER);
+		timeIntervalDropdownAndResetPanel.add(createResetButton(), BorderLayout.EAST);
+
+		topPanel.add(timeIntervalDropdownAndResetPanel, BorderLayout.NORTH);
+		topPanel.add(searchAndDownloadPanel, BorderLayout.CENTER);
+		topPanel.add(createProfitAndSubInfoContainer(), BorderLayout.SOUTH);
 		topPanel.setBorder(new EmptyBorder(0,0,2,0));
+
 		return topPanel;
 	}
 
 	private void prepareLabels() {
 		Arrays.stream(textLabelArray).forEach(l -> l.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH));
 
-		//To ensure the item's name won't wrap the whole panel.
-//		taxPaidVal.setMaximumSize(new Dimension(145, 0));
-
 		sessionTimeVal.setText(TimeFormatters.formatDuration(plugin.viewAccumulatedTimeForCurrentView()));
 		sessionTimeVal.setPreferredSize(new Dimension(200, 0));
 		sessionTimeVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 
 		//Profit total over the selected time interval
-		totalProfitVal.setFont(BIG_PROFIT_FONT);
+		totalProfitVal.setFont(StyleContext.getDefaultStyleContext()
+			.getFont(FontManager.getRunescapeBoldFont().getName(), Font.PLAIN, 28));
 		totalProfitVal.setHorizontalAlignment(SwingConstants.CENTER);
 		totalProfitVal.setToolTipText("");
 
 		updateSubInfoFont();
-	}
-
-	private JComboBox createSortDropdown() {
-		JComboBox sortDropdown = new JComboBox<>(SORT_BY_STRINGS);
-		sortDropdown.setSelectedItem("Most Recent");
-		sortDropdown.setRenderer(new ComboBoxListRenderer());
-		sortDropdown.setEditable(true);
-		sortDropdown.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
-		sortDropdown.setPreferredSize(new Dimension(sortDropdown.getWidth(), 32));
-		sortDropdown.setFocusable(false);
-		sortDropdown.setBackground(CustomColors.DARK_GRAY_LIGHTER);
-
-		sortDropdown.addActionListener(event ->
-		{
-			selectedSort = (String) sortDropdown.getSelectedItem();
-
-			if (selectedSort == null)
-			{
-				return;
-			}
-			rebuild(plugin.viewTradesForCurrentView());
-		});
-		return sortDropdown;
 	}
 
 	private JPanel createTotalProfitPanel(JPanel subInfoPanel) {
@@ -936,31 +952,6 @@ public class StatsPanel extends JPanel
 		return sessionTimePanel;
 	}
 
-	private JPanel createSortAndScrollContainer() {
-		JPanel sortPanel = new JPanel(new BorderLayout());
-		sortPanel.setBorder(new EmptyBorder(0, 0, 0, 90));
-		sortPanel.add(sortDropdown, BorderLayout.CENTER);
-
-		statItemPanelsContainer.setLayout(new BoxLayout(statItemPanelsContainer, BoxLayout.Y_AXIS));
-
-		JPanel statItemPanelsContainerWrapper = new JPanel(new BorderLayout());
-		statItemPanelsContainerWrapper.setBorder(new EmptyBorder(0,0,0,3));
-		statItemPanelsContainerWrapper.add(statItemPanelsContainer, BorderLayout.NORTH);
-
-		JScrollPane scrollPane = new JScrollPane(statItemPanelsContainerWrapper);
-		scrollPane.setBackground(ColorScheme.DARK_GRAY_COLOR);
-		scrollPane.setBorder(new EmptyBorder(5, 0, 0, 0));
-		scrollPane.getVerticalScrollBar().setPreferredSize(new Dimension(2, 0));
-
-		//itemContainer holds the StatItems along with its sorting selector.
-		JPanel sortAndScrollContainer = new JPanel(new BorderLayout());
-		sortAndScrollContainer.setBorder(new EmptyBorder(15,0,5,0));
-		sortAndScrollContainer.add(sortPanel, BorderLayout.NORTH);
-		sortAndScrollContainer.add(scrollPane, BorderLayout.CENTER);
-
-		return sortAndScrollContainer;
-	}
-
 	private JPanel createProfitAndSubInfoContainer() {
 		subInfoPanel = this.createSubInfoPanel();
 		JPanel profitAndSubInfoContainer = new JPanel(new BorderLayout());
@@ -968,21 +959,5 @@ public class StatsPanel extends JPanel
 		profitAndSubInfoContainer.add(subInfoPanel, BorderLayout.SOUTH);
 		profitAndSubInfoContainer.setBorder(new EmptyBorder(5, 0, 5, 0));
 		return profitAndSubInfoContainer;
-	}
-
-	private Paginator createPaginator() {
-		paginator = new Paginator(() -> SwingUtilities.invokeLater(() -> {
-			//we only want to rebuildStatItemContainer and not updateDisplays bc the display
-			//is built based on every item on every page and so it shouldn't change if you
-			//switch pages.
-			Instant rebuildStart = Instant.now();
-			rebuildStatItemContainer(getResultsForCurrentSearchQuery(plugin.viewTradesForCurrentView()));
-			revalidate();
-			repaint();
-			log.debug("page change took {}", Duration.between(rebuildStart, Instant.now()).toMillis());
-		}));
-		paginator.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
-		paginator.setBorder(new EmptyBorder(0, 0, 0, 10));
-		return paginator;
 	}
 }

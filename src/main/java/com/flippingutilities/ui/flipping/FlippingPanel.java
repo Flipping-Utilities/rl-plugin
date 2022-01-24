@@ -47,6 +47,7 @@ import net.runelite.http.api.item.ItemStats;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.MatteBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -61,8 +62,6 @@ public class FlippingPanel extends JPanel
 {
 	public enum SORT {
 		FAVORITE,
-		ROI,
-		PROFIT,
 		TIME
 	}
 
@@ -145,6 +144,8 @@ public class FlippingPanel extends JPanel
 		topPanel.add(this.createFavoriteButton(), BorderLayout.EAST);
 
 		paginator = new Paginator(() -> rebuild(plugin.viewTradesForCurrentView()));
+		paginator.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		paginator.setBorder(new MatteBorder(1,0,0,2, ColorScheme.DARK_GRAY_COLOR.darker()));
 		paginator.setPageSize(10);
 
 		//To switch between greeting and items panels
@@ -248,59 +249,6 @@ public class FlippingPanel extends JPanel
 				}
 				result = result.stream().filter(item -> item.isFavorite()).collect(Collectors.toList());
 				sortByTime(result); //when it is on favorites you also want it to be sorted by time
-				break;
-			case PROFIT:
-				result.sort((item1, item2) ->
-				{
-					if (item1 == null || item2 == null)
-					{
-						return -1;
-					}
-					if ((item1.getLatestInstaBuy().isPresent() && item1.getLatestInstaSell().isPresent()) && (!item2.getLatestInstaSell().isPresent() || !item2.getLatestInstaBuy().isPresent()))
-					{
-						return -1;
-					}
-
-					if ((item2.getLatestInstaBuy().isPresent() && item2.getLatestInstaSell().isPresent()) && (!item1.getLatestInstaSell().isPresent() || !item1.getLatestInstaBuy().isPresent()))
-					{
-						return 1;
-					}
-
-					if ((!item2.getLatestInstaBuy().isPresent() || !item2.getLatestInstaSell().isPresent()) && (!item1.getLatestInstaSell().isPresent() || !item1.getLatestInstaBuy().isPresent()))
-					{
-						return 0;
-					}
-
-					boolean shouldIncludeMarginCheck = plugin.getConfig().marginCheckLoss();
-					boolean shouldUseRemainingGeLimit = plugin.getConfig().geLimitProfit();
-					return item2.getPotentialProfit(shouldIncludeMarginCheck, shouldUseRemainingGeLimit).orElse(0) - item1.getPotentialProfit(shouldIncludeMarginCheck, shouldUseRemainingGeLimit).orElse(0);
-				});
-				break;
-			case ROI:
-				result.sort((item1, item2) -> {
-					if ((item1.getLatestInstaBuy().isPresent() && item1.getLatestInstaSell().isPresent()) && (!item2.getLatestInstaSell().isPresent() || !item2.getLatestInstaBuy().isPresent()))
-					{
-						return -1;
-					}
-
-					if ((item2.getLatestInstaBuy().isPresent() && item2.getLatestInstaSell().isPresent()) && (!item1.getLatestInstaSell().isPresent() || !item1.getLatestInstaBuy().isPresent()))
-					{
-						return 1;
-					}
-
-					if ((!item2.getLatestInstaBuy().isPresent() || !item2.getLatestInstaSell().isPresent()) && (!item1.getLatestInstaSell().isPresent() || !item1.getLatestInstaBuy().isPresent()))
-					{
-						return 0;
-					}
-
-					int item1ProfitEach = item1.getLatestInstaSell().get().getPrice() - item1.getLatestInstaBuy().get().getPrice();
-					int item2ProfitEach = item2.getLatestInstaSell().get().getPrice() - item2.getLatestInstaBuy().get().getPrice();
-
-					float item1roi = (float) item1ProfitEach / item1.getLatestInstaBuy().get().getPrice() * 100;
-					float item2roi = (float) item2ProfitEach / item2.getLatestInstaBuy().get().getPrice() * 100;
-
-					return Float.compare(item1roi, item2roi);
-				});
 				break;
 		}
 		return result;
