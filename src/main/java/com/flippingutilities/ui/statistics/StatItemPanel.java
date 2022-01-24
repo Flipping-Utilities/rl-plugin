@@ -95,11 +95,10 @@ public class StatItemPanel extends JPanel
 	 * along with being the container for the trade history of that item.
 	 *
 	 * @param plugin       Used to access the plugin user config.
-	 * @param itemManager  Used to get the icon of the item.
 	 * @param flippingItem The item that the panel represents.
 	 */
 
-	StatItemPanel(FlippingPlugin plugin, ItemManager itemManager, FlippingItem flippingItem)
+	StatItemPanel(FlippingPlugin plugin, FlippingItem flippingItem)
 	{
 		setLayout(new BorderLayout());
 		setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
@@ -137,7 +136,7 @@ public class StatItemPanel extends JPanel
 		JPanel subInfoPanel = createSubInfoPanel(descriptionLabels, valueLabels);
 		JPanel tradeHistoryPanel = createTradeHistoryPanel(offersBackgroundPanel, flipsBackgroundPanel, combinationFlipsBackgroundPanel);
 		JPanel subInfoAndHistoryContainer = createSubInfoAndHistoryContainer(subInfoPanel, tradeHistoryPanel);
-        JPanel titlePanel = createTitlePanel(createIconPanel(itemManager), createNameAndProfitPanel(), createCollapseIcon(), subInfoAndHistoryContainer);
+        JPanel titlePanel = createTitlePanel(createIconPanel(plugin.getItemManager()), createNameAndProfitPanel(), createCollapseIcon(), subInfoAndHistoryContainer);
 
         updateLabels(offers, adjustedOffers, personalCombinationFlips);
 

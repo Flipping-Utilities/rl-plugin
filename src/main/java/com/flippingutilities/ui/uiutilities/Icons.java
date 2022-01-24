@@ -118,6 +118,10 @@ public class Icons {
     public static final ImageIcon RIGHT_ARROW_LARGE;
     public static final ImageIcon LEFT_ARROW_LARGE;
 
+    public static final ImageIcon SORT;
+    public static final ImageIcon SORT_HOVER;
+
+
     static
     {
         final BufferedImage openIcon = ImageUtil
@@ -295,5 +299,11 @@ public class Icons {
 
         final BufferedImage leftArrowLarge = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/left-arrow-large.png");
         LEFT_ARROW_LARGE = new ImageIcon(leftArrowLarge);
+
+        final BufferedImage sort = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/sort.png");
+        SORT = new ImageIcon(ImageUtil.alphaOffset(sort, 0.53f));
+
+        final BufferedImage sortHover = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/sort.png");
+        SORT_HOVER = new ImageIcon(sort);
     }
 }
