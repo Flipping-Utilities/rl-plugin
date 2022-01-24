@@ -335,7 +335,7 @@ public class StatsPanel extends JPanel
 
 			List<CombinationFlip> combinationFlips = item.getPersonalCombinationFlips(startOfInterval);
 
-			taxPaid += adjustedOffers.stream().mapToInt(OfferEvent::getTaxPaid).sum() + combinationFlips.stream().mapToLong(CombinationFlip::getTaxPaid).sum();;
+			taxPaid += adjustedOffers.stream().mapToLong(OfferEvent::getTaxPaid).sum() + combinationFlips.stream().mapToLong(CombinationFlip::getTaxPaid).sum();;
 			totalProfit += item.getProfit(adjustedOffers) + combinationFlips.stream().mapToLong(CombinationFlip::getProfit).sum();
 			totalExpenses += item.getValueOfMatchedOffers(adjustedOffers, true) + combinationFlips.stream().mapToLong(CombinationFlip::getExpense).sum();
 			totalFlips += item.getFlips(adjustedOffers).size() + combinationFlips.size();
@@ -592,7 +592,7 @@ public class StatsPanel extends JPanel
 					List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
 					long quantity =
 							item.countFlipQuantity(adjustedOffers) +
-							personalCombinationFlips.stream().mapToInt(cf -> cf.getParent().amountConsumed).sum();
+							personalCombinationFlips.stream().mapToLong(cf -> cf.getParent().amountConsumed).sum();
 					if (quantity == 0) {
 						return Long.MIN_VALUE;
 					}
