@@ -172,8 +172,8 @@ public class CombinationFlipPanel extends JPanel {
 
     private JPanel createPartialOfferPanel(List<PartialOffer> partialOffers) {
         String itemName = partialOffers.get(0).offer.getItemName();
-        int quantity = partialOffers.stream().mapToInt(po -> po.amountConsumed).sum();
-        int itemPrice = partialOffers.stream().mapToInt(po -> po.offer.getPrice() * po.amountConsumed).sum()/quantity;
+        long quantity = partialOffers.stream().mapToLong(po -> po.amountConsumed).sum();
+        int itemPrice = (int) (partialOffers.stream().mapToLong(po -> po.offer.getPrice() * po.amountConsumed).sum()/quantity);
 
         JLabel itemNameLabel = new JLabel(itemName, SwingConstants.CENTER);
         itemNameLabel.setFont(FontManager.getRunescapeSmallFont());

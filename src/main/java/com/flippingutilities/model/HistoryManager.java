@@ -230,7 +230,7 @@ public class HistoryManager
 	{
 		return tradeList.stream().
 				filter(o -> o.isBuy() == isBuy).
-				mapToInt(o -> o.getCurrentQuantityInTrade() * o.getPrice()).sum();
+				mapToLong(o -> o.getCurrentQuantityInTrade() * o.getPrice()).sum();
 	}
 
 	/**
