@@ -500,6 +500,7 @@ public class StatItemPanel extends JPanel
 				totalItemsSold += offer.getCurrentQuantityInTrade();
 			}
 		}
+
 		int itemCountFlipped = flippingItem.countFlipQuantity(adjustedOffers);
 		long revenueFromFlippedItems = flippingItem.getValueOfMatchedOffers(adjustedOffers, false);
 		long expenseFromFlippedItems = flippingItem.getValueOfMatchedOffers(adjustedOffers, true);
