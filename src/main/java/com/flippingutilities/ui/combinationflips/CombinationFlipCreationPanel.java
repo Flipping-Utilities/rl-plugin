@@ -48,8 +48,9 @@ public class CombinationFlipCreationPanel extends JPanel {
         this.parentOffer = parentOffer;
         this.parentItem = item;
 
-        Map<Integer, Optional<FlippingItem>> childItemsInCombination = plugin.getRecipeChildItems(parentOffer.getItemId(), parentOffer.isBuy());
         recipe = plugin.getApplicableRecipe(parentOffer.getItemId(), parentOffer.isBuy()).get();
+        Map<Integer, Optional<FlippingItem>> childItemsInCombination = plugin.getItemsInRecipe(recipe);
+
         selectedOffers = initSelectedOffers(childItemsInCombination);
         idToHeader = createItemIcons(selectedOffers);
 
@@ -314,7 +315,7 @@ public class CombinationFlipCreationPanel extends JPanel {
      */
     private void addOfferPanelRow(JPanel bodyPanel,
                                   Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
-        Map<Integer, Integer> targetValues = recipe.getTargetValuesForMaxRecipeCount(itemIdToPartialOffers);
+        Map<Integer, Integer> targetValues = plugin.getTargetValuesForMaxRecipeCount(recipe, itemIdToPartialOffers);
 
         idToHeader.keySet().forEach(id -> {
             int targetValue = targetValues.get(id);
@@ -375,7 +376,11 @@ public class CombinationFlipCreationPanel extends JPanel {
     private void handleItemsHittingTargetConsumptionValues() {
         int parentOfferConsumedAmount = selectedOffers.get(parentOffer.getItemId()).get(parentOffer.getUuid()).amountConsumed;
         //if the parent quantity in the recipe is not 1, gonna have to do the modding and stuff
-        Map<Integer, Integer> idToTargetValues = recipe.getTargetValues(parentOfferConsumedAmount);
+        Map<Integer, List<PartialOffer>> idToPartialOffers = selectedOffers.entrySet().stream().
+            map(e -> Map.entry(e.getKey(), new ArrayList<>(e.getValue().values()))).
+            collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        Map<Integer, Integer> idToTargetValues = plugin.getItemIdToMaxRecipesThatCanBeMade(recipe, idToPartialOffers);
 
         AtomicBoolean allMatchTargetValues = new AtomicBoolean(true);
         selectedOffers.forEach((itemId, partialOfferMap) -> {
@@ -421,7 +426,7 @@ public class CombinationFlipCreationPanel extends JPanel {
         bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS));
         bottomPanel.setBackground(Color.BLACK);
 
-        int itemsThatCanMakeZeroRecipes = (int) recipe.getItemIdToMaxRecipesThatCanBeMade(itemIdToPartialOffers).entrySet().stream().
+        int itemsThatCanMakeZeroRecipes = (int) plugin.getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers).entrySet().stream().
                 filter(e -> e.getValue() == 0).count();
 
         if (itemsThatCanMakeZeroRecipes > 0) {

@@ -168,7 +168,7 @@ public class OfferPanel extends JPanel {
         JPanel iconPanel = new JPanel(new BorderLayout());
         iconPanel.setBackground(CustomColors.DARK_GRAY);
         boolean hasRecipe = plugin.getApplicableRecipe(offer.getItemId(), offer.isBuy()).isPresent();
-        if (plugin.isRecipeParent(offer.getItemId()) && hasRecipe && offer.isComplete()) {
+        if (hasRecipe && offer.isComplete()) {
             JLabel deleteIcon = createDeleteIcon();
             deleteIcon.setBorder(new EmptyBorder(0,5,0,0));
             iconPanel.add(createCombinationFlipIcon(), BorderLayout.EAST);

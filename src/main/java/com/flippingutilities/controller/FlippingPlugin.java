@@ -914,24 +914,26 @@ public class FlippingPlugin extends Plugin {
                         })), 1000, 1000, TimeUnit.MILLISECONDS);
     }
 
-    //see RecipeHandler.getRecipeChildItems
-    public Map<Integer, Optional<FlippingItem>> getRecipeChildItems(int parentId, boolean isBuy) {
-        return recipeHandler.getRecipeChildItems(parentId, isBuy, getTradesForCurrentView());
+    //see RecipeHandler.getItemsInRecipe
+    public Map<Integer, Optional<FlippingItem>> getItemsInRecipe(Recipe recipe) {
+        return recipeHandler.getItemsInRecipe(recipe, getTradesForCurrentView());
     }
-
     //see RecipeHandler.isInRecipe
     public boolean isInRecipe(int itemId) {
         return recipeHandler.isInRecipe(itemId);
     }
 
-    //see RecipeHandler.isRecipeParent
-    public boolean isRecipeParent(int itemId) {
-        return recipeHandler.isRecipeParent(itemId);
-    }
-
     //see RecipeHandler.getApplicableRecipe
     public Optional<Recipe> getApplicableRecipe(int parentId, boolean isBuy) {
         return recipeHandler.getApplicableRecipe(parentId, isBuy);
+    }
+    //see RecipeHandler.getTargetValuesForMaxRecipeCount
+    public Map<Integer, Integer> getTargetValuesForMaxRecipeCount(Recipe recipe, Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
+        return recipeHandler.getTargetValuesForMaxRecipeCount(recipe, itemIdToPartialOffers);
+    }
+    //see RecipeHandler.getItemIdToMaxRecipesThatCanBeMade
+    public Map<Integer, Integer> getItemIdToMaxRecipesThatCanBeMade(Recipe recipe, Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
+        return recipeHandler.getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers);
     }
 
     @Subscribe
