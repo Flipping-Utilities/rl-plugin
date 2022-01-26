@@ -1,7 +1,7 @@
-package com.flippingutilities.ui.combinationflips;
+package com.flippingutilities.ui.recipeflips;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.model.CombinationFlip;
+import com.flippingutilities.model.RecipeFlip;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.statistics.OfferPanel;
@@ -28,53 +28,49 @@ import java.util.stream.Collectors;
 /**
  * The panel the user interacts with when creating a combination flip
  */
-public class CombinationFlipCreationPanel extends JPanel {
+public class RecipeFlipCreationPanel extends JPanel {
     FlippingPlugin plugin;
-    //the offer the user clicked on to bring up this panel. This will be the "parent" offer such
-    //as the set that was sold after buying the individual pieces and constructing the set and selling it.
-    OfferEvent parentOffer;
-    FlippingItem parentItem;
+    //the offer the user clicked on to bring up this panel.
+    OfferEvent sourceOffer;
     //used to track which offers a user has selected to be in the combination flip and how much of the
     //offer is contributed.
     //This is a map of item id to a map of offer id to selected offer.
-    LinkedHashMap<Integer, Map<String, PartialOffer>> selectedOffers;
+    Map<Integer, Map<String, PartialOffer>> selectedOffers;
     JButton finishButton = new JButton("Combine!");
     JLabel profitNumberLabel = new JLabel("+0");
     Recipe recipe;
-    LinkedHashMap<Integer, CombinationItemHeaderPanel> idToHeader;
+    Map<Integer, RecipeItemHeaderPanel> idToHeader;
 
-    public CombinationFlipCreationPanel(FlippingPlugin plugin, FlippingItem item, OfferEvent parentOffer) {
+    public RecipeFlipCreationPanel(FlippingPlugin plugin, OfferEvent sourceOffer) {
         this.plugin = plugin;
-        this.parentOffer = parentOffer;
-        this.parentItem = item;
+        this.sourceOffer = sourceOffer;
 
-        recipe = plugin.getApplicableRecipe(parentOffer.getItemId(), parentOffer.isBuy()).get();
-        Map<Integer, Optional<FlippingItem>> childItemsInCombination = plugin.getItemsInRecipe(recipe);
+        recipe = plugin.getApplicableRecipe(sourceOffer.getItemId(), sourceOffer.isBuy()).get();
+        Map<Integer, Optional<FlippingItem>> itemsInRecipe = plugin.getItemsInRecipe(recipe);
 
-        selectedOffers = initSelectedOffers(childItemsInCombination);
-        idToHeader = createItemIcons(selectedOffers);
+        selectedOffers = initSelectedOffers(itemsInRecipe);
+        idToHeader = createRecipeItemHeaderPanel(selectedOffers);
 
         setBackground(Color.BLACK);
         setLayout(new BorderLayout());
 
         Map<Integer, List<PartialOffer>> itemIdToPartialOffers = createItemIdToPartialOffers(
-                childItemsInCombination,
+                itemsInRecipe,
                 plugin.getStatPanel().getStartOfInterval());
         add(createTitle(), BorderLayout.NORTH);
         add(createBody(itemIdToPartialOffers), BorderLayout.CENTER);
-        add(createBottomPanel(childItemsInCombination, itemIdToPartialOffers), BorderLayout.SOUTH);
+        add(createBottomPanel(itemsInRecipe, itemIdToPartialOffers), BorderLayout.SOUTH);
 
         setBorder(new EmptyBorder(8, 8, 8, 8));
 
     }
 
-    private LinkedHashMap<Integer, Map<String, PartialOffer>> initSelectedOffers(Map<Integer, Optional<FlippingItem>> childItemsInCombination) {
-        selectedOffers = new LinkedHashMap<>();
-        //putting the parent offer in the selected offers map from the beginning as it will always be "selected"
-        //by virtue of it being what caused the combination flip
-        selectedOffers.put(parentOffer.getItemId(), Map.of(parentOffer.getUuid(), new PartialOffer(parentOffer, parentOffer.getCurrentQuantityInTrade())));
+    private Map<Integer, Map<String, PartialOffer>> initSelectedOffers(Map<Integer, Optional<FlippingItem>> itemsInRecipe) {
+        selectedOffers = new HashMap<>();
         //initializing the selected offers map with empty hashmaps for the constituent parts of the combination flip
-        childItemsInCombination.keySet().forEach(id -> selectedOffers.put(id, new HashMap<>()));
+        itemsInRecipe.keySet().forEach(id -> {
+            selectedOffers.put(id, new HashMap<>());
+        });
         return selectedOffers;
     }
 
@@ -105,7 +101,7 @@ public class CombinationFlipCreationPanel extends JPanel {
      */
     private JComponent createOffersPanel(
             List<PartialOffer> partialOffers,
-            CombinationItemHeaderPanel headerPanel,
+            RecipeItemHeaderPanel headerPanel,
             int targetSelectionValue) {
         JPanel offersPanel = new JPanel();
         offersPanel.setBackground(Color.BLACK);
@@ -114,7 +110,7 @@ public class CombinationFlipCreationPanel extends JPanel {
             return createOffersScrollPane(partialOffers, headerPanel, targetSelectionValue, offersPanel);
         }
 
-        String type = parentOffer.isBuy() ? "sell" : "buy";
+        String type = sourceOffer.isBuy() ? "sell" : "buy";
         JLabel noTradesLabel = new JLabel(String.format("No recorded %s for this item", type));
         noTradesLabel.setForeground(Color.RED);
         offersPanel.add(noTradesLabel);
@@ -131,7 +127,7 @@ public class CombinationFlipCreationPanel extends JPanel {
      */
     private JScrollPane createOffersScrollPane(
         List<PartialOffer> partialOffers,
-        CombinationItemHeaderPanel headerPanel,
+        RecipeItemHeaderPanel headerPanel,
         int targetSelectionValue,
         JPanel offersPanel
     ) {
@@ -186,7 +182,7 @@ public class CombinationFlipCreationPanel extends JPanel {
      */
     private JPanel createOfferPanelWithPicker(
             OfferPanel offerPanel,
-            CombinationItemHeaderPanel headerPanel,
+            RecipeItemHeaderPanel headerPanel,
             PartialOffer partialOffer,
             int amountToSelect) {
         JPanel offerPanelWithPicker = new JPanel(new BorderLayout());
@@ -229,16 +225,15 @@ public class CombinationFlipCreationPanel extends JPanel {
     /**
      * Creates all the item icons and text for the first row in the dynamic grid layout
      *
-     * @return a mapping of item id to a label which contains the item icon and multiplier text.
-     * We use a linked hashmap so we can preserve insertion order when reading, thus ensuring
-     * the first element retrieved from the map is always the parent offer.
+     * @return a mapping of item id to a label which contains the item icon and consumed amount text, and
+     * target consumption text.
      */
-    private LinkedHashMap<Integer, CombinationItemHeaderPanel> createItemIcons(LinkedHashMap<Integer, Map<String, PartialOffer>> selectedOffers) {
+    private Map<Integer, RecipeItemHeaderPanel> createRecipeItemHeaderPanel(Map<Integer, Map<String, PartialOffer>> selectedOffers) {
         Set<Integer> allIds = selectedOffers.keySet();
-        LinkedHashMap<Integer, CombinationItemHeaderPanel> idToIconLabel = new LinkedHashMap<>();
+        Map<Integer, RecipeItemHeaderPanel> idToIconLabel = new HashMap<>();
         allIds.forEach(id -> {
             AsyncBufferedImage itemImage = plugin.getItemManager().getImage(id);
-            idToIconLabel.put(id, new CombinationItemHeaderPanel(itemImage));
+            idToIconLabel.put(id, new RecipeItemHeaderPanel(itemImage));
         });
 
         return idToIconLabel;
@@ -253,37 +248,37 @@ public class CombinationFlipCreationPanel extends JPanel {
         idToHeader.keySet().forEach(itemId -> {
             JPanel headerPanel = idToHeader.get(itemId);
             bodyPanel.add(headerPanel);
-            if (itemId == parentOffer.getItemId()) {
+            if (itemId == sourceOffer.getItemId()) {
                 //adding the arrow in the next column
-                ImageIcon arrowIcon = parentOffer.isBuy() ? Icons.RIGHT_ARROW_LARGE : Icons.LEFT_ARROW_LARGE;
+                ImageIcon arrowIcon = sourceOffer.isBuy() ? Icons.RIGHT_ARROW_LARGE : Icons.LEFT_ARROW_LARGE;
                 bodyPanel.add(new JLabel(arrowIcon));
             }
         });
     }
 
     /**
-     * @param childItemsInCombination the child items in the combination
+     * @param itemIdToItem all the items in the recipe
      * @return a map of ALL the items in the combination and the partial offers that should be rendered. We don't
      * simply return OfferEvents because we want to know if any of the OfferEvents have some of their quantity
      * already consumed by other combination flips for these items. If that is the case, we want to render them as
      * such.
      */
     private Map<Integer, List<PartialOffer>> createItemIdToPartialOffers(
-            Map<Integer, Optional<FlippingItem>> childItemsInCombination,
+            Map<Integer, Optional<FlippingItem>> itemIdToItem,
             Instant startOfInterval
     ) {
         Map<Integer, List<PartialOffer>> itemIdToPartialOffers = new HashMap<>();
 
-        Map<String, PartialOffer> parentItemPartialOffers = parentItem.getOfferIdToPartialOfferInComboFlips();
-        if (parentItemPartialOffers.containsKey(parentOffer.getUuid())) {
-            PartialOffer parentPartialOffer = parentItemPartialOffers.get(parentOffer.getUuid());
-            itemIdToPartialOffers.put(parentOffer.getItemId(), List.of(parentPartialOffer));
+        Map<String, PartialOffer> parentItemPartialOffers = sourceItem.getOfferIdToPartialOfferInComboFlips();
+        if (parentItemPartialOffers.containsKey(sourceOffer.getUuid())) {
+            PartialOffer parentPartialOffer = parentItemPartialOffers.get(sourceOffer.getUuid());
+            itemIdToPartialOffers.put(sourceOffer.getItemId(), List.of(parentPartialOffer));
         }
         else {
-            itemIdToPartialOffers.put(parentOffer.getItemId(), List.of(new PartialOffer(parentOffer, 0)));
+            itemIdToPartialOffers.put(sourceOffer.getItemId(), List.of(new PartialOffer(sourceOffer, 0)));
         }
 
-        childItemsInCombination.forEach((itemId, item) -> {
+        itemIdToItem.forEach((itemId, item) -> {
             List<PartialOffer> offers = item.map(fitem -> {
                 Map<String, PartialOffer> itemPartialOffers = fitem.getOfferIdToPartialOfferInComboFlips();
                 List<OfferEvent> history = fitem.getIntervalHistory(startOfInterval);
@@ -291,7 +286,7 @@ public class CombinationFlipCreationPanel extends JPanel {
                 //if the parent offer is a sell, it means the user created it from its constituent parts and
                 //so we should only look for buys of the constituent parts. Hence, if there are no offers passed in to this
                 //method, it means there were no buys.
-                return history.stream().filter(o -> o.isBuy() != parentOffer.isBuy() && o.isComplete()).
+                return history.stream().filter(o -> o.isBuy() != sourceOffer.isBuy() && o.isComplete()).
                         map(o -> {
                             if (itemPartialOffers.containsKey(o.getUuid())) {
                                 return itemPartialOffers.get(o.getUuid());
@@ -320,10 +315,10 @@ public class CombinationFlipCreationPanel extends JPanel {
         idToHeader.keySet().forEach(id -> {
             int targetValue = targetValues.get(id);
             List<PartialOffer> partialOffers = itemIdToPartialOffers.get(id);
-            CombinationItemHeaderPanel combinationItemHeaderPanel = idToHeader.get(id);
+            RecipeItemHeaderPanel combinationItemHeaderPanel = idToHeader.get(id);
             combinationItemHeaderPanel.setTargetValueDisplay(targetValue);
             bodyPanel.add(createOffersPanel(partialOffers, combinationItemHeaderPanel, targetValue));
-            if (id == parentOffer.getItemId()) {
+            if (id == sourceOffer.getItemId()) {
                 //empty panel occupies the space under the arrow
                 JPanel emptyPanel = new JPanel();
                 emptyPanel.setBackground(Color.BLACK);
@@ -338,7 +333,7 @@ public class CombinationFlipCreationPanel extends JPanel {
      * Handles the what happens when the number picker's value changes.
      */
     private void numberPickerHandler(ChangeEvent e, OfferEvent offer, OfferPanel offerPanel,
-                                     CombinationItemHeaderPanel headerPanel) {
+                                     RecipeItemHeaderPanel headerPanel) {
         JSpinner numberPicker = (JSpinner) e.getSource();
         int numberPickerValue = (int) numberPicker.getValue();
 
@@ -351,7 +346,7 @@ public class CombinationFlipCreationPanel extends JPanel {
      * This is used in the number picker handler method too.
      */
     private void setDisplaysAndStateBasedOnSelection(int numberPickerValue, OfferEvent offer, OfferPanel offerPanel,
-                                                     CombinationItemHeaderPanel headerPanel) {
+                                                     RecipeItemHeaderPanel headerPanel) {
         int itemId = offer.getItemId();
 
         offerPanel.setSelected(numberPickerValue > 0);
@@ -374,7 +369,7 @@ public class CombinationFlipCreationPanel extends JPanel {
      * target value display.
      */
     private void handleItemsHittingTargetConsumptionValues() {
-        int parentOfferConsumedAmount = selectedOffers.get(parentOffer.getItemId()).get(parentOffer.getUuid()).amountConsumed;
+        int parentOfferConsumedAmount = selectedOffers.get(sourceOffer.getItemId()).get(sourceOffer.getUuid()).amountConsumed;
         //if the parent quantity in the recipe is not 1, gonna have to do the modding and stuff
         Map<Integer, List<PartialOffer>> idToPartialOffers = selectedOffers.entrySet().stream().
             map(e -> Map.entry(e.getKey(), new ArrayList<>(e.getValue().values()))).
@@ -384,7 +379,7 @@ public class CombinationFlipCreationPanel extends JPanel {
 
         AtomicBoolean allMatchTargetValues = new AtomicBoolean(true);
         selectedOffers.forEach((itemId, partialOfferMap) -> {
-            CombinationItemHeaderPanel itemHeaderPanel = idToHeader.get(itemId);
+            RecipeItemHeaderPanel itemHeaderPanel = idToHeader.get(itemId);
             int amountConsumed = partialOfferMap.values().stream().mapToInt(o -> o.amountConsumed).sum();
             int targetConsumedAmount = idToTargetValues.get(itemId);
 
@@ -448,8 +443,7 @@ public class CombinationFlipCreationPanel extends JPanel {
         finishButton.setFont(new Font("Whitney", Font.PLAIN, 16));
         finishButton.setFocusPainted(false);
         finishButton.addActionListener(e -> {
-            CombinationFlip combinationFlip = new CombinationFlip(parentOffer.getItemId(), parentOffer.getUuid(), selectedOffers);
-            parentItem.addPersonalCombinationFlip(combinationFlip);
+            RecipeFlip combinationFlip = new RecipeFlip(recipe, selectedOffers);
             childItemsInCombination.values().forEach(item -> item.get().addParentCombinationFlip(combinationFlip));
             plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
             bottomPanel.removeAll();
@@ -492,9 +486,9 @@ public class CombinationFlipCreationPanel extends JPanel {
         titlePanel.setBorder(new EmptyBorder(5, 0, 25, 0));
         titlePanel.setBackground(Color.BLACK);
 
-        String action = parentOffer.isBuy() ? "Breaking" : "Constructing";
+        String action = sourceOffer.isBuy() ? "Breaking" : "Constructing";
         JLabel title = new JLabel(action, JLabel.CENTER);
-        ImageIcon itemIcon = new ImageIcon(plugin.getItemManager().getImage(parentOffer.getItemId()));
+        ImageIcon itemIcon = new ImageIcon(plugin.getItemManager().getImage(sourceOffer.getItemId()));
         title.setBorder(new EmptyBorder(0, 0, 20, 0));
         title.setFont(new Font("Whitney", Font.PLAIN, 20));
         title.setIcon(itemIcon);
@@ -529,11 +523,11 @@ public class CombinationFlipCreationPanel extends JPanel {
     }
 
     private long calculateProfit() {
-        PartialOffer parentPartialOffer = selectedOffers.get(parentOffer.getItemId()).get(parentOffer.getUuid());
+        PartialOffer parentPartialOffer = selectedOffers.get(sourceOffer.getItemId()).get(sourceOffer.getUuid());
         Map<Integer, Map<String, PartialOffer>> children = selectedOffers.entrySet().stream().
-                filter(e -> e.getKey() != parentOffer.getItemId()).
+                filter(e -> e.getKey() != sourceOffer.getItemId()).
                 collect(
                         Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        return CombinationFlip.calculateProfit(parentPartialOffer, children);
+        return RecipeFlip.calculateProfit(selectedOffers);
     }
 }

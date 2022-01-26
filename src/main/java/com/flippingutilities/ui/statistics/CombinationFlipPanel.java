@@ -1,7 +1,7 @@
 package com.flippingutilities.ui.statistics;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.model.CombinationFlip;
+import com.flippingutilities.model.RecipeFlip;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.PartialOffer;
@@ -30,11 +30,11 @@ import java.util.stream.Collectors;
  */
 public class CombinationFlipPanel extends JPanel {
     private JLabel timeDisplay;
-    private CombinationFlip combinationFlip;
+    private RecipeFlip combinationFlip;
     private FlippingPlugin plugin;
     private FlippingItem item;
 
-    public CombinationFlipPanel(CombinationFlip combinationFlip, FlippingPlugin plugin, FlippingItem item) {
+    public CombinationFlipPanel(RecipeFlip combinationFlip, FlippingPlugin plugin, FlippingItem item) {
         this.combinationFlip = combinationFlip;
         this.plugin = plugin;
         this.item = item;
@@ -76,7 +76,7 @@ public class CombinationFlipPanel extends JPanel {
         return titlePanel;
     }
 
-    private JLabel createTimeDisplay(CombinationFlip combinationFlip) {
+    private JLabel createTimeDisplay(RecipeFlip combinationFlip) {
         OfferEvent offer = combinationFlip.getParent().offer;
         JLabel timeDisplay = new JLabel(
                 "(" + TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago)",

@@ -35,7 +35,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * This class is the representation of an item that a user is flipping. It contains information about the
@@ -267,11 +266,11 @@ public class FlippingItem
 		return history.getPartialOfferAdjustedView(tradeList);
 	}
 
-	public List<CombinationFlip> getCombinationFlips(Instant earliestTime) {
+	public List<RecipeFlip> getCombinationFlips(Instant earliestTime) {
 		return history.getCombinationFlips(earliestTime);
 	}
 
-	public List<CombinationFlip> getPersonalCombinationFlips(Instant earliestTime) {
+	public List<RecipeFlip> getPersonalCombinationFlips(Instant earliestTime) {
 		return history.getPersonalCombinationFlips(earliestTime);
 	}
 
@@ -388,15 +387,15 @@ public class FlippingItem
 		history.setCombinationFlipOfferNames(idToItemName);
 	}
 
-	public void addPersonalCombinationFlip(CombinationFlip combinationFlip) {
+	public void addPersonalCombinationFlip(RecipeFlip combinationFlip) {
 		history.addPersonalCombinationFlip(combinationFlip);
 	}
 
-	public void addParentCombinationFlip(CombinationFlip combinationFlip) {
+	public void addParentCombinationFlip(RecipeFlip combinationFlip) {
 		history.addParentCombinationFlip(combinationFlip);
 	}
 
-	public void deleteCombinationFlip(CombinationFlip combinationFlip, List<FlippingItem> items) {
+	public void deleteCombinationFlip(RecipeFlip combinationFlip, List<FlippingItem> items) {
 		history.deleteCombinationFlips(List.of(combinationFlip), items);
 	}
 

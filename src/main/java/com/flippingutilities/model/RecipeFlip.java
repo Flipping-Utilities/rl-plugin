@@ -1,5 +1,6 @@
 package com.flippingutilities.model;
 
+import com.flippingutilities.utilities.Recipe;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -18,36 +19,23 @@ import java.util.stream.Collectors;
  */
 @Data
 @AllArgsConstructor
-public class CombinationFlip {
-    PartialOffer parent;
+public class RecipeFlip {
+    Map<Integer, Map<String, PartialOffer>> outputs;
     //item id to a map of offer id to offer
-    Map<Integer, Map<String, PartialOffer>> children;
+    Map<Integer, Map<String, PartialOffer>> inputs;
 
-    public CombinationFlip(int parentItemId, String parentOfferId, Map<Integer, Map<String, PartialOffer>> allPartialOffers) {
-        this.parent = allPartialOffers.get(parentItemId).get(parentOfferId);
-        this.children = allPartialOffers.entrySet().stream().
-                filter(e -> e.getKey() != parentItemId).
-                collect(
-                        Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    public RecipeFlip(Recipe recipe, Map<Integer, Map<String, PartialOffer>> allPartialOffers) {
+        Set<Integer> recipeInputIds = recipe.getInputIds();
+        Set<Integer> recipeOutputIds = recipe.getOutputIds();
 
-    }
-
-    public CombinationFlip clone() {
-        return new CombinationFlip(
-                parent.clone(),
-                children.entrySet().stream()
-                        .map(e -> Map.entry(
-                                e.getKey(),
-                                e.getValue().entrySet().stream().map(
-                                        entry -> Map.entry(entry.getKey(),
-                                                entry.getValue().clone())).
-                                        collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))))
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
-        );
+        this.inputs = allPartialOffers.entrySet().stream().filter(e -> recipeInputIds.contains(e.getKey()))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        this.outputs = allPartialOffers.entrySet().stream().filter(e -> recipeOutputIds.contains(e.getKey()))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     public long getProfit() {
-        return CombinationFlip.calculateProfit(parent, children);
+        return RecipeFlip.calculateProfit(parent, children);
     }
 
     private long getExpenseOrRevenue(boolean getRevenue) {
@@ -75,7 +63,7 @@ public class CombinationFlip {
         return getOffers().stream().mapToLong(po -> po.getOffer().getTaxPaid()).sum();
     }
 
-    public static long calculateProfit(PartialOffer parent, Map<Integer, Map<String, PartialOffer>> children) {
+    public static long calculateProfit(Map<Integer, Map<String, PartialOffer>> allPartialOffers) {
         long totalValueOfChildren = children.values().stream().
                 flatMap(m -> m.values().stream()).
                 mapToLong(po -> po.offer.getPrice() * po.amountConsumed).

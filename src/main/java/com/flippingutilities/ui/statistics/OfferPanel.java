@@ -4,7 +4,7 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.MasterPanel;
-import com.flippingutilities.ui.combinationflips.CombinationFlipCreationPanel;
+import com.flippingutilities.ui.recipeflips.RecipeFlipCreationPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
@@ -203,7 +203,7 @@ public class OfferPanel extends JPanel {
                     return;
                 }
                 MasterPanel m = plugin.getMasterPanel();
-                CombinationFlipCreationPanel combinationFlipPanel = new CombinationFlipCreationPanel(plugin, item, offer);
+                RecipeFlipCreationPanel combinationFlipPanel = new RecipeFlipCreationPanel(plugin, offer);
                 JDialog loginModal = UIUtilities.createModalFromPanel(m, combinationFlipPanel);
                 loginModal.pack();
                 loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, Math.max(m.getLocationOnScreen().y - loginModal.getHeight()/2,0) + 100);

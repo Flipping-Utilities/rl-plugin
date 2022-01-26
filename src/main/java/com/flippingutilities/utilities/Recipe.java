@@ -38,4 +38,12 @@ public class Recipe {
     public boolean isInput(int itemId) {
         return inputs.stream().anyMatch(ri -> ri.id == itemId);
     }
+
+    public Set<Integer> getInputIds() {
+        return inputs.stream().map(ri -> ri.id).collect(Collectors.toSet());
+    }
+
+    public Set<Integer> getOutputIds() {
+        return outputs.stream().map(ri -> ri.id).collect(Collectors.toSet());
+    }
 }
