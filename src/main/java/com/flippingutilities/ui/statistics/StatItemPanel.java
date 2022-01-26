@@ -27,7 +27,7 @@
 package com.flippingutilities.ui.statistics;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.model.CombinationFlip;
+import com.flippingutilities.model.RecipeFlip;
 import com.flippingutilities.model.Flip;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
@@ -111,8 +111,8 @@ public class StatItemPanel extends JPanel
 		List<OfferEvent> offers = flippingItem.getIntervalHistory(startOfInterval);
 		List<OfferEvent> adjustedOffers = flippingItem.getPartialOfferAdjustedView(offers);
 		List<Flip> flips = flippingItem.getFlips(adjustedOffers);
-		List<CombinationFlip> combinationFlips = flippingItem.getCombinationFlips(startOfInterval);
-		List<CombinationFlip> personalCombinationFlips = flippingItem.getPersonalCombinationFlips(startOfInterval);
+		List<RecipeFlip> combinationFlips = flippingItem.getCombinationFlips(startOfInterval);
+		List<RecipeFlip> personalCombinationFlips = flippingItem.getPersonalCombinationFlips(startOfInterval);
 
 		this.flipPaginator = createPaginator(() -> buildAllFlipsPanel(flips));
 		this.offerPaginator = createPaginator(() -> buildAllOffersPanels(offers));
@@ -184,10 +184,10 @@ public class StatItemPanel extends JPanel
 		revalidate();
 	}
 
-    private void buildAllCombinationFlipPanels(List<CombinationFlip> combinationFlips) {
-		List<CombinationFlip> combinationFlipsCopy = new ArrayList<>(combinationFlips);
+    private void buildAllCombinationFlipPanels(List<RecipeFlip> combinationFlips) {
+		List<RecipeFlip> combinationFlipsCopy = new ArrayList<>(combinationFlips);
 		Collections.reverse(combinationFlipsCopy);
-		List<CombinationFlip> combinationFlipsOnCurrentPage = combinationFlipPaginator.getCurrentPageItems(combinationFlipsCopy);
+		List<RecipeFlip> combinationFlipsOnCurrentPage = combinationFlipPaginator.getCurrentPageItems(combinationFlipsCopy);
 		combinationFlipPanels = combinationFlipsOnCurrentPage.stream().
 				map(cf -> new CombinationFlipPanel(cf, plugin, flippingItem)).
 				collect(Collectors.toList());
@@ -478,7 +478,7 @@ public class StatItemPanel extends JPanel
 		return collapseIconLabel;
 	}
 
-	public void updateLabels(List<OfferEvent> offers, List<OfferEvent> adjustedOffers, List<CombinationFlip> personalCombinationFlips)
+	public void updateLabels(List<OfferEvent> offers, List<OfferEvent> adjustedOffers, List<RecipeFlip> personalCombinationFlips)
 	{
         quantityFlipped.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         avgBuyPriceValLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
@@ -506,8 +506,8 @@ public class StatItemPanel extends JPanel
 		long totalRevenue = flippingItem.getTotalRevenueOrExpense(offers, false);
 		long totalExpense = flippingItem.getTotalRevenueOrExpense(offers, true);
 
-		revenueFromFlippedItems +=  personalCombinationFlips.stream().mapToLong(CombinationFlip::getRevenue).sum();
-		expenseFromFlippedItems += personalCombinationFlips.stream().mapToLong(CombinationFlip::getExpense).sum();
+		revenueFromFlippedItems +=  personalCombinationFlips.stream().mapToLong(RecipeFlip::getRevenue).sum();
+		expenseFromFlippedItems += personalCombinationFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
 		itemCountFlipped += personalCombinationFlips.stream().mapToInt(cf -> cf.getParent().amountConsumed).sum();
 
 		long profit = revenueFromFlippedItems - expenseFromFlippedItems;
