@@ -182,7 +182,7 @@ public class OfferPanel extends JPanel {
     }
 
     private JComponent createCombinationFlipIcon() {
-        boolean offerAlreadyInCombinationFlip = item.getOfferIdToPartialOfferInPersonalComboFlips().containsKey(offer.getUuid());
+        boolean offerAlreadyInCombinationFlip = plugin.getOfferIdToPartialOffer(item.getItemId()).containsKey(offer.getUuid());
         if (offerAlreadyInCombinationFlip) {
             JLabel combinationFlipLabel = new JLabel("Already in a combo flip");
             combinationFlipLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
@@ -232,7 +232,7 @@ public class OfferPanel extends JPanel {
 
                 //If the user pressed "Yes"
                 if (result == JOptionPane.YES_OPTION) {
-                    item.deleteOffers(List.of(offer), plugin.getTradesForCurrentView());
+                    item.deleteOffers(List.of(offer));
                     plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
                 }
             }

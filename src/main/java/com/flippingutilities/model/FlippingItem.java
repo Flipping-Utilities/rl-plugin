@@ -223,16 +223,12 @@ public class FlippingItem
 		{
 			item1.getHistory().getCompressedOfferEvents().addAll(item2.getHistory().getCompressedOfferEvents());
 			item1.setFavorite(item1.isFavorite() || item2.isFavorite());
-			item1.getHistory().getPersonalCombinationFlips().addAll(item2.getHistory().getPersonalCombinationFlips());
-			item1.getHistory().getParentCombinationFlips().addAll(item2.getHistory().getParentCombinationFlips());
 			return item1;
 		}
 		else
 		{
 			item2.getHistory().getCompressedOfferEvents().addAll(item1.getHistory().getCompressedOfferEvents());
 			item2.setFavorite(item2.isFavorite() || item1.isFavorite());
-			item2.getHistory().getPersonalCombinationFlips().addAll(item1.getHistory().getPersonalCombinationFlips());
-			item2.getHistory().getParentCombinationFlips().addAll(item1.getHistory().getParentCombinationFlips());
 			return item2;
 		}
 	}
@@ -262,16 +258,8 @@ public class FlippingItem
 		return history.getFlips(tradeList);
 	}
 
-	public List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> tradeList) {
-		return history.getPartialOfferAdjustedView(tradeList);
-	}
-
-	public List<RecipeFlip> getCombinationFlips(Instant earliestTime) {
-		return history.getCombinationFlips(earliestTime);
-	}
-
-	public List<RecipeFlip> getPersonalCombinationFlips(Instant earliestTime) {
-		return history.getPersonalCombinationFlips(earliestTime);
+	public static List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> offers, Map<String,PartialOffer> partialOffers) {
+		return HistoryManager.getPartialOfferAdjustedView(offers, partialOffers);
 	}
 
 	public ArrayList<OfferEvent> getIntervalHistory(Instant earliestTime)
@@ -311,9 +299,9 @@ public class FlippingItem
 	/**
 	 * see the documentation for HistoryManager.deleteOffers
 	 */
-	public void deleteOffers(List<OfferEvent> offerList, List<FlippingItem> items)
+	public void deleteOffers(List<OfferEvent> offerList)
 	{
-		history.deleteOffers(offerList, items);
+		history.deleteOffers(offerList);
 	}
 	public void setValidFlippingPanelItem(boolean isValid)
 	{
@@ -384,27 +372,6 @@ public class FlippingItem
 	//see documentation for HistoryManager.setOfferNames or HistoryManager.setCombinationFlipOfferNames
 	private void setOfferNames(Map<Integer, String> idToItemName) {
 		history.setOfferNames(itemName);
-		history.setCombinationFlipOfferNames(idToItemName);
-	}
-
-	public void addPersonalCombinationFlip(RecipeFlip combinationFlip) {
-		history.addPersonalCombinationFlip(combinationFlip);
-	}
-
-	public void addParentCombinationFlip(RecipeFlip combinationFlip) {
-		history.addParentCombinationFlip(combinationFlip);
-	}
-
-	public void deleteCombinationFlip(RecipeFlip combinationFlip, List<FlippingItem> items) {
-		history.deleteCombinationFlips(List.of(combinationFlip), items);
-	}
-
-	public Map<String, PartialOffer> getOfferIdToPartialOfferInPersonalComboFlips() {
-		return history.getOfferIdToPartialOfferInPersonalComboFlips();
-	}
-
-	public Map<String, PartialOffer> getOfferIdToPartialOfferInComboFlips() {
-		return history.getOfferIdToPartialOfferInComboFlips();
 	}
 
 	/**

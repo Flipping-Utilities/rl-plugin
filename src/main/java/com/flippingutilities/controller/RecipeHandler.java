@@ -2,6 +2,7 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.PartialOffer;
+import com.flippingutilities.model.RecipeFlipGroup;
 import com.flippingutilities.utilities.Recipe;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -34,6 +35,17 @@ public class RecipeHandler {
         if (idToRecipes.isPresent()) {
             log.info("Successfully loaded recipes");
         }
+    }
+
+    public Optional<RecipeFlipGroup> findRecipeFlipGroup(List<RecipeFlipGroup> recipeFlipGroups, Recipe recipe) {
+        return recipeFlipGroups.stream().filter(group -> group.getRecipe().equals(recipe)).findFirst();
+    }
+
+    public Map<String, PartialOffer> getOfferIdToPartialOffer(List<RecipeFlipGroup> recipeFlipGroups, int itemId) {
+        return recipeFlipGroups.stream()
+            .filter(group -> group.isInGroup(itemId))
+            .flatMap(group -> group.getPartialOffers(itemId).stream())
+            .collect(Collectors.toMap(po -> po.offer.getUuid(), po -> po));
     }
 
     /**

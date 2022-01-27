@@ -55,8 +55,6 @@ public class CombinationFlipPanel extends JPanel {
         titlePanel.setLayout(new DynamicGridLayout(2,1));
         titlePanel.setBackground(CustomColors.DARK_GRAY);
 
-        String actionText = combinationFlip.getParent().offer.isBuy()? "Broke" : "Constructed";
-        String parentName = combinationFlip.getParent().getOffer().getItemName();
         String quantityInCombination = QuantityFormatter.formatNumber(combinationFlip.getParent().amountConsumed);
 
         JLabel quantityLabel = new JLabel(quantityInCombination + "x");
@@ -77,9 +75,8 @@ public class CombinationFlipPanel extends JPanel {
     }
 
     private JLabel createTimeDisplay(RecipeFlip combinationFlip) {
-        OfferEvent offer = combinationFlip.getParent().offer;
         JLabel timeDisplay = new JLabel(
-                "(" + TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago)",
+                "(" + TimeFormatters.formatDurationTruncated(combinationFlip.getTimeOfCreation()) + " ago)",
                 SwingConstants.CENTER);
         timeDisplay.setFont(FontManager.getRunescapeSmallFont());
         return timeDisplay;
@@ -151,7 +148,6 @@ public class CombinationFlipPanel extends JPanel {
                         null, new String[]{"Yes", "No"}, "No");
 
                 if (result == JOptionPane.YES_OPTION) {
-                    item.deleteCombinationFlip(combinationFlip, plugin.viewTradesForCurrentView());
                     plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
                 }
             }
@@ -233,7 +229,6 @@ public class CombinationFlipPanel extends JPanel {
     }
 
     public void updateTimeDisplay() {
-        OfferEvent offer = combinationFlip.getParent().offer;
-        timeDisplay.setText("(" + TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago)");
+        timeDisplay.setText("(" + TimeFormatters.formatDurationTruncated(combinationFlip.getTimeOfCreation()) + " ago)");
     }
  }
