@@ -245,14 +245,16 @@ public class RecipeFlipCreationPanel extends JPanel {
      * @param bodyPanel the panel which the item labels are being added to
      */
     private void addHeaderPanelRow(JPanel bodyPanel) {
-        idToHeader.keySet().forEach(itemId -> {
+        recipe.getInputIds().forEach(itemId -> {
             JPanel headerPanel = idToHeader.get(itemId);
             bodyPanel.add(headerPanel);
-            if (itemId == sourceOffer.getItemId()) {
-                //adding the arrow in the next column
-                ImageIcon arrowIcon = sourceOffer.isBuy() ? Icons.RIGHT_ARROW_LARGE : Icons.LEFT_ARROW_LARGE;
-                bodyPanel.add(new JLabel(arrowIcon));
-            }
+        });
+
+        bodyPanel.add(new JLabel(Icons.RIGHT_ARROW_LARGE));
+
+        recipe.getOutputIds().forEach(itemId -> {
+            JPanel headerPanel = idToHeader.get(itemId);
+            bodyPanel.add(headerPanel);
         });
     }
 
@@ -269,33 +271,22 @@ public class RecipeFlipCreationPanel extends JPanel {
     ) {
         Map<Integer, List<PartialOffer>> itemIdToPartialOffers = new HashMap<>();
 
-        Map<String, PartialOffer> parentItemPartialOffers = sourceItem.getOfferIdToPartialOfferInComboFlips();
-        if (parentItemPartialOffers.containsKey(sourceOffer.getUuid())) {
-            PartialOffer parentPartialOffer = parentItemPartialOffers.get(sourceOffer.getUuid());
-            itemIdToPartialOffers.put(sourceOffer.getItemId(), List.of(parentPartialOffer));
-        }
-        else {
-            itemIdToPartialOffers.put(sourceOffer.getItemId(), List.of(new PartialOffer(sourceOffer, 0)));
-        }
-
         itemIdToItem.forEach((itemId, item) -> {
-            List<PartialOffer> offers = item.map(fitem -> {
-                Map<String, PartialOffer> itemPartialOffers = fitem.getOfferIdToPartialOfferInComboFlips();
-                List<OfferEvent> history = fitem.getIntervalHistory(startOfInterval);
-                Collections.reverse(history);
-                //if the parent offer is a sell, it means the user created it from its constituent parts and
-                //so we should only look for buys of the constituent parts. Hence, if there are no offers passed in to this
-                //method, it means there were no buys.
-                return history.stream().filter(o -> o.isBuy() != sourceOffer.isBuy() && o.isComplete()).
+            List<PartialOffer> partialOffers = item.map(fitem -> {
+                Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(itemId);
+                List<OfferEvent> offers = itemId == sourceOffer.getItemId()? new ArrayList<>(List.of(sourceOffer)): fitem.getIntervalHistory(startOfInterval);
+                Collections.reverse(offers);
+
+                return offers.stream().filter(o -> o.isBuy() == recipe.isInput(itemId) && o.isComplete()).
                         map(o -> {
-                            if (itemPartialOffers.containsKey(o.getUuid())) {
-                                return itemPartialOffers.get(o.getUuid());
+                            if (offerIdToPartialOffer.containsKey(o.getUuid())) {
+                                return offerIdToPartialOffer.get(o.getUuid());
                             }
                             return new PartialOffer(o, 0);
                         }).
                         collect(Collectors.toList());
             }).orElse(new ArrayList<>());
-            itemIdToPartialOffers.put(itemId, offers);
+            itemIdToPartialOffers.put(itemId, partialOffers);
         });
 
         return itemIdToPartialOffers;
@@ -312,21 +303,29 @@ public class RecipeFlipCreationPanel extends JPanel {
                                   Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
         Map<Integer, Integer> targetValues = plugin.getTargetValuesForMaxRecipeCount(recipe, itemIdToPartialOffers);
 
-        idToHeader.keySet().forEach(id -> {
+        recipe.getInputIds().forEach(id -> addOfferPanel(bodyPanel, id, itemIdToPartialOffers, targetValues));
+
+        //empty panel occupies the space under the arrow
+        JPanel emptyPanel = new JPanel();
+        emptyPanel.setBackground(Color.BLACK);
+        bodyPanel.add(emptyPanel);
+
+        recipe.getOutputIds().forEach(id -> addOfferPanel(bodyPanel, id, itemIdToPartialOffers, targetValues));
+
+        handleItemsHittingTargetConsumptionValues();
+    }
+
+    private void addOfferPanel(
+        JPanel bodyPanel,
+        int id,
+        Map<Integer, List<PartialOffer>> itemIdToPartialOffers,
+        Map<Integer, Integer> targetValues
+    ) {
             int targetValue = targetValues.get(id);
             List<PartialOffer> partialOffers = itemIdToPartialOffers.get(id);
             RecipeItemHeaderPanel combinationItemHeaderPanel = idToHeader.get(id);
             combinationItemHeaderPanel.setTargetValueDisplay(targetValue);
             bodyPanel.add(createOffersPanel(partialOffers, combinationItemHeaderPanel, targetValue));
-            if (id == sourceOffer.getItemId()) {
-                //empty panel occupies the space under the arrow
-                JPanel emptyPanel = new JPanel();
-                emptyPanel.setBackground(Color.BLACK);
-                bodyPanel.add(emptyPanel);
-            }
-        });
-
-        handleItemsHittingTargetConsumptionValues();
     }
 
     /**
@@ -444,7 +443,6 @@ public class RecipeFlipCreationPanel extends JPanel {
         finishButton.setFocusPainted(false);
         finishButton.addActionListener(e -> {
             RecipeFlip combinationFlip = new RecipeFlip(recipe, selectedOffers);
-            childItemsInCombination.values().forEach(item -> item.get().addParentCombinationFlip(combinationFlip));
             plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
             bottomPanel.removeAll();
 
@@ -523,11 +521,6 @@ public class RecipeFlipCreationPanel extends JPanel {
     }
 
     private long calculateProfit() {
-        PartialOffer parentPartialOffer = selectedOffers.get(sourceOffer.getItemId()).get(sourceOffer.getUuid());
-        Map<Integer, Map<String, PartialOffer>> children = selectedOffers.entrySet().stream().
-                filter(e -> e.getKey() != sourceOffer.getItemId()).
-                collect(
-                        Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         return RecipeFlip.calculateProfit(selectedOffers);
     }
 }

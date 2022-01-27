@@ -429,11 +429,15 @@ public class FlippingPlugin extends Plugin {
     }
 
     public List<FlippingItem> getTradesForCurrentView() {
-        return accountCurrentlyViewed.equals(ACCOUNT_WIDE) ? createAccountWideList() : dataHandler.getAccountData(accountCurrentlyViewed).getTrades();
+        return accountCurrentlyViewed.equals(ACCOUNT_WIDE) ? createAccountWideFlippingItemList() : dataHandler.getAccountData(accountCurrentlyViewed).getTrades();
     }
 
     public List<FlippingItem> viewTradesForCurrentView() {
-        return accountCurrentlyViewed.equals(ACCOUNT_WIDE) ? createAccountWideList() : dataHandler.viewAccountData(accountCurrentlyViewed).getTrades();
+        return accountCurrentlyViewed.equals(ACCOUNT_WIDE) ? createAccountWideFlippingItemList() : dataHandler.viewAccountData(accountCurrentlyViewed).getTrades();
+    }
+
+    public List<RecipeFlipGroup> viewRecipeGroupsForCurrentView() {
+        return accountCurrentlyViewed.equals(ACCOUNT_WIDE) ? createAccountWideRecipeFlipGroupList() : dataHandler.viewAccountData(accountCurrentlyViewed).getRecipeFlipGroups();
     }
 
     public Duration viewAccumulatedTimeForCurrentView() {
@@ -502,7 +506,7 @@ public class FlippingPlugin extends Plugin {
 
         List<FlippingItem> tradesListToDisplay;
         if (selectedName.equals(ACCOUNT_WIDE)) {
-            tradesListToDisplay = createAccountWideList();
+            tradesListToDisplay = createAccountWideFlippingItemList();
         } else {
             tradesListToDisplay = dataHandler.getAccountData(selectedName).getTrades();
         }
@@ -585,14 +589,16 @@ public class FlippingPlugin extends Plugin {
         }, 1000, TimeUnit.MILLISECONDS);
     }
 
+    private List<RecipeFlipGroup> createAccountWideRecipeFlipGroupList() {
+        return new ArrayList<>();
+    }
+
     /**
      * creates a view of an "account wide tradelist". An account wide tradelist is just a reflection of the flipping
      * items currently in each of the account's tradelists. It does this by merging the flipping items of the same type
      * from each account's trade list into one flipping item.
-     *
-     * @return
      */
-    private List<FlippingItem> createAccountWideList() {
+    private List<FlippingItem> createAccountWideFlippingItemList() {
         //since this is an expensive operation, cache its results and only recompute it if there has been an update
         //to one of the account's tradelists, (updateSinceLastAccountWideBuild is set in onGrandExchangeOfferChanged)
         if (!updateSinceLastAccountWideBuild) {
@@ -791,10 +797,10 @@ public class FlippingPlugin extends Plugin {
     public void deleteOffers(Instant startOfInterval) {
         if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
             for (AccountData accountData : dataHandler.getAllAccountData()) {
-                accountData.getTrades().forEach(item -> item.deleteOffers(item.getIntervalHistory(startOfInterval), accountData.getTrades()));
+                accountData.getTrades().forEach(item -> item.deleteOffers(item.getIntervalHistory(startOfInterval)));
             }
         } else {
-            getTradesForCurrentView().forEach(item -> item.deleteOffers(item.getIntervalHistory(startOfInterval), viewTradesForCurrentView()));
+            getTradesForCurrentView().forEach(item -> item.deleteOffers(item.getIntervalHistory(startOfInterval)));
         }
 
         updateSinceLastAccountWideBuild = true;
@@ -934,6 +940,12 @@ public class FlippingPlugin extends Plugin {
     //see RecipeHandler.getItemIdToMaxRecipesThatCanBeMade
     public Map<Integer, Integer> getItemIdToMaxRecipesThatCanBeMade(Recipe recipe, Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
         return recipeHandler.getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers);
+    }
+    public Optional<RecipeFlipGroup> findRecipeGroup(Recipe recipe) {
+        return recipeHandler.findRecipeFlipGroup(viewRecipeGroupsForCurrentView(), recipe);
+    }
+    public Map<String, PartialOffer> getOfferIdToPartialOffer(int itemId) {
+        return recipeHandler.getOfferIdToPartialOffer(viewRecipeGroupsForCurrentView(), itemId);
     }
 
     @Subscribe

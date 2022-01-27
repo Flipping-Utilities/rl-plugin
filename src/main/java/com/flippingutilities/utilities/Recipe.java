@@ -22,6 +22,10 @@ public class Recipe {
         return ids;
     }
 
+    public boolean isInRecipe(int itemId) {
+        return getIds().contains(itemId);
+    }
+
     /**
      * Gets a mapping of item id in the recipe to desired quantity of that item
      */

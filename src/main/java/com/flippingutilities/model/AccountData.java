@@ -50,6 +50,7 @@ public class AccountData
 	private long accumulatedSessionTimeMillis = 0;
 	private Instant lastSessionTimeUpdate;
 	private List<SlotActivityTimer> slotTimers;
+	private List<RecipeFlipGroup> recipeFlipGroups = new ArrayList<>();
 
 	/**
 	 * Resets all session related data associated with an account. This is called when the plugin first starts

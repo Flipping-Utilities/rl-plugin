@@ -338,43 +338,17 @@ public class HistoryManager
 	 * Used to mark offers as invalid. These offers are then pruned later. This is the mechanism
 	 * by which offers are deleted.
 	 * @param offerList the offers being invalidated
-	 *
-	 * @param items    The other items in the account's trade list. These items are needed because
-	 * 	               the offer list that we are invalidating may be used in the combination flips of other
-	 * 	               items, so we have to delete all combination flips that use these offers, both in this item
-	 * 	               and in all other items.
 	 */
-	public void deleteOffers(List<OfferEvent> offerList, List<FlippingItem> items)
+	public void deleteOffers(List<OfferEvent> offerList)
 	{
 		if (offerList.isEmpty()) {
 			return;
 		}
 
 		Set<String> idsOfOffersToBeDeleted = offerList.stream().map(OfferEvent::getUuid).collect(Collectors.toSet());
-		List<RecipeFlip> combinationFlipsToBeDeleted = getInvalidatedCombinationFlips(idsOfOffersToBeDeleted);
-		deleteCombinationFlips(combinationFlipsToBeDeleted, items);
 		compressedOfferEvents.removeIf(o -> idsOfOffersToBeDeleted.contains(o.getUuid()));
 	}
 
-	/**
-	 * Deletes combination flips by deleting the combination flip from the personal or parent combination flip
-	 * of every item in the combination flip
-	 */
-	public void deleteCombinationFlips(List<RecipeFlip> combinationFlips, List<FlippingItem> items) {
-		Map<Integer, FlippingItem> itemIdToItem = items.stream().
-				map(item -> Map.entry(item.getItemId(), item)).
-				collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-		combinationFlips.forEach(cf -> {
-			Set<Integer> itemIds = cf.getItemIds();
-			itemIds.forEach(id -> {
-				FlippingItem item = itemIdToItem.get(id);
-				if (item != null) {
-					item.getHistory().deleteCombinationFlipForThisItem(cf);
-				}
-			});
-		});
-	}
 
 	/**
 	 * Gets offers that have the same quantity, price ea, and buy/sell state as the given offer. This is currently used
@@ -597,123 +571,6 @@ public class HistoryManager
 	}
 
 	/**
-	 * Maintains a cache of offer ids to partial offers from THIS item that contributes to personal combination
-	 * flips or parent combination flips. Since an offer id can be referenced by multiple combination flips, this
-	 * combines the partial offers into one partial offer such that the resulting partial offer has the amount
-	 * consumed from both the partial offers. This allows us to get the total amount consumed from an offer event
-	 * corresponding to a certain offer id.
-	 */
-	public Map<String, PartialOffer> getOfferIdToPartialOfferInComboFlips() {
-		if (compressedOfferEvents.isEmpty()) {
-			return new HashMap<>();
-		}
-		if (offerIdToPartialInParentCombinationFlips == null) {
-			offerIdToPartialInParentCombinationFlips = new HashMap<>();
-			List<PartialOffer> partialOffers = getPartialOffers();
-			partialOffers.forEach(po -> {
-				String offerId =  po.offer.getUuid();
-				if (offerIdToPartialInParentCombinationFlips.containsKey(offerId)) {
-					PartialOffer currentPartialOffer = offerIdToPartialInParentCombinationFlips.get(offerId);
-					currentPartialOffer.amountConsumed += po.amountConsumed;
-				}
-				else {
-					offerIdToPartialInParentCombinationFlips.put(po.offer.getUuid(), po);
-				}
-			});
-		}
-
-		return offerIdToPartialInParentCombinationFlips;
-	}
-
-	/**
-	 * Maintains a cache of offer ids to partial offers from THIS item that contributes to only personal
-	 * combination flips
-	 */
-	public Map<String, PartialOffer> getOfferIdToPartialOfferInPersonalComboFlips() {
-		if (offerIdToPartialInPersonalCombinationFlips == null) {
-			Set<String> offerIdsInPersonalComboFlips = personalCombinationFlips.stream().
-					map(cf -> cf.parent.getOffer().getUuid()).
-					collect(Collectors.toSet());
-			offerIdToPartialInPersonalCombinationFlips = getOfferIdToPartialOfferInComboFlips().entrySet().stream().
-					filter(e -> offerIdsInPersonalComboFlips.contains(e.getKey())).
-					collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-		}
-		return offerIdToPartialInPersonalCombinationFlips;
-	}
-
-	/**
-	 * Gets all partial offers for THIS item, from both personal combination flips and parent combination flips
-	 */
-	private List<PartialOffer> getPartialOffers() {
-		int thisItemsId = compressedOfferEvents.get(0).getItemId();
-		List<PartialOffer> partialOffers = new ArrayList<>();
-		parentCombinationFlips.forEach(cf -> partialOffers.addAll(cf.getChildOffers(thisItemsId)));
-		personalCombinationFlips.forEach(cf -> partialOffers.add(cf.parent));
-		return partialOffers;
-	}
-
-	/**
-	 * Gets all the combination flips reference the offers in idsOfOffersToBeDeleted
-	 */
-	private List<RecipeFlip> getInvalidatedCombinationFlips(Set<String> idsOfOffersToBeDeleted) {
-		List<RecipeFlip> combinationFlips = new ArrayList<>();
-		combinationFlips.addAll(getInvalidatedPersonalCombinationFlips(idsOfOffersToBeDeleted));
-		combinationFlips.addAll(getInvalidatedParentCombinationFlips(idsOfOffersToBeDeleted));
-		return combinationFlips;
-	}
-
-	/**
-	 * Gets the personal combination flips that need to be deleted given they reference
-	 * offers that are about to be deleted.
-	 * @param idsOfOffersToBeDeleted the offers that are going to be deleted
-	 */
-	private List<RecipeFlip> getInvalidatedPersonalCombinationFlips(Set<String> idsOfOffersToBeDeleted) {
-		return personalCombinationFlips.stream().
-				filter(cf -> idsOfOffersToBeDeleted.contains(cf.parent.offer.getUuid())).
-				collect(Collectors.toList());
-
-	}
-
-	/**
-	 * Gets the combination flips that need to be deleted from the parent combination
-	 * flip list given that they reference offers that are about to be deleted.
-	 *
-	 * @param idsOfOffersToBeDeleted ids of offers that are about to be deleted
-	 */
-	private List<RecipeFlip> getInvalidatedParentCombinationFlips(Set<String> idsOfOffersToBeDeleted) {
-		if (compressedOfferEvents.isEmpty()) {
-			return new ArrayList<>();
-		}
-		int thisItemsId = compressedOfferEvents.get(0).getItemId();
-		return parentCombinationFlips.stream().
-				filter(cf -> cf.getChildren().get(thisItemsId).keySet().stream().anyMatch(idsOfOffersToBeDeleted::contains)).
-				collect(Collectors.toList());
-	}
-
-	public void addPersonalCombinationFlip(RecipeFlip combinationFlip) {
-		personalCombinationFlips.add(combinationFlip);
-		offerIdToPartialInParentCombinationFlips = null;
-		offerIdToPartialInPersonalCombinationFlips = null;
-	}
-
-	public void addParentCombinationFlip(RecipeFlip combinationFlip) {
-		parentCombinationFlips.add(combinationFlip);
-		offerIdToPartialInParentCombinationFlips = null;
-	}
-
-	/**
-	 * A combination flip cannot exist in both personal and parent combination flips, but list.remove() won't
-	 * throw an error and its convenient to just attempt to remove from both of them as it absolves
-	 * the caller of having to know where the combination flip is.
-	 */
-	public void deleteCombinationFlipForThisItem(RecipeFlip combinationFlip) {
-		personalCombinationFlips.remove(combinationFlip);
-		parentCombinationFlips.remove(combinationFlip);
-		offerIdToPartialInPersonalCombinationFlips = null;
-		offerIdToPartialInParentCombinationFlips = null;
-	}
-
-	/**
 	 * Creates Flips from offers. Flips represent a buy trade followed by a sell trade. A trade is a collection
 	 * of offers from the empty offer to the completed offer. A completed offer marks the end of a trade.
 	 *
@@ -736,60 +593,16 @@ public class HistoryManager
 	}
 
 	/**
-	 * Returns combinations flips that have all their offers after earliestTime. We don't rely on a
-	 * offer list as an input bc to figure out whether a combination flip is in the offer list, you really
-	 * need the offer list of the same time range from every item that contributed to the combination flip.
-	 */
-	public List<RecipeFlip> getCombinationFlips(Instant earliestTime) {
-		List<RecipeFlip> combinationFlips = getCombinationFlips();
-		//get only the combination flips that have all their offers after earliestTime
-		return combinationFlips.stream().
-				filter(cf -> cf.getOffers().stream().allMatch(po -> po.getOffer().getTime().isAfter(earliestTime))).
-				sorted(Comparator.comparing(cf -> cf.parent.getOffer().getTime())).
-				collect(Collectors.toList());
-	}
-
-	public List<RecipeFlip> getPersonalCombinationFlips(Instant earliestTime) {
-		return personalCombinationFlips.stream()
-				.filter(cf -> cf.getOffers().stream().allMatch(po -> po.getOffer().getTime().isAfter(earliestTime)))
-				.collect(Collectors.toList());
-	}
-
-	/**
 	 * Returns a view of the offer events that accounts for the amount consumed by partial offers
 	 * in the combination flips
 	 */
-	List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> offers) {
-		Map<String, PartialOffer> offerIdsInCombinationFlips = getOfferIdToPartialOfferInComboFlips();
+	static List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> offers, Map<String, PartialOffer> partialOffers) {
 		return offers.stream().map(o -> {
-			if (offerIdsInCombinationFlips.containsKey(o.getUuid())) {
-				return offerIdsInCombinationFlips.get(o.getUuid()).toRemainingOfferEvent();
+			if (partialOffers.containsKey(o.getUuid())) {
+				return partialOffers.get(o.getUuid()).toRemainingOfferEvent();
 			}
 			return o;
 		}).collect(Collectors.toList());
-	}
-
-	/**
-	 * @return all combination flips regardless of time
-	 */
-	private List<RecipeFlip> getCombinationFlips() {
-		List<RecipeFlip> combinationFlips = new ArrayList<>();
-		combinationFlips.addAll(personalCombinationFlips);
-		combinationFlips.addAll(parentCombinationFlips);
-		return combinationFlips;
-	}
-
-	/**
-	 * Because we don't persist the itemName field in an OfferEvent, we need to hydrate every
-	 * OfferEvent with it, which includes the offer events in combination flips
-	 * @param idToItemName a map of item id to item name for quick lookup
-	 */
-	public void setCombinationFlipOfferNames(Map<Integer, String> idToItemName) {
-		getCombinationFlips().forEach(cf -> cf.getOffers().forEach(po -> {
-			OfferEvent o = po.getOffer();
-			String itemName = idToItemName.getOrDefault(o.getItemId(), "");
-			o.setItemName(itemName);
-		}));
 	}
 
 	/**
@@ -805,7 +618,6 @@ public class HistoryManager
 	 */
 	public void setOfferMadeBy(String name) {
 		compressedOfferEvents.forEach(o -> o.setMadeBy(name));
-		getCombinationFlips().forEach(cf -> cf.getOffers().forEach(o -> o.getOffer().setMadeBy(name)));
 	}
 
 	/**

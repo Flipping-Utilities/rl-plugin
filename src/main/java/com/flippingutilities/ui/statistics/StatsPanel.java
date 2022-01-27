@@ -27,7 +27,7 @@
 package com.flippingutilities.ui.statistics;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.model.RecipeFlip;
+import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.uiutilities.*;
@@ -386,18 +386,17 @@ public class StatsPanel extends JPanel
 
 		for (FlippingItem item : tradesList)
 		{
+			Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
 			List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-			List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
+			List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
 			if (intervalHistory.isEmpty()) {
 				continue;
 			}
 
-			List<RecipeFlip> combinationFlips = item.getPersonalCombinationFlips(startOfInterval);
-
-			taxPaid += adjustedOffers.stream().mapToLong(OfferEvent::getTaxPaid).sum() + combinationFlips.stream().mapToLong(RecipeFlip::getTaxPaid).sum();;
-			totalProfit += item.getProfit(adjustedOffers) + combinationFlips.stream().mapToLong(RecipeFlip::getProfit).sum();
-			totalExpenses += item.getValueOfMatchedOffers(adjustedOffers, true) + combinationFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
-			totalFlips += item.getFlips(adjustedOffers).size() + combinationFlips.size();
+			taxPaid += adjustedOffers.stream().mapToLong(OfferEvent::getTaxPaid).sum();
+			totalProfit += item.getProfit(adjustedOffers);
+			totalExpenses += item.getValueOfMatchedOffers(adjustedOffers, true);
+			totalFlips += item.getFlips(adjustedOffers).size();
 		}
 
 		updateTotalProfitDisplay();
@@ -545,8 +544,8 @@ public class StatsPanel extends JPanel
 			return;
 		}
 
-		FlippingItem item = itemPanel.getFlippingItem();
-		item.deleteOffers(item.getIntervalHistory(startOfInterval), plugin.viewTradesForCurrentView());
+		FlippingItem item = itemPanel.getItem();
+		item.deleteOffers(item.getIntervalHistory(startOfInterval));
 		if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
 			plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 		}
@@ -641,37 +640,35 @@ public class StatsPanel extends JPanel
 
 			case TOTAL_PROFIT:
 				result.sort(Comparator.comparing(item -> {
+					Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
 					ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-					List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
-					return item.getProfit(adjustedOffers) + item.getPersonalCombinationFlips(startOfInterval).stream().mapToLong(RecipeFlip::getProfit).sum();
+					List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
+					return item.getProfit(adjustedOffers);
 				}));
 				break;
 
 			case PROFIT_EACH:
 				result.sort(Comparator.comparing(item -> {
-					List<RecipeFlip> personalCombinationFlips = item.getPersonalCombinationFlips(startOfInterval);
+					Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
 					ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-					List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
-					long quantity =
-							item.countFlipQuantity(adjustedOffers) +
-							personalCombinationFlips.stream().mapToLong(cf -> cf.getParent().amountConsumed).sum();
+					List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
+					long quantity = item.countFlipQuantity(adjustedOffers);
 					if (quantity == 0) {
 						return Long.MIN_VALUE;
 					}
 
-					long profit = item.getProfit(adjustedOffers) + personalCombinationFlips.stream().mapToLong(RecipeFlip::getProfit).sum();
+					long profit = item.getProfit(adjustedOffers);
 					return profit / quantity;
 				}));
 				break;
 			case ROI:
 				result.sort(Comparator.comparing(item -> {
-					List<RecipeFlip> personalCombinationFlips = item.getPersonalCombinationFlips(startOfInterval);
+					Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
 					List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-					List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
+					List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
 
-					long profit = item.getProfit(adjustedOffers) + personalCombinationFlips.stream().mapToLong(RecipeFlip::getProfit).sum();
-					long expense = item.getValueOfMatchedOffers(adjustedOffers, true) +
-							personalCombinationFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
+					long profit = item.getProfit(adjustedOffers);
+					long expense = item.getValueOfMatchedOffers(adjustedOffers, true);
 					if (expense == 0) {
 						return Float.MIN_VALUE;
 					}
@@ -682,9 +679,10 @@ public class StatsPanel extends JPanel
 			case FLIP_COUNT:
 				result.sort(Comparator.comparing(
 						item -> {
+							Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
 							List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-							List<OfferEvent> adjustedOffers = item.getPartialOfferAdjustedView(intervalHistory);
-							return item.countFlipQuantity(adjustedOffers) + item.getPersonalCombinationFlips(startOfInterval).size();
+							List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
+							return item.countFlipQuantity(adjustedOffers);
 						}));
 				break;
 			default:

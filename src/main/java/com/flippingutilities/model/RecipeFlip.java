@@ -4,6 +4,7 @@ import com.flippingutilities.utilities.Recipe;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -20,6 +21,7 @@ import java.util.stream.Collectors;
 @Data
 @AllArgsConstructor
 public class RecipeFlip {
+    Instant timeOfCreation;
     Map<Integer, Map<String, PartialOffer>> outputs;
     //item id to a map of offer id to offer
     Map<Integer, Map<String, PartialOffer>> inputs;
@@ -35,50 +37,45 @@ public class RecipeFlip {
     }
 
     public long getProfit() {
-        return RecipeFlip.calculateProfit(parent, children);
+        return getRevenue() - getExpense();
     }
 
-    private long getExpenseOrRevenue(boolean getRevenue) {
-        long totalValueOfChildren = children.values().stream().
-                flatMap(m -> m.values().stream()).
-                mapToLong(po -> po.offer.getPrice() * po.amountConsumed).
-                sum();
-        long totalValueOfParent = (long) parent.offer.getPrice() * parent.amountConsumed;
-        boolean parentIsBuy = parent.offer.isBuy();
-        if ((parentIsBuy && getRevenue) || (!parentIsBuy && !getRevenue)) {
-            return totalValueOfChildren;
-        }
-        return totalValueOfParent;
+    private long getExpenseOrRevenue(boolean getExpense) {
+        return getOffers().stream()
+            .filter(po -> po.offer.isBuy() == getExpense)
+            .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
+            .sum();
     }
 
     public long getExpense() {
-        return getExpenseOrRevenue(false);
-    }
-
-    public long getRevenue() {
         return getExpenseOrRevenue(true);
     }
 
+    public long getRevenue() {
+        return getExpenseOrRevenue(false);
+    }
+
     public long getTaxPaid() {
-        return getOffers().stream().mapToLong(po -> po.getOffer().getTaxPaid()).sum();
+        return getOutputs().values().stream()
+            .mapToLong(
+                offerIdToPartialOfferMap -> offerIdToPartialOfferMap.values().stream().mapToInt(po -> po.getOffer().getTaxPaid()).sum())
+            .sum();
     }
 
     public static long calculateProfit(Map<Integer, Map<String, PartialOffer>> allPartialOffers) {
-        long totalValueOfChildren = children.values().stream().
-                flatMap(m -> m.values().stream()).
-                mapToLong(po -> po.offer.getPrice() * po.amountConsumed).
-                sum();
-        long totalValueOfParent = (long) parent.offer.getPrice() * parent.amountConsumed;
-        //if you buy the parent offer, you must be selling its children. Ex: buy a guthan set to deconstruct it and
-        //sell the individual pieces.
-        if (parent.offer.isBuy()) {
-            return totalValueOfChildren - totalValueOfParent;
-        }
-        else {
-            //if you sell a parent, you must have constructed it from its children. Ex, buy the guthan set pieces to
-            //construct a set to sell it.
-            return totalValueOfParent - totalValueOfChildren;
-        }
+        List<PartialOffer> offers = allPartialOffers.values().stream()
+            .flatMap(offerIdToPartialOfferMap -> offerIdToPartialOfferMap.values().stream())
+            .collect(Collectors.toList());
+
+        long revenue = offers.stream()
+            .filter(po -> !po.getOffer().isBuy())
+            .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
+            .sum();
+        long expense = offers.stream()
+            .filter(po -> po.getOffer().isBuy())
+            .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
+            .sum();
+        return revenue - expense;
     }
 
     /**
@@ -86,38 +83,19 @@ public class RecipeFlip {
      */
     public List<PartialOffer> getOffers() {
         List<PartialOffer> offers = new ArrayList<>();
-        offers.add(parent);
-        offers.addAll(getChildrenOffers());
+        inputs.values().forEach(map -> offers.addAll(map.values()));
+        outputs.values().forEach(map -> offers.addAll(map.values()));
         return offers;
     }
 
-    /**
-     * Gets only the partial offers of  children
-     */
-    public List<PartialOffer> getChildrenOffers() {
-        return children.values().stream().
-                flatMap(
-                        m -> m.values().stream()).
-                collect(Collectors.toList());
-    }
-
-    /**
-     * Gets a specific child's partial offers
-     */
-    public List<PartialOffer> getChildOffers(int childItemId) {
-        if (!children.containsKey(childItemId)) {
-            return new ArrayList<>();
+    public List<PartialOffer> getPartialOffers(int itemId) {
+        List<PartialOffer> partialOffers = new ArrayList<>();
+        if (outputs.containsKey(itemId)) {
+            partialOffers.addAll(outputs.get(itemId).values());
         }
-        return new ArrayList<>(children.get(childItemId).values());
-    }
-
-    /**
-     * Gets item ids of all the items that make up the combination flip
-     */
-    public Set<Integer> getItemIds() {
-        Set<Integer> ids = new HashSet<>();
-        ids.add(parent.offer.getItemId());
-        ids.addAll(children.keySet());
-        return ids;
+        if (inputs.containsKey(itemId)) {
+            partialOffers.addAll(inputs.get(itemId).values());
+        }
+        return partialOffers;
     }
 }
