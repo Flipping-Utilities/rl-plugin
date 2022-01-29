@@ -1,4 +1,4 @@
-package com.flippingutilities.ui.statistics;
+package com.flippingutilities.ui.statistics.items;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.FlippingItem;

@@ -54,17 +54,11 @@ import java.awt.event.MouseEvent;
 import java.time.Instant;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 
 @Slf4j
 public class FlippingPanel extends JPanel
 {
-	public enum SORT {
-		FAVORITE,
-		TIME
-	}
-
 	@Getter
 	private static final String WELCOME_PANEL = "WELCOME_PANEL";
 	private static final String ITEMS_PANEL = "ITEMS_PANEL";
@@ -85,16 +79,13 @@ public class FlippingPanel extends JPanel
 	private boolean itemHighlighted = false;
 
 	@Getter
-	@Setter
-	private SORT selectedSort = SORT.TIME;
-
-	@Getter
 	private Paginator paginator;
 
 	@Getter
 	private OfferEditorContainerPanel offerEditorContainerPanel;
 
 	private boolean currentlySearching;
+	private boolean favoriteSelected;
 
 	public FlippingPanel(final FlippingPlugin plugin)
 	{
@@ -176,8 +167,8 @@ public class FlippingPanel extends JPanel
 			}
 			int vGap = 8;
 			cardLayout.show(flippingItemContainer, ITEMS_PANEL);
-			List<FlippingItem> sortedItems = sortTradeList(flippingItems);
-			List<FlippingItem> itemsThatShouldHavePanels = sortedItems.stream().filter(item -> item.getValidFlippingPanelItem()).collect(Collectors.toList());
+			List<FlippingItem> itemsToDisplay = getItemsToDisplay(flippingItems);
+			List<FlippingItem> itemsThatShouldHavePanels = itemsToDisplay.stream().filter(item -> item.getValidFlippingPanelItem()).collect(Collectors.toList());
 			paginator.updateTotalPages(itemsThatShouldHavePanels.size());
 			List<FlippingItem> itemsOnCurrentPage = paginator.getCurrentPageItems(itemsThatShouldHavePanels);
 			List<FlippingItemPanel> newPanels = itemsOnCurrentPage.stream().map(item -> new FlippingItemPanel(plugin, itemManager.getImage(item.getItemId()), item)).collect(Collectors.toList());
@@ -210,9 +201,8 @@ public class FlippingPanel extends JPanel
 	 * @param offerEvent the new offer that just came in
 	 */
 	public void onNewOfferEventRebuild(OfferEvent offerEvent) {
-		boolean currentlySortedByTime = selectedSort == SORT.TIME || selectedSort == SORT.FAVORITE;
 		boolean newOfferEventAlreadyAtTop = activePanels.size() > 0 && activePanels.get(0).getFlippingItem().getItemId() == offerEvent.getItemId();
-		if (currentlySortedByTime && newOfferEventAlreadyAtTop) {
+		if (newOfferEventAlreadyAtTop) {
 			refreshPricesForFlippingItemPanel(offerEvent.getItemId());
 			return;
 		}
@@ -223,34 +213,15 @@ public class FlippingPanel extends JPanel
 		}
 	}
 
-	public List<FlippingItem> sortTradeList(List<FlippingItem> tradeList)
-	{
+	public List<FlippingItem> getItemsToDisplay(List<FlippingItem> tradeList) {
 		List<FlippingItem> result = new ArrayList<>(tradeList);
-
-		if (result.isEmpty())
-		{
+		if (result.isEmpty()) {
 			return result;
 		}
-		if (selectedSort == null) {
-			selectedSort = SORT.TIME;
+		if (favoriteSelected && isItemHighlighted()) {
+			result = result.stream().filter(FlippingItem::isFavorite).collect(Collectors.toList());
 		}
-
-		switch (selectedSort)
-		{
-			case TIME:
-				sortByTime(result);
-				break;
-			case FAVORITE:
-				if (isItemHighlighted()){
-					//when the item is highlighted we always want to show it. If the sort is set to favorite and the
-					//highlighted item is not a favorite, the filtering will prevent it from being shown, so we don't want to
-					//filter in that case.
-					break;
-				}
-				result = result.stream().filter(item -> item.isFavorite()).collect(Collectors.toList());
-				sortByTime(result); //when it is on favorites you also want it to be sorted by time
-				break;
-		}
+		sortByTime(result); //when it is on favorites you also want it to be sorted by time
 		return result;
 	}
 
@@ -285,27 +256,26 @@ public class FlippingPanel extends JPanel
 		favoriteButton.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
-				if (selectedSort == SORT.FAVORITE) {
+				if (favoriteSelected) {
 					favoriteButton.setIcon(Icons.SMALL_STAR_OFF_ICON);
-					selectedSort = null;
 				}
 				else {
 					favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
-					selectedSort = SORT.FAVORITE;
 				}
+				favoriteSelected = !favoriteSelected;
 				rebuild(plugin.viewTradesForCurrentView());
 			}
 
 			@Override
 			public void mouseEntered(MouseEvent e) {
-				if (selectedSort != SORT.FAVORITE) {
+				if (!favoriteSelected) {
 					favoriteButton.setIcon(Icons.SMALL_STAR_HOVER_ICON);
 				}
 			}
 
 			@Override
 			public void mouseExited(MouseEvent e) {
-				if (selectedSort == SORT.FAVORITE) {
+				if (favoriteSelected) {
 					favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
 				}
 				else {

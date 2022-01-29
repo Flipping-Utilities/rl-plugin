@@ -30,7 +30,13 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.model.RecipeFlipGroup;
+import com.flippingutilities.ui.statistics.items.FlippingItemPanel;
+import com.flippingutilities.ui.statistics.items.FlippingItemTabPanel;
+import com.flippingutilities.ui.statistics.recipes.RecipeGroupTabPanel;
 import com.flippingutilities.ui.uiutilities.*;
+import com.flippingutilities.utilities.SORT;
+import com.flippingutilities.utilities.Searchable;
 import com.google.common.base.Strings;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -62,14 +68,6 @@ import java.util.stream.Stream;
 @Slf4j
 public class StatsPanel extends JPanel
 {
-	public enum SORT {
-		TIME,
-		TOTAL_PROFIT,
-		PROFIT_EACH,
-		ROI,
-		FLIP_COUNT
-	}
-
 	private static final String[] TIME_INTERVAL_STRINGS = {"-1h (Past Hour)", "-4h (Past 4 Hours)", "-12h (Past 12 Hours)", "-1d (Past Day)", "-1w (Past Week)", "-1m (Past Month)", "Session", "All"};
 	private static final Dimension ICON_SIZE = new Dimension(16, 16);
 
@@ -120,8 +118,6 @@ public class StatsPanel extends JPanel
 	@Getter
 	private SORT selectedSort = SORT.TIME;
 
-	private ArrayList<StatItemPanel> activePanels = new ArrayList<>();
-
 	@Getter
 	private Set<String> expandedItems = new HashSet<>();
 	@Getter
@@ -131,8 +127,8 @@ public class StatsPanel extends JPanel
 
 	private boolean currentlySearching;
 	private IconTextField searchBar;
-	private StatItemTabPanel statItemTabPanel;
-	private RecipeTabPanel recipeTabPanel;
+	private FlippingItemTabPanel flippingItemTabPanel;
+	private RecipeGroupTabPanel recipeGroupTabPanel;
 	/**
 	 * The statistics panel shows various stats about trades the user has made over a selectable time interval.
 	 * This represents the front-end Statistics Tab.
@@ -148,11 +144,11 @@ public class StatsPanel extends JPanel
 		this.prepareLabels();
 
 		searchBar = createSearchBar();
-		statItemTabPanel = new StatItemTabPanel(plugin);
-		recipeTabPanel = new RecipeTabPanel();
+		flippingItemTabPanel = new FlippingItemTabPanel(plugin);
+		recipeGroupTabPanel = new RecipeGroupTabPanel(plugin);
 
 		JPanel mainDisplay = new JPanel();
-		FastTabGroup tabGroup = createTabGroup(mainDisplay, statItemTabPanel, recipeTabPanel);
+		FastTabGroup tabGroup = createTabGroup(mainDisplay, flippingItemTabPanel, recipeGroupTabPanel);
 
 		setLayout(new BorderLayout());
 		add(createTopPanel(searchBar), BorderLayout.NORTH);
@@ -218,7 +214,7 @@ public class StatsPanel extends JPanel
 		return sortIcon;
 	}
 
-	private FastTabGroup createTabGroup(JPanel mainDisplay, StatItemTabPanel statItemTabPanel, RecipeTabPanel recipeTabPanel) {
+	private FastTabGroup createTabGroup(JPanel mainDisplay, FlippingItemTabPanel statItemTabPanel, RecipeGroupTabPanel recipeTabPanel) {
 		FastTabGroup tabGroup = new FastTabGroup(mainDisplay);
 		tabGroup.setBorder(new EmptyBorder(0,16 + 15,0,0));
 
@@ -240,13 +236,12 @@ public class StatsPanel extends JPanel
 	 */
 	public void rebuild(List<FlippingItem> flippingItems)
 	{
-		activePanels = new ArrayList<>();
 		List<FlippingItem> items = getItemsToDisplay(flippingItems);
 		SwingUtilities.invokeLater(() -> {
-			statItemTabPanel.rebuild(items);
+			flippingItemTabPanel.rebuild(items);
 			updateDisplays(items);
 			if (flippingItems.isEmpty() && currentlySearching) {
-				if (statItemTabPanel.isVisible()) statItemTabPanel.showPanel(createEmptySearchPanel());
+				if (flippingItemTabPanel.isVisible()) flippingItemTabPanel.showPanel(createEmptySearchPanel());
 			}
 			revalidate();
 			repaint();
@@ -296,29 +291,36 @@ public class StatsPanel extends JPanel
 		rebuild(result);
 	}
 
-	private List<FlippingItem> getSearchResults(List<FlippingItem> items, String lookup) {
-		return items.stream().filter(
-				item ->
-						item.getItemName().toLowerCase().contains(lookup) && item.hasOfferInInterval(startOfInterval)).
-				collect(Collectors.toList());
+	private <T extends Searchable> List<T> getSearchResults(List<T> objs, String lookup) {
+		return objs.stream().filter(
+			obj ->
+				obj.getNameForSearch().toLowerCase().contains(lookup) && obj.isInInterval(startOfInterval)).
+			collect(Collectors.toList());
 	}
 
 	/**
 	 * Filters the items based on what is currently being searched for. If nothing is being searched
 	 * for, it just returns the original list
-	 * @param items all the items that could be in the current view
+	 * @param objs all the objs (flipping item or recipe flip group) that could be in the current view
 	 */
-	private List<FlippingItem> getResultsForCurrentSearchQuery(List<FlippingItem> items) {
+	private <T extends Searchable> List<T> getResultsForCurrentSearchQuery(List<T> objs) {
 		String lookup = searchBar.getText().toLowerCase();
 		if (currentlySearching && !Strings.isNullOrEmpty(lookup)) {
-			return getSearchResults(items, lookup);
+			return getSearchResults(objs, lookup);
 		}
-		return items;
+		return objs;
 	}
 
 	public List<FlippingItem> getItemsToDisplay(List<FlippingItem> items) {
-		return sortItems(getResultsForCurrentSearchQuery(getItemsInInterval(items)));
+		return plugin.sortItems(getResultsForCurrentSearchQuery(getObjsInInterval(items)), selectedSort, startOfInterval);
 	}
+
+	public List<RecipeFlipGroup> getRecipeFlipGroupsToDisplay(List<RecipeFlipGroup> recipeFlipGroups) {
+		plugin.sortRecipeFlipGroups(getResultsForCurrentSearchQuery(getObjsInInterval(recipeFlipGroups)), selectedSort, startOfInterval);
+	}
+
+
+
 
 	private IconTextField createSearchBar() {
 		IconTextField searchBar = UIUtilities.createSearchBar(plugin.getExecutor(), this::updateSearch);
@@ -394,9 +396,9 @@ public class StatsPanel extends JPanel
 			}
 
 			taxPaid += adjustedOffers.stream().mapToLong(OfferEvent::getTaxPaid).sum();
-			totalProfit += item.getProfit(adjustedOffers);
-			totalExpenses += item.getValueOfMatchedOffers(adjustedOffers, true);
-			totalFlips += item.getFlips(adjustedOffers).size();
+			totalProfit += FlippingItem.getProfit(adjustedOffers);
+			totalExpenses += FlippingItem.getValueOfMatchedOffers(adjustedOffers, true);
+			totalFlips += FlippingItem.getFlips(adjustedOffers).size();
 		}
 
 		updateTotalProfitDisplay();
@@ -517,7 +519,8 @@ public class StatsPanel extends JPanel
 	 */
 	public void updateTimeDisplay()
 	{
-		activePanels.forEach(StatItemPanel::updateTimeLabels);
+		flippingItemTabPanel.updateTimeDisplay();
+		recipeGroupTabPanel.updateTimeDisplay();
 	}
 
 	/**
@@ -537,13 +540,8 @@ public class StatsPanel extends JPanel
 	 *
 	 * @param itemPanel The panel which holds the FlippingItem to be terminated.
 	 */
-	public void deletePanel(StatItemPanel itemPanel)
+	public void deletePanel(FlippingItemPanel itemPanel)
 	{
-		if (!activePanels.contains(itemPanel))
-		{
-			return;
-		}
-
 		FlippingItem item = itemPanel.getItem();
 		item.deleteOffers(item.getIntervalHistory(startOfInterval));
 		if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
@@ -615,81 +613,8 @@ public class StatsPanel extends JPanel
 		}
 	}
 
-	private List<FlippingItem> getItemsInInterval(List<FlippingItem> items) {
-		return items.stream().filter(item -> item.hasOfferInInterval(startOfInterval)).collect(Collectors.toList());
-	}
-
-	/**
-	 * Shallow clones and sorts the to-be-built tradeList items according to the selectedSort string.
-	 *
-	 * @param items The soon-to-be drawn tradeList whose items are getting sorted.
-	 * @return Returns a cloned and sorted tradeList as specified by the selectedSort string.
-	 */
-	private List<FlippingItem> sortItems(List<FlippingItem> items)
-	{
-		List<FlippingItem> result = new ArrayList<>(items);
-
-		if (selectedSort == null || result.isEmpty()) {
-			return result;
-		}
-
-		switch (selectedSort) {
-			case TIME:
-				result.sort(Comparator.comparing(FlippingItem::getLatestActivityTime));
-				break;
-
-			case TOTAL_PROFIT:
-				result.sort(Comparator.comparing(item -> {
-					Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-					ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-					List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
-					return item.getProfit(adjustedOffers);
-				}));
-				break;
-
-			case PROFIT_EACH:
-				result.sort(Comparator.comparing(item -> {
-					Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-					ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-					List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
-					long quantity = item.countFlipQuantity(adjustedOffers);
-					if (quantity == 0) {
-						return Long.MIN_VALUE;
-					}
-
-					long profit = item.getProfit(adjustedOffers);
-					return profit / quantity;
-				}));
-				break;
-			case ROI:
-				result.sort(Comparator.comparing(item -> {
-					Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-					List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-					List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
-
-					long profit = item.getProfit(adjustedOffers);
-					long expense = item.getValueOfMatchedOffers(adjustedOffers, true);
-					if (expense == 0) {
-						return Float.MIN_VALUE;
-					}
-
-					return (float) profit / expense * 100;
-				}));
-				break;
-			case FLIP_COUNT:
-				result.sort(Comparator.comparing(
-						item -> {
-							Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-							List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-							List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
-							return item.countFlipQuantity(adjustedOffers);
-						}));
-				break;
-			default:
-				throw new IllegalStateException("Unexpected sort value: " + selectedSort);
-		}
-		Collections.reverse(result);
-		return result;
+	private <T extends Searchable> List<T> getObjsInInterval(List<T> objs) {
+		return objs.stream().filter(obj -> obj.isInInterval(startOfInterval)).collect(Collectors.toList());
 	}
 
 	private JLabel createResetButton() {

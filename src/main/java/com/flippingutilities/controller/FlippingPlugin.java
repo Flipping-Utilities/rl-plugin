@@ -195,6 +195,7 @@ public class FlippingPlugin extends Plugin {
 
     public TradePersister tradePersister;
     private RecipeHandler recipeHandler;
+    private FlippingItemHandler flippingItemHandler;
 
     @Override
     protected void startUp() {
@@ -202,6 +203,7 @@ public class FlippingPlugin extends Plugin {
 
         tradePersister = new TradePersister(gson);
         recipeHandler = new RecipeHandler(gson, httpClient);
+        flippingItemHandler = new FlippingItemHandler(this);
 
         optionHandler = new OptionHandler(this);
         dataHandler = new DataHandler(this);
@@ -472,24 +474,11 @@ public class FlippingPlugin extends Plugin {
         return configManager.getConfig(FlippingConfig.class);
     }
 
-    public void deleteRemovedItems(List<FlippingItem> currItems) {
-        currItems.removeIf((item) ->
-        {
-            if (item.getGeLimitResetTime() != null) {
-                Instant startOfRefresh = item.getGeLimitResetTime().minus(4, ChronoUnit.HOURS);
-
-                return !item.getValidFlippingPanelItem() && !item.hasValidOffers()
-                        && (!Instant.now().isAfter(item.getGeLimitResetTime()) || item.getGeLimitResetTime().isBefore(startOfRefresh));
-            }
-            return !item.getValidFlippingPanelItem() && !item.hasValidOffers();
-        });
-    }
-
     public void truncateTradeList() {
         if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
-            dataHandler.getAllAccountData().forEach(accountData -> deleteRemovedItems(accountData.getTrades()));
+            dataHandler.getAllAccountData().forEach(accountData -> flippingItemHandler.deleteRemovedItems(accountData.getTrades()));
         } else {
-            deleteRemovedItems(getTradesForCurrentView());
+            flippingItemHandler.deleteRemovedItems(getTradesForCurrentView());
         }
     }
 
@@ -589,15 +578,12 @@ public class FlippingPlugin extends Plugin {
         }, 1000, TimeUnit.MILLISECONDS);
     }
 
+
+
     private List<RecipeFlipGroup> createAccountWideRecipeFlipGroupList() {
         return new ArrayList<>();
     }
 
-    /**
-     * creates a view of an "account wide tradelist". An account wide tradelist is just a reflection of the flipping
-     * items currently in each of the account's tradelists. It does this by merging the flipping items of the same type
-     * from each account's trade list into one flipping item.
-     */
     private List<FlippingItem> createAccountWideFlippingItemList() {
         //since this is an expensive operation, cache its results and only recompute it if there has been an update
         //to one of the account's tradelists, (updateSinceLastAccountWideBuild is set in onGrandExchangeOfferChanged)
@@ -609,23 +595,17 @@ public class FlippingPlugin extends Plugin {
             return new ArrayList<>();
         }
 
-        //take all flipping items from the account cache, regardless of account, and segregate them based on item name.
-        Map<Integer, List<FlippingItem>> groupedItems = dataHandler.viewAllAccountData().stream().
-                flatMap(accountData -> accountData.getTrades().stream()).
-                map(FlippingItem::clone).
-                collect(Collectors.groupingBy(FlippingItem::getItemId));
-
-        //take every list containing flipping items of the same type and reduce it to one merged flipping item and put that
-        //item in a final merged list
-        List<FlippingItem> mergedItems = groupedItems.values().stream().
-                map(list -> list.stream().reduce(FlippingItem::merge)).filter(Optional::isPresent).map(Optional::get).
-                collect(Collectors.toList());
-
-        mergedItems.sort(Collections.reverseOrder(Comparator.comparing(FlippingItem::getLatestActivityTime)));
-
         updateSinceLastAccountWideBuild = false;
-        prevBuiltAccountWideList = mergedItems;
-        return mergedItems;
+        prevBuiltAccountWideList = flippingItemHandler.createAccountWideFlippingItemList(dataHandler.viewAllAccountData());;
+        return prevBuiltAccountWideList;
+    }
+
+    public List<FlippingItem> sortItems(List<FlippingItem> items, SORT sort, Instant startOfInterval) {
+        return flippingItemHandler.sortItems(items, sort, startOfInterval);
+    }
+
+    public List<RecipeFlipGroup> sortRecipeFlipGroups() {
+
     }
 
     /**
@@ -934,18 +914,22 @@ public class FlippingPlugin extends Plugin {
         return recipeHandler.getApplicableRecipe(parentId, isBuy);
     }
     //see RecipeHandler.getTargetValuesForMaxRecipeCount
-    public Map<Integer, Integer> getTargetValuesForMaxRecipeCount(Recipe recipe, Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
-        return recipeHandler.getTargetValuesForMaxRecipeCount(recipe, itemIdToPartialOffers);
+    public Map<Integer, Integer> getTargetValuesForMaxRecipeCount(Recipe recipe, Map<Integer, List<PartialOffer>> itemIdToPartialOffers, boolean useRemainingOffer) {
+        return recipeHandler.getTargetValuesForMaxRecipeCount(recipe, itemIdToPartialOffers, useRemainingOffer);
     }
     //see RecipeHandler.getItemIdToMaxRecipesThatCanBeMade
-    public Map<Integer, Integer> getItemIdToMaxRecipesThatCanBeMade(Recipe recipe, Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
-        return recipeHandler.getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers);
+    public Map<Integer, Integer> getItemIdToMaxRecipesThatCanBeMade(Recipe recipe, Map<Integer, List<PartialOffer>> itemIdToPartialOffers, boolean useRemainingOffer) {
+        return recipeHandler.getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers, useRemainingOffer);
     }
     public Optional<RecipeFlipGroup> findRecipeGroup(Recipe recipe) {
         return recipeHandler.findRecipeFlipGroup(viewRecipeGroupsForCurrentView(), recipe);
     }
     public Map<String, PartialOffer> getOfferIdToPartialOffer(int itemId) {
         return recipeHandler.getOfferIdToPartialOffer(viewRecipeGroupsForCurrentView(), itemId);
+    }
+    public void addRecipeFlip(RecipeFlip recipeFlip) {
+        AccountData account = dataHandler.getAccountData(accountCurrentlyViewed);
+        recipeHandler.addRecipeFlip(account.getRecipeFlipGroups(), recipeFlip);
     }
 
     @Subscribe

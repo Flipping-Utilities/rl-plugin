@@ -1,6 +1,7 @@
 package com.flippingutilities.model;
 
 import com.flippingutilities.utilities.Recipe;
+import com.flippingutilities.utilities.RecipeItem;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -97,5 +98,17 @@ public class RecipeFlip {
             partialOffers.addAll(inputs.get(itemId).values());
         }
         return partialOffers;
+    }
+
+    public int getRecipeCountConsumed(Recipe recipe) {
+        RecipeItem randomItemInRecipe = recipe.getOutputs().get(0);
+        int quantityOfRandomItemInRecipe = randomItemInRecipe.getQuantity();
+        int randomItemIdInRecipe = randomItemInRecipe.getId();
+        int amountConsumed = getPartialOffers(randomItemIdInRecipe).stream().mapToInt(po -> po.amountConsumed).sum();
+        return amountConsumed/quantityOfRandomItemInRecipe;
+    }
+
+    public boolean belongsToRecipe(Recipe recipe) {
+        return inputs.keySet().equals(recipe.getInputIds()) && outputs.keySet().equals(recipe.getOutputIds());
     }
 }

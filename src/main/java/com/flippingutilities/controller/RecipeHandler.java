@@ -2,6 +2,7 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.PartialOffer;
+import com.flippingutilities.model.RecipeFlip;
 import com.flippingutilities.model.RecipeFlipGroup;
 import com.flippingutilities.utilities.Recipe;
 import com.google.gson.Gson;
@@ -41,6 +42,8 @@ public class RecipeHandler {
         return recipeFlipGroups.stream().filter(group -> group.getRecipe().equals(recipe)).findFirst();
     }
 
+    //TODO this is pretty inefficient, i don't think it really matters, but might be worth looking into.
+    //TODO We could either cache it in the plugin or make the lookups faster somehow.
     public Map<String, PartialOffer> getOfferIdToPartialOffer(List<RecipeFlipGroup> recipeFlipGroups, int itemId) {
         return recipeFlipGroups.stream()
             .filter(group -> group.isInGroup(itemId))
@@ -153,9 +156,13 @@ public class RecipeHandler {
      *
      * @param itemIdToPartialOffers all the suitable partial offers for each item
      */
-    public Map<Integer, Integer> getTargetValuesForMaxRecipeCount(Recipe recipe, Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
+    public Map<Integer, Integer> getTargetValuesForMaxRecipeCount(
+            Recipe recipe,
+            Map<Integer, List<PartialOffer>> itemIdToPartialOffers,
+            boolean useRemainingOffer
+    ) {
         Map<Integer, Integer> itemIdToQuantity = recipe.getItemIdToQuantity();
-        Map<Integer, Integer> itemIdToMaxRecipesThatCanBeMade = getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers);
+        Map<Integer, Integer> itemIdToMaxRecipesThatCanBeMade = getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers, useRemainingOffer);
         int lowestRecipeCountThatCanBeMade = itemIdToMaxRecipesThatCanBeMade.values().stream().min(Comparator.comparingInt(i -> i)).get();
         return itemIdToQuantity.entrySet().stream().
             map(e -> Map.entry(e.getKey(), e.getValue() * lowestRecipeCountThatCanBeMade)).
@@ -166,16 +173,40 @@ public class RecipeHandler {
      * Gets a mapping of item id to the max amount of recipes that can be contributed to for each item in the given
      * partial offers
      */
-    public Map<Integer, Integer> getItemIdToMaxRecipesThatCanBeMade(Recipe recipe, Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
+    public Map<Integer, Integer> getItemIdToMaxRecipesThatCanBeMade(
+            Recipe recipe,
+            Map<Integer, List<PartialOffer>> itemIdToPartialOffers,
+            boolean useRemainingOffer) {
         Map<Integer, Integer> itemIdToQuantity = recipe.getItemIdToQuantity();
         return itemIdToPartialOffers.entrySet().stream().map(e -> {
             int itemId = e.getKey();
             long totalQuantity = e.getValue().stream().
-                mapToLong(po -> po.getOffer().getCurrentQuantityInTrade() - po.amountConsumed).sum();
+                mapToLong(
+                    po -> useRemainingOffer? po.getOffer().getCurrentQuantityInTrade() - po.amountConsumed: po.amountConsumed)
+                .sum();
             long quantityNeededForRecipe = itemIdToQuantity.get(itemId);
             int maxRecipesThatCanBeMade = (int) (totalQuantity / quantityNeededForRecipe);
             return Map.entry(itemId, maxRecipesThatCanBeMade);
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public void addRecipeFlip(List<RecipeFlipGroup> recipeFlipGroups, RecipeFlip recipeFlip) {
+        int someInputItemId = recipeFlip.getInputs().keySet().iterator().next();
+        Optional<Recipe> recipeMaybe = getApplicableRecipe(someInputItemId, true);
+        if (recipeMaybe.isEmpty()) {
+            log.info("not adding recipe, for some reason the recipe flip does not have an associated recipe");
+            return;
+        }
+        Recipe recipe = recipeMaybe.get();
+        for (RecipeFlipGroup recipeFlipGroup : recipeFlipGroups) {
+            if (recipe.equals(recipeFlipGroup.getRecipe())) {
+                recipeFlipGroup.addRecipeFlip(recipeFlip);
+                return;
+            }
+        }
+        RecipeFlipGroup recipeFlipGroup = new RecipeFlipGroup(recipe);
+        recipeFlipGroup.addRecipeFlip(recipeFlip);
+        recipeFlipGroups.add(recipeFlipGroup);
     }
 
     private Optional<List<Recipe>> loadRecipes() {
