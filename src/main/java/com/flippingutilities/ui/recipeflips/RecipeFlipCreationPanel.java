@@ -4,12 +4,13 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.RecipeFlip;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
-import com.flippingutilities.ui.statistics.OfferPanel;
+import com.flippingutilities.ui.statistics.items.OfferPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.Recipe;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.util.AsyncBufferedImage;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 /**
  * The panel the user interacts with when creating a combination flip
  */
+@Slf4j
 public class RecipeFlipCreationPanel extends JPanel {
     FlippingPlugin plugin;
     //the offer the user clicked on to bring up this panel.
@@ -59,7 +61,7 @@ public class RecipeFlipCreationPanel extends JPanel {
                 plugin.getStatPanel().getStartOfInterval());
         add(createTitle(), BorderLayout.NORTH);
         add(createBody(itemIdToPartialOffers), BorderLayout.CENTER);
-        add(createBottomPanel(itemsInRecipe, itemIdToPartialOffers), BorderLayout.SOUTH);
+        add(createBottomPanel(itemIdToPartialOffers), BorderLayout.SOUTH);
 
         setBorder(new EmptyBorder(8, 8, 8, 8));
 
@@ -67,7 +69,6 @@ public class RecipeFlipCreationPanel extends JPanel {
 
     private Map<Integer, Map<String, PartialOffer>> initSelectedOffers(Map<Integer, Optional<FlippingItem>> itemsInRecipe) {
         selectedOffers = new HashMap<>();
-        //initializing the selected offers map with empty hashmaps for the constituent parts of the combination flip
         itemsInRecipe.keySet().forEach(id -> {
             selectedOffers.put(id, new HashMap<>());
         });
@@ -301,8 +302,11 @@ public class RecipeFlipCreationPanel extends JPanel {
      */
     private void addOfferPanelRow(JPanel bodyPanel,
                                   Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
-        Map<Integer, Integer> targetValues = plugin.getTargetValuesForMaxRecipeCount(recipe, itemIdToPartialOffers);
-
+        itemIdToPartialOffers.forEach((id, l) -> {
+            log.info("amount consumed for item {} is {}", id, l.stream().mapToInt(po -> po.amountConsumed).sum());
+        });
+        Map<Integer, Integer> targetValues = plugin.getTargetValuesForMaxRecipeCount(recipe, itemIdToPartialOffers, true);
+        log.info("target values: {}", targetValues);
         recipe.getInputIds().forEach(id -> addOfferPanel(bodyPanel, id, itemIdToPartialOffers, targetValues));
 
         //empty panel occupies the space under the arrow
@@ -370,11 +374,11 @@ public class RecipeFlipCreationPanel extends JPanel {
     private void handleItemsHittingTargetConsumptionValues() {
         int parentOfferConsumedAmount = selectedOffers.get(sourceOffer.getItemId()).get(sourceOffer.getUuid()).amountConsumed;
         //if the parent quantity in the recipe is not 1, gonna have to do the modding and stuff
-        Map<Integer, List<PartialOffer>> idToPartialOffers = selectedOffers.entrySet().stream().
+        Map<Integer, List<PartialOffer>> idToPartialOffersSelected = selectedOffers.entrySet().stream().
             map(e -> Map.entry(e.getKey(), new ArrayList<>(e.getValue().values()))).
             collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
-        Map<Integer, Integer> idToTargetValues = plugin.getItemIdToMaxRecipesThatCanBeMade(recipe, idToPartialOffers);
+        Map<Integer, Integer> idToTargetValues = plugin.getTargetValuesForMaxRecipeCount(recipe, idToPartialOffersSelected, false);
 
         AtomicBoolean allMatchTargetValues = new AtomicBoolean(true);
         selectedOffers.forEach((itemId, partialOfferMap) -> {
@@ -413,14 +417,13 @@ public class RecipeFlipCreationPanel extends JPanel {
      * shows when a combination flip can't be created due to insufficient items.
      */
     private JPanel createBottomPanel(
-            Map<Integer, Optional<FlippingItem>> childItemsInCombination,
             Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
         JPanel bottomPanel = new JPanel();
         bottomPanel.setBorder(new EmptyBorder(5, 0, 0, 0));
         bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS));
         bottomPanel.setBackground(Color.BLACK);
 
-        int itemsThatCanMakeZeroRecipes = (int) plugin.getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers).entrySet().stream().
+        int itemsThatCanMakeZeroRecipes = (int) plugin.getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers, true).entrySet().stream().
                 filter(e -> e.getValue() == 0).count();
 
         if (itemsThatCanMakeZeroRecipes > 0) {
@@ -442,10 +445,11 @@ public class RecipeFlipCreationPanel extends JPanel {
         finishButton.setFont(new Font("Whitney", Font.PLAIN, 16));
         finishButton.setFocusPainted(false);
         finishButton.addActionListener(e -> {
-            RecipeFlip combinationFlip = new RecipeFlip(recipe, selectedOffers);
+            RecipeFlip recipeFlip = new RecipeFlip(recipe, selectedOffers);
+            plugin.addRecipeFlip(recipeFlip);
             plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
-            bottomPanel.removeAll();
 
+            bottomPanel.removeAll();
             JPanel successPanel = new JPanel(new DynamicGridLayout(2, 1));
             successPanel.setBackground(Color.BLACK);
 
@@ -484,14 +488,9 @@ public class RecipeFlipCreationPanel extends JPanel {
         titlePanel.setBorder(new EmptyBorder(5, 0, 25, 0));
         titlePanel.setBackground(Color.BLACK);
 
-        String action = sourceOffer.isBuy() ? "Breaking" : "Constructing";
-        JLabel title = new JLabel(action, JLabel.CENTER);
-        ImageIcon itemIcon = new ImageIcon(plugin.getItemManager().getImage(sourceOffer.getItemId()));
+        JLabel title = new JLabel(recipe.getName(), JLabel.CENTER);
         title.setBorder(new EmptyBorder(0, 0, 20, 0));
         title.setFont(new Font("Whitney", Font.PLAIN, 20));
-        title.setIcon(itemIcon);
-        title.setHorizontalTextPosition(SwingConstants.LEFT);
-        title.setIconTextGap(8);
 
         JPanel intervalPanel = new JPanel();
         intervalPanel.setBackground(Color.BLACK);

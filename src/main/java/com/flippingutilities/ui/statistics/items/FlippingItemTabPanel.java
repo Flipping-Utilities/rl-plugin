@@ -1,7 +1,8 @@
-package com.flippingutilities.ui.statistics;
+package com.flippingutilities.ui.statistics.items;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.FlippingItem;
+import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import lombok.extern.slf4j.Slf4j;
@@ -18,19 +19,19 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class StatItemTabPanel extends JPanel {
+public class FlippingItemTabPanel extends JPanel {
 
-    private JPanel statItemPanelsContainer;
-    private ArrayList<StatItemPanel> activePanels = new ArrayList<>();
+    private JPanel flippingItemPanelsContainer;
+    private List<FlippingItemPanel> activePanels = new ArrayList<>();
     private Paginator paginator;
     private FlippingPlugin plugin;
 
-    public StatItemTabPanel(FlippingPlugin flippingPlugin) {
+    public FlippingItemTabPanel(FlippingPlugin flippingPlugin) {
         plugin = flippingPlugin;
-        statItemPanelsContainer = createStatItemsPanelContainer();
+        flippingItemPanelsContainer = createStatItemsPanelContainer();
         paginator = createPaginator();
 
-        JScrollPane scrollPane = createScrollPane(statItemPanelsContainer);
+        JScrollPane scrollPane = createScrollPane(flippingItemPanelsContainer);
 
         setLayout(new BorderLayout());
 
@@ -40,20 +41,20 @@ public class StatItemTabPanel extends JPanel {
 
     public void rebuild(List<FlippingItem> flippingItems) {
         activePanels.clear();
-        statItemPanelsContainer.removeAll();
+        flippingItemPanelsContainer.removeAll();
 
         paginator.updateTotalPages(flippingItems.size());
 
         List<FlippingItem> itemsOnCurrentPage = paginator.getCurrentPageItems(flippingItems);
-        List<StatItemPanel> newPanels = itemsOnCurrentPage.stream().map(item -> new StatItemPanel(plugin, item)).collect(Collectors.toList());
-        UIUtilities.stackPanelsVertically((List) newPanels, statItemPanelsContainer, 5);
+        List<FlippingItemPanel> newPanels = itemsOnCurrentPage.stream().map(item -> new FlippingItemPanel(plugin, item)).collect(Collectors.toList());
+        UIUtilities.stackPanelsVertically((List) newPanels, flippingItemPanelsContainer, 5);
         activePanels.addAll(newPanels);
     }
 
     public void showPanel(JPanel panel) {
         activePanels.clear();
-        statItemPanelsContainer.removeAll();
-        statItemPanelsContainer.add(panel);
+        flippingItemPanelsContainer.removeAll();
+        flippingItemPanelsContainer.add(panel);
     }
 
     private JPanel createStatItemsPanelContainer() {

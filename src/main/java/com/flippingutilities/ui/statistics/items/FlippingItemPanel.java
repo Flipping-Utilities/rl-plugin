@@ -24,10 +24,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.flippingutilities.ui.statistics;
+package com.flippingutilities.ui.statistics.items;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.*;
+import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.uiutilities.*;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -46,7 +47,6 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -54,7 +54,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class StatItemPanel extends JPanel
+public class FlippingItemPanel extends JPanel
 {
 	private FlippingPlugin plugin;
 	@Getter
@@ -93,7 +93,7 @@ public class StatItemPanel extends JPanel
 	 * @param item The item that the panel represents.
 	 */
 
-	StatItemPanel(FlippingPlugin plugin, FlippingItem item)
+	FlippingItemPanel(FlippingPlugin plugin, FlippingItem item)
 	{
 		setLayout(new BorderLayout());
 		setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
@@ -105,7 +105,7 @@ public class StatItemPanel extends JPanel
 		List<OfferEvent> offers = item.getIntervalHistory(statsPanel.getStartOfInterval());
 		Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
 		List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(offers, offerIdToPartialOffer);
-		List<Flip> flips = item.getFlips(adjustedOffers);
+		List<Flip> flips = FlippingItem.getFlips(adjustedOffers);
 
 		this.flipPaginator = createPaginator(() -> buildAllFlipsPanel(flips));
 		this.offerPaginator = createPaginator(() -> buildAllOffersPanels(offers));
@@ -469,11 +469,11 @@ public class StatItemPanel extends JPanel
 			}
 		}
 
-		int itemCountFlipped = item.countFlipQuantity(adjustedOffers);
-		long revenueFromFlippedItems = item.getValueOfMatchedOffers(adjustedOffers, false);
-		long expenseFromFlippedItems = item.getValueOfMatchedOffers(adjustedOffers, true);
-		long totalRevenue = item.getTotalRevenueOrExpense(offers, false);
-		long totalExpense = item.getTotalRevenueOrExpense(offers, true);
+		int itemCountFlipped = FlippingItem.countFlipQuantity(adjustedOffers);
+		long revenueFromFlippedItems = FlippingItem.getValueOfMatchedOffers(adjustedOffers, false);
+		long expenseFromFlippedItems = FlippingItem.getValueOfMatchedOffers(adjustedOffers, true);
+		long totalRevenue = FlippingItem.getTotalRevenueOrExpense(offers, false);
+		long totalExpense = FlippingItem.getTotalRevenueOrExpense(offers, true);
 		long profit = revenueFromFlippedItems - expenseFromFlippedItems;
 
 		updateTitleLabels(profit, itemCountFlipped);

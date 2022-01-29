@@ -26,6 +26,7 @@
 
 package com.flippingutilities.model;
 
+import com.flippingutilities.utilities.Searchable;
 import com.google.gson.annotations.SerializedName;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -49,7 +50,7 @@ import java.util.*;
 @AllArgsConstructor
 @NoArgsConstructor
 @Slf4j
-public class FlippingItem
+public class FlippingItem implements Searchable
 {
 
 	@SerializedName("id")
@@ -233,29 +234,29 @@ public class FlippingItem
 		}
 	}
 
-	public long getProfit(List<OfferEvent> tradeList)
+	public static long getProfit(List<OfferEvent> tradeList)
 	{
-		return history.getProfit(tradeList);
+		return HistoryManager.getProfit(tradeList);
 	}
 
-	public long getValueOfMatchedOffers(List<OfferEvent> tradeList, boolean isBuy)
+	public static long getValueOfMatchedOffers(List<OfferEvent> tradeList, boolean isBuy)
 	{
-		return history.getValueOfMatchedOffers(tradeList, isBuy);
+		return HistoryManager.getValueOfMatchedOffers(tradeList, isBuy);
 	}
 
-	public long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean isBuy)
+	public static long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean isBuy)
 	{
-		return history.getTotalRevenueOrExpense(tradeList, isBuy);
+		return HistoryManager.getTotalRevenueOrExpense(tradeList, isBuy);
 	}
 
-	public int countFlipQuantity(List<OfferEvent> tradeList)
+	public static int countFlipQuantity(List<OfferEvent> tradeList)
 	{
-		return history.countFlipQuantity(tradeList);
+		return HistoryManager.countFlipQuantity(tradeList);
 	}
 
-	public List<Flip> getFlips(List<OfferEvent> tradeList)
+	public static List<Flip> getFlips(List<OfferEvent> tradeList)
 	{
-		return history.getFlips(tradeList);
+		return HistoryManager.getFlips(tradeList);
 	}
 
 	public static List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> offers, Map<String,PartialOffer> partialOffers) {
@@ -292,7 +293,8 @@ public class FlippingItem
 		return history.hasValidOffers();
 	}
 
-	public boolean hasOfferInInterval(Instant earliestTime) {
+	@Override
+	public boolean isInInterval(Instant earliestTime) {
 		return history.hasOfferInInterval(earliestTime);
 	}
 
@@ -391,5 +393,10 @@ public class FlippingItem
 		{
 			validFlippingPanelItem = true;
 		}
+	}
+
+	@Override
+	public String getNameForSearch() {
+		return itemName;
 	}
 }

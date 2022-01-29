@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 public class Recipe {
     List<RecipeItem> inputs;
     List<RecipeItem> outputs;
+    String name;
 
     /**
      * Gets the item ids for all the items in the outputs and inputs of the recipe
