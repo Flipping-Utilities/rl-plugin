@@ -438,7 +438,7 @@ public class FlippingPlugin extends Plugin {
         return accountCurrentlyViewed.equals(ACCOUNT_WIDE) ? createAccountWideFlippingItemList() : dataHandler.viewAccountData(accountCurrentlyViewed).getTrades();
     }
 
-    public List<RecipeFlipGroup> viewRecipeGroupsForCurrentView() {
+    public List<RecipeFlipGroup> viewRecipeFlipGroupsForCurrentView() {
         return accountCurrentlyViewed.equals(ACCOUNT_WIDE) ? createAccountWideRecipeFlipGroupList() : dataHandler.viewAccountData(accountCurrentlyViewed).getRecipeFlipGroups();
     }
 
@@ -604,8 +604,8 @@ public class FlippingPlugin extends Plugin {
         return flippingItemHandler.sortItems(items, sort, startOfInterval);
     }
 
-    public List<RecipeFlipGroup> sortRecipeFlipGroups() {
-
+    public List<RecipeFlipGroup> sortRecipeFlipGroups(List<RecipeFlipGroup> recipeFlipGroups, SORT sort, Instant startOfInterval) {
+        return recipeHandler.sortRecipeFlipGroups(recipeFlipGroups, sort, startOfInterval);
     }
 
     /**
@@ -922,10 +922,10 @@ public class FlippingPlugin extends Plugin {
         return recipeHandler.getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers, useRemainingOffer);
     }
     public Optional<RecipeFlipGroup> findRecipeGroup(Recipe recipe) {
-        return recipeHandler.findRecipeFlipGroup(viewRecipeGroupsForCurrentView(), recipe);
+        return recipeHandler.findRecipeFlipGroup(viewRecipeFlipGroupsForCurrentView(), recipe);
     }
     public Map<String, PartialOffer> getOfferIdToPartialOffer(int itemId) {
-        return recipeHandler.getOfferIdToPartialOffer(viewRecipeGroupsForCurrentView(), itemId);
+        return recipeHandler.getOfferIdToPartialOffer(viewRecipeFlipGroupsForCurrentView(), itemId);
     }
     public void addRecipeFlip(RecipeFlip recipeFlip) {
         AccountData account = dataHandler.getAccountData(accountCurrentlyViewed);

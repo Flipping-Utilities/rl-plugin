@@ -5,6 +5,7 @@ import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.model.RecipeFlip;
 import com.flippingutilities.model.RecipeFlipGroup;
 import com.flippingutilities.utilities.Recipe;
+import com.flippingutilities.utilities.SORT;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +16,7 @@ import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -207,6 +209,50 @@ public class RecipeHandler {
         RecipeFlipGroup recipeFlipGroup = new RecipeFlipGroup(recipe);
         recipeFlipGroup.addRecipeFlip(recipeFlip);
         recipeFlipGroups.add(recipeFlipGroup);
+    }
+
+    public List<RecipeFlipGroup> sortRecipeFlipGroups(List<RecipeFlipGroup> items, SORT selectedSort, Instant startOfInterval) {
+        List<RecipeFlipGroup> result = new ArrayList<>(items);
+
+        if (selectedSort == null || result.isEmpty()) {
+            return result;
+        }
+
+        switch (selectedSort) {
+            case TIME:
+                result.sort(Comparator.comparing(RecipeFlipGroup::getLatestFlipTime));
+                break;
+            case FLIP_COUNT:
+                result.sort(Comparator.comparing(group -> {
+                    List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+                    return flips.stream().mapToInt(rf -> rf.getRecipeCountMade(group.getRecipe())).sum();
+                }));
+                break;
+            case TOTAL_PROFIT:
+                result.sort(Comparator.comparing(group -> {
+                    List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+                    return flips.stream().mapToLong(RecipeFlip::getProfit).sum();
+                }));
+                break;
+            case PROFIT_EACH:
+                result.sort(Comparator.comparing(group -> {
+                    List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+                    long totalProfit = flips.stream().mapToLong(RecipeFlip::getProfit).sum();
+                    long totalRecipesMade = flips.stream().mapToInt(rf -> rf.getRecipeCountMade(group.getRecipe())).sum();
+                    return totalProfit/totalRecipesMade;
+                }));
+                break;
+            case ROI:
+                result.sort(Comparator.comparing(group -> {
+                    List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+                    long totalProfit = flips.stream().mapToLong(RecipeFlip::getProfit).sum();
+                    long totalExpense = flips.stream().mapToLong(RecipeFlip::getExpense).sum();
+                    return (float) totalProfit / totalExpense * 100;
+                }));
+                break;
+        }
+        Collections.reverse(result);
+        return result;
     }
 
     private Optional<List<Recipe>> loadRecipes() {

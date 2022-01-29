@@ -121,6 +121,7 @@ public class Icons {
     public static final ImageIcon SORT;
     public static final ImageIcon SORT_HOVER;
 
+    public static final ImageIcon CONSTRUCTION;
 
     static
     {
@@ -305,5 +306,8 @@ public class Icons {
 
         final BufferedImage sortHover = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/sort.png");
         SORT_HOVER = new ImageIcon(sort);
+
+        final BufferedImage construction = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/construction.png");
+        CONSTRUCTION = new ImageIcon(construction);
     }
 }

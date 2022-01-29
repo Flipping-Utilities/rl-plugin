@@ -1,10 +1,8 @@
 package com.flippingutilities.ui.statistics.recipes;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.RecipeFlipGroup;
 import com.flippingutilities.ui.statistics.StatsPanel;
-import com.flippingutilities.ui.statistics.items.FlippingItemPanel;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +21,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class RecipeGroupTabPanel extends JPanel {
     private JPanel recipeGroupContainer;
-    private List<RecipeGroupPanel> activePanels = new ArrayList<>();
+    private List<RecipeFlipGroupPanel> activePanels = new ArrayList<>();
     private Paginator paginator;
     private FlippingPlugin plugin;
 
@@ -43,11 +41,10 @@ public class RecipeGroupTabPanel extends JPanel {
     public void rebuild(List<RecipeFlipGroup> recipeFlipGroups) {
         activePanels.clear();
         recipeGroupContainer.removeAll();
-
         paginator.updateTotalPages(recipeFlipGroups.size());
 
         List<RecipeFlipGroup> itemsOnCurrentPage = paginator.getCurrentPageItems(recipeFlipGroups);
-        List<RecipeGroupPanel> newPanels = itemsOnCurrentPage.stream().map(rfg -> new RecipeGroupPanel(plugin, rfg)).collect(Collectors.toList());
+        List<RecipeFlipGroupPanel> newPanels = itemsOnCurrentPage.stream().map(rfg -> new RecipeFlipGroupPanel(plugin, rfg)).collect(Collectors.toList());
         UIUtilities.stackPanelsVertically((List) newPanels, recipeGroupContainer, 5);
         activePanels.addAll(newPanels);
     }
@@ -81,7 +78,7 @@ public class RecipeGroupTabPanel extends JPanel {
         paginator = new Paginator(() -> SwingUtilities.invokeLater(() -> {
             StatsPanel statsPanel = plugin.getStatPanel();
             Instant rebuildStart = Instant.now();
-            rebuild(statsPanel.getItemsToDisplay(plugin.viewTradesForCurrentView()));
+            rebuild(statsPanel.getRecipeFlipGroupsToDisplay(plugin.viewRecipeFlipGroupsForCurrentView()));
             revalidate();
             repaint();
             log.debug("page change took {}", Duration.between(rebuildStart, Instant.now()).toMillis());
@@ -89,5 +86,9 @@ public class RecipeGroupTabPanel extends JPanel {
         paginator.setBackground(ColorScheme.DARK_GRAY_COLOR);
         paginator.setBorder(new MatteBorder(1,0,0,0, ColorScheme.DARK_GRAY_COLOR.darker()));
         return paginator;
+    }
+
+    public void updateTimeDisplay() {
+        activePanels.forEach(RecipeFlipGroupPanel::updateTimeLabels);
     }
 }

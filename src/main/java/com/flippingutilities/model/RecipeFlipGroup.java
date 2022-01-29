@@ -29,8 +29,17 @@ public class RecipeFlipGroup implements Searchable {
         recipeFlips.add(recipeFlip);
     }
 
-    public boolean hasRecipeFlipsInInterval(Instant startOfInterval) {
-        return recipeFlips.stream().anyMatch(rf -> rf.getTimeOfCreation().isAfter(startOfInterval));
+    public Instant getLatestFlipTime() {
+        if (recipeFlips.isEmpty()) {
+            return Instant.EPOCH;
+        }
+        return recipeFlips.get(recipeFlips.size()-1).timeOfCreation;
+    }
+
+    public List<RecipeFlip> getFlipsInInterval(Instant startOfInterval) {
+        return recipeFlips.stream()
+            .filter(recipeFlip -> recipeFlip.getTimeOfCreation().isAfter(startOfInterval))
+            .collect(Collectors.toList());
     }
 
     @Override

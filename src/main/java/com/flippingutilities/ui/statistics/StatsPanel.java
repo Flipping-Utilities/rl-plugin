@@ -316,11 +316,8 @@ public class StatsPanel extends JPanel
 	}
 
 	public List<RecipeFlipGroup> getRecipeFlipGroupsToDisplay(List<RecipeFlipGroup> recipeFlipGroups) {
-		plugin.sortRecipeFlipGroups(getResultsForCurrentSearchQuery(getObjsInInterval(recipeFlipGroups)), selectedSort, startOfInterval);
+		return plugin.sortRecipeFlipGroups(getResultsForCurrentSearchQuery(getObjsInInterval(recipeFlipGroups)), selectedSort, startOfInterval);
 	}
-
-
-
 
 	private IconTextField createSearchBar() {
 		IconTextField searchBar = UIUtilities.createSearchBar(plugin.getExecutor(), this::updateSearch);
