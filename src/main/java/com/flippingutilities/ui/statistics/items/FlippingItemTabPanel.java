@@ -89,4 +89,8 @@ public class FlippingItemTabPanel extends JPanel {
         paginator.setBorder(new MatteBorder(1,0,0,0, ColorScheme.DARK_GRAY_COLOR.darker()));
         return paginator;
     }
+
+    public void updateTimeDisplay() {
+        activePanels.forEach(FlippingItemPanel::updateTimeLabels);
+    }
 }

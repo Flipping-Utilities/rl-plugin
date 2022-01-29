@@ -100,15 +100,11 @@ public class RecipeFlip {
         return partialOffers;
     }
 
-    public int getRecipeCountConsumed(Recipe recipe) {
+    public int getRecipeCountMade(Recipe recipe) {
         RecipeItem randomItemInRecipe = recipe.getOutputs().get(0);
         int quantityOfRandomItemInRecipe = randomItemInRecipe.getQuantity();
         int randomItemIdInRecipe = randomItemInRecipe.getId();
         int amountConsumed = getPartialOffers(randomItemIdInRecipe).stream().mapToInt(po -> po.amountConsumed).sum();
         return amountConsumed/quantityOfRandomItemInRecipe;
-    }
-
-    public boolean belongsToRecipe(Recipe recipe) {
-        return inputs.keySet().equals(recipe.getInputIds()) && outputs.keySet().equals(recipe.getOutputIds());
     }
 }

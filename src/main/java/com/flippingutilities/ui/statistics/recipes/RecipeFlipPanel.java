@@ -32,19 +32,17 @@ public class RecipeFlipPanel extends JPanel {
     private JLabel timeDisplay;
     private RecipeFlip recipeFlip;
     private FlippingPlugin plugin;
-    private FlippingItem item;
     private Recipe recipe;
 
-    public RecipeFlipPanel(RecipeFlip combinationFlip, Recipe recipe, FlippingPlugin plugin, FlippingItem item) {
-        this.recipeFlip = combinationFlip;
+    public RecipeFlipPanel(RecipeFlip recipeFlip, Recipe recipe, FlippingPlugin plugin) {
+        this.recipeFlip = recipeFlip;
         this.plugin = plugin;
-        this.item = item;
         this.recipe = recipe;
         setBackground(CustomColors.DARK_GRAY);
         setBorder(new EmptyBorder(5,5,5,5));
         setLayout(new BorderLayout());
 
-        timeDisplay = createTimeDisplay(combinationFlip);
+        timeDisplay = createTimeDisplay(recipeFlip);
 
         add(createTitlePanel(), BorderLayout.NORTH);
         add(createProfitPanel(), BorderLayout.CENTER);
@@ -58,7 +56,7 @@ public class RecipeFlipPanel extends JPanel {
         titlePanel.setBackground(CustomColors.DARK_GRAY);
 
 
-        String quantityInCombination = QuantityFormatter.formatNumber(recipeFlip.getRecipeCountConsumed(recipe));
+        String quantityInCombination = QuantityFormatter.formatNumber(recipeFlip.getRecipeCountMade(recipe));
 
         JLabel quantityLabel = new JLabel(quantityInCombination + "x");
         quantityLabel.setFont(FontManager.getRunescapeSmallFont());
@@ -212,7 +210,7 @@ public class RecipeFlipPanel extends JPanel {
     }
 
     private JPanel createProfitPanel() {
-        long quantity = recipeFlip.getRecipeCountConsumed(recipe);
+        long quantity = recipeFlip.getRecipeCountMade(recipe);
         long profit = recipeFlip.getProfit();
         long profitEach = profit/quantity;
         String profitString = UIUtilities.quantityToRSDecimalStack(profit, true) + " gp";
@@ -237,7 +235,7 @@ public class RecipeFlipPanel extends JPanel {
         return profitPanel;
     }
 
-    public void updateTimeDisplay() {
+    public void updateTimeLabels() {
         timeDisplay.setText("(" + TimeFormatters.formatDurationTruncated(recipeFlip.getTimeOfCreation()) + " ago)");
     }
  }

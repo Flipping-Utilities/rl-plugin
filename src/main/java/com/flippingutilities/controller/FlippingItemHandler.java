@@ -78,8 +78,6 @@ public class FlippingItemHandler {
                         return FlippingItem.countFlipQuantity(adjustedOffers);
                     }));
                 break;
-            default:
-                throw new IllegalStateException("Unexpected sort value: " + selectedSort);
         }
         Collections.reverse(result);
         return result;
