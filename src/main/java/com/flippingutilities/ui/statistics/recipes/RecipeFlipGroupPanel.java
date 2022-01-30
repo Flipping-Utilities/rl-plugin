@@ -3,20 +3,16 @@ package com.flippingutilities.ui.statistics.recipes;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.statistics.StatsPanel;
-import com.flippingutilities.ui.statistics.items.FlipPanel;
-import com.flippingutilities.ui.statistics.items.OfferPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
+import com.flippingutilities.utilities.Recipe;
 import lombok.Getter;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
-import net.runelite.client.ui.components.materialtabs.MaterialTab;
-import net.runelite.client.ui.components.materialtabs.MaterialTabGroup;
-import net.runelite.client.util.AsyncBufferedImage;
 import net.runelite.client.util.QuantityFormatter;
 
 import javax.swing.*;
@@ -24,7 +20,6 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -40,16 +35,13 @@ public class RecipeFlipGroupPanel extends JPanel {
 
     private JLabel recipeProfitAndQuantityLabel = new JLabel();
     private JPanel itemIconTitlePanel = new JPanel(new BorderLayout());
-    //Label that controls the collapse function of the item panel.
-    private JLabel collapseIconTitleLabel = new JLabel();
 
     private JLabel totalProfitValLabel = new JLabel("", SwingConstants.RIGHT);
     private JLabel profitEachValLabel = new JLabel("", SwingConstants.RIGHT);
     private JLabel quantityFlipped = new JLabel("", SwingConstants.RIGHT);
     private JLabel roiValLabel = new JLabel("", SwingConstants.RIGHT);
 
-
-    private List<RecipeFlipPanel> recipeFlipPanels = new ArrayList<>();
+    private List<RecipeFlipPanel> recipeFlipPanels;
     private Paginator recipeFlipPaginator;
     private JPanel recipeFlipsBackgroundPanel = new JPanel();
 
@@ -64,7 +56,7 @@ public class RecipeFlipGroupPanel extends JPanel {
 
         List<RecipeFlip> flips = recipeFlipGroup.getRecipeFlips();
 
-        this.recipeFlipPaginator = createPaginator(() -> putRecipeFlipPanelsOnBackgroundPanel(flips));
+        this.recipeFlipPaginator = createPaginator(() -> updateBackgroundPanel(flips));
         recipeFlipPaginator.updateTotalPages(flips.size());
 
         recipeFlipPanels = createRecipeFlipPanels(flips);
@@ -78,7 +70,7 @@ public class RecipeFlipGroupPanel extends JPanel {
         JPanel subInfoAndHistoryContainer = createSubInfoAndHistoryContainer(subInfoPanel, tradeHistoryPanel);
         JPanel titlePanel = createTitlePanel(createIconPanel(plugin.getItemManager()), createNameAndProfitPanel(), createCollapseIcon(), subInfoAndHistoryContainer);
 
-        updateLabels(offers, adjustedOffers);
+        updateLabels(flips);
 
         add(titlePanel, BorderLayout.NORTH);
         add(subInfoAndHistoryContainer, BorderLayout.CENTER);
@@ -90,7 +82,7 @@ public class RecipeFlipGroupPanel extends JPanel {
         subInfoAndHistoryContainer.setBackground(CustomColors.DARK_GRAY_LIGHTER);
         subInfoAndHistoryContainer.add(subInfoPanel, BorderLayout.CENTER);
         subInfoAndHistoryContainer.add(tradeHistoryPanel, BorderLayout.SOUTH);
-        subInfoAndHistoryContainer.setVisible(statsPanel.getExpandedItems().contains(recipeFlipGroup.getItemName()));
+        subInfoAndHistoryContainer.setVisible(false);
         return subInfoAndHistoryContainer;
     }
 
@@ -131,7 +123,7 @@ public class RecipeFlipGroupPanel extends JPanel {
         return flipsOnCurrentPage.stream().map(rf -> new RecipeFlipPanel(rf, recipeFlipGroup.getRecipe(), plugin)).collect(Collectors.toList());
     }
 
-    private void putRecipeFlipPanelsOnBackgroundPanel(List<RecipeFlip> flips) {
+    private void updateBackgroundPanel(List<RecipeFlip> flips) {
         recipeFlipPanels = createRecipeFlipPanels(flips);
         putPanelsOnBackgroundPanel(new ArrayList<>(recipeFlipPanels), recipeFlipsBackgroundPanel, recipeFlipPaginator);
     }
@@ -150,13 +142,11 @@ public class RecipeFlipGroupPanel extends JPanel {
             public void mousePressed(MouseEvent e) {
                 if (e.getButton() == MouseEvent.BUTTON1) {
                     if (subInfoAndHistoryContainer.isVisible()) {
-                        collapseIconTitleLabel.setIcon(Icons.CLOSE_ICON);
+                        collapseIcon.setIcon(Icons.CLOSE_ICON);
                         subInfoAndHistoryContainer.setVisible(false);
-                        statsPanel.getExpandedItems().remove(recipeFlipGroup.getItemName());
                     } else {
-                        collapseIconTitleLabel.setIcon(Icons.OPEN_ICON);
+                        collapseIcon.setIcon(Icons.OPEN_ICON);
                         subInfoAndHistoryContainer.setVisible(true);
-                        statsPanel.getExpandedItems().add(recipeFlipGroup.getItemName());
                     }
                 }
             }
@@ -263,16 +253,7 @@ public class RecipeFlipGroupPanel extends JPanel {
         deleteLabel.setPreferredSize(new Dimension(24, 24));
         deleteLabel.setVisible(false);
 
-        AsyncBufferedImage itemImage = itemManager.getImage(recipeFlipGroup.getItemId());
-        JLabel itemLabel = new JLabel();
-        Runnable resize = () ->
-        {
-            BufferedImage subIcon = itemImage.getSubimage(0, 0, 32, 32);
-            ImageIcon itemIcon = new ImageIcon(subIcon.getScaledInstance(24, 24, Image.SCALE_SMOOTH));
-            itemLabel.setIcon(itemIcon);
-        };
-        itemImage.onLoaded(resize);
-        resize.run();
+        JLabel itemLabel = new JLabel(Icons.CONSTRUCTION);
 
         itemIconTitlePanel.add(itemLabel, BorderLayout.WEST);
         itemIconTitlePanel.add(deleteLabel, BorderLayout.EAST);
@@ -287,7 +268,7 @@ public class RecipeFlipGroupPanel extends JPanel {
 
                 if (result == JOptionPane.YES_OPTION) {
                     deletePanel();
-                    statsPanel.rebuild(plugin.viewTradesForCurrentView());
+                    statsPanel.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
                 }
             }
 
@@ -310,7 +291,7 @@ public class RecipeFlipGroupPanel extends JPanel {
     private JPanel createNameAndProfitPanel() {
         JPanel nameAndProfitPanel = new JPanel(new BorderLayout());
         nameAndProfitPanel.setBackground(CustomColors.DARK_GRAY);
-        JLabel itemNameLabel = new JLabel(recipeFlipGroup.getItemName());
+        JLabel itemNameLabel = new JLabel(recipeFlipGroup.getRecipe().getName());
         nameAndProfitPanel.add(itemNameLabel, BorderLayout.NORTH);
         nameAndProfitPanel.add(recipeProfitAndQuantityLabel, BorderLayout.SOUTH);
         nameAndProfitPanel.setPreferredSize(new Dimension(0, 0));
@@ -319,7 +300,7 @@ public class RecipeFlipGroupPanel extends JPanel {
 
     private JLabel createCollapseIcon() {
         JLabel collapseIconLabel = new JLabel();
-        collapseIconLabel.setIcon(statsPanel.getExpandedItems().contains(recipeFlipGroup.getItemName()) ? Icons.OPEN_ICON : Icons.CLOSE_ICON);
+        collapseIconLabel.setIcon(Icons.OPEN_ICON);
         collapseIconLabel.setBorder(new EmptyBorder(2, 2, 2, 2));
         return collapseIconLabel;
     }
@@ -327,14 +308,15 @@ public class RecipeFlipGroupPanel extends JPanel {
     public void updateLabels(List<RecipeFlip> recipeFlips) {
         quantityFlipped.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 
+        Recipe recipe = recipeFlipGroup.getRecipe();
 
-        int itemCountFlipped = FlippingItem.countFlipQuantity(adjustedOffers);
-        long revenueFromFlippedItems = FlippingItem.getValueOfMatchedOffers(adjustedOffers, false);
-        long expenseFromFlippedItems = FlippingItem.getValueOfMatchedOffers(adjustedOffers, true);
-        long profit = revenueFromFlippedItems - expenseFromFlippedItems;
+        int recipesMade = recipeFlips.stream().mapToInt(rf -> rf.getRecipeCountMade(recipe)).sum();
+        long revenue = recipeFlips.stream().mapToLong(RecipeFlip::getRevenue).sum();
+        long expense = recipeFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
+        long profit = revenue - expense;
 
-        updateTitleLabels(profit, itemCountFlipped);
-        updateFlippingLabels(expenseFromFlippedItems, revenueFromFlippedItems, itemCountFlipped);
+        updateTitleLabels(profit, recipesMade);
+        updateFlippingLabels(expense, revenue, recipesMade);
         updateTimeLabels();
     }
 
@@ -372,12 +354,11 @@ public class RecipeFlipGroupPanel extends JPanel {
         roiValLabel.setToolTipText("<html>Return on investment:<br>Percentage of profit relative to gp invested</html>");
     }
 
-
     public void updateTimeLabels() {
         recipeFlipPanels.forEach(RecipeFlipPanel::updateTimeLabels);
     }
 
     private void deletePanel() {
-        statsPanel.deletePanel(this);
+        statsPanel.deleteRecipeFlipGroupPanel(this);
     }
 }

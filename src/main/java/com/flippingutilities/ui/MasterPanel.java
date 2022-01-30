@@ -275,7 +275,7 @@ public class MasterPanel extends PluginPanel
 	 */
 	public void setupAccSelectorDropdown(Set<String> currentAccounts) {
 		//adding an item causes the event listener (changeView) to fire which causes stat panel
-		//and flipping panel to rebuild. I think this only happens on the first item you add.
+		//and flipping panel to rebuildItemsDisplay. I think this only happens on the first item you add.
 		accountSelector.addItem(FlippingPlugin.ACCOUNT_WIDE);
 
 		currentAccounts.forEach(displayName -> accountSelector.addItem(displayName));

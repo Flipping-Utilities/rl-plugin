@@ -64,8 +64,6 @@ public class FlippingItemPanel extends JPanel
 
 	private JLabel itemProfitAndQuantityLabel = new JLabel();
 	private JPanel itemIconTitlePanel = new JPanel(new BorderLayout());
-	//Label that controls the collapse function of the item panel.
-	private JLabel collapseIconTitleLabel = new JLabel();
 
 	private JLabel totalProfitValLabel = new JLabel("", SwingConstants.RIGHT);
 	private JLabel profitEachValLabel = new JLabel("", SwingConstants.RIGHT);
@@ -212,13 +210,13 @@ public class FlippingItemPanel extends JPanel
 				{
 					if (subInfoAndHistoryContainer.isVisible())
 					{
-						collapseIconTitleLabel.setIcon(Icons.CLOSE_ICON);
+						collapseIcon.setIcon(Icons.CLOSE_ICON);
 						subInfoAndHistoryContainer.setVisible(false);
 						statsPanel.getExpandedItems().remove(item.getItemName());
 					}
 					else
 					{
-						collapseIconTitleLabel.setIcon(Icons.OPEN_ICON);
+						collapseIcon.setIcon(Icons.OPEN_ICON);
 						subInfoAndHistoryContainer.setVisible(true);
 						statsPanel.getExpandedItems().add(item.getItemName());
 					}
@@ -406,7 +404,6 @@ public class FlippingItemPanel extends JPanel
 				if (result == JOptionPane.YES_OPTION)
 				{
 					deletePanel();
-					statsPanel.rebuild(plugin.viewTradesForCurrentView());
 				}
 			}
 
@@ -533,6 +530,6 @@ public class FlippingItemPanel extends JPanel
 
 	private void deletePanel()
 	{
-		statsPanel.deletePanel(this);
+		statsPanel.deleteItemPanel(this);
 	}
 }

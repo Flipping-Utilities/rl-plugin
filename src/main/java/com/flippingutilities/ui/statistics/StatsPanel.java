@@ -27,13 +27,11 @@
 package com.flippingutilities.ui.statistics;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.model.PartialOffer;
-import com.flippingutilities.model.FlippingItem;
-import com.flippingutilities.model.OfferEvent;
-import com.flippingutilities.model.RecipeFlipGroup;
+import com.flippingutilities.model.*;
 import com.flippingutilities.ui.statistics.items.FlippingItemPanel;
-import com.flippingutilities.ui.statistics.items.FlippingItemTabPanel;
-import com.flippingutilities.ui.statistics.recipes.RecipeGroupTabPanel;
+import com.flippingutilities.ui.statistics.items.FlippingItemContainerPanel;
+import com.flippingutilities.ui.statistics.recipes.RecipeFlipGroupPanel;
+import com.flippingutilities.ui.statistics.recipes.RecipeGroupContainerPanel;
 import com.flippingutilities.ui.uiutilities.*;
 import com.flippingutilities.utilities.SORT;
 import com.flippingutilities.utilities.Searchable;
@@ -102,12 +100,8 @@ public class StatsPanel extends JPanel
 	private final JPanel roiPanel = new JPanel(new BorderLayout());
 	private final JPanel totalFlipsPanel = new JPanel(new BorderLayout());
 	private final JPanel taxPaidPanel = new JPanel(new BorderLayout());
-	private final JPanel sessionTimePanel = this.createSessionTimePanel();
+	private final JPanel sessionTimePanel = new JPanel(new BorderLayout());
 	private final JPanel[] subInfoPanelArray = {hourlyProfitPanel, roiPanel, totalFlipsPanel, taxPaidPanel, sessionTimePanel};
-
-	private long totalProfit;
-	private long totalExpenses;
-	private int totalFlips;
 
 	//Contains the unix time of the start of the interval.
 	@Getter
@@ -127,8 +121,8 @@ public class StatsPanel extends JPanel
 
 	private boolean currentlySearching;
 	private IconTextField searchBar;
-	private FlippingItemTabPanel flippingItemTabPanel;
-	private RecipeGroupTabPanel recipeGroupTabPanel;
+	private FlippingItemContainerPanel flippingItemContainerPanel;
+	private RecipeGroupContainerPanel recipeGroupContainerPanel;
 	/**
 	 * The statistics panel shows various stats about trades the user has made over a selectable time interval.
 	 * This represents the front-end Statistics Tab.
@@ -144,11 +138,11 @@ public class StatsPanel extends JPanel
 		this.prepareLabels();
 
 		searchBar = createSearchBar();
-		flippingItemTabPanel = new FlippingItemTabPanel(plugin);
-		recipeGroupTabPanel = new RecipeGroupTabPanel(plugin);
+		flippingItemContainerPanel = new FlippingItemContainerPanel(plugin);
+		recipeGroupContainerPanel = new RecipeGroupContainerPanel(plugin);
 
 		JPanel mainDisplay = new JPanel();
-		FastTabGroup tabGroup = createTabGroup(mainDisplay, flippingItemTabPanel, recipeGroupTabPanel);
+		FastTabGroup tabGroup = createTabGroup(mainDisplay, flippingItemContainerPanel, recipeGroupContainerPanel);
 
 		setLayout(new BorderLayout());
 		add(createTopPanel(searchBar), BorderLayout.NORTH);
@@ -187,7 +181,8 @@ public class StatsPanel extends JPanel
 			menuItem.addItemListener(i -> {
 				if (i.getStateChange() == ItemEvent.SELECTED) {
 					selectedSort = sortEnum;
-					rebuild(plugin.viewTradesForCurrentView());
+					this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+					this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 				}
 			});
 			popupMenu.add(menuItem);
@@ -214,7 +209,7 @@ public class StatsPanel extends JPanel
 		return sortIcon;
 	}
 
-	private FastTabGroup createTabGroup(JPanel mainDisplay, FlippingItemTabPanel statItemTabPanel, RecipeGroupTabPanel recipeTabPanel) {
+	private FastTabGroup createTabGroup(JPanel mainDisplay, FlippingItemContainerPanel statItemTabPanel, RecipeGroupContainerPanel recipeTabPanel) {
 		FastTabGroup tabGroup = new FastTabGroup(mainDisplay);
 		tabGroup.setBorder(new EmptyBorder(0,16 + 15,0,0));
 
@@ -228,24 +223,39 @@ public class StatsPanel extends JPanel
 		return tabGroup;
 	}
 
-	/**
-	 * Removes old stat items and builds new ones based on the passed trade list.
-	 * Items are initialized with their sub info containers collapsed.
-	 *
-	 * @param flippingItems The list of flipping items that get shown on the stat panel.
-	 */
-	public void rebuild(List<FlippingItem> flippingItems)
+
+	public void rebuildItemsDisplay(List<FlippingItem> flippingItems)
 	{
-		List<FlippingItem> items = getItemsToDisplay(flippingItems);
+		List<FlippingItem> itemsToDisplay = getItemsToDisplay(flippingItems);
 		SwingUtilities.invokeLater(() -> {
-			flippingItemTabPanel.rebuild(items);
-			updateDisplays(items);
-			if (flippingItems.isEmpty() && currentlySearching) {
-				if (flippingItemTabPanel.isVisible()) flippingItemTabPanel.showPanel(createEmptySearchPanel());
-			}
+			flippingItemContainerPanel.rebuild(itemsToDisplay);
+			updateCumulativeDisplays(itemsToDisplay, plugin.viewRecipeFlipGroupsForCurrentView());
+			if (flippingItems.isEmpty() && currentlySearching) showEmptySearchPanel();
 			revalidate();
 			repaint();
 		});
+	}
+
+	public void rebuildRecipesDisplay(List<RecipeFlipGroup> recipeFlipGroups)
+	{
+		List<RecipeFlipGroup> recipeFlipGroupsToDisplay = getRecipeFlipGroupsToDisplay(recipeFlipGroups);
+		SwingUtilities.invokeLater(() -> {
+			recipeGroupContainerPanel.rebuild(recipeFlipGroupsToDisplay);
+			updateCumulativeDisplays(plugin.viewItemsForCurrentView(), recipeFlipGroupsToDisplay);
+			if (recipeFlipGroups.isEmpty() && currentlySearching) showEmptySearchPanel();
+			revalidate();
+			repaint();
+		});
+	}
+
+	private void showEmptySearchPanel() {
+		//don't feel like creating an interface for em just for this...
+		if (flippingItemContainerPanel.isVisible()) {
+			flippingItemContainerPanel.showPanel(createEmptySearchPanel());
+		}
+		if (recipeGroupContainerPanel.isVisible()) {
+			recipeGroupContainerPanel.showPanel(createEmptySearchPanel());
+		}
 	}
 
 	/**
@@ -275,20 +285,14 @@ public class StatsPanel extends JPanel
 		if (Strings.isNullOrEmpty(lookup)) {
 			searchBar.setIcon(IconTextField.Icon.SEARCH);
 			currentlySearching = false;
-			rebuild(plugin.viewTradesForCurrentView());
+			this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+			this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 			return;
 		}
 
-		List<FlippingItem> result = getSearchResults(plugin.viewTradesForCurrentView(), lookup);
-
-		if (result.isEmpty()) {
-			searchBar.setIcon(IconTextField.Icon.ERROR);
-		}
-		else {
-			searchBar.setIcon(IconTextField.Icon.SEARCH);
-		}
 		currentlySearching = true;
-		rebuild(result);
+		this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 	}
 
 	private <T extends Searchable> List<T> getSearchResults(List<T> objs, String lookup) {
@@ -331,7 +335,7 @@ public class StatsPanel extends JPanel
 		timeIntervalDropdown.setEditable(true);
 		timeIntervalDropdown.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 		timeIntervalDropdown.setBackground(CustomColors.DARK_GRAY_LIGHTER);
-		//setting the selected item as session before the item listener is attached so it doesn't fire a rebuild.
+		//setting the selected item as session before the item listener is attached so it doesn't fire a rebuildItemsDisplay.
 		timeIntervalDropdown.setSelectedItem("Session");
 		timeIntervalDropdown.setToolTipText("Specify the time span you would like to see the statistics of");
 		timeIntervalDropdown.addItemListener(event ->
@@ -345,7 +349,7 @@ public class StatsPanel extends JPanel
 				//remove the helper text. so something like "1w (Past week)" becomes just "1w"
 				String justTheInterval = interval.split(" \\(")[0];
 				ItemListener[] itemListeners = timeIntervalDropdown.getItemListeners();
-				//have to remove item listeners so setSelectedItem doesn't cause another rebuild.
+				//have to remove item listeners so setSelectedItem doesn't cause another rebuildItemsDisplay.
 				for (ItemListener listener : itemListeners) {
 					timeIntervalDropdown.removeItemListener(listener);
 				}
@@ -359,12 +363,7 @@ public class StatsPanel extends JPanel
 		return timeIntervalDropdown;
 	}
 
-	/**
-	 * Updates the display of the total profit value along with the display of sub panels
-	 *
-	 * @param tradesList
-	 */
-	public void updateDisplays(List<FlippingItem> tradesList)
+	public void updateCumulativeDisplays(List<FlippingItem> tradesList, List<RecipeFlipGroup> recipeFlipGroups)
 	{
 		if (!Objects.equals(timeIntervalDropdown.getSelectedItem(), "Session"))
 		{
@@ -376,11 +375,9 @@ public class StatsPanel extends JPanel
 			subInfoPanel.add(hourlyProfitPanel);
 		}
 
-		//TODO why are these instance variables....
-		totalProfit = 0;
-		totalExpenses = 0;
-		totalFlips = 0;
-
+		long totalProfit = 0;
+		long totalExpenses = 0;
+		long totalFlips = 0;
 		long taxPaid = 0;
 
 		for (FlippingItem item : tradesList)
@@ -398,25 +395,34 @@ public class StatsPanel extends JPanel
 			totalFlips += FlippingItem.getFlips(adjustedOffers).size();
 		}
 
-		updateTotalProfitDisplay();
+		for (RecipeFlipGroup recipeFlipGroup : recipeFlipGroups) {
+			List<RecipeFlip> recipeFlips = recipeFlipGroup.getFlipsInInterval(startOfInterval);
+			if (recipeFlips.isEmpty()) continue;
+			taxPaid += recipeFlips.stream().mapToLong(RecipeFlip::getTaxPaid).sum();
+			totalProfit += recipeFlips.stream().mapToLong(RecipeFlip::getProfit).sum();
+			totalExpenses += recipeFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
+			totalFlips += recipeFlips.stream().mapToLong(rf -> rf.getRecipeCountMade(recipeFlipGroup.getRecipe())).sum();
+		}
+
+		updateTotalProfitDisplay(totalProfit);
 		if (Objects.equals(timeIntervalDropdown.getSelectedItem(), "Session"))
 		{
 			Duration accumulatedTime = plugin.viewAccumulatedTimeForCurrentView();
 			updateSessionTimeDisplay(accumulatedTime);
-			updateHourlyProfitDisplay(accumulatedTime);
+			updateHourlyProfitDisplay(totalProfit, accumulatedTime);
 		}
-		updateRoiDisplay();
-		updateTotalFlipsDisplay();
+		updateRoiDisplay(totalProfit, totalExpenses);
+		updateTotalFlipsDisplay(totalFlips);
 		updateTaxPaidDisplay(taxPaid);
 	}
 
 	/**
 	 * Responsible for updating the total profit label at the very top.
-	 * Sets the new total profit value from the items in tradesList from {@link FlippingPlugin#getTradesForCurrentView()}.
+	 * Sets the new total profit value from the items in tradesList from {@link FlippingPlugin#getItemsForCurrentView()}.
 	 */
-	private void updateTotalProfitDisplay()
+	private void updateTotalProfitDisplay(long totalProfit)
 	{
-		if (plugin.viewTradesForCurrentView() == null)
+		if (plugin.viewItemsForCurrentView() == null)
 		{
 			totalProfitVal.setText("0");
 			totalProfitVal.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
@@ -453,7 +459,7 @@ public class StatsPanel extends JPanel
 	/**
 	 * Updates the hourly profit value display. Also checks and sets the font color according to profit/loss.
 	 */
-	private void updateHourlyProfitDisplay(Duration accumulatedTime)
+	private void updateHourlyProfitDisplay(long totalProfit, Duration accumulatedTime)
 	{
 		String profitString;
 		double divisor = accumulatedTime.toMillis() / 1000 * 1.0 / (60 * 60);
@@ -475,7 +481,7 @@ public class StatsPanel extends JPanel
 	/**
 	 * Updates the total ROI value display. Also checks and sets the font color according to profit/loss.
 	 */
-	private void updateRoiDisplay()
+	private void updateRoiDisplay(long totalProfit, long totalExpenses)
 	{
 		float roi = (float) totalProfit / totalExpenses * 100;
 
@@ -494,7 +500,7 @@ public class StatsPanel extends JPanel
 		roiPanel.setToolTipText("<html>Return on investment:<br>Percentage of profit relative to gp invested</html>");
 	}
 
-	private void updateTotalFlipsDisplay()
+	private void updateTotalFlipsDisplay(long totalFlips)
 	{
 		totalFlipsVal.setText(QuantityFormatter.formatNumber(totalFlips));
 		totalFlipsVal.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
@@ -516,8 +522,8 @@ public class StatsPanel extends JPanel
 	 */
 	public void updateTimeDisplay()
 	{
-		flippingItemTabPanel.updateTimeDisplay();
-		recipeGroupTabPanel.updateTimeDisplay();
+		flippingItemContainerPanel.updateTimeDisplay();
+		recipeGroupContainerPanel.updateTimeDisplay();
 	}
 
 	/**
@@ -533,18 +539,22 @@ public class StatsPanel extends JPanel
 
 	/**
 	 * Invalidates a FlippingItems offers for the currently picked time interval.
-	 * This means the panel will not be built upon the next rebuild calls of StatPanel for that time interval.
+	 * This means the panel will not be built upon the next rebuildItemsDisplay calls of StatPanel for that time interval.
 	 *
 	 * @param itemPanel The panel which holds the FlippingItem to be terminated.
 	 */
-	public void deletePanel(FlippingItemPanel itemPanel)
+	public void deleteItemPanel(FlippingItemPanel itemPanel)
 	{
 		FlippingItem item = itemPanel.getItem();
-		item.deleteOffers(item.getIntervalHistory(startOfInterval));
-		if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
-			plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
-		}
-		rebuild(plugin.viewTradesForCurrentView());
+		plugin.deleteOffers(item.getIntervalHistory(startOfInterval), item);
+		this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
+	}
+
+	public void deleteRecipeFlipGroupPanel(RecipeFlipGroupPanel recipeFlipGroupPanel) {
+		recipeFlipGroupPanel.getRecipeFlipGroup().deleteFlips(startOfInterval);
+		plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
+		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 	}
 
 	/**
@@ -595,7 +605,8 @@ public class StatsPanel extends JPanel
 				return;
 			}
 		}
-		rebuild(plugin.viewTradesForCurrentView());
+		this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 	}
 
 	/**
@@ -635,7 +646,8 @@ public class StatsPanel extends JPanel
 					if (result == JOptionPane.YES_OPTION)
 					{
 						plugin.deleteOffers(startOfInterval);
-						rebuild(plugin.viewTradesForCurrentView());
+						StatsPanel.this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+						StatsPanel.this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 					}
 				}
 			}
@@ -843,33 +855,6 @@ public class StatsPanel extends JPanel
 				BorderFactory.createMatteBorder(0,2,2,2, ColorScheme.DARKER_GRAY_COLOR.darker()),
 				new EmptyBorder(2, 5, 5, 5)));
 		return subInfoPanel;
-	}
-
-	private JPanel createSessionTimePanel() {
-		JPanel sessionTimePanel = new JPanel(new BorderLayout());
-		sessionTimePanel.addMouseListener(new MouseAdapter()
-		{
-			@Override
-			public void mousePressed(MouseEvent e)
-			{
-				if (SwingUtilities.isRightMouseButton(e))
-				{
-					//Display warning message
-					final int result = JOptionPane.showOptionDialog(sessionTimePanel, "Are you sure you want to reset the session time?",
-							"Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
-							null, new String[]{"Yes", "No"}, "No");
-
-					//If the user pressed "Yes"
-					if (result == JOptionPane.YES_OPTION)
-					{
-						plugin.handleSessionTimeReset();
-						rebuild(plugin.viewTradesForCurrentView());
-					}
-				}
-			}
-		});
-		sessionTimePanel.setToolTipText("Right-click to reset session timer");
-		return sessionTimePanel;
 	}
 
 	private JPanel createProfitAndSubInfoContainer() {

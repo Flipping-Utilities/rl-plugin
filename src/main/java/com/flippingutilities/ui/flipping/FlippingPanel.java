@@ -134,7 +134,7 @@ public class FlippingPanel extends JPanel
 		topPanel.add(searchBar, BorderLayout.CENTER);
 		topPanel.add(this.createFavoriteButton(), BorderLayout.EAST);
 
-		paginator = new Paginator(() -> rebuild(plugin.viewTradesForCurrentView()));
+		paginator = new Paginator(() -> rebuild(plugin.viewItemsForCurrentView()));
 		paginator.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		paginator.setBorder(new MatteBorder(1,0,0,2, ColorScheme.DARK_GRAY_COLOR.darker()));
 		paginator.setPageSize(10);
@@ -151,7 +151,7 @@ public class FlippingPanel extends JPanel
 	 * Creates and renders the panel using the flipping items in the listed parameter.
 	 * An item is only displayed if it contains a valid OfferInfo object in its history.
 	 *
-	 * @param flippingItems List of flipping items that the rebuild will render.
+	 * @param flippingItems List of flipping items that the rebuildItemsDisplay will render.
 	 */
 	public void rebuild(List<FlippingItem> flippingItems)
 	{
@@ -197,7 +197,7 @@ public class FlippingPanel extends JPanel
 
 	/**
 	 * Handles rebuilding the flipping panel when a new offer event comes in. There are several cases
-	 * where we don't want to rebuild either because it is unnecessary or visually annoying for a user.
+	 * where we don't want to rebuildItemsDisplay either because it is unnecessary or visually annoying for a user.
 	 * @param offerEvent the new offer that just came in
 	 */
 	public void onNewOfferEventRebuild(OfferEvent offerEvent) {
@@ -209,7 +209,7 @@ public class FlippingPanel extends JPanel
 		//it's annoying when you have searched an item up or an item is
 		//highlighted and then the panel is rebuilt due to an offer coming in. This guard prevents that.
 		if (!isItemHighlighted() && !currentlySearching) {
-			rebuild(plugin.viewTradesForCurrentView());
+			rebuild(plugin.viewItemsForCurrentView());
 		}
 	}
 
@@ -263,7 +263,7 @@ public class FlippingPanel extends JPanel
 					favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
 				}
 				favoriteSelected = !favoriteSelected;
-				rebuild(plugin.viewTradesForCurrentView());
+				rebuild(plugin.viewItemsForCurrentView());
 			}
 
 			@Override
@@ -295,7 +295,7 @@ public class FlippingPanel extends JPanel
 			return;
 		}
 		itemHighlighted = false;
-		rebuild(plugin.viewTradesForCurrentView());
+		rebuild(plugin.viewItemsForCurrentView());
 	}
 
 	/**
@@ -331,11 +331,11 @@ public class FlippingPanel extends JPanel
 		if (Strings.isNullOrEmpty(lookup))
 		{
 			currentlySearching = false;
-			rebuild(plugin.viewTradesForCurrentView());
+			rebuild(plugin.viewItemsForCurrentView());
 			return;
 		}
 
-		Map<Integer, FlippingItem> currentFlippingItems = plugin.viewTradesForCurrentView().stream().collect(Collectors.toMap(f -> f.getItemId(), f -> f));
+		Map<Integer, FlippingItem> currentFlippingItems = plugin.viewItemsForCurrentView().stream().collect(Collectors.toMap(f -> f.getItemId(), f -> f));
 		List<FlippingItem> matchesInHistory = new ArrayList<>();
 		List<FlippingItem> matchesNotInHistory = new ArrayList<>();
 		for (ItemPrice itemInfo:  itemManager.search(lookup)) {
@@ -361,7 +361,7 @@ public class FlippingPanel extends JPanel
 		{
 			searchBar.setIcon(IconTextField.Icon.ERROR);
 			currentlySearching = false;
-			rebuild(plugin.viewTradesForCurrentView());
+			rebuild(plugin.viewItemsForCurrentView());
 			return;
 		}
 		searchBar.setIcon(IconTextField.Icon.SEARCH);
@@ -400,7 +400,7 @@ public class FlippingPanel extends JPanel
 						plugin.setAllFlippingItemsAsHidden();
 						setItemHighlighted(false);
 						cardLayout.show(flippingItemContainer, WELCOME_PANEL);
-						rebuild(plugin.viewTradesForCurrentView());
+						rebuild(plugin.viewItemsForCurrentView());
 					}
 				}
 			}
