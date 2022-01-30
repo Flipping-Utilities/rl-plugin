@@ -232,8 +232,10 @@ public class OfferPanel extends JPanel {
 
                 //If the user pressed "Yes"
                 if (result == JOptionPane.YES_OPTION) {
-                    item.deleteOffers(List.of(offer));
-                    plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
+                    plugin.deleteOffers(List.of(offer), item);
+                    plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+                    plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
+
                 }
             }
 

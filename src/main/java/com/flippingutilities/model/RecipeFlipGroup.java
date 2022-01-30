@@ -7,6 +7,7 @@ import lombok.Data;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Data
@@ -40,6 +41,15 @@ public class RecipeFlipGroup implements Searchable {
         return recipeFlips.stream()
             .filter(recipeFlip -> recipeFlip.getTimeOfCreation().isAfter(startOfInterval))
             .collect(Collectors.toList());
+    }
+
+    public void deleteFlips(Instant startOfInterval) {
+        recipeFlips.removeIf(rf -> rf.getTimeOfCreation().isAfter(startOfInterval));
+    }
+
+    public void deleteFlipsWithDeletedOffers(List<OfferEvent> offers) {
+        Set<String> offerIds = offers.stream().map(OfferEvent::getUuid).collect(Collectors.toSet());
+        recipeFlips.removeIf(rf -> rf.getPartialOffers().stream().anyMatch(po -> offerIds.contains(po.offer.getUuid())));
     }
 
     @Override

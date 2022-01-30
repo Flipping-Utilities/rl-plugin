@@ -42,7 +42,7 @@ public class RecipeFlip {
     }
 
     private long getExpenseOrRevenue(boolean getExpense) {
-        return getOffers().stream()
+        return getPartialOffers().stream()
             .filter(po -> po.offer.isBuy() == getExpense)
             .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
             .sum();
@@ -82,7 +82,7 @@ public class RecipeFlip {
     /**
      * Gets all the partial offers contained in this combination flip.
      */
-    public List<PartialOffer> getOffers() {
+    public List<PartialOffer> getPartialOffers() {
         List<PartialOffer> offers = new ArrayList<>();
         inputs.values().forEach(map -> offers.addAll(map.values()));
         outputs.values().forEach(map -> offers.addAll(map.values()));

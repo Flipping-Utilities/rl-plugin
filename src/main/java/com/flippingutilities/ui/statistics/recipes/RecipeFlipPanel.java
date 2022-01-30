@@ -2,7 +2,6 @@ package com.flippingutilities.ui.statistics.recipes;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.RecipeFlip;
-import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
@@ -155,7 +154,7 @@ public class RecipeFlipPanel extends JPanel {
                         null, new String[]{"Yes", "No"}, "No");
 
                 if (result == JOptionPane.YES_OPTION) {
-                    plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
+                    plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
                 }
             }
 

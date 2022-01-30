@@ -1,9 +1,6 @@
 package com.flippingutilities.controller;
 
-import com.flippingutilities.model.FlippingItem;
-import com.flippingutilities.model.PartialOffer;
-import com.flippingutilities.model.RecipeFlip;
-import com.flippingutilities.model.RecipeFlipGroup;
+import com.flippingutilities.model.*;
 import com.flippingutilities.utilities.Recipe;
 import com.flippingutilities.utilities.SORT;
 import com.google.gson.Gson;
@@ -253,6 +250,15 @@ public class RecipeHandler {
         }
         Collections.reverse(result);
         return result;
+    }
+
+    public void deleteInvalidRecipeFlips(List<OfferEvent> offers, List<RecipeFlipGroup> recipeFlipGroups) {
+        if (offers.isEmpty()) {
+            return;
+        }
+        int itemId = offers.get(0).getItemId();
+        //get all the rfgs containing recipe flips that the offers could possibly be referenced in
+        recipeFlipGroups.stream().filter(rfg -> rfg.isInGroup(itemId)).forEach(rfg -> rfg.deleteFlipsWithDeletedOffers(offers));
     }
 
     private Optional<List<Recipe>> loadRecipes() {

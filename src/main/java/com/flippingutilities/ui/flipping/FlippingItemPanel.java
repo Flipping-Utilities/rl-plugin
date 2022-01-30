@@ -640,7 +640,7 @@ public class FlippingItemPanel extends JPanel
 				if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
 					plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 				}
-				plugin.getFlippingPanel().rebuild(plugin.viewTradesForCurrentView());
+				plugin.getFlippingPanel().rebuild(plugin.viewItemsForCurrentView());
 			}
 
 			@Override

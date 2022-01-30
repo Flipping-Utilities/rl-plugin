@@ -91,7 +91,7 @@ public class NewOfferEventPipelineHandler {
         }
 
         plugin.getFlippingPanel().onNewOfferEventRebuild(offerEvent);
-        plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
+        plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
     }
 
     /**

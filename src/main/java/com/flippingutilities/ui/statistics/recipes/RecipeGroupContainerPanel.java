@@ -1,7 +1,7 @@
-package com.flippingutilities.ui.statistics.items;
+package com.flippingutilities.ui.statistics.recipes;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.model.FlippingItem;
+import com.flippingutilities.model.RecipeFlipGroup;
 import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
@@ -19,19 +19,18 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class FlippingItemTabPanel extends JPanel {
-
-    private JPanel flippingItemPanelsContainer;
-    private List<FlippingItemPanel> activePanels = new ArrayList<>();
+public class RecipeGroupContainerPanel extends JPanel {
+    private JPanel recipeGroupContainer;
+    private List<RecipeFlipGroupPanel> activePanels = new ArrayList<>();
     private Paginator paginator;
     private FlippingPlugin plugin;
 
-    public FlippingItemTabPanel(FlippingPlugin flippingPlugin) {
+    public RecipeGroupContainerPanel(FlippingPlugin flippingPlugin) {
         plugin = flippingPlugin;
-        flippingItemPanelsContainer = createStatItemsPanelContainer();
+        recipeGroupContainer = createRecipeGroupContainer();
         paginator = createPaginator();
 
-        JScrollPane scrollPane = createScrollPane(flippingItemPanelsContainer);
+        JScrollPane scrollPane = createScrollPane(recipeGroupContainer);
 
         setLayout(new BorderLayout());
 
@@ -39,34 +38,33 @@ public class FlippingItemTabPanel extends JPanel {
         add(paginator, BorderLayout.SOUTH);
     }
 
-    public void rebuild(List<FlippingItem> flippingItems) {
+    public void rebuild(List<RecipeFlipGroup> recipeFlipGroups) {
         activePanels.clear();
-        flippingItemPanelsContainer.removeAll();
+        recipeGroupContainer.removeAll();
+        paginator.updateTotalPages(recipeFlipGroups.size());
 
-        paginator.updateTotalPages(flippingItems.size());
-
-        List<FlippingItem> itemsOnCurrentPage = paginator.getCurrentPageItems(flippingItems);
-        List<FlippingItemPanel> newPanels = itemsOnCurrentPage.stream().map(item -> new FlippingItemPanel(plugin, item)).collect(Collectors.toList());
-        UIUtilities.stackPanelsVertically((List) newPanels, flippingItemPanelsContainer, 5);
+        List<RecipeFlipGroup> itemsOnCurrentPage = paginator.getCurrentPageItems(recipeFlipGroups);
+        List<RecipeFlipGroupPanel> newPanels = itemsOnCurrentPage.stream().map(rfg -> new RecipeFlipGroupPanel(plugin, rfg)).collect(Collectors.toList());
+        UIUtilities.stackPanelsVertically((List) newPanels, recipeGroupContainer, 5);
         activePanels.addAll(newPanels);
     }
 
     public void showPanel(JPanel panel) {
         activePanels.clear();
-        flippingItemPanelsContainer.removeAll();
-        flippingItemPanelsContainer.add(panel);
+        recipeGroupContainer.removeAll();
+        recipeGroupContainer.add(panel);
     }
 
-    private JPanel createStatItemsPanelContainer() {
+    private JPanel createRecipeGroupContainer() {
         JPanel statItemPanelsContainer = new JPanel();
         statItemPanelsContainer.setLayout(new BoxLayout(statItemPanelsContainer, BoxLayout.Y_AXIS));
         return statItemPanelsContainer;
     }
 
-    private JScrollPane createScrollPane(JPanel statItemPanelsContainer) {
+    private JScrollPane createScrollPane(JPanel recipeGroupContainer) {
         JPanel statItemPanelsContainerWrapper = new JPanel(new BorderLayout());
         statItemPanelsContainerWrapper.setBorder(new EmptyBorder(0,0,0,3));
-        statItemPanelsContainerWrapper.add(statItemPanelsContainer, BorderLayout.NORTH);
+        statItemPanelsContainerWrapper.add(recipeGroupContainer, BorderLayout.NORTH);
 
         JScrollPane scrollPane = new JScrollPane(statItemPanelsContainerWrapper);
         scrollPane.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -80,7 +78,7 @@ public class FlippingItemTabPanel extends JPanel {
         paginator = new Paginator(() -> SwingUtilities.invokeLater(() -> {
             StatsPanel statsPanel = plugin.getStatPanel();
             Instant rebuildStart = Instant.now();
-            rebuild(statsPanel.getItemsToDisplay(plugin.viewTradesForCurrentView()));
+            rebuild(statsPanel.getRecipeFlipGroupsToDisplay(plugin.viewRecipeFlipGroupsForCurrentView()));
             revalidate();
             repaint();
             log.debug("page change took {}", Duration.between(rebuildStart, Instant.now()).toMillis());
@@ -91,6 +89,6 @@ public class FlippingItemTabPanel extends JPanel {
     }
 
     public void updateTimeDisplay() {
-        activePanels.forEach(FlippingItemPanel::updateTimeLabels);
+        activePanels.forEach(RecipeFlipGroupPanel::updateTimeLabels);
     }
 }

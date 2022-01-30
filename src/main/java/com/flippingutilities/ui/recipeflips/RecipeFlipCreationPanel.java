@@ -447,7 +447,7 @@ public class RecipeFlipCreationPanel extends JPanel {
         finishButton.addActionListener(e -> {
             RecipeFlip recipeFlip = new RecipeFlip(recipe, selectedOffers);
             plugin.addRecipeFlip(recipeFlip);
-            plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
+            plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 
             bottomPanel.removeAll();
             JPanel successPanel = new JPanel(new DynamicGridLayout(2, 1));
