@@ -120,7 +120,7 @@ public class RecipeFlipGroupPanel extends JPanel {
         List<RecipeFlip> flipsCopy = new ArrayList<>(recipeFlips);
         Collections.reverse(flipsCopy);
         List<RecipeFlip> flipsOnCurrentPage = recipeFlipPaginator.getCurrentPageItems(flipsCopy);
-        return flipsOnCurrentPage.stream().map(rf -> new RecipeFlipPanel(rf, recipeFlipGroup.getRecipe(), plugin)).collect(Collectors.toList());
+        return flipsOnCurrentPage.stream().map(rf -> new RecipeFlipPanel(recipeFlipGroup, rf, recipeFlipGroup.getRecipe(), plugin)).collect(Collectors.toList());
     }
 
     private void updateBackgroundPanel(List<RecipeFlip> flips) {

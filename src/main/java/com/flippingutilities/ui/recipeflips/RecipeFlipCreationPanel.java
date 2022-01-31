@@ -302,11 +302,7 @@ public class RecipeFlipCreationPanel extends JPanel {
      */
     private void addOfferPanelRow(JPanel bodyPanel,
                                   Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
-        itemIdToPartialOffers.forEach((id, l) -> {
-            log.info("amount consumed for item {} is {}", id, l.stream().mapToInt(po -> po.amountConsumed).sum());
-        });
         Map<Integer, Integer> targetValues = plugin.getTargetValuesForMaxRecipeCount(recipe, itemIdToPartialOffers, true);
-        log.info("target values: {}", targetValues);
         recipe.getInputIds().forEach(id -> addOfferPanel(bodyPanel, id, itemIdToPartialOffers, targetValues));
 
         //empty panel occupies the space under the arrow
@@ -448,6 +444,7 @@ public class RecipeFlipCreationPanel extends JPanel {
             RecipeFlip recipeFlip = new RecipeFlip(recipe, selectedOffers);
             plugin.addRecipeFlip(recipeFlip);
             plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
+            plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
 
             bottomPanel.removeAll();
             JPanel successPanel = new JPanel(new DynamicGridLayout(2, 1));

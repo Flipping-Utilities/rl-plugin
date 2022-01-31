@@ -47,6 +47,10 @@ public class RecipeFlipGroup implements Searchable {
         recipeFlips.removeIf(rf -> rf.getTimeOfCreation().isAfter(startOfInterval));
     }
 
+    public void deleteFlip(RecipeFlip recipeFlip) {
+        recipeFlips.removeIf(rf -> rf.equals(recipeFlip));
+    }
+
     public void deleteFlipsWithDeletedOffers(List<OfferEvent> offers) {
         Set<String> offerIds = offers.stream().map(OfferEvent::getUuid).collect(Collectors.toSet());
         recipeFlips.removeIf(rf -> rf.getPartialOffers().stream().anyMatch(po -> offerIds.contains(po.offer.getUuid())));

@@ -3,6 +3,7 @@ package com.flippingutilities.ui.statistics.recipes;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.RecipeFlip;
 import com.flippingutilities.model.PartialOffer;
+import com.flippingutilities.model.RecipeFlipGroup;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
@@ -32,8 +33,10 @@ public class RecipeFlipPanel extends JPanel {
     private RecipeFlip recipeFlip;
     private FlippingPlugin plugin;
     private Recipe recipe;
+    private RecipeFlipGroup recipeFlipGroup;
 
-    public RecipeFlipPanel(RecipeFlip recipeFlip, Recipe recipe, FlippingPlugin plugin) {
+    public RecipeFlipPanel(RecipeFlipGroup recipeFlipGroup, RecipeFlip recipeFlip, Recipe recipe, FlippingPlugin plugin) {
+        this.recipeFlipGroup = recipeFlipGroup;
         this.recipeFlip = recipeFlip;
         this.plugin = plugin;
         this.recipe = recipe;
@@ -154,7 +157,8 @@ public class RecipeFlipPanel extends JPanel {
                         null, new String[]{"Yes", "No"}, "No");
 
                 if (result == JOptionPane.YES_OPTION) {
-                    plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+                    recipeFlipGroup.deleteFlip(recipeFlip);
+                    plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
                 }
             }
 
