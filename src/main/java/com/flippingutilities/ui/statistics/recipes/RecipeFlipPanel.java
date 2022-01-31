@@ -89,10 +89,12 @@ public class RecipeFlipPanel extends JPanel {
 
     private JPanel createComponentGroupPanel(Map<Integer, Map<String, PartialOffer>> partialOffers, boolean outputs) {
 
-        JLabel titleLabel = new JLabel(outputs? "Outputs":"Inputs", SwingConstants.CENTER);
-        titleLabel.setFont(FontManager.getRunescapeSmallFont());
+        JLabel titleLabel = new JLabel(outputs? "OUTPUTS":"INPUTS", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
+        titleLabel.setBorder(new EmptyBorder(0,0,5,0));
 
         JPanel componentGroupPanel = new JPanel(new DynamicGridLayout(1 + partialOffers.size(), 1));
+        componentGroupPanel.setBackground(CustomColors.DARK_GRAY);
         componentGroupPanel.add(titleLabel);
 
         partialOffers.forEach((itemId, partialOfferMap) -> {
@@ -112,6 +114,7 @@ public class RecipeFlipPanel extends JPanel {
         itemNameLabel.setFont(FontManager.getRunescapeSmallFont());
 
         JPanel quantityPanel = new JPanel(new BorderLayout());
+        quantityPanel.setBackground(CustomColors.DARK_GRAY);
         JLabel quantityLabel = new JLabel("Quantity", SwingConstants.CENTER);
         quantityLabel.setFont(FontManager.getRunescapeSmallFont());
         JLabel quantityValueLabel = new JLabel(QuantityFormatter.formatNumber(quantity));
@@ -120,14 +123,16 @@ public class RecipeFlipPanel extends JPanel {
         quantityPanel.add(quantityValueLabel, BorderLayout.EAST);
 
         JPanel pricePanel = new JPanel(new BorderLayout());
+        pricePanel.setBackground(CustomColors.DARK_GRAY);
         JLabel priceLabel = new JLabel("Avg Price", SwingConstants.CENTER);
         priceLabel.setFont(FontManager.getRunescapeSmallFont());
         JLabel priceValueLabel = new JLabel(QuantityFormatter.formatNumber(avgPrice));
         priceValueLabel.setFont(FontManager.getRunescapeSmallFont());
-        pricePanel.add(quantityLabel, BorderLayout.WEST);
-        pricePanel.add(quantityValueLabel, BorderLayout.EAST);
+        pricePanel.add(priceLabel, BorderLayout.WEST);
+        pricePanel.add(priceValueLabel, BorderLayout.EAST);
 
         JPanel itemPanel = new JPanel(new DynamicGridLayout(3,1));
+        itemPanel.setBackground(CustomColors.DARK_GRAY);
         itemPanel.add(itemNameLabel);
         itemPanel.add(quantityPanel);
         itemPanel.add(pricePanel);
@@ -220,42 +225,6 @@ public class RecipeFlipPanel extends JPanel {
         return deleteIcon;
     }
 
-    private JPanel createPartialOfferPanel(List<PartialOffer> partialOffers) {
-        String itemName = partialOffers.get(0).offer.getItemName();
-        long quantity = partialOffers.stream().mapToLong(po -> po.amountConsumed).sum();
-        int itemPrice = (int) (partialOffers.stream().mapToLong(po -> po.offer.getPrice() * po.amountConsumed).sum()/quantity);
-
-        JLabel itemNameLabel = new JLabel(itemName, SwingConstants.CENTER);
-        itemNameLabel.setFont(FontManager.getRunescapeSmallFont());
-
-        JLabel quantityDescLabel = new JLabel("Quantity:");
-        JLabel quantityValueLabel = new JLabel(String.valueOf(quantity));
-
-        JLabel priceDescLabel = new JLabel("Price ea:");
-        JLabel priceValueLabel = new JLabel(QuantityFormatter.formatNumber(itemPrice) + " gp");
-
-        List.of(quantityDescLabel, quantityValueLabel, priceDescLabel, priceValueLabel).forEach(l -> l.setFont(FontManager.getRunescapeSmallFont()));
-
-        JPanel quantityPanel = new JPanel(new BorderLayout());
-        quantityPanel.setBackground(CustomColors.DARK_GRAY);
-        quantityPanel.add(quantityDescLabel, BorderLayout.WEST);
-        quantityPanel.add(quantityValueLabel, BorderLayout.EAST);
-
-        JPanel pricePanel = new JPanel(new BorderLayout());
-        pricePanel.setBackground(CustomColors.DARK_GRAY);
-        pricePanel.add(priceDescLabel, BorderLayout.WEST);
-        pricePanel.add(priceValueLabel, BorderLayout.EAST);
-
-        JPanel partialOfferPanel = new JPanel(new DynamicGridLayout(3,1));
-        partialOfferPanel.add(itemNameLabel);
-        partialOfferPanel.add(quantityPanel);
-        partialOfferPanel.add(pricePanel);
-
-        partialOfferPanel.setBackground(CustomColors.DARK_GRAY);
-
-        return partialOfferPanel;
-    }
-
     private JPanel createProfitPanel() {
         long quantity = recipeFlip.getRecipeCountMade(recipe);
         long profit = recipeFlip.getProfit();
@@ -271,7 +240,6 @@ public class RecipeFlipPanel extends JPanel {
         profitDescriptionLabel.setFont(FontManager.getRunescapeSmallFont());
 
         profitDescriptionLabel.setForeground(profit >= 0? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
-        profitValLabel.setForeground(profit >= 0? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
 
         JPanel profitPanel = new JPanel(new BorderLayout());
         profitPanel.setBackground(CustomColors.DARK_GRAY);

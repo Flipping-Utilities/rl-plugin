@@ -43,7 +43,7 @@ public class RecipeFlipGroupPanel extends JPanel {
 
     private List<RecipeFlipPanel> recipeFlipPanels;
     private Paginator recipeFlipPaginator;
-    private JPanel recipeFlipsBackgroundPanel = new JPanel();
+    private JPanel recipeFlipsBackgroundPanel = createRecipeFlipsBackgroundPanel();
 
 
     RecipeFlipGroupPanel(FlippingPlugin plugin, RecipeFlipGroup recipeFlipGroup) {
@@ -85,6 +85,12 @@ public class RecipeFlipGroupPanel extends JPanel {
         subInfoAndHistoryContainer.add(tradeHistoryPanel, BorderLayout.SOUTH);
         subInfoAndHistoryContainer.setVisible(false);
         return subInfoAndHistoryContainer;
+    }
+
+    private JPanel createRecipeFlipsBackgroundPanel() {
+        JPanel recipeFlipsBackgroundPanel = new JPanel();
+        recipeFlipsBackgroundPanel.setVisible(false);
+        return recipeFlipsBackgroundPanel;
     }
 
     private Paginator createPaginator(Runnable runnable) {
