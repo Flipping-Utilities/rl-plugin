@@ -31,6 +31,11 @@ public class PartialOffer {
         adjustedOfferEvent.setCurrentQuantityInTrade(remainingAmount);
         return adjustedOfferEvent;
     }
+
+    public void hydrateUnderlyingOfferEvent(String madeBy, String itemName) {
+        offer.setMadeBy(madeBy);
+        offer.setItemName(itemName);
+    }
 }
 
 

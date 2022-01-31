@@ -20,7 +20,9 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -85,24 +87,66 @@ public class RecipeFlipPanel extends JPanel {
         return timeDisplay;
     }
 
+    private JPanel createComponentGroupPanel(Map<Integer, Map<String, PartialOffer>> partialOffers, boolean outputs) {
+
+        JLabel titleLabel = new JLabel(outputs? "Outputs":"Inputs", SwingConstants.CENTER);
+        titleLabel.setFont(FontManager.getRunescapeSmallFont());
+
+        JPanel componentGroupPanel = new JPanel(new DynamicGridLayout(1 + partialOffers.size(), 1));
+        componentGroupPanel.add(titleLabel);
+
+        partialOffers.forEach((itemId, partialOfferMap) -> {
+            componentGroupPanel.add(createComponentPanel(partialOfferMap));
+        });
+
+        return componentGroupPanel;
+    }
+
+    private JPanel createComponentPanel(Map<String, PartialOffer> partialOfferMap){
+        List<PartialOffer> partialOfferList = new ArrayList<>(partialOfferMap.values());
+        String itemName = partialOfferList.get(0).offer.getItemName();
+        int quantity = partialOfferList.stream().mapToInt(po -> po.amountConsumed).sum();
+        long avgPrice = partialOfferList.stream().mapToLong(po -> po.getOffer().getPrice()).sum()/quantity;
+
+        JLabel itemNameLabel = new JLabel(itemName, SwingConstants.CENTER);
+        itemNameLabel.setFont(FontManager.getRunescapeSmallFont());
+
+        JPanel quantityPanel = new JPanel(new BorderLayout());
+        JLabel quantityLabel = new JLabel("Quantity", SwingConstants.CENTER);
+        quantityLabel.setFont(FontManager.getRunescapeSmallFont());
+        JLabel quantityValueLabel = new JLabel(QuantityFormatter.formatNumber(quantity));
+        quantityValueLabel.setFont(FontManager.getRunescapeSmallFont());
+        quantityPanel.add(quantityLabel, BorderLayout.WEST);
+        quantityPanel.add(quantityValueLabel, BorderLayout.EAST);
+
+        JPanel pricePanel = new JPanel(new BorderLayout());
+        JLabel priceLabel = new JLabel("Avg Price", SwingConstants.CENTER);
+        priceLabel.setFont(FontManager.getRunescapeSmallFont());
+        JLabel priceValueLabel = new JLabel(QuantityFormatter.formatNumber(avgPrice));
+        priceValueLabel.setFont(FontManager.getRunescapeSmallFont());
+        pricePanel.add(quantityLabel, BorderLayout.WEST);
+        pricePanel.add(quantityValueLabel, BorderLayout.EAST);
+
+        JPanel itemPanel = new JPanel(new DynamicGridLayout(3,1));
+        itemPanel.add(itemNameLabel);
+        itemPanel.add(quantityPanel);
+        itemPanel.add(pricePanel);
+
+        return itemPanel;
+    }
+
     private JPanel createDetailsPanel() {
-        List<JPanel> partialOfferPanels = new ArrayList<>();
-        partialOfferPanels.addAll(
-            recipeFlip.getOutputs().values().stream()
-                .map(offerIdToPartialOffer -> createPartialOfferPanel(new ArrayList<>(offerIdToPartialOffer.values())))
-                .collect(Collectors.toList())
-        );
 
-        partialOfferPanels.addAll(
-            recipeFlip.getInputs().values().stream()
-                .map(offerIdToPartialOffer -> createPartialOfferPanel(new ArrayList<>(offerIdToPartialOffer.values())))
-                .collect(Collectors.toList())
-        );
+        JPanel inputPanel = createComponentGroupPanel(recipeFlip.getInputs(), false);
+        JPanel outputPanel = createComponentGroupPanel(recipeFlip.getOutputs(), true);
 
-        JPanel extraDetailsPanel = UIUtilities.stackPanelsVertically(partialOfferPanels, 2);
-        extraDetailsPanel.setBorder(new EmptyBorder(5,0,0,0));
-        extraDetailsPanel.setBackground(CustomColors.DARK_GRAY);
-        extraDetailsPanel.setVisible(false);
+        JPanel inputsAndOutputsPanel = new JPanel(new DynamicGridLayout(2,1));
+        inputsAndOutputsPanel.setBorder(new EmptyBorder(5,0,0,0));
+        inputsAndOutputsPanel.setBackground(CustomColors.DARK_GRAY);
+        inputsAndOutputsPanel.setVisible(false);
+
+        inputsAndOutputsPanel.add(inputPanel);
+        inputsAndOutputsPanel.add(outputPanel);
 
         JLabel expandDetailsLabel = new JLabel("Expand Details", SwingConstants.CENTER);
         Color c = expandDetailsLabel.getForeground();
@@ -113,8 +157,8 @@ public class RecipeFlipPanel extends JPanel {
         expandDetailsLabel.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                extraDetailsPanel.setVisible(!extraDetailsPanel.isVisible());
-                expandDetailsLabel.setText(extraDetailsPanel.isVisible()? "Collapse Details": "Expand Details");
+                inputsAndOutputsPanel.setVisible(!inputsAndOutputsPanel.isVisible());
+                expandDetailsLabel.setText(inputsAndOutputsPanel.isVisible()? "Collapse Details": "Expand Details");
             }
 
             @Override
@@ -138,7 +182,7 @@ public class RecipeFlipPanel extends JPanel {
         detailsPanel.setBackground(CustomColors.DARK_GRAY);
         detailsPanel.setBorder(new EmptyBorder(5,0,0,0));
         detailsPanel.add(expandDetailsPanel, BorderLayout.NORTH);
-        detailsPanel.add(extraDetailsPanel, BorderLayout.CENTER);
+        detailsPanel.add(inputsAndOutputsPanel, BorderLayout.CENTER);
 
         return detailsPanel;
     }

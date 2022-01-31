@@ -364,6 +364,9 @@ public class FlippingItem implements Searchable
 	}
 
 	private void setOfferMadeBy() {
+		if (flippedBy == null) {
+			log.info("flipped by is null");
+		}
 		history.setOfferMadeBy(flippedBy);
 	}
 
@@ -372,7 +375,7 @@ public class FlippingItem implements Searchable
 	}
 
 	//see documentation for HistoryManager.setOfferNames or HistoryManager.setCombinationFlipOfferNames
-	private void setOfferNames(Map<Integer, String> idToItemName) {
+	private void setOfferNames() {
 		history.setOfferNames(itemName);
 	}
 
@@ -382,11 +385,11 @@ public class FlippingItem implements Searchable
 	 * fill those new fields with default values. I think gson should do this when deserializing already, but
 	 * I ran into some issues with it some time ago and am too lazy to re-explore...
 	 */
-	public void hydrate(Map<Integer, String> idToItemName, int geLimit) {
+	public void hydrate(int geLimit) {
 		setTotalGELimit(geLimit);
 		syncState();
 		setOfferIds();
-		setOfferNames(idToItemName);
+		setOfferNames();
 		setOfferMadeBy();
 		//when this change was made the field will not exist and will be null
 		if (validFlippingPanelItem == null)
