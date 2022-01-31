@@ -223,39 +223,26 @@ public class StatsPanel extends JPanel
 		return tabGroup;
 	}
 
-
-	public void rebuildItemsDisplay(List<FlippingItem> flippingItems)
-	{
+	public void rebuildItemsDisplay(List<FlippingItem> flippingItems) {
 		List<FlippingItem> itemsToDisplay = getItemsToDisplay(flippingItems);
 		SwingUtilities.invokeLater(() -> {
 			flippingItemContainerPanel.rebuild(itemsToDisplay);
-			updateCumulativeDisplays(itemsToDisplay, plugin.viewRecipeFlipGroupsForCurrentView());
-			if (flippingItems.isEmpty() && currentlySearching) showEmptySearchPanel();
+			updateCumulativeDisplays(itemsToDisplay, getRecipeFlipGroupsToDisplay(plugin.viewRecipeFlipGroupsForCurrentView()));
+			if (itemsToDisplay.isEmpty() && currentlySearching) flippingItemContainerPanel.showPanel(createEmptySearchPanel());;
 			revalidate();
 			repaint();
 		});
 	}
 
-	public void rebuildRecipesDisplay(List<RecipeFlipGroup> recipeFlipGroups)
-	{
+	public void rebuildRecipesDisplay(List<RecipeFlipGroup> recipeFlipGroups) {
 		List<RecipeFlipGroup> recipeFlipGroupsToDisplay = getRecipeFlipGroupsToDisplay(recipeFlipGroups);
 		SwingUtilities.invokeLater(() -> {
 			recipeGroupContainerPanel.rebuild(recipeFlipGroupsToDisplay);
-			updateCumulativeDisplays(plugin.viewItemsForCurrentView(), recipeFlipGroupsToDisplay);
-			if (recipeFlipGroups.isEmpty() && currentlySearching) showEmptySearchPanel();
+			updateCumulativeDisplays(getItemsToDisplay(plugin.viewItemsForCurrentView()), recipeFlipGroupsToDisplay);
+			if (recipeFlipGroupsToDisplay.isEmpty() && currentlySearching) recipeGroupContainerPanel.showPanel(createEmptySearchPanel());
 			revalidate();
 			repaint();
 		});
-	}
-
-	private void showEmptySearchPanel() {
-		//don't feel like creating an interface for em just for this...
-		if (flippingItemContainerPanel.isVisible()) {
-			flippingItemContainerPanel.showPanel(createEmptySearchPanel());
-		}
-		if (recipeGroupContainerPanel.isVisible()) {
-			recipeGroupContainerPanel.showPanel(createEmptySearchPanel());
-		}
 	}
 
 	/**

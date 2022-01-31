@@ -20,7 +20,6 @@ import java.util.stream.Collectors;
  * parent item shall own the profits, revenue, expense, etc for the combination flip.
  */
 @Data
-@AllArgsConstructor
 public class RecipeFlip {
     Instant timeOfCreation;
     Map<Integer, Map<String, PartialOffer>> outputs;
@@ -31,6 +30,7 @@ public class RecipeFlip {
         Set<Integer> recipeInputIds = recipe.getInputIds();
         Set<Integer> recipeOutputIds = recipe.getOutputIds();
 
+        this.timeOfCreation = Instant.now();
         this.inputs = allPartialOffers.entrySet().stream().filter(e -> recipeInputIds.contains(e.getKey()))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         this.outputs = allPartialOffers.entrySet().stream().filter(e -> recipeOutputIds.contains(e.getKey()))
