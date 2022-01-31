@@ -26,6 +26,11 @@ public class RecipeFlipGroup implements Searchable {
     public List<PartialOffer> getPartialOffers(int itemId) {
         return recipeFlips.stream().flatMap(rf -> rf.getPartialOffers(itemId).stream()).collect(Collectors.toList());
     }
+
+    public List<PartialOffer> getPartialOffers() {
+        return recipeFlips.stream().flatMap(rf -> rf.getPartialOffers().stream()).collect(Collectors.toList());
+    }
+
     public void addRecipeFlip(RecipeFlip recipeFlip) {
         recipeFlips.add(recipeFlip);
     }

@@ -42,86 +42,92 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Data
-public class AccountData
-{
-	private Map<Integer, OfferEvent> lastOffers = new HashMap<>();
-	private List<FlippingItem> trades = new ArrayList<>();
-	private Instant sessionStartTime = Instant.now();
-	private long accumulatedSessionTimeMillis = 0;
-	private Instant lastSessionTimeUpdate;
-	private List<SlotActivityTimer> slotTimers;
-	private List<RecipeFlipGroup> recipeFlipGroups = new ArrayList<>();
+public class AccountData {
+    private Map<Integer, OfferEvent> lastOffers = new HashMap<>();
+    private List<FlippingItem> trades = new ArrayList<>();
+    private Instant sessionStartTime = Instant.now();
+    private long accumulatedSessionTimeMillis = 0;
+    private Instant lastSessionTimeUpdate;
+    private List<SlotActivityTimer> slotTimers;
+    private List<RecipeFlipGroup> recipeFlipGroups = new ArrayList<>();
 
-	/**
-	 * Resets all session related data associated with an account. This is called when the plugin first starts
-	 * as that's when a new session is "started" and when a user wants to start a new session for an account.
-	 */
-	public void startNewSession()
-	{
-		sessionStartTime = Instant.now();
-		accumulatedSessionTimeMillis = 0;
-		lastSessionTimeUpdate = null;
-	}
+    /**
+     * Resets all session related data associated with an account. This is called when the plugin first starts
+     * as that's when a new session is "started" and when a user wants to start a new session for an account.
+     */
+    public void startNewSession() {
+        sessionStartTime = Instant.now();
+        accumulatedSessionTimeMillis = 0;
+        lastSessionTimeUpdate = null;
+    }
 
-	/**
-	 * Over time as we delete/add fields, we need to make sure the fields are set properly the first time the user
-	 * loads their trades after the new update. This method serves as a way to sanitize the data. It also ensures
-	 * that the FlippingItems have their non persisted fields set from history.
-	 */
-	public void prepareForUse(FlippingPlugin plugin)
-	{
-		fixIncorrectItemNames(plugin.getItemManager());
+    /**
+     * Over time as we delete/add fields, we need to make sure the fields are set properly the first time the user
+     * loads their trades after the new update. This method serves as a way to sanitize the data. It also ensures
+     * that the FlippingItems have their non persisted fields set from history.
+     */
+    public void prepareForUse(FlippingPlugin plugin) {
+        fixIncorrectItemNames(plugin.getItemManager());
 
-		//eventually used in HistoryManager.setCombinationFlipOfferNames
-		Map<Integer, String> idToItemName = trades.stream().
-				map(item -> Map.entry(item.getItemId(), item.getItemName())).
-				collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        Map<String, OfferEvent> hydratedOffers = new HashMap<>();
 
-		for (FlippingItem item : trades)
-		{
-			//in case ge limits have been updated
-			int tradeItemId = item.getItemId();
-			ItemStats itemStats = plugin.getItemManager().getItemStats(tradeItemId, false);
-			int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
+        for (FlippingItem item : trades) {
+            //in case ge limits have been updated
+            int tradeItemId = item.getItemId();
+            ItemStats itemStats = plugin.getItemManager().getItemStats(tradeItemId, false);
+            int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
 
-			item.hydrate(idToItemName, geLimit);
-		}
+            item.hydrate(geLimit);
+            item.getHistory().getCompressedOfferEvents().forEach(o -> hydratedOffers.put(o.getUuid(), o));
+        }
 
-		if (slotTimers == null)
-		{
-			setSlotTimers(setupSlotTimers(plugin));
-		}
-		else
-		{
-			slotTimers.forEach(timer -> {
-				timer.setClient(plugin.getClient());
-				timer.setPlugin(plugin);
-			});
-		}
-	}
+        hydratePartialOffers(hydratedOffers);
+        hydrateSlotTimers(plugin);
+    }
 
-	/**
-	 * When a user is an f2p world and recieves events for members items (cause they were already in the GE),
-	 * the item manager retrieves the item's name as "Members object". The item manager returns the correct
-	 * name when the user is on a member's world or logged out. As such, this method is called when the plugin starts
-	 * and whenever the user logs into a members world to clean up any "Members object" item names.
-	 */
-	public void fixIncorrectItemNames(ItemManager itemManager) {
-		trades.forEach(item -> {
-			if (item.getItemName().equals("Members object")) {
-				String actualName = itemManager.getItemComposition(item.getItemId()).getName();
-				item.setItemName(actualName);
-			}
-		});
-	}
+    private void hydrateSlotTimers(FlippingPlugin plugin) {
+        if (slotTimers == null) {
+            slotTimers = setupSlotTimers(plugin);
+        } else {
+            slotTimers.forEach(timer -> {
+                timer.setClient(plugin.getClient());
+                timer.setPlugin(plugin);
+            });
+        }
+    }
 
-	private List<SlotActivityTimer> setupSlotTimers(FlippingPlugin plugin)
-	{
-		ArrayList<SlotActivityTimer> slotTimers = new ArrayList<>();
-		for (int slotIndex = 0; slotIndex < 8; slotIndex++)
-		{
-			slotTimers.add(new SlotActivityTimer(plugin, plugin.getClient(), slotIndex));
-		}
-		return slotTimers;
-	}
+    private void hydratePartialOffers(Map<String, OfferEvent> hydratedOffers) {
+        List<PartialOffer> partialOffers = recipeFlipGroups.stream().flatMap(rfg -> rfg.getPartialOffers().stream()).collect(Collectors.toList());
+        partialOffers.forEach(po -> {
+            OfferEvent o = hydratedOffers.get(po.offer.getUuid());
+            if (o == null) {
+                log.warn("partial offer references deleted offer event, this should not happen!");
+                return;
+            }
+            po.hydrateUnderlyingOfferEvent(o.getMadeBy(), o.getItemName());
+        });
+    }
+
+    /**
+     * When a user is an f2p world and recieves events for members items (cause they were already in the GE),
+     * the item manager retrieves the item's name as "Members object". The item manager returns the correct
+     * name when the user is on a member's world or logged out. As such, this method is called when the plugin starts
+     * and whenever the user logs into a members world to clean up any "Members object" item names.
+     */
+    public void fixIncorrectItemNames(ItemManager itemManager) {
+        trades.forEach(item -> {
+            if (item.getItemName().equals("Members object")) {
+                String actualName = itemManager.getItemComposition(item.getItemId()).getName();
+                item.setItemName(actualName);
+            }
+        });
+    }
+
+    private List<SlotActivityTimer> setupSlotTimers(FlippingPlugin plugin) {
+        ArrayList<SlotActivityTimer> slotTimers = new ArrayList<>();
+        for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
+            slotTimers.add(new SlotActivityTimer(plugin, plugin.getClient(), slotIndex));
+        }
+        return slotTimers;
+    }
 }

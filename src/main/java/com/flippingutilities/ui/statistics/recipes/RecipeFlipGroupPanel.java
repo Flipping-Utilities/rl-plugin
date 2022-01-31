@@ -60,6 +60,7 @@ public class RecipeFlipGroupPanel extends JPanel {
         recipeFlipPaginator.updateTotalPages(flips.size());
 
         recipeFlipPanels = createRecipeFlipPanels(flips);
+        putPanelsOnBackgroundPanel(new ArrayList<>(recipeFlipPanels), recipeFlipsBackgroundPanel, recipeFlipPaginator);
 
         JLabel[] descriptionLabels = {new JLabel("Total Profit: "), new JLabel("Avg. Profit ea: "), new JLabel("Avg. ROI: "), new JLabel("Quantity Flipped: ")};
 
@@ -218,9 +219,10 @@ public class RecipeFlipGroupPanel extends JPanel {
             public void mousePressed(MouseEvent e) {
                 if (e.getButton() == MouseEvent.BUTTON1) {
                     if (recipeFlipsBackgroundPanel.isVisible()) {
+                        recipeFlipsBackgroundPanel.setVisible(false);
                         collapseTradeHistoryIconLabel.setIcon(Icons.CLOSE_ICON);
                     } else {
-
+                        recipeFlipsBackgroundPanel.setVisible(true);
                         collapseTradeHistoryIconLabel.setIcon(Icons.OPEN_ICON);
                     }
                 }

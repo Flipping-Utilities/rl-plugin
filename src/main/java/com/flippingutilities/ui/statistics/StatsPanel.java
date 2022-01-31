@@ -371,6 +371,7 @@ public class StatsPanel extends JPanel
 		{
 			Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
 			List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
+
 			List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
 			if (intervalHistory.isEmpty()) {
 				continue;
