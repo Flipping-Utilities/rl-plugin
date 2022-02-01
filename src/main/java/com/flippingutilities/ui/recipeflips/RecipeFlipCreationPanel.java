@@ -303,6 +303,7 @@ public class RecipeFlipCreationPanel extends JPanel {
     private void addOfferPanelRow(JPanel bodyPanel,
                                   Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
         Map<Integer, Integer> targetValues = plugin.getTargetValuesForMaxRecipeCount(recipe, itemIdToPartialOffers, true);
+
         recipe.getInputIds().forEach(id -> addOfferPanel(bodyPanel, id, itemIdToPartialOffers, targetValues));
 
         //empty panel occupies the space under the arrow
@@ -368,7 +369,6 @@ public class RecipeFlipCreationPanel extends JPanel {
      * target value display.
      */
     private void handleItemsHittingTargetConsumptionValues() {
-        int parentOfferConsumedAmount = selectedOffers.get(sourceOffer.getItemId()).get(sourceOffer.getUuid()).amountConsumed;
         //if the parent quantity in the recipe is not 1, gonna have to do the modding and stuff
         Map<Integer, List<PartialOffer>> idToPartialOffersSelected = selectedOffers.entrySet().stream().
             map(e -> Map.entry(e.getKey(), new ArrayList<>(e.getValue().values()))).
