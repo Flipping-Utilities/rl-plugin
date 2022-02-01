@@ -26,6 +26,7 @@
 
 package com.flippingutilities.model;
 
+import com.flippingutilities.utilities.Searchable;
 import com.google.gson.annotations.SerializedName;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -35,7 +36,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * This class is the representation of an item that a user is flipping. It contains information about the
@@ -50,7 +50,7 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 @NoArgsConstructor
 @Slf4j
-public class FlippingItem
+public class FlippingItem implements Searchable
 {
 
 	@SerializedName("id")
@@ -224,55 +224,43 @@ public class FlippingItem
 		{
 			item1.getHistory().getCompressedOfferEvents().addAll(item2.getHistory().getCompressedOfferEvents());
 			item1.setFavorite(item1.isFavorite() || item2.isFavorite());
-			item1.getHistory().getPersonalCombinationFlips().addAll(item2.getHistory().getPersonalCombinationFlips());
-			item1.getHistory().getParentCombinationFlips().addAll(item2.getHistory().getParentCombinationFlips());
 			return item1;
 		}
 		else
 		{
 			item2.getHistory().getCompressedOfferEvents().addAll(item1.getHistory().getCompressedOfferEvents());
 			item2.setFavorite(item2.isFavorite() || item1.isFavorite());
-			item2.getHistory().getPersonalCombinationFlips().addAll(item1.getHistory().getPersonalCombinationFlips());
-			item2.getHistory().getParentCombinationFlips().addAll(item1.getHistory().getParentCombinationFlips());
 			return item2;
 		}
 	}
 
-	public long getProfit(List<OfferEvent> tradeList)
+	public static long getProfit(List<OfferEvent> tradeList)
 	{
-		return history.getProfit(tradeList);
+		return HistoryManager.getProfit(tradeList);
 	}
 
-	public long getValueOfMatchedOffers(List<OfferEvent> tradeList, boolean isBuy)
+	public static long getValueOfMatchedOffers(List<OfferEvent> tradeList, boolean isBuy)
 	{
-		return history.getValueOfMatchedOffers(tradeList, isBuy);
+		return HistoryManager.getValueOfMatchedOffers(tradeList, isBuy);
 	}
 
-	public long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean isBuy)
+	public static long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean isBuy)
 	{
-		return history.getTotalRevenueOrExpense(tradeList, isBuy);
+		return HistoryManager.getTotalRevenueOrExpense(tradeList, isBuy);
 	}
 
-	public int countFlipQuantity(List<OfferEvent> tradeList)
+	public static int countFlipQuantity(List<OfferEvent> tradeList)
 	{
-		return history.countFlipQuantity(tradeList);
+		return HistoryManager.countFlipQuantity(tradeList);
 	}
 
-	public List<Flip> getFlips(List<OfferEvent> tradeList)
+	public static List<Flip> getFlips(List<OfferEvent> tradeList)
 	{
-		return history.getFlips(tradeList);
+		return HistoryManager.getFlips(tradeList);
 	}
 
-	public List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> tradeList) {
-		return history.getPartialOfferAdjustedView(tradeList);
-	}
-
-	public List<CombinationFlip> getCombinationFlips(Instant earliestTime) {
-		return history.getCombinationFlips(earliestTime);
-	}
-
-	public List<CombinationFlip> getPersonalCombinationFlips(Instant earliestTime) {
-		return history.getPersonalCombinationFlips(earliestTime);
+	public static List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> offers, Map<String,PartialOffer> partialOffers) {
+		return HistoryManager.getPartialOfferAdjustedView(offers, partialOffers);
 	}
 
 	public ArrayList<OfferEvent> getIntervalHistory(Instant earliestTime)
@@ -305,16 +293,17 @@ public class FlippingItem
 		return history.hasValidOffers();
 	}
 
-	public boolean hasOfferInInterval(Instant earliestTime) {
+	@Override
+	public boolean isInInterval(Instant earliestTime) {
 		return history.hasOfferInInterval(earliestTime);
 	}
 
 	/**
 	 * see the documentation for HistoryManager.deleteOffers
 	 */
-	public void deleteOffers(List<OfferEvent> offerList, List<FlippingItem> items)
+	public void deleteOffers(List<OfferEvent> offerList)
 	{
-		history.deleteOffers(offerList, items);
+		history.deleteOffers(offerList);
 	}
 	public void setValidFlippingPanelItem(boolean isValid)
 	{
@@ -375,6 +364,9 @@ public class FlippingItem
 	}
 
 	private void setOfferMadeBy() {
+		if (flippedBy == null) {
+			log.info("flipped by is null");
+		}
 		history.setOfferMadeBy(flippedBy);
 	}
 
@@ -382,30 +374,8 @@ public class FlippingItem
 		history.setOfferIds();
 	}
 
-	//see documentation for HistoryManager.setOfferNames or HistoryManager.setCombinationFlipOfferNames
-	private void setOfferNames(Map<Integer, String> idToItemName) {
+	private void setOfferNames() {
 		history.setOfferNames(itemName);
-		history.setCombinationFlipOfferNames(idToItemName);
-	}
-
-	public void addPersonalCombinationFlip(CombinationFlip combinationFlip) {
-		history.addPersonalCombinationFlip(combinationFlip);
-	}
-
-	public void addParentCombinationFlip(CombinationFlip combinationFlip) {
-		history.addParentCombinationFlip(combinationFlip);
-	}
-
-	public void deleteCombinationFlip(CombinationFlip combinationFlip, List<FlippingItem> items) {
-		history.deleteCombinationFlips(List.of(combinationFlip), items);
-	}
-
-	public Map<String, PartialOffer> getOfferIdToPartialOfferInPersonalComboFlips() {
-		return history.getOfferIdToPartialOfferInPersonalComboFlips();
-	}
-
-	public Map<String, PartialOffer> getOfferIdToPartialOfferInComboFlips() {
-		return history.getOfferIdToPartialOfferInComboFlips();
 	}
 
 	/**
@@ -414,16 +384,21 @@ public class FlippingItem
 	 * fill those new fields with default values. I think gson should do this when deserializing already, but
 	 * I ran into some issues with it some time ago and am too lazy to re-explore...
 	 */
-	public void hydrate(Map<Integer, String> idToItemName, int geLimit) {
+	public void hydrate(int geLimit) {
 		setTotalGELimit(geLimit);
 		syncState();
 		setOfferIds();
-		setOfferNames(idToItemName);
+		setOfferNames();
 		setOfferMadeBy();
 		//when this change was made the field will not exist and will be null
 		if (validFlippingPanelItem == null)
 		{
 			validFlippingPanelItem = true;
 		}
+	}
+
+	@Override
+	public String getNameForSearch() {
+		return itemName;
 	}
 }

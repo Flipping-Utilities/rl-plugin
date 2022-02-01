@@ -72,7 +72,7 @@ public class NewOfferEventPipelineHandler {
 
         updateTradesList(currentlyLoggedInAccountsTrades, flippingItem, finalizedOfferEvent.clone());
 
-        plugin.setUpdateSinceLastAccountWideBuild(true);
+        plugin.setUpdateSinceLastItemAccountWideBuild(true);
 
         rebuildDisplayAfterOfferEvent(finalizedOfferEvent);
     }
@@ -91,7 +91,7 @@ public class NewOfferEventPipelineHandler {
         }
 
         plugin.getFlippingPanel().onNewOfferEventRebuild(offerEvent);
-        plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
+        plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
     }
 
     /**

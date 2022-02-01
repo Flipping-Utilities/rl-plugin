@@ -1,10 +1,11 @@
-package com.flippingutilities.ui.statistics;
+package com.flippingutilities.ui.statistics.items;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.ui.MasterPanel;
-import com.flippingutilities.ui.combinationflips.CombinationFlipCreationPanel;
+import com.flippingutilities.ui.recipeflips.RecipeFlipCreationPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
@@ -32,8 +33,8 @@ public class OfferPanel extends JPanel {
     private final OfferEvent offer;
     private final FlippingPlugin plugin;
     private final FlippingItem item;
-    //flag used to decide whether the icons such as the delete icon and combination flip icon should be shown.
-    //when these panels are being displayed in the CombinationFlipPanel, we don't want to show those icons.
+    //flag used to decide whether the icons such as the delete icon and recipe flip icon should be shown.
+    //when these panels are being displayed in the recipeFlipPanel, we don't want to show those icons.
     private boolean plainMode;
     private JLabel offerDescriptionLabel;
 
@@ -161,17 +162,17 @@ public class OfferPanel extends JPanel {
     }
 
     /**
-     * Creates the panel which holds the delete icon and combination flip
+     * Creates the panel which holds the delete icon and recipe flip
      * icon (if needed)
      */
     private JPanel createIconPanel() {
         JPanel iconPanel = new JPanel(new BorderLayout());
         iconPanel.setBackground(CustomColors.DARK_GRAY);
         boolean hasRecipe = plugin.getApplicableRecipe(offer.getItemId(), offer.isBuy()).isPresent();
-        if (plugin.isRecipeParent(offer.getItemId()) && hasRecipe && offer.isComplete()) {
+        if (hasRecipe && offer.isComplete()) {
             JLabel deleteIcon = createDeleteIcon();
             deleteIcon.setBorder(new EmptyBorder(0,5,0,0));
-            iconPanel.add(createCombinationFlipIcon(), BorderLayout.EAST);
+            iconPanel.add(createRecipeFlipIcon(), BorderLayout.EAST);
             iconPanel.add(deleteIcon, BorderLayout.WEST);
         }
         else {
@@ -181,36 +182,36 @@ public class OfferPanel extends JPanel {
         return iconPanel;
     }
 
-    private JComponent createCombinationFlipIcon() {
-        boolean offerAlreadyInCombinationFlip = item.getOfferIdToPartialOfferInPersonalComboFlips().containsKey(offer.getUuid());
-        if (offerAlreadyInCombinationFlip) {
-            JLabel combinationFlipLabel = new JLabel("Already in a combo flip");
-            combinationFlipLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
-            combinationFlipLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-            return combinationFlipLabel;
+    private JComponent createRecipeFlipIcon() {
+        PartialOffer po = plugin.getOfferIdToPartialOffer(item.getItemId()).get(offer.getUuid());
+        if (po != null && po.amountConsumed == offer.getCurrentQuantityInTrade()) {
+            JLabel recipeFlipLabel = new JLabel("Fully consumed");
+            recipeFlipLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
+            recipeFlipLabel.setForeground(CustomColors.TOMATO);
+            return recipeFlipLabel;
         }
-        JButton combinationFlipButton = new JButton("Combination Flip +");
-        combinationFlipButton.setToolTipText("<html>A combo flip is when you combine several items into one to sell it, <br>" +
-                "or break apart an item into parts to sell them. <br>If that's what you did with this trade, click me!</html>");
-        combinationFlipButton.setFocusPainted(false);
-        combinationFlipButton.setFont(new Font("Whitney", Font.PLAIN, 10));
-        combinationFlipButton.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-        combinationFlipButton.addMouseListener(new MouseAdapter() {
+        JButton recipeFlipButton = new JButton("Recipe Flip +");
+        recipeFlipButton.setToolTipText("<html>A recipe flip is when you combine several items into one to sell it, <br>" +
+                "or break apart an item into parts to sell them. <br>If that's what you did with this offer, click me!</html>");
+        recipeFlipButton.setFocusPainted(false);
+        recipeFlipButton.setFont(new Font("Whitney", Font.PLAIN, 10));
+        recipeFlipButton.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+        recipeFlipButton.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
-                    JOptionPane.showMessageDialog(null, "You cannot create combo flips in the Accountwide view");
+                    JOptionPane.showMessageDialog(null, "You cannot create recipe flips in the Accountwide view");
                     return;
                 }
                 MasterPanel m = plugin.getMasterPanel();
-                CombinationFlipCreationPanel combinationFlipPanel = new CombinationFlipCreationPanel(plugin, item, offer);
-                JDialog loginModal = UIUtilities.createModalFromPanel(m, combinationFlipPanel);
+                RecipeFlipCreationPanel recipeFlipCreationPanel = new RecipeFlipCreationPanel(plugin, offer);
+                JDialog loginModal = UIUtilities.createModalFromPanel(m, recipeFlipCreationPanel);
                 loginModal.pack();
                 loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, Math.max(m.getLocationOnScreen().y - loginModal.getHeight()/2,0) + 100);
                 loginModal.setVisible(true);
             }
         });
-        return combinationFlipButton;
+        return recipeFlipButton;
     }
 
     /**
@@ -232,8 +233,10 @@ public class OfferPanel extends JPanel {
 
                 //If the user pressed "Yes"
                 if (result == JOptionPane.YES_OPTION) {
-                    item.deleteOffers(List.of(offer), plugin.getTradesForCurrentView());
-                    plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
+                    plugin.deleteOffers(List.of(offer), item);
+                    plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+                    plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
+
                 }
             }
 
@@ -266,7 +269,7 @@ public class OfferPanel extends JPanel {
     }
 
     /**
-     * Used in the CombinationFlipPanel to show that this offer panel is selected or not
+     * Used in the RecipeFlipPanel to show that this offer panel is selected or not
      */
     public void setSelected(boolean selected) {
         setBorder(createBorder(selected));

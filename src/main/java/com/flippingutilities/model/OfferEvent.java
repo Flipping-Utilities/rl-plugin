@@ -90,7 +90,7 @@ public class OfferEvent
 	 */
 	private transient String madeBy;
 
-	//Used in theGeHistoryTabOfferPanel and CombinationFlipPanel
+	//Used in theGeHistoryTabOfferPanel and RecipeFlipPanel
 	private transient String itemName;
 	//used in the live slot view to show what price something was listed at
 	private transient int listedPrice;

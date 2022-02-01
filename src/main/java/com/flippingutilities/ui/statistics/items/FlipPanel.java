@@ -24,7 +24,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.flippingutilities.ui.statistics;
+package com.flippingutilities.ui.statistics.items;
 
 import com.flippingutilities.model.Flip;
 import com.flippingutilities.ui.uiutilities.CustomColors;
