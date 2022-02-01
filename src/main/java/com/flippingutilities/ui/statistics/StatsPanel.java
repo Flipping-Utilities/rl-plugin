@@ -532,8 +532,7 @@ public class StatsPanel extends JPanel
 	 *
 	 * @param itemPanel The panel which holds the FlippingItem to be terminated.
 	 */
-	public void deleteItemPanel(FlippingItemPanel itemPanel)
-	{
+	public void deleteItemPanel(FlippingItemPanel itemPanel) {
 		FlippingItem item = itemPanel.getItem();
 		plugin.deleteOffers(item.getIntervalHistory(startOfInterval), item);
 		this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
@@ -545,6 +544,7 @@ public class StatsPanel extends JPanel
 		plugin.setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
 		plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
+		this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
 	}
 
 	/**
