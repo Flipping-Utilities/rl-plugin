@@ -13,11 +13,11 @@ import java.util.stream.Collectors;
  * This is the structure that represents a flip made out of various different items, either because
  * those items were combined to make some other one, or were the result of breaking some other item.
  * Ex: guthan set bought then broken up into pieces and sold.
- * The "parent" in these CombinationFlips is not necessarily the output item (of combining or breaking stuff), it is
- * the item that I have arbitrarily chosen to own the profits of the combination flips. This is because profits cannot
- * be divided over all the items in the combination flip. What decides how much profit each item gets? For that reason
- * I've decided that each recipe has a parent item (the parent item that will end up in the CombinationFlip) and that
- * parent item shall own the profits, revenue, expense, etc for the combination flip.
+ * The "parent" in these recipeFlips is not necessarily the output item (of combining or breaking stuff), it is
+ * the item that I have arbitrarily chosen to own the profits of the recipe flips. This is because profits cannot
+ * be divided over all the items in the recipe flip. What decides how much profit each item gets? For that reason
+ * I've decided that each recipe has a parent item (the parent item that will end up in the recipeFlip) and that
+ * parent item shall own the profits, revenue, expense, etc for the recipe flip.
  */
 @Data
 @AllArgsConstructor
@@ -98,7 +98,7 @@ public class RecipeFlip {
     }
 
     /**
-     * Gets all the partial offers contained in this combination flip.
+     * Gets all the partial offers contained in this recipe flip.
      */
     public List<PartialOffer> getPartialOffers() {
         List<PartialOffer> offers = new ArrayList<>();

@@ -374,7 +374,6 @@ public class FlippingItem implements Searchable
 		history.setOfferIds();
 	}
 
-	//see documentation for HistoryManager.setOfferNames or HistoryManager.setCombinationFlipOfferNames
 	private void setOfferNames() {
 		history.setOfferNames(itemName);
 	}

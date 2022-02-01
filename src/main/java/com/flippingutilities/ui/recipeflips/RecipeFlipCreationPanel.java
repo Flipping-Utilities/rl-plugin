@@ -27,14 +27,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
- * The panel the user interacts with when creating a combination flip
+ * The panel the user interacts with when creating a recipe flip
  */
 @Slf4j
 public class RecipeFlipCreationPanel extends JPanel {
     FlippingPlugin plugin;
     //the offer the user clicked on to bring up this panel.
     OfferEvent sourceOffer;
-    //used to track which offers a user has selected to be in the combination flip and how much of the
+    //used to track which offers a user has selected to be in the recipe flip and how much of the
     //offer is contributed.
     //This is a map of item id to a map of offer id to selected offer.
     Map<Integer, Map<String, PartialOffer>> selectedOffers;
@@ -209,7 +209,7 @@ public class RecipeFlipCreationPanel extends JPanel {
 
             JLabel alreadyUsedLabel = new JLabel(
                     String.format("<html><body width='150' style='text-align:center;'> " +
-                                    "%d/%d items in this offer already used in other combo flips</body></html>",
+                                    "%d/%d items in this offer already used in other recipe flips</body></html>",
                             partialOffer.amountConsumed,
                             partialOffer.getOffer().getCurrentQuantityInTrade())
                     , SwingConstants.CENTER);
@@ -261,9 +261,9 @@ public class RecipeFlipCreationPanel extends JPanel {
 
     /**
      * @param itemIdToItem all the items in the recipe
-     * @return a map of ALL the items in the combination and the partial offers that should be rendered. We don't
+     * @return a map of ALL the items in the recipe and the partial offers that should be rendered. We don't
      * simply return OfferEvents because we want to know if any of the OfferEvents have some of their quantity
-     * already consumed by other combination flips for these items. If that is the case, we want to render them as
+     * already consumed by other recipe flips for these items. If that is the case, we want to render them as
      * such.
      */
     private Map<Integer, List<PartialOffer>> createItemIdToPartialOffers(
@@ -298,7 +298,7 @@ public class RecipeFlipCreationPanel extends JPanel {
      *
      * @param bodyPanel                   the panel the offer panels are being added to
      *                                    a reference to this label in this method so we can change the multiplier text
-     * @param itemIdToPartialOffers              a map of all the items in the combination and the offers that should be rendered
+     * @param itemIdToPartialOffers              a map of all the items in the recipe and the offers that should be rendered
      */
     private void addOfferPanelRow(JPanel bodyPanel,
                                   Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
@@ -323,9 +323,9 @@ public class RecipeFlipCreationPanel extends JPanel {
     ) {
             int targetValue = targetValues.get(id);
             List<PartialOffer> partialOffers = itemIdToPartialOffers.get(id);
-            RecipeItemHeaderPanel combinationItemHeaderPanel = idToHeader.get(id);
-            combinationItemHeaderPanel.setTargetValueDisplay(targetValue);
-            bodyPanel.add(createOffersPanel(partialOffers, combinationItemHeaderPanel, targetValue));
+            RecipeItemHeaderPanel recipeItemHeaderPanel = idToHeader.get(id);
+            recipeItemHeaderPanel.setTargetValueDisplay(targetValue);
+            bodyPanel.add(createOffersPanel(partialOffers, recipeItemHeaderPanel, targetValue));
     }
 
     /**
@@ -410,7 +410,7 @@ public class RecipeFlipCreationPanel extends JPanel {
 
     /**
      * The bottom panel holds the "Combine!" button, the profit label, and the text that
-     * shows when a combination flip can't be created due to insufficient items.
+     * shows when a recipe flip can't be created due to insufficient items.
      */
     private JPanel createBottomPanel(
             Map<Integer, List<PartialOffer>> itemIdToPartialOffers) {
@@ -423,7 +423,7 @@ public class RecipeFlipCreationPanel extends JPanel {
                 filter(e -> e.getValue() == 0).count();
 
         if (itemsThatCanMakeZeroRecipes > 0) {
-            JLabel missingItemsLabel = new JLabel("No combination flip can be made as some items don't have enough" +
+            JLabel missingItemsLabel = new JLabel("No recipe flip can be made as some items don't have enough" +
                     " trades", SwingConstants.CENTER);
             missingItemsLabel.setForeground(CustomColors.TOMATO);
             missingItemsLabel.setAlignmentX(Component.CENTER_ALIGNMENT);

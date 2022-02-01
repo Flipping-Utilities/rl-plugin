@@ -4,8 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 
 /**
- * Used as the data structure that references OfferEvents in CombinationFlips. Its only purpose is to
- * show how much of an offer event was consumed as when creating combination flips you can
+ * Used as the data structure that references OfferEvents in RecipeFlips. Its only purpose is to
+ * show how much of an offer event was consumed bc when creating recipe flips you can
  * specify that you only want some of the offer to be used.
  */
 @Data
