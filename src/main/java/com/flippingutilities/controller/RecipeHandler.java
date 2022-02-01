@@ -228,7 +228,7 @@ public class RecipeHandler {
         int someInputItemId = recipeFlip.getInputs().keySet().iterator().next();
         Optional<Recipe> recipeMaybe = getApplicableRecipe(someInputItemId, true);
         if (recipeMaybe.isEmpty()) {
-            log.info("not adding recipe, for some reason the recipe flip does not have an associated recipe");
+            log.warn("not adding recipe, for some reason the recipe flip does not have an associated recipe");
             return;
         }
         Recipe recipe = recipeMaybe.get();
