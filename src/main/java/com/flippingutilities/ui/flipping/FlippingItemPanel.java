@@ -108,6 +108,8 @@ public class FlippingItemPanel extends JPanel
 	WikiRequest wikiRequest;
 	Instant timeOfRequestCompletion;
 
+	JPopupMenu popup;
+
 	FlippingItemPanel(final FlippingPlugin plugin, AsyncBufferedImage itemImage, final FlippingItem flippingItem)
 	{
 		this.flippingItem = flippingItem;
@@ -540,7 +542,7 @@ public class FlippingItemPanel extends JPanel
 		wikiRequestCountDownTimer.setAlignmentY(JLabel.TOP);
 		wikiRequestCountDownTimer.setFont(new Font(Font.SERIF, Font.PLAIN, 9));
 
-		JPopupMenu popup = new JPopupMenu();
+		popup = new JPopupMenu();
 		popup.add(createWikiHoverTimePanel());
 		UIUtilities.addPopupOnHover(wikiBuyVal, popup, true);
 		UIUtilities.addPopupOnHover(wikiSellVal, popup, true);
@@ -638,7 +640,7 @@ public class FlippingItemPanel extends JPanel
 				if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
 					plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 				}
-				plugin.getFlippingPanel().rebuild(plugin.viewTradesForCurrentView());
+				plugin.getFlippingPanel().rebuild(plugin.viewItemsForCurrentView());
 			}
 
 			@Override

@@ -82,6 +82,9 @@ public class DataHandler {
         return accountSpecificData.values();
     }
 
+    //TODO this is a weird solution to the problem of having to know whether data changed...
+    //TODO change it to something that perhaps takes a snapshot of data at plugin start and compares it to
+    //TODO data at logout/plugin shutdown.
     //calls it if data is going to be updated,
     public AccountData getAccountData(String displayName) {
         accountsWithUnsavedChanges.add(displayName);

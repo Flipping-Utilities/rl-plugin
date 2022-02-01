@@ -31,6 +31,7 @@ import com.flippingutilities.utilities.Constants;
 import com.google.gson.annotations.SerializedName;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
@@ -38,6 +39,7 @@ import net.runelite.api.events.GrandExchangeOfferChanged;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -50,6 +52,7 @@ import java.util.UUID;
 @NoArgsConstructor
 public class OfferEvent
 {
+	@Getter
 	private String uuid;
 	@SerializedName("b")
 	private boolean buy;
@@ -75,11 +78,8 @@ public class OfferEvent
 	private int ticksSinceFirstOffer;
 	@SerializedName("tQIT")
 	private int totalQuantityInTrade;
-	//States that determine if the offer is appurtenant to the current scope of the panel.
-	//The states change dependent on user-selected removals.
-	@SerializedName("vSQ")
-	private boolean validOfferEvent;
 	private Instant tradeStartedAt;
+	private boolean beforeLogin;
 	/**
 	 * a offer always belongs to a flipping item. Every flipping item was flipped by an account and only one account and
 	 * has a flipped by attribute. So, the reason this attribute is here is because during the process of creating
@@ -90,8 +90,7 @@ public class OfferEvent
 	 */
 	private transient String madeBy;
 
-	private boolean beforeLogin;
-	//only used in theGeHistoryTabOfferPanel cause i don't want to pass the itemmanager down that far just to resolve item name from an id.
+	//Used in theGeHistoryTabOfferPanel and RecipeFlipPanel
 	private transient String itemName;
 	//used in the live slot view to show what price something was listed at
 	private transient int listedPrice;
@@ -199,10 +198,9 @@ public class OfferEvent
 				tickArrivedAt,
 				ticksSinceFirstOffer,
 				totalQuantityInTrade,
-				validOfferEvent,
 				tradeStartedAt,
-				madeBy,
 				beforeLogin,
+				madeBy,
 				itemName,
 				listedPrice,
 				spent
@@ -223,11 +221,12 @@ public class OfferEvent
 
 		OfferEvent otherOffer = (OfferEvent) other;
 
-		return isDuplicate(otherOffer)
+		return
+			isDuplicate(otherOffer)
+			&& uuid.equals(otherOffer.uuid)
 			&& tickArrivedAt == otherOffer.tickArrivedAt
 			&& ticksSinceFirstOffer == otherOffer.ticksSinceFirstOffer
-			&& time.equals(otherOffer.time)
-			&& validOfferEvent == otherOffer.validOfferEvent;
+			&& time.equals(otherOffer.time);
 	}
 
 	/**
@@ -252,7 +251,6 @@ public class OfferEvent
 	{
 		GrandExchangeOffer offer = event.getOffer();
 
-
 		boolean isBuy = offer.getState() == GrandExchangeOfferState.BOUGHT
 			|| offer.getState() == GrandExchangeOfferState.CANCELLED_BUY
 			|| offer.getState() == GrandExchangeOfferState.BUYING;
@@ -269,13 +267,12 @@ public class OfferEvent
 			0,
 			0,
 			offer.getTotalQuantity(),
-			true,
-			null,
 			null,
 			false,
 			null,
-				offer.getPrice(),
-				offer.getSpent());
+			null,
+			offer.getPrice(),
+			offer.getSpent());
 	}
 
 	/**
@@ -303,10 +300,9 @@ public class OfferEvent
 				1,
 				marginCheck? 1 : 10,
 				1,
-				false,
 				null,
-				"",
 				false,
+				"",
 				itemName,
 				0,
 				0);

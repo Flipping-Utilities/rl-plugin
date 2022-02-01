@@ -26,6 +26,7 @@
 
 package com.flippingutilities.model;
 
+import com.flippingutilities.utilities.Searchable;
 import com.google.gson.annotations.SerializedName;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -34,10 +35,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * This class is the representation of an item that a user is flipping. It contains information about the
@@ -52,7 +50,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Slf4j
-public class FlippingItem
+public class FlippingItem implements Searchable
 {
 
 	@SerializedName("id")
@@ -175,6 +173,7 @@ public class FlippingItem
 	 */
 	public void updateHistory(OfferEvent newOffer)
 	{
+		newOffer.setItemName(itemName);
 		history.updateHistory(newOffer);
 	}
 
@@ -208,7 +207,9 @@ public class FlippingItem
 
 	/**
 	 * combines two flipping items together (this only makes sense if they are for the same item) by adding
-	 * their histories together and retaining the other properties of the latest active item.
+	 * their histories together and retaining the other properties of the latest active item. This is used to
+	 * construct the account wide view as flipping items (referencing the same item) from different accounts need
+	 * to be merged into one.
 	 *
 	 * @return merged flipping item
 	 */
@@ -233,33 +234,33 @@ public class FlippingItem
 		}
 	}
 
-	public long currentProfit(List<OfferEvent> tradeList)
+	public static long getProfit(List<OfferEvent> tradeList)
 	{
-		return history.currentProfit(tradeList);
+		return HistoryManager.getProfit(tradeList);
 	}
 
-	public long getTaxPaid(List<OfferEvent> tradeList) {
-		return tradeList.stream().mapToInt(OfferEvent::getTaxPaid).sum();
+	public static long getValueOfMatchedOffers(List<OfferEvent> tradeList, boolean isBuy)
+	{
+		return HistoryManager.getValueOfMatchedOffers(tradeList, isBuy);
 	}
 
-	public long getFlippedCashFlow(List<OfferEvent> tradeList, boolean getExpense)
+	public static long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean isBuy)
 	{
-		return history.getFlippedCashFlow(tradeList, getExpense);
+		return HistoryManager.getTotalRevenueOrExpense(tradeList, isBuy);
 	}
 
-	public long getFlippedCashFlow(Instant earliestTime, boolean getExpense)
+	public static int countFlipQuantity(List<OfferEvent> tradeList)
 	{
-		return history.getFlippedCashFlow(getIntervalHistory(earliestTime), getExpense);
+		return HistoryManager.countFlipQuantity(tradeList);
 	}
 
-	public long getTotalCashFlow(List<OfferEvent> tradeList, boolean getExpense)
+	public static List<Flip> getFlips(List<OfferEvent> tradeList)
 	{
-		return history.getTotalCashFlow(tradeList, getExpense);
+		return HistoryManager.getFlips(tradeList);
 	}
 
-	public int countItemsFlipped(List<OfferEvent> tradeList)
-	{
-		return history.countItemsFlipped(tradeList);
+	public static List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> offers, Map<String,PartialOffer> partialOffers) {
+		return HistoryManager.getPartialOfferAdjustedView(offers, partialOffers);
 	}
 
 	public ArrayList<OfferEvent> getIntervalHistory(Instant earliestTime)
@@ -287,21 +288,23 @@ public class FlippingItem
 		history.validateGeProperties();
 	}
 
-	public List<Flip> getFlips(Instant earliestTime)
-	{
-		return history.getFlips(earliestTime);
-	}
-
 	public boolean hasValidOffers()
 	{
 		return history.hasValidOffers();
 	}
 
-	public void invalidateOffers(List<OfferEvent> offerList)
-	{
-		history.invalidateOffers(offerList);
+	@Override
+	public boolean isInInterval(Instant earliestTime) {
+		return history.hasOfferInInterval(earliestTime);
 	}
 
+	/**
+	 * see the documentation for HistoryManager.deleteOffers
+	 */
+	public void deleteOffers(List<OfferEvent> offerList)
+	{
+		history.deleteOffers(offerList);
+	}
 	public void setValidFlippingPanelItem(boolean isValid)
 	{
 		validFlippingPanelItem = isValid;
@@ -352,7 +355,7 @@ public class FlippingItem
 	 * can be constructed using the history that is already persisted. The downside is that I have to
 	 * manually sync state when flipping items are created at plugin startup.
 	 */
-	public void syncState() {
+	private void syncState() {
 		latestBuy = history.getLatestOfferThatMatchesPredicate(offer -> offer.isBuy());
 		latestSell = history.getLatestOfferThatMatchesPredicate(offer -> !offer.isBuy());
 		latestInstaBuy = history.getLatestOfferThatMatchesPredicate(offer -> offer.isBuy() & offer.isMarginCheck());
@@ -360,20 +363,42 @@ public class FlippingItem
 		latestActivityTime = history.getCompressedOfferEvents().size() == 0? Instant.now() : history.getCompressedOfferEvents().get(history.getCompressedOfferEvents().size()-1).getTime();
 	}
 
-	public void setOfferMadeBy() {
-		history.getCompressedOfferEvents().forEach(o -> o.setMadeBy(flippedBy));
+	private void setOfferMadeBy() {
+		if (flippedBy == null) {
+			log.info("flipped by is null");
+		}
+		history.setOfferMadeBy(flippedBy);
 	}
 
-	public void setOfferIds() {
-		history.getCompressedOfferEvents().forEach(o -> {
-			if (o.getUuid() == null) {
-				o.setUuid(UUID.randomUUID().toString());
-			}
-		});
+	private void setOfferIds() {
+		history.setOfferIds();
 	}
 
-	public void resetGeLimit() {
-		history.resetGeLimit();
+	private void setOfferNames() {
+		history.setOfferNames(itemName);
 	}
 
+	/**
+	 * There are several fields we don't persist in offer events, so we need to fill them in
+	 * at plugin start. Additionally, due to schema evolution such as fields being added, we have to
+	 * fill those new fields with default values. I think gson should do this when deserializing already, but
+	 * I ran into some issues with it some time ago and am too lazy to re-explore...
+	 */
+	public void hydrate(int geLimit) {
+		setTotalGELimit(geLimit);
+		syncState();
+		setOfferIds();
+		setOfferNames();
+		setOfferMadeBy();
+		//when this change was made the field will not exist and will be null
+		if (validFlippingPanelItem == null)
+		{
+			validFlippingPanelItem = true;
+		}
+	}
+
+	@Override
+	public String getNameForSearch() {
+		return itemName;
+	}
 }
