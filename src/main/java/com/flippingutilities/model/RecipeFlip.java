@@ -59,19 +59,19 @@ public class RecipeFlip {
         return getRevenue() - getExpense();
     }
 
-    private long getExpenseOrRevenue(boolean getExpense) {
+    private long getIngredientsValue(boolean isBuyOffer) {
         return getPartialOffers().stream()
-            .filter(po -> po.offer.isBuy() == getExpense)
+            .filter(po -> po.offer.isBuy() == isBuyOffer)
             .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
             .sum();
     }
 
     public long getExpense() {
-        return getExpenseOrRevenue(true);
+        return getIngredientsValue(true);
     }
 
     public long getRevenue() {
-        return getExpenseOrRevenue(false);
+        return getIngredientsValue(false);
     }
 
     public long getTaxPaid() {
