@@ -270,6 +270,10 @@ public class RecipeFlipGroupPanel extends JPanel {
         itemIconTitlePanel.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+                    JOptionPane.showMessageDialog(null, "You cannot delete recipe flips in the Accountwide view");
+                    return;
+                }
                 int result = JOptionPane.showOptionDialog(itemIconTitlePanel, "Are you sure you want to delete this recipe's flips from this time interval?",
                     "Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
                     null, new String[]{"Yes", "No"}, "No");

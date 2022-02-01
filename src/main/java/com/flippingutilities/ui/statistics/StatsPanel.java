@@ -228,7 +228,7 @@ public class StatsPanel extends JPanel
 			List<FlippingItem> itemsToDisplay = getItemsToDisplay(flippingItems);
 			flippingItemContainerPanel.rebuild(itemsToDisplay);
 			updateCumulativeDisplays(itemsToDisplay, getRecipeFlipGroupsToDisplay(plugin.viewRecipeFlipGroupsForCurrentView()));
-			if (itemsToDisplay.isEmpty() && currentlySearching) flippingItemContainerPanel.showPanel(createEmptySearchPanel());;
+			if (itemsToDisplay.isEmpty() && currentlySearching) flippingItemContainerPanel.showPanel(createEmptySearchPanel());
 			revalidate();
 			repaint();
 

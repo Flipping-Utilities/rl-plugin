@@ -289,7 +289,7 @@ public class FlippingItemPanel extends JPanel
 
 		JPanel mainDisplay = new JPanel();
 		MaterialTabGroup tabGroup = new MaterialTabGroup(mainDisplay);
-		MaterialTab offersTab = new MaterialTab("Trades", tabGroup, offersPanel);
+		MaterialTab offersTab = new MaterialTab("Offers", tabGroup, offersPanel);
 		offersTab.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
