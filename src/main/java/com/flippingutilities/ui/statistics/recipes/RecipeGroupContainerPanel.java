@@ -43,16 +43,34 @@ public class RecipeGroupContainerPanel extends JPanel {
         recipeGroupContainer.removeAll();
         paginator.updateTotalPages(recipeFlipGroups.size());
 
-        List<RecipeFlipGroup> itemsOnCurrentPage = paginator.getCurrentPageItems(recipeFlipGroups);
-        List<RecipeFlipGroupPanel> newPanels = itemsOnCurrentPage.stream().map(rfg -> new RecipeFlipGroupPanel(plugin, rfg)).collect(Collectors.toList());
-        UIUtilities.stackPanelsVertically((List) newPanels, recipeGroupContainer, 5);
-        activePanels.addAll(newPanels);
+        if (!recipeFlipGroups.isEmpty()) {
+            List<RecipeFlipGroup> itemsOnCurrentPage = paginator.getCurrentPageItems(recipeFlipGroups);
+            List<RecipeFlipGroupPanel> newPanels = itemsOnCurrentPage.stream().map(rfg -> new RecipeFlipGroupPanel(plugin, rfg)).collect(Collectors.toList());
+            UIUtilities.stackPanelsVertically((List) newPanels, recipeGroupContainer, 5);
+            activePanels.addAll(newPanels);
+        }
+        else {
+            recipeGroupContainer.add(createHelpLabel());
+        }
     }
 
     public void showPanel(JPanel panel) {
         activePanels.clear();
         recipeGroupContainer.removeAll();
         recipeGroupContainer.add(panel);
+    }
+
+    private JLabel createHelpLabel() {
+        JLabel helpLabel = new JLabel(
+            "<html><body width='220' style='text-align:center;'>" +
+                "You currently have no recipe flips for this interval. You can create a recipe flip by going to an offer for an item " +
+                "and clicking on the recipe flip button.<br><br> " +
+                "<b>That button will only be there if that item has a recipe associated with it</b>.<br><br> " +
+                "If a recipe is missing, contact us on discord and we will add it!");
+        helpLabel.setFont(new Font("Whitney", Font.PLAIN, 15));
+        helpLabel.setBorder(new EmptyBorder(20,5,0,0));
+        helpLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        return helpLabel;
     }
 
     private JPanel createRecipeGroupContainer() {
