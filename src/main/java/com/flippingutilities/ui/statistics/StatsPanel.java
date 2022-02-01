@@ -224,19 +224,20 @@ public class StatsPanel extends JPanel
 	}
 
 	public void rebuildItemsDisplay(List<FlippingItem> flippingItems) {
-		List<FlippingItem> itemsToDisplay = getItemsToDisplay(flippingItems);
 		SwingUtilities.invokeLater(() -> {
+			List<FlippingItem> itemsToDisplay = getItemsToDisplay(flippingItems);
 			flippingItemContainerPanel.rebuild(itemsToDisplay);
 			updateCumulativeDisplays(itemsToDisplay, getRecipeFlipGroupsToDisplay(plugin.viewRecipeFlipGroupsForCurrentView()));
 			if (itemsToDisplay.isEmpty() && currentlySearching) flippingItemContainerPanel.showPanel(createEmptySearchPanel());;
 			revalidate();
 			repaint();
+
 		});
 	}
 
 	public void rebuildRecipesDisplay(List<RecipeFlipGroup> recipeFlipGroups) {
-		List<RecipeFlipGroup> recipeFlipGroupsToDisplay = getRecipeFlipGroupsToDisplay(recipeFlipGroups);
 		SwingUtilities.invokeLater(() -> {
+			List<RecipeFlipGroup> recipeFlipGroupsToDisplay = getRecipeFlipGroupsToDisplay(recipeFlipGroups);
 			recipeGroupContainerPanel.rebuild(recipeFlipGroupsToDisplay);
 			updateCumulativeDisplays(getItemsToDisplay(plugin.viewItemsForCurrentView()), recipeFlipGroupsToDisplay);
 			if (recipeFlipGroupsToDisplay.isEmpty() && currentlySearching) recipeGroupContainerPanel.showPanel(createEmptySearchPanel());
@@ -541,6 +542,7 @@ public class StatsPanel extends JPanel
 
 	public void deleteRecipeFlipGroupPanel(RecipeFlipGroupPanel recipeFlipGroupPanel) {
 		recipeFlipGroupPanel.getRecipeFlipGroup().deleteFlips(startOfInterval);
+		plugin.setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
 		plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 	}

@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
  * parent item shall own the profits, revenue, expense, etc for the combination flip.
  */
 @Data
+@AllArgsConstructor
 public class RecipeFlip {
     Instant timeOfCreation;
     Map<Integer, Map<String, PartialOffer>> outputs;
@@ -34,6 +35,23 @@ public class RecipeFlip {
         this.inputs = allPartialOffers.entrySet().stream().filter(e -> recipeInputIds.contains(e.getKey()))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         this.outputs = allPartialOffers.entrySet().stream().filter(e -> recipeOutputIds.contains(e.getKey()))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public RecipeFlip clone() {
+        Instant clonedInstant = Instant.ofEpochSecond(timeOfCreation.getEpochSecond());
+        Map<Integer, Map<String, PartialOffer>> clonedOutputs = cloneComponents(outputs);
+        Map<Integer, Map<String, PartialOffer>> clonedInputs = cloneComponents(inputs);
+        return new RecipeFlip(clonedInstant, clonedOutputs, clonedInputs);
+    }
+
+    private Map<Integer, Map<String, PartialOffer>> cloneComponents(Map<Integer, Map<String, PartialOffer>> component) {
+        return component.entrySet().stream()
+            .map(e -> Map.entry(
+                e.getKey(),
+                e.getValue().entrySet().stream()
+                    .map(entry -> Map.entry(entry.getKey(), entry.getValue().clone()))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 

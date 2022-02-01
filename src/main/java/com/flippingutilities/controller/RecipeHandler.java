@@ -43,11 +43,46 @@ public class RecipeHandler {
 
     //TODO this is pretty inefficient, i don't think it really matters, but might be worth looking into.
     //TODO We could either cache it in the plugin or make the lookups faster somehow.
+    /**
+     * Gets a map of offer id to partial offer. Since an offer can be referenced by multiple partial offers (each
+     * consuming part of the offer) from recipe flips in different recipe flip groups, we need to sum up the amount
+     * consumed by each of the partial offers referencing that one offer to get the final partial offer corresponding
+     * to that offer id.
+     */
     public Map<String, PartialOffer> getOfferIdToPartialOffer(List<RecipeFlipGroup> recipeFlipGroups, int itemId) {
-        return recipeFlipGroups.stream()
-            .filter(group -> group.isInGroup(itemId))
-            .flatMap(group -> group.getPartialOffers(itemId).stream())
-            .collect(Collectors.toMap(po -> po.offer.getUuid(), po -> po));
+        Map<String, PartialOffer> offerIdToPartialOffer = new HashMap<>();
+        for (RecipeFlipGroup recipeFlipGroup : recipeFlipGroups) {
+            if (!recipeFlipGroup.isInGroup(itemId)) {
+                continue;
+            }
+            recipeFlipGroup.getOfferIdToPartialOffer(itemId).forEach((offerId, partialOffer) -> {
+                if (offerIdToPartialOffer.containsKey(offerId)) {
+                    PartialOffer otherPartialOffer = offerIdToPartialOffer.get(offerId);
+                    PartialOffer cumulativePartialOffer = otherPartialOffer.clone();
+                    cumulativePartialOffer.amountConsumed += partialOffer.amountConsumed;
+                    offerIdToPartialOffer.put(offerId, cumulativePartialOffer);
+                }
+                else {
+                    offerIdToPartialOffer.put(offerId, partialOffer);
+                }
+            });
+        }
+        return offerIdToPartialOffer;
+    }
+
+    public List<RecipeFlipGroup> createAccountWideRecipeFlipGroupList(Collection<AccountData> allAccountData) {
+        Map<Recipe, List<RecipeFlipGroup>> groupedItems = allAccountData.stream().
+            flatMap(accountData -> accountData.getRecipeFlipGroups().stream()).
+            map(RecipeFlipGroup::clone).
+            collect(Collectors.groupingBy(RecipeFlipGroup::getRecipe));
+
+        List<RecipeFlipGroup> mergedRecipeFlipGroups = groupedItems.values().stream()
+            .map(list -> list.stream().reduce(RecipeFlipGroup::merge))
+            .filter(Optional::isPresent).map(Optional::get)
+            .sorted(Collections.reverseOrder(Comparator.comparing(RecipeFlipGroup::getLatestActivityTime)))
+            .collect(Collectors.toList());
+
+        return mergedRecipeFlipGroups;
     }
 
     /**

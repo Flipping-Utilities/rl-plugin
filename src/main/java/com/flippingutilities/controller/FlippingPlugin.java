@@ -160,8 +160,11 @@ public class FlippingPlugin extends Plugin {
     //building the account wide trade list is an expensive operation so we store it in this variable and only recompute
     //it if we have gotten an update since the last account wide trade list build.
     @Setter
-    boolean updateSinceLastAccountWideBuild = true;
-    List<FlippingItem> prevBuiltAccountWideList;
+    boolean updateSinceLastItemAccountWideBuild = true;
+    @Setter
+    boolean updateSinceLastRecipeFlipGroupAccountWideBuild = true;
+    List<FlippingItem> prevBuiltAccountWideItemList;
+    List<RecipeFlipGroup> prevBuildAccountWideRecipeFlipGroup;
 
     //updates the cache by monitoring the directory and loading a file's contents into the cache if it has been changed
     private CacheUpdaterJob cacheUpdaterJob;
@@ -551,7 +554,7 @@ public class FlippingPlugin extends Plugin {
                     masterPanel.getAccountSelector().setVisible(true);
                 }
 
-                updateSinceLastAccountWideBuild = true;
+                updateSinceLastItemAccountWideBuild = true;
 
                 //rebuildItemsDisplay if you are currently looking at the account who's cache just got updated or the account wide view.
                 if (accountCurrentlyViewed.equals(ACCOUNT_WIDE) || accountCurrentlyViewed.equals(displayNameOfChangedAcc)) {
@@ -564,26 +567,34 @@ public class FlippingPlugin extends Plugin {
         }, 1000, TimeUnit.MILLISECONDS);
     }
 
-
-
+    //TODO this caching logic can be generalized and put into another component. There are also a bunch of
+    //other places where I want to cache things.
     private List<RecipeFlipGroup> createAccountWideRecipeFlipGroupList() {
-        return new ArrayList<>();
+        if (!updateSinceLastRecipeFlipGroupAccountWideBuild) {
+            return prevBuildAccountWideRecipeFlipGroup;
+        }
+        if (dataHandler.getCurrentAccounts().size() == 0) {
+            return new ArrayList<>();
+        }
+        updateSinceLastRecipeFlipGroupAccountWideBuild = false;
+        prevBuildAccountWideRecipeFlipGroup = recipeHandler.createAccountWideRecipeFlipGroupList(dataHandler.viewAllAccountData());
+        return prevBuildAccountWideRecipeFlipGroup;
     }
 
     private List<FlippingItem> createAccountWideFlippingItemList() {
         //since this is an expensive operation, cache its results and only recompute it if there has been an update
         //to one of the account's tradelists, (updateSinceLastAccountWideBuild is set in onGrandExchangeOfferChanged)
-        if (!updateSinceLastAccountWideBuild) {
-            return prevBuiltAccountWideList;
+        if (!updateSinceLastItemAccountWideBuild) {
+            return prevBuiltAccountWideItemList;
         }
 
         if (dataHandler.getCurrentAccounts().size() == 0) {
             return new ArrayList<>();
         }
 
-        updateSinceLastAccountWideBuild = false;
-        prevBuiltAccountWideList = flippingItemHandler.createAccountWideFlippingItemList(dataHandler.viewAllAccountData());;
-        return prevBuiltAccountWideList;
+        updateSinceLastItemAccountWideBuild = false;
+        prevBuiltAccountWideItemList = flippingItemHandler.createAccountWideFlippingItemList(dataHandler.viewAllAccountData());;
+        return prevBuiltAccountWideItemList;
     }
 
     public List<FlippingItem> sortItems(List<FlippingItem> items, SORT sort, Instant startOfInterval) {
@@ -773,7 +784,8 @@ public class FlippingPlugin extends Plugin {
             });
         }
 
-        updateSinceLastAccountWideBuild = true;
+        updateSinceLastItemAccountWideBuild = true;
+        updateSinceLastRecipeFlipGroupAccountWideBuild = true;
         truncateTradeList();
     }
 
@@ -785,6 +797,8 @@ public class FlippingPlugin extends Plugin {
         item.deleteOffers(offers);
         recipeHandler.deleteInvalidRecipeFlips(offers, recipeFlipGroups);
         markAccountTradesAsHavingChanged(accountCurrentlyViewed);
+        updateSinceLastItemAccountWideBuild = true;
+        updateSinceLastRecipeFlipGroupAccountWideBuild = true;
     }
 
     /**
@@ -799,7 +813,7 @@ public class FlippingPlugin extends Plugin {
         } else {
             getItemsForCurrentView().forEach(flippingItem -> flippingItem.setValidFlippingPanelItem(false));
         }
-        updateSinceLastAccountWideBuild = true;
+        updateSinceLastItemAccountWideBuild = true;
         truncateTradeList();
     }
 
@@ -930,6 +944,7 @@ public class FlippingPlugin extends Plugin {
     public void addRecipeFlip(RecipeFlip recipeFlip) {
         AccountData account = dataHandler.getAccountData(accountCurrentlyViewed);
         recipeHandler.addRecipeFlip(account.getRecipeFlipGroups(), recipeFlip);
+        updateSinceLastRecipeFlipGroupAccountWideBuild = true;
     }
 
     @Subscribe

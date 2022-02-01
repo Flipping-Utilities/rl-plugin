@@ -270,13 +270,12 @@ public class RecipeFlipGroupPanel extends JPanel {
         itemIconTitlePanel.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                int result = JOptionPane.showOptionDialog(itemIconTitlePanel, "Are you sure you want to delete this item's offers from this time interval?",
+                int result = JOptionPane.showOptionDialog(itemIconTitlePanel, "Are you sure you want to delete this recipe's flips from this time interval?",
                     "Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
                     null, new String[]{"Yes", "No"}, "No");
 
                 if (result == JOptionPane.YES_OPTION) {
                     deletePanel();
-                    statsPanel.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
                 }
             }
 

@@ -207,6 +207,8 @@ public class RecipeFlipPanel extends JPanel {
 
                 if (result == JOptionPane.YES_OPTION) {
                     recipeFlipGroup.deleteFlip(recipeFlip);
+                    plugin.setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
+                    plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
                     plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
                 }
             }

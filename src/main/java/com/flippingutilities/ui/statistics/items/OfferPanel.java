@@ -3,6 +3,7 @@ package com.flippingutilities.ui.statistics.items;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.ui.MasterPanel;
 import com.flippingutilities.ui.recipeflips.RecipeFlipCreationPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
@@ -182,16 +183,16 @@ public class OfferPanel extends JPanel {
     }
 
     private JComponent createCombinationFlipIcon() {
-        boolean offerAlreadyInCombinationFlip = plugin.getOfferIdToPartialOffer(item.getItemId()).containsKey(offer.getUuid());
-        if (offerAlreadyInCombinationFlip) {
-            JLabel combinationFlipLabel = new JLabel("Already in a combo flip");
+        PartialOffer po = plugin.getOfferIdToPartialOffer(item.getItemId()).get(offer.getUuid());
+        if (po != null && po.amountConsumed == offer.getCurrentQuantityInTrade()) {
+            JLabel combinationFlipLabel = new JLabel("Fully consumed");
             combinationFlipLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
-            combinationFlipLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+            combinationFlipLabel.setForeground(CustomColors.TOMATO);
             return combinationFlipLabel;
         }
-        JButton combinationFlipButton = new JButton("Combination Flip +");
-        combinationFlipButton.setToolTipText("<html>A combo flip is when you combine several items into one to sell it, <br>" +
-                "or break apart an item into parts to sell them. <br>If that's what you did with this trade, click me!</html>");
+        JButton combinationFlipButton = new JButton("Recipe Flip +");
+        combinationFlipButton.setToolTipText("<html>A recipe flip is when you combine several items into one to sell it, <br>" +
+                "or break apart an item into parts to sell them. <br>If that's what you did with this offer, click me!</html>");
         combinationFlipButton.setFocusPainted(false);
         combinationFlipButton.setFont(new Font("Whitney", Font.PLAIN, 10));
         combinationFlipButton.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
@@ -199,7 +200,7 @@ public class OfferPanel extends JPanel {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
-                    JOptionPane.showMessageDialog(null, "You cannot create combo flips in the Accountwide view");
+                    JOptionPane.showMessageDialog(null, "You cannot create recipe flips in the Accountwide view");
                     return;
                 }
                 MasterPanel m = plugin.getMasterPanel();
