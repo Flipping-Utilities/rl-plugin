@@ -26,7 +26,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * The visual representation of a CombinationFlip. CombinationFlipPanels
+ * The visual representation of a RecipeFlip. RecipeFlipPanels
  * are shown in the "combos" tab of the trade history section of an item in the
  * statistics tab.
  */
@@ -59,10 +59,9 @@ public class RecipeFlipPanel extends JPanel {
         titlePanel.setLayout(new DynamicGridLayout(2,1));
         titlePanel.setBackground(CustomColors.DARK_GRAY);
 
+        String recipeQuantity = QuantityFormatter.formatNumber(recipeFlip.getRecipeCountMade(recipe));
 
-        String quantityInCombination = QuantityFormatter.formatNumber(recipeFlip.getRecipeCountMade(recipe));
-
-        JLabel quantityLabel = new JLabel(quantityInCombination + "x");
+        JLabel quantityLabel = new JLabel(recipeQuantity + "x");
         quantityLabel.setFont(FontManager.getRunescapeSmallFont());
 
         JPanel quantityAndTimePanel = new JPanel();
@@ -79,9 +78,9 @@ public class RecipeFlipPanel extends JPanel {
         return titlePanel;
     }
 
-    private JLabel createTimeDisplay(RecipeFlip combinationFlip) {
+    private JLabel createTimeDisplay(RecipeFlip recipeFlip) {
         JLabel timeDisplay = new JLabel(
-                "(" + TimeFormatters.formatDurationTruncated(combinationFlip.getTimeOfCreation()) + " ago)",
+                "(" + TimeFormatters.formatDurationTruncated(recipeFlip.getTimeOfCreation()) + " ago)",
                 SwingConstants.CENTER);
         timeDisplay.setFont(FontManager.getRunescapeSmallFont());
         return timeDisplay;
@@ -198,10 +197,10 @@ public class RecipeFlipPanel extends JPanel {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
-                    JOptionPane.showMessageDialog(null, "You cannot delete combo flips in the Accountwide view");
+                    JOptionPane.showMessageDialog(null, "You cannot delete recipe flips in the Accountwide view");
                     return;
                 }
-                final int result = JOptionPane.showOptionDialog(deleteIcon, "Are you sure you want to delete this combo flip?",
+                final int result = JOptionPane.showOptionDialog(deleteIcon, "Are you sure you want to delete this recipe flip?",
                         "Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
                         null, new String[]{"Yes", "No"}, "No");
 

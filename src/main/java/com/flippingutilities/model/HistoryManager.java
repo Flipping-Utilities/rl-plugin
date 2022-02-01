@@ -430,7 +430,7 @@ public class HistoryManager
 
 	/**
 	 * Returns a view of the offer events that accounts for the amount consumed by partial offers
-	 * in the combination flips
+	 * in the recipe flips
 	 */
 	static List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> offers, Map<String, PartialOffer> partialOffers) {
 		return offers.stream().map(o -> {

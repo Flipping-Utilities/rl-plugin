@@ -168,7 +168,7 @@ public class RecipeHandler {
      * This method computes the initial target values for each of the items when the panel
      * first shows up. This is so that the user doesn't have to manually input them (tho they can still
      * adjust them if they want). The target values are selected such that the max amount of
-     * combinations/recipes can be made. Here is an example:
+     * recipes can be made. Here is an example:
      *
      * Lets say there is a recipe where for every item C you need 3 of item A and 5 of item B. We
      * can shorten it by saying the recipe is 1C, 3A, and 5B. Now, lets say we have a quantity of 5 for item C,

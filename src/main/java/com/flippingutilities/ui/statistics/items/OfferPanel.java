@@ -33,8 +33,8 @@ public class OfferPanel extends JPanel {
     private final OfferEvent offer;
     private final FlippingPlugin plugin;
     private final FlippingItem item;
-    //flag used to decide whether the icons such as the delete icon and combination flip icon should be shown.
-    //when these panels are being displayed in the CombinationFlipPanel, we don't want to show those icons.
+    //flag used to decide whether the icons such as the delete icon and recipe flip icon should be shown.
+    //when these panels are being displayed in the recipeFlipPanel, we don't want to show those icons.
     private boolean plainMode;
     private JLabel offerDescriptionLabel;
 
@@ -162,7 +162,7 @@ public class OfferPanel extends JPanel {
     }
 
     /**
-     * Creates the panel which holds the delete icon and combination flip
+     * Creates the panel which holds the delete icon and recipe flip
      * icon (if needed)
      */
     private JPanel createIconPanel() {
@@ -172,7 +172,7 @@ public class OfferPanel extends JPanel {
         if (hasRecipe && offer.isComplete()) {
             JLabel deleteIcon = createDeleteIcon();
             deleteIcon.setBorder(new EmptyBorder(0,5,0,0));
-            iconPanel.add(createCombinationFlipIcon(), BorderLayout.EAST);
+            iconPanel.add(createRecipeFlipIcon(), BorderLayout.EAST);
             iconPanel.add(deleteIcon, BorderLayout.WEST);
         }
         else {
@@ -182,21 +182,21 @@ public class OfferPanel extends JPanel {
         return iconPanel;
     }
 
-    private JComponent createCombinationFlipIcon() {
+    private JComponent createRecipeFlipIcon() {
         PartialOffer po = plugin.getOfferIdToPartialOffer(item.getItemId()).get(offer.getUuid());
         if (po != null && po.amountConsumed == offer.getCurrentQuantityInTrade()) {
-            JLabel combinationFlipLabel = new JLabel("Fully consumed");
-            combinationFlipLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
-            combinationFlipLabel.setForeground(CustomColors.TOMATO);
-            return combinationFlipLabel;
+            JLabel recipeFlipLabel = new JLabel("Fully consumed");
+            recipeFlipLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
+            recipeFlipLabel.setForeground(CustomColors.TOMATO);
+            return recipeFlipLabel;
         }
-        JButton combinationFlipButton = new JButton("Recipe Flip +");
-        combinationFlipButton.setToolTipText("<html>A recipe flip is when you combine several items into one to sell it, <br>" +
+        JButton recipeFlipButton = new JButton("Recipe Flip +");
+        recipeFlipButton.setToolTipText("<html>A recipe flip is when you combine several items into one to sell it, <br>" +
                 "or break apart an item into parts to sell them. <br>If that's what you did with this offer, click me!</html>");
-        combinationFlipButton.setFocusPainted(false);
-        combinationFlipButton.setFont(new Font("Whitney", Font.PLAIN, 10));
-        combinationFlipButton.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-        combinationFlipButton.addMouseListener(new MouseAdapter() {
+        recipeFlipButton.setFocusPainted(false);
+        recipeFlipButton.setFont(new Font("Whitney", Font.PLAIN, 10));
+        recipeFlipButton.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+        recipeFlipButton.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
@@ -204,14 +204,14 @@ public class OfferPanel extends JPanel {
                     return;
                 }
                 MasterPanel m = plugin.getMasterPanel();
-                RecipeFlipCreationPanel combinationFlipPanel = new RecipeFlipCreationPanel(plugin, offer);
-                JDialog loginModal = UIUtilities.createModalFromPanel(m, combinationFlipPanel);
+                RecipeFlipCreationPanel recipeFlipCreationPanel = new RecipeFlipCreationPanel(plugin, offer);
+                JDialog loginModal = UIUtilities.createModalFromPanel(m, recipeFlipCreationPanel);
                 loginModal.pack();
                 loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, Math.max(m.getLocationOnScreen().y - loginModal.getHeight()/2,0) + 100);
                 loginModal.setVisible(true);
             }
         });
-        return combinationFlipButton;
+        return recipeFlipButton;
     }
 
     /**
@@ -269,7 +269,7 @@ public class OfferPanel extends JPanel {
     }
 
     /**
-     * Used in the CombinationFlipPanel to show that this offer panel is selected or not
+     * Used in the RecipeFlipPanel to show that this offer panel is selected or not
      */
     public void setSelected(boolean selected) {
         setBorder(createBorder(selected));
