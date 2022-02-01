@@ -447,29 +447,13 @@ public class RecipeFlipCreationPanel extends JPanel {
             plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
 
             bottomPanel.removeAll();
-            JPanel successPanel = new JPanel(new DynamicGridLayout(2, 1));
-            successPanel.setBackground(Color.BLACK);
 
             JLabel successLabel = new JLabel("Success!", SwingConstants.CENTER);
             successLabel.setBorder(new EmptyBorder(0, 0, 10, 0));
             successLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
             successLabel.setFont(new Font("Whitney", Font.PLAIN, 16));
 
-            JLabel helpTextLabel = new JLabel("" +
-                    "<html><body style='text-align: center'>" +
-                    "You can find the flip under the \"combos\" tab of the trade history" +
-                    "<br>" +
-                    "section of <b>ANY</b> of the items seen here, <u><b>" +
-                    UIUtilities.colorText("provided you are in a time ", CustomColors.SOFT_ALCH) +
-                    "<br>" +
-                    UIUtilities.colorText("interval that contains all the offers you selected here", CustomColors.SOFT_ALCH) +
-                    "</b><u> <html>", SwingConstants.CENTER);
-            helpTextLabel.setFont(new Font("Whitney", Font.PLAIN, 12));
-
-            successPanel.add(successLabel);
-            successPanel.add(helpTextLabel);
-
-            bottomPanel.add(successPanel);
+            bottomPanel.add(successLabel);
             revalidate();
             repaint();
         });
