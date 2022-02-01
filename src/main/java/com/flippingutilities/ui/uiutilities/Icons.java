@@ -24,7 +24,7 @@ public class Icons {
     public static final ImageIcon SETTINGS_ICON;
     public static final ImageIcon SETTINGS_ICON_OFF;
 
-    public static final ImageIcon ACCOUNT_ICON;
+    public static final ImageIcon GNOME_CHILD;
 
     public static final ImageIcon DELETE_BUTTON;
 
@@ -115,6 +115,14 @@ public class Icons {
 
     public static final ImageIcon FLASH;
 
+    public static final ImageIcon RIGHT_ARROW_LARGE;
+    public static final ImageIcon LEFT_ARROW_LARGE;
+
+    public static final ImageIcon SORT;
+    public static final ImageIcon SORT_HOVER;
+
+    public static final ImageIcon CONSTRUCTION;
+
     static
     {
         final BufferedImage openIcon = ImageUtil
@@ -136,7 +144,7 @@ public class Icons {
         SETTINGS_ICON_OFF = new ImageIcon(ImageUtil.alphaOffset(settingsIcon, 0.53f));
 
         final BufferedImage accountIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/gnome.png");
-        ACCOUNT_ICON = new ImageIcon(accountIcon);
+        GNOME_CHILD = new ImageIcon(accountIcon);
 
         final BufferedImage deleteButton = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/deleteButton.png");
         DELETE_BUTTON = new ImageIcon(deleteButton);
@@ -147,7 +155,7 @@ public class Icons {
 
         final BufferedImage starOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/star-gold.png");
         final BufferedImage sortByRecentOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/clock-gold.png");
-        final BufferedImage sortByRoiOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/roi-gold.png");
+        final BufferedImage sortByRoiOn = ImageUtil.loadImageResource(FlippingPlugin.class, "/toolbar-icons/roi-gold.png");
         final BufferedImage sortByProfitOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/profit-gold.png");
         final BufferedImage starOff = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/star_off_white.png");
         final BufferedImage sortByRecentOff = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/clock_white.png");
@@ -199,7 +207,7 @@ public class Icons {
         GITHUB_ICON_ON = new ImageIcon(githubIconOn);
 
         final BufferedImage twitterIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/twitter-alch.png");
-        final BufferedImage twitterIconOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/twitteron.png");
+        final BufferedImage twitterIconOn = ImageUtil.loadImageResource(FlippingPlugin.class, "/twitteron.png");
         TWITTER_ICON = new ImageIcon(twitterIcon);
         TWITTER_ICON_ON = new ImageIcon(twitterIconOn);
 
@@ -286,5 +294,20 @@ public class Icons {
 
         final BufferedImage flashIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/flash-cheese.png");
         FLASH = new ImageIcon(flashIcon);
+
+        final BufferedImage rightArrowLarge = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/right-arrow-large.png");
+        RIGHT_ARROW_LARGE = new ImageIcon(rightArrowLarge);
+
+        final BufferedImage leftArrowLarge = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/left-arrow-large.png");
+        LEFT_ARROW_LARGE = new ImageIcon(leftArrowLarge);
+
+        final BufferedImage sort = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/sort.png");
+        SORT = new ImageIcon(ImageUtil.alphaOffset(sort, 0.53f));
+
+        final BufferedImage sortHover = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/sort.png");
+        SORT_HOVER = new ImageIcon(sort);
+
+        final BufferedImage construction = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/construction.png");
+        CONSTRUCTION = new ImageIcon(construction);
     }
 }

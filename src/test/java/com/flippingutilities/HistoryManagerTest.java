@@ -109,17 +109,17 @@ public class HistoryManagerTest
 	{
 		List<OfferEvent> tradesList;
 		tradesList = historyManager.getIntervalsHistory(baseTime.minus(1, ChronoUnit.HOURS));
-		assertEquals(200, historyManager.currentProfit(tradesList));
+		assertEquals(200, historyManager.getProfit(tradesList));
 
 		//sell 5 more of the item
 		historyManager.updateHistory(Utils.offer(false, 5, 105, baseTime.minus(4, ChronoUnit.MINUTES), 1, GrandExchangeOfferState.SOLD, 5, 0));
 
 		tradesList = historyManager.getIntervalsHistory(baseTime.minus(1, ChronoUnit.HOURS));
-		assertEquals(225, historyManager.currentProfit(tradesList)); //47 buys and 45 sells, so looks for 45 items and profit is 5 gp ea.
+		assertEquals(225, historyManager.getProfit(tradesList)); //47 buys and 45 sells, so looks for 45 items and profit is 5 gp ea.
 
 		//when no trades are present given the interval
 		tradesList = historyManager.getIntervalsHistory(baseTime);
-		assertEquals(0, historyManager.currentProfit(tradesList));
+		assertEquals(0, historyManager.getProfit(tradesList));
 	}
 
 	@Test
@@ -374,7 +374,7 @@ public class HistoryManagerTest
 		//now lets add a completed offer for slot 1.
 		historyManager.updateHistory(Utils.offer(true, 50, 100, baseTime, 1, GrandExchangeOfferState.BOUGHT, 50));
 
-		//rebuild the compressed offers list
+		//rebuildItemsDisplay the compressed offers list
 		expectedCompressedEvents.clear();
 		expectedCompressedEvents.add(Utils.offer(true, 5, 100, baseTime, 2, GrandExchangeOfferState.BUYING, 1));
 		expectedCompressedEvents.add(Utils.offer(true, 50, 100, baseTime, 1, GrandExchangeOfferState.BOUGHT, 50));

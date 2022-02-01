@@ -24,7 +24,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.flippingutilities.ui.statistics;
+package com.flippingutilities.ui.statistics.items;
 
 import com.flippingutilities.model.Flip;
 import com.flippingutilities.ui.uiutilities.CustomColors;
@@ -50,6 +50,8 @@ public class FlipPanel extends JPanel
 		this.flip = flip;
 
 		setLayout(new BorderLayout());
+		setBackground(CustomColors.DARK_GRAY);
+		setBorder(new EmptyBorder(2,2,2,2));
 
 
 		int profitEach = flip.getSellPrice() - flip.getBuyPrice();
@@ -58,7 +60,8 @@ public class FlipPanel extends JPanel
 		title.setOpaque(true);
 		title.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		title.setFont(FontManager.getRunescapeSmallFont());
-		updateTitle();
+		title.setBorder(new EmptyBorder(0,0,2,0));
+		updateTitleAndTimeDisplay();
 
 		JLabel buyPriceText = new JLabel("Buy Price:");
 		JLabel sellPriceText = new JLabel("Sell Price:");
@@ -68,7 +71,7 @@ public class FlipPanel extends JPanel
 		JLabel sellPriceVal = new JLabel(QuantityFormatter.formatNumber(flip.getSellPrice()) + " gp", SwingConstants.RIGHT);
 
 		String profitString = UIUtilities.quantityToRSDecimalStack(profitTotal, true) + " gp"
-			+ ((flip.getQuantity() <= 1) ? "" : " (" + UIUtilities.quantityToRSDecimalStack(profitEach, false) + " gp ea.)");
+			+ ((flip.getQuantity() <= 1) ? "" : " (" + UIUtilities.quantityToRSDecimalStack(profitEach, false) + " gp ea)");
 
 		JLabel profitVal = new JLabel(profitString);
 
@@ -84,8 +87,13 @@ public class FlipPanel extends JPanel
 		profitVal.setForeground((profitTotal >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
 
 		JPanel buyPricePanel = new JPanel(new BorderLayout());
+		buyPricePanel.setBackground(CustomColors.DARK_GRAY);
+
 		JPanel sellPricePanel = new JPanel(new BorderLayout());
+		sellPricePanel.setBackground(CustomColors.DARK_GRAY);
+
 		JPanel profitPanel = new JPanel(new BorderLayout());
+		profitPanel.setBackground(CustomColors.DARK_GRAY);
 
 		buyPricePanel.add(buyPriceText, BorderLayout.WEST);
 		buyPricePanel.add(buyPriceVal, BorderLayout.EAST);
@@ -97,6 +105,7 @@ public class FlipPanel extends JPanel
 		profitPanel.add(profitVal, BorderLayout.EAST);
 
 		JPanel infoContainer = new JPanel(new DynamicGridLayout(3, 2, 0, 2));
+		infoContainer.setBackground(CustomColors.DARK_GRAY);
 
 		infoContainer.add(buyPricePanel);
 		infoContainer.add(sellPricePanel);
@@ -108,12 +117,12 @@ public class FlipPanel extends JPanel
 		add(infoContainer, BorderLayout.CENTER);
 	}
 
-	public void updateTitle()
+	public void updateTitleAndTimeDisplay()
 	{
 		if (flip.isMarginCheck())
 		{
 			title.setText("Margin Checked " + "(" + TimeFormatters.formatDurationTruncated(flip.getTime()) + " ago)");
-			title.setForeground(ColorScheme.PROGRESS_COMPLETE_COLOR);
+			title.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
 		}
 
 		else if (flip.isOngoing())
@@ -125,7 +134,7 @@ public class FlipPanel extends JPanel
 		else
 		{
 			title.setText(QuantityFormatter.formatNumber(flip.getQuantity()) + " Flipped (" + TimeFormatters.formatDurationTruncated(flip.getTime()) + " ago)");
-			title.setForeground(ColorScheme.PROGRESS_COMPLETE_COLOR);
+			title.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
 		}
 	}
 

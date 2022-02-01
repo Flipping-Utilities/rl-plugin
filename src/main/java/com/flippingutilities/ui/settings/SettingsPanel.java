@@ -100,7 +100,7 @@ public class SettingsPanel extends JPanel
 	 */
 	private JLabel accountLabel(String name)
 	{
-		JLabel accountLabel = new JLabel(Icons.ACCOUNT_ICON, JLabel.LEFT);
+		JLabel accountLabel = new JLabel(Icons.GNOME_CHILD, JLabel.LEFT);
 		accountLabel.setOpaque(true);
 		accountLabel.setMaximumSize(new Dimension(170, ACCOUNT_LABEL_HEIGHT));
 		accountLabel.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());

@@ -28,12 +28,8 @@
 package com.flippingutilities.model;
 
 import com.flippingutilities.utilities.ListUtils;
-import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
@@ -73,7 +69,12 @@ public class HistoryManager
 	{
 		List<OfferEvent> clonedCompressedOfferEvents = compressedOfferEvents.stream().map(OfferEvent::clone).collect(Collectors.toList());
 		Instant clonedGeLimitRefresh = nextGeLimitRefresh == null ? null : Instant.ofEpochMilli(nextGeLimitRefresh.toEpochMilli());
-		return new HistoryManager(clonedCompressedOfferEvents, clonedGeLimitRefresh, itemsBoughtThisLimitWindow, itemsBoughtThroughCompleteOffers);
+		return new HistoryManager(
+				clonedCompressedOfferEvents,
+				clonedGeLimitRefresh,
+				itemsBoughtThisLimitWindow,
+				itemsBoughtThroughCompleteOffers
+		);
 	}
 
 	public void updateHistory(OfferEvent newOffer)
@@ -98,7 +99,6 @@ public class HistoryManager
 	 */
 	private void updateGeLimitProperties(OfferEvent newOfferEvent)
 	{
-
 		//there is a small bug in this method. Basically, when we get non-complete offers from different slots it will
 		//only take one of the slots buys into account. When the offer completes or is cancelled things are fine.
 
@@ -116,16 +116,8 @@ public class HistoryManager
 
 		//if the login was within the window that was established by the purchase of an item while logged in
 		// there isn't a problem, bc u know to just add to the items bought this window.
-
-
 		if (nextGeLimitRefresh == null || newOfferEvent.getTime().compareTo(nextGeLimitRefresh) > 0)
 		{
-			//this isn't always the correct things to do, but more often than not, its better to assume the offer came in
-			//during a previous window.
-//			if (newOfferEvent.isBeforeLogin()) {
-//				return;
-//			}
-
 			nextGeLimitRefresh = newOfferEvent.getTime().plus(4, ChronoUnit.HOURS);
 			if (newOfferEvent.isComplete())
 			{
@@ -183,141 +175,6 @@ public class HistoryManager
 	}
 
 	/**
-	 * Calculates profit for a list of trades made with this item by counting the expenses and revenues
-	 * accrued over these trades and figuring out the difference in value.
-	 *
-	 * @param tradeList The list of trades whose total profits will be calculated.
-	 * @return profit
-	 */
-	public static long currentProfit(List<OfferEvent> tradeList)
-	{
-		//return the value of the sell list - the value of the buy list. This is the profit.
-		return getFlippedCashFlow(tradeList, false) - getFlippedCashFlow(tradeList, true);
-	}
-
-	/**
-	 * This method finds the value of a list of offers up to the number of items flipped. The boolean parameter
-	 * determines if we calculate from buyList or sellList.
-	 *
-	 * @param tradeList  The list of standardized offers whose cashflow we want the value of.
-	 * @param getExpense Options parameter that calculates, if true, the total expenses accrued
-	 *                   and, if false, the total revenues accrued from the trades.
-	 * @return Returns a long value based on the boolean parameter provided.
-	 */
-	public static long getFlippedCashFlow(List<OfferEvent> tradeList, boolean getExpense)
-	{
-		return getValueOfTrades(getSaleList(tradeList, getExpense), countItemsFlipped(tradeList));
-	}
-
-	/**
-	 * Calculates the total value of the sell or buy offers in a trade list.
-	 *
-	 * @param tradeList
-	 * @param getExpense whether sell offers or buy offers should be looked at.
-	 * @return
-	 */
-	public static long getTotalCashFlow(List<OfferEvent> tradeList, boolean getExpense)
-	{
-		return getValueOfTrades(getSaleList(tradeList, getExpense), -1);
-	}
-
-	/**
-	 * Gets the currentQuantityInTrade of flipped items that has been done in a list of offers.
-	 * The currentQuantityInTrade flipped is determined by the lowest of either number of items bought or sold.
-	 *
-	 * @param tradeList The list of items that the item count is based on
-	 * @return An integer representing the total currentQuantityInTrade of items flipped in the list of offers
-	 */
-	public static int countItemsFlipped(List<OfferEvent> tradeList)
-	{
-		int numBoughtItems = 0;
-		int numSoldItems = 0;
-
-		for (OfferEvent offer : tradeList)
-		{
-			if (!offer.isValidOfferEvent())
-			{
-				continue;
-			}
-
-			if (offer.isBuy())
-			{
-				numBoughtItems += offer.getCurrentQuantityInTrade();
-			}
-			else
-			{
-				numSoldItems += offer.getCurrentQuantityInTrade();
-			}
-		}
-
-		return Math.min(numBoughtItems, numSoldItems);
-	}
-
-	/**
-	 * Gets the list of trades of either buy or sell states from a list of trades.
-	 *
-	 * @param tradeList The list of trades that will be checked.
-	 * @param buyState  true will return offers that have been bought and false will return offers that have been sold.
-	 * @return A list of items either sold or bought over a period of time.
-	 */
-	private static ArrayList<OfferEvent> getSaleList(List<OfferEvent> tradeList, boolean buyState)
-	{
-		ArrayList<OfferEvent> results = new ArrayList<>();
-
-		for (OfferEvent offer : tradeList)
-		{
-			if (offer.isBuy() == buyState && offer.isValidOfferEvent())
-			{
-				results.add(offer);
-			}
-		}
-
-		return results;
-	}
-
-	/**
-	 * Calculates the amount of money spent on either a buy or sell list, up to the amount of items
-	 * specified by the limit.
-	 *
-	 * @param tradeList a buy or a sell list
-	 * @param itemLimit the amount of items to calculate the value up until. This is for the case
-	 *                  when a user has an unequal amount of buys/sells in which case you want to return the
-	 *                  profit the items only up until the buys and sells are equal. If this values is -1, it
-	 *                  ignores the limit.
-	 * @return the amount of money spent on the offer list, up to the amount of items specified by the
-	 * limit
-	 */
-	private static long getValueOfTrades(List<OfferEvent> tradeList, long itemLimit)
-	{
-		int itemsSeen = 0;
-		long moneySpent = 0;
-
-		itemLimit = itemLimit == -1 ? Long.MAX_VALUE : itemLimit;
-
-		for (OfferEvent offer : tradeList)
-		{
-			if (!offer.isValidOfferEvent())
-			{
-				continue;
-			}
-
-			if (itemsSeen + offer.getCurrentQuantityInTrade() >= itemLimit)
-			{
-				moneySpent += (itemLimit - itemsSeen) * offer.getPrice();
-				break;
-			}
-			else
-			{
-				moneySpent += offer.getCurrentQuantityInTrade() * offer.getPrice();
-				itemsSeen += offer.getCurrentQuantityInTrade();
-			}
-
-		}
-
-		return moneySpent;
-	}
-
-	/**
 	 * Returns the history of the item that were traded between earliestTime and now.
 	 *
 	 * @param earliestTime the earliest time that trades from the trade history are added to the resulting list.
@@ -329,7 +186,7 @@ public class HistoryManager
 
 		for (OfferEvent offer : compressedOfferEvents)
 		{
-			if (offer.getTime().isAfter(earliestTime) && offer.isValidOfferEvent())
+			if (offer.getTime().isAfter(earliestTime))
 			{
 				result.add(offer);
 			}
@@ -360,52 +217,30 @@ public class HistoryManager
 
 	public boolean hasValidOffers()
 	{
-		return compressedOfferEvents.stream().anyMatch(OfferEvent::isValidOfferEvent);
+		return compressedOfferEvents.size() > 0;
 	}
 
-	public void invalidateOffers(List<OfferEvent> offerList)
-	{
-		offerList.forEach(offer -> offer.setValidOfferEvent(false));
-		removeInvalidatedOfferEvents();
-	}
-
-	public void removeInvalidatedOfferEvents()
-	{
-		if (nextGeLimitRefresh == null)
-		{
-			compressedOfferEvents.removeIf(offer -> !offer.isValidOfferEvent());
-			return;
+	public boolean hasOfferInInterval(Instant earliestTime) {
+		if (!hasValidOffers()) {
+			return false;
 		}
-
-		Instant startOfRefresh = nextGeLimitRefresh.minus(4, ChronoUnit.HOURS);
-
-		compressedOfferEvents.removeIf(offer -> !offer.isValidOfferEvent() &&
-			(offer.getTime().isAfter(nextGeLimitRefresh) || offer.getTime().isBefore(startOfRefresh)));
+		OfferEvent lastOffer = compressedOfferEvents.get(compressedOfferEvents.size()-1);
+		return lastOffer.getTime().isAfter(earliestTime);
 	}
 
 	/**
-	 * Creates Flips from offers. Flips represent a buy trade followed by a sell trade. A trade is a collection
-	 * of offers from the empty offer to the completed offer. A completed offer marks the end of a trade.
-	 *
-	 * @param earliestTime the time after which trades should be looked at
-	 * @return flips
+	 * Used to mark offers as invalid. These offers are then pruned later. This is the mechanism
+	 * by which offers are deleted.
+	 * @param offerList the offers being invalidated
 	 */
-	public List<Flip> getFlips(Instant earliestTime)
+	public void deleteOffers(List<OfferEvent> offerList)
 	{
-		ArrayList<OfferEvent> intervalHistory = getIntervalsHistory(earliestTime);
+		if (offerList.isEmpty()) {
+			return;
+		}
 
-		//group offers based on which account those offers belong to (this is really only relevant when getting the flips
-		//of the account wide tradelist as you don't want to match offers from diff accounts.
-		Map<String, List<OfferEvent>> groupedOffers = intervalHistory.stream().collect(Collectors.groupingBy(OfferEvent::getMadeBy));
-
-		//take each offer list and create flips out of them, then put those flips into one list.
-		List<Flip> flips = new ArrayList<>();
-		groupedOffers.values().forEach(offers -> flips.addAll(createFlips(offers)));
-
-		flips.sort(Comparator.comparing(Flip::getTime));
-		Collections.reverse(flips);
-
-		return flips;
+		Set<String> idsOfOffersToBeDeleted = offerList.stream().map(OfferEvent::getUuid).collect(Collectors.toSet());
+		compressedOfferEvents.removeIf(o -> idsOfOffersToBeDeleted.contains(o.getUuid()));
 	}
 
 	/**
@@ -416,7 +251,7 @@ public class HistoryManager
 	 *
 	 * @param offer offer that duplicates are being found for.
 	 * @return offers that could potentially be duplicates of the given offer event.
-	 * @parm limit max amount of potentially duplicate offers to find.
+	 * @param limit max amount of potentially duplicate offers to find.
 	 */
 	public List<OfferEvent> getOfferMatches(OfferEvent offer, int limit)
 	{
@@ -440,6 +275,193 @@ public class HistoryManager
 			}
 		}
 		return matches;
+	}
+
+	/**
+	 * Gets the YOUNGEST offer that matches some arbitrary conditions
+	 * @param predicate conditions
+	 */
+	public Optional<OfferEvent> getLatestOfferThatMatchesPredicate(Predicate<OfferEvent> predicate)
+	{
+		for (int i = compressedOfferEvents.size() - 1; i > -1; i--)
+		{
+			if (predicate.test(compressedOfferEvents.get(i)))
+			{
+				return Optional.of(compressedOfferEvents.get(i));
+			}
+		}
+		return Optional.empty();
+	}
+
+	/**
+	 * Because we don't persist the itemName field in an OfferEvent, we need to hydrate every
+	 * OfferEvent with it
+	 */
+	public void setOfferNames(String itemName) {
+		compressedOfferEvents.forEach(o -> o.setItemName(itemName));
+	}
+
+	/**
+	 * We don't persist the madeBy field, so it has to be hydrated.
+	 */
+	public void setOfferMadeBy(String name) {
+		compressedOfferEvents.forEach(o -> o.setMadeBy(name));
+	}
+
+	/**
+	 * Every new offer event created nowadays has a uuid associated with it. However, the old
+	 * offer events that have already been persisted need their uuids' set.
+	 */
+	public void setOfferIds() {
+		compressedOfferEvents.forEach(o -> {
+			if (o.getUuid() == null) {
+				o.setUuid(UUID.randomUUID().toString());
+			}
+		});
+	}
+
+	//STATIC METHODS BEGIN (wondering if i should move them elsewhere, but, where?)
+
+	/**
+	 * Calculates profit for a list of trades made with this item by counting the expenses and revenues
+	 * accrued over these trades and figuring out the difference in value.
+	 *
+	 * @param tradeList The list of trades whose total profits will be calculated.
+	 * @return profit
+	 */
+	public static long getProfit(List<OfferEvent> tradeList)
+	{
+		return getValueOfMatchedOffers(tradeList, false) -
+			getValueOfMatchedOffers(tradeList, true);
+	}
+
+	/**
+	 * This method finds the value of all the offers with the buyState that are
+	 * contributing to flips. As such, this is NOT the value of the entire trade list, or the value of
+	 * ALL the buys/sells. It is only the value of buys OR sells that are contributing to flips, meaning
+	 * they would be matched to another buy/sell when constructing flips.
+	 *
+	 * @param tradeList  A list of offers
+	 * @param isBuy Refers to whether buys or sells should be looked at
+	 * @return Returns the value of flips
+	 */
+	public static long getValueOfMatchedOffers(List<OfferEvent> tradeList, boolean isBuy)
+	{
+		return getValueOfOffersUpToLimit(
+			tradeList.stream().filter(o -> o.isBuy() == isBuy).collect(Collectors.toList()),
+			countFlipQuantity(tradeList));
+	}
+
+	/**
+	 * Calculates the total value of the sell or buy offers in a trade list.
+	 */
+	public static long getTotalRevenueOrExpense(List<OfferEvent> tradeList, boolean isBuy)
+	{
+		return tradeList.stream().
+			filter(o -> o.isBuy() == isBuy).
+			mapToLong(o -> o.getCurrentQuantityInTrade() * o.getPrice()).sum();
+	}
+
+	/**
+	 * Gets the amount of items in a given tradelist that have been "flipped". We take
+	 * min(itemsBought, itemsSold) bc we only want the amount of items that will actually be matched against each
+	 * other to create flips and if either buys or sells has a surplus relative to the other, that surplus won't be
+	 * matched.
+	 *
+	 * @param tradeList The list of offers that the flip count is based on
+	 * @return An integer representing the total currentQuantityInTrade of items flipped in the list of offers
+	 */
+	public static int countFlipQuantity(List<OfferEvent> tradeList)
+	{
+		int numBoughtItems = 0;
+		int numSoldItems = 0;
+
+		for (OfferEvent offer : tradeList)
+		{
+			if (offer.isBuy())
+			{
+				numBoughtItems += offer.getCurrentQuantityInTrade();
+			}
+			else
+			{
+				numSoldItems += offer.getCurrentQuantityInTrade();
+			}
+		}
+
+		return Math.min(numBoughtItems, numSoldItems);
+	}
+
+	/**
+	 * Calculates the amount of money spent on either a buy or sell list, up to the amount of items
+	 * specified by the limit.
+	 *
+	 * @param tradeList a buy or a sell list
+	 * @param itemLimit the amount of items to calculate the value up until. This is for the case
+	 *                  when a user has an unequal amount of buys/sells in which case you want to return the
+	 *                  profit the items only up until the buys and sells are equal. If this values is -1, it
+	 *                  ignores the limit.
+	 * @return the amount of money spent on the offer list, up to the amount of items specified by the
+	 * limit
+	 */
+	private static long getValueOfOffersUpToLimit(List<OfferEvent> tradeList, long itemLimit)
+	{
+		int itemsSeen = 0;
+		long moneySpent = 0;
+
+		itemLimit = itemLimit == -1 ? Long.MAX_VALUE : itemLimit;
+
+		for (OfferEvent offer : tradeList)
+		{
+			if (itemsSeen + offer.getCurrentQuantityInTrade() >= itemLimit)
+			{
+				moneySpent += (itemLimit - itemsSeen) * offer.getPrice();
+				break;
+			}
+			else
+			{
+				moneySpent += offer.getCurrentQuantityInTrade() * offer.getPrice();
+				itemsSeen += offer.getCurrentQuantityInTrade();
+			}
+
+		}
+
+		return moneySpent;
+	}
+
+	/**
+	 * Returns a view of the offer events that accounts for the amount consumed by partial offers
+	 * in the recipe flips
+	 */
+	static List<OfferEvent> getPartialOfferAdjustedView(List<OfferEvent> offers, Map<String, PartialOffer> partialOffers) {
+		return offers.stream().map(o -> {
+			if (partialOffers.containsKey(o.getUuid())) {
+				return partialOffers.get(o.getUuid()).toRemainingOfferEvent();
+			}
+			return o;
+		}).collect(Collectors.toList());
+	}
+
+	/**
+	 * Creates Flips from offers. Flips represent a buy trade followed by a sell trade. A trade is a collection
+	 * of offers from the empty offer to the completed offer. A completed offer marks the end of a trade.
+	 *
+	 * @param tradeList offers
+	 * @return flips
+	 */
+	public static List<Flip> getFlips(List<OfferEvent> tradeList)
+	{
+		//group offers based on which account those offers belong to (this is really only relevant when getting the flips
+		//of the account wide tradelist as you don't want to match offers from diff accounts.
+
+		Map<String, List<OfferEvent>> groupedOffers = tradeList.stream().collect(Collectors.groupingBy(OfferEvent::getMadeBy));
+
+		//take each offer list and create flips out of them, then put those flips into one list.
+		List<Flip> flips = new ArrayList<>();
+		groupedOffers.values().forEach(offers -> flips.addAll(createFlips(offers)));
+
+		flips.sort(Comparator.comparing(Flip::getTime));
+
+		return flips;
 	}
 
 	/**
@@ -575,6 +597,9 @@ public class HistoryManager
 		int buyIdx = 0;
 		for (OfferEvent sell : sells)
 		{
+			if (sell.getCurrentQuantityInTrade() == 0) {
+				continue;
+			}
 			int numBuysSeen = 0;
 			int totalRevenue = 0;
 			while (buyIdx < buys.size())
@@ -607,23 +632,5 @@ public class HistoryManager
 		}
 
 		return flips;
-	}
-
-	public Optional<OfferEvent> getLatestOfferThatMatchesPredicate(Predicate<OfferEvent> predicate)
-	{
-		for (int i = compressedOfferEvents.size() - 1; i > -1; i--)
-		{
-			if (predicate.test(compressedOfferEvents.get(i)))
-			{
-				return Optional.of(compressedOfferEvents.get(i));
-			}
-		}
-		return Optional.empty();
-	}
-
-	public void resetGeLimit() {
-		itemsBoughtThroughCompleteOffers = 0;
-		itemsBoughtThisLimitWindow = 0;
-		nextGeLimitRefresh = Instant.now();
 	}
 }

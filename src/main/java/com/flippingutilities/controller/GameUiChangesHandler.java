@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
 import net.runelite.api.VarClientInt;
-import net.runelite.api.VarbitComposition;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.events.VarbitChanged;
@@ -88,7 +87,7 @@ public class GameUiChangesHandler {
         plugin.getClientThread().invokeLater(() ->
         {
             OfferEditor flippingWidget = new OfferEditor(client.getWidget(WidgetInfo.CHATBOX_CONTAINER), client);
-            Optional<FlippingItem> selectedItem = plugin.viewTradesForCurrentView().stream().filter(item -> item.getItemId() == client.getVar(CURRENT_GE_ITEM)).findFirst();
+            Optional<FlippingItem> selectedItem = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == client.getVar(CURRENT_GE_ITEM)).findFirst();
 
             String chatInputText = client.getWidget(WidgetInfo.CHATBOX_TITLE).getText();
             String offerText = client.getWidget(WidgetInfo.GRAND_EXCHANGE_OFFER_CONTAINER).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
@@ -222,7 +221,7 @@ public class GameUiChangesHandler {
 
     private void highlightOffer(int itemId) {
         highlightedItemId = itemId;
-        Optional<FlippingItem> itemInHistory = plugin.viewTradesForCurrentView().stream().filter(item -> item.getItemId() == highlightedItemId && item.getValidFlippingPanelItem()).findFirst();
+        Optional<FlippingItem> itemInHistory = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == highlightedItemId && item.getValidFlippingPanelItem()).findFirst();
         if (itemInHistory.isPresent()) {
             highlightedItem = itemInHistory;
         }

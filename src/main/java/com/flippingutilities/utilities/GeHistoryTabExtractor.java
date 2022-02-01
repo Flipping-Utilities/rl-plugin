@@ -44,7 +44,7 @@ public class GeHistoryTabExtractor {
         //just making ticksSinceFirst offer something > 2 so it doesn't count as a margin check
         int ticksSinceFirstOffer = 10;
 
-        OfferEvent offerEvent = new OfferEvent(UUID.randomUUID().toString(), isBuy, itemId, quantity, price, time, slot, offerState, tickArrivedAt, ticksSinceFirstOffer, totalQuantity, true, null, null, false, null,0,0);
+        OfferEvent offerEvent = new OfferEvent(UUID.randomUUID().toString(), isBuy, itemId, quantity, price, time, slot, offerState, tickArrivedAt, ticksSinceFirstOffer, totalQuantity, null, false, null, null,0,0);
         return offerEvent;
     }
 
