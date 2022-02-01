@@ -452,6 +452,7 @@ public class RecipeFlipCreationPanel extends JPanel {
             successLabel.setBorder(new EmptyBorder(0, 0, 10, 0));
             successLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
             successLabel.setFont(new Font("Whitney", Font.PLAIN, 16));
+            successLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
             bottomPanel.add(successLabel);
             revalidate();
