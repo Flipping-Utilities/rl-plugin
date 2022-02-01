@@ -448,7 +448,7 @@ public class RecipeFlipCreationPanel extends JPanel {
 
             bottomPanel.removeAll();
 
-            JLabel successLabel = new JLabel("Success! This flip will now show up in Recipes tab", SwingConstants.CENTER);
+            JLabel successLabel = new JLabel("Success! This flip will now show up in the Recipes tab", SwingConstants.CENTER);
             successLabel.setBorder(new EmptyBorder(0, 0, 10, 0));
             successLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
             successLabel.setFont(new Font("Whitney", Font.PLAIN, 16));

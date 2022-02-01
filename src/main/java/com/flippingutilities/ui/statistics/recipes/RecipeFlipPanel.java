@@ -125,7 +125,7 @@ public class RecipeFlipPanel extends JPanel {
         pricePanel.setBackground(CustomColors.DARK_GRAY);
         JLabel priceLabel = new JLabel("Avg Price", SwingConstants.CENTER);
         priceLabel.setFont(FontManager.getRunescapeSmallFont());
-        JLabel priceValueLabel = new JLabel(QuantityFormatter.formatNumber(avgPrice));
+        JLabel priceValueLabel = new JLabel(QuantityFormatter.formatNumber(avgPrice) + " gp");
         priceValueLabel.setFont(FontManager.getRunescapeSmallFont());
         pricePanel.add(priceLabel, BorderLayout.WEST);
         pricePanel.add(priceValueLabel, BorderLayout.EAST);
