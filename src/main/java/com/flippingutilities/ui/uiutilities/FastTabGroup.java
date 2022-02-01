@@ -57,7 +57,6 @@ public class FastTabGroup extends MaterialTabGroup
 		this.display = display;
 		this.display.setLayout(new CardLayout());
 		setLayout(new FlowLayout(FlowLayout.CENTER, 8, 0));
-		setOpaque(false);
 	}
 
 	public void addTab(MaterialTab tab)

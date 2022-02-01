@@ -97,7 +97,7 @@ public class CustomizationPanel extends JPanel {
 
     private void onSectionChange() {
         rebuild(sections);
-        plugin.getFlippingPanel().rebuild(plugin.viewTradesForCurrentView());
+        plugin.getFlippingPanel().rebuild(plugin.viewItemsForCurrentView());
         plugin.getDataHandler().markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
     }
 

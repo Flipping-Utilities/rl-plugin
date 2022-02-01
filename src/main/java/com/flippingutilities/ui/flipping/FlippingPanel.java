@@ -47,25 +47,18 @@ import net.runelite.http.api.item.ItemStats;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.MatteBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.Instant;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 
 @Slf4j
 public class FlippingPanel extends JPanel
 {
-	public enum SORT {
-		FAVORITE,
-		ROI,
-		PROFIT,
-		TIME
-	}
-
 	@Getter
 	private static final String WELCOME_PANEL = "WELCOME_PANEL";
 	private static final String ITEMS_PANEL = "ITEMS_PANEL";
@@ -86,16 +79,13 @@ public class FlippingPanel extends JPanel
 	private boolean itemHighlighted = false;
 
 	@Getter
-	@Setter
-	private SORT selectedSort = SORT.TIME;
-
-	@Getter
 	private Paginator paginator;
 
 	@Getter
 	private OfferEditorContainerPanel offerEditorContainerPanel;
 
 	private boolean currentlySearching;
+	private boolean favoriteSelected;
 
 	public FlippingPanel(final FlippingPlugin plugin)
 	{
@@ -144,7 +134,9 @@ public class FlippingPanel extends JPanel
 		topPanel.add(searchBar, BorderLayout.CENTER);
 		topPanel.add(this.createFavoriteButton(), BorderLayout.EAST);
 
-		paginator = new Paginator(() -> rebuild(plugin.viewTradesForCurrentView()));
+		paginator = new Paginator(() -> rebuild(plugin.viewItemsForCurrentView()));
+		paginator.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		paginator.setBorder(new MatteBorder(1,0,0,2, ColorScheme.DARK_GRAY_COLOR.darker()));
 		paginator.setPageSize(10);
 
 		//To switch between greeting and items panels
@@ -159,7 +151,7 @@ public class FlippingPanel extends JPanel
 	 * Creates and renders the panel using the flipping items in the listed parameter.
 	 * An item is only displayed if it contains a valid OfferInfo object in its history.
 	 *
-	 * @param flippingItems List of flipping items that the rebuild will render.
+	 * @param flippingItems List of flipping items that the rebuildItemsDisplay will render.
 	 */
 	public void rebuild(List<FlippingItem> flippingItems)
 	{
@@ -175,8 +167,8 @@ public class FlippingPanel extends JPanel
 			}
 			int vGap = 8;
 			cardLayout.show(flippingItemContainer, ITEMS_PANEL);
-			List<FlippingItem> sortedItems = sortTradeList(flippingItems);
-			List<FlippingItem> itemsThatShouldHavePanels = sortedItems.stream().filter(item -> item.getValidFlippingPanelItem()).collect(Collectors.toList());
+			List<FlippingItem> itemsToDisplay = getItemsToDisplay(flippingItems);
+			List<FlippingItem> itemsThatShouldHavePanels = itemsToDisplay.stream().filter(item -> item.getValidFlippingPanelItem()).collect(Collectors.toList());
 			paginator.updateTotalPages(itemsThatShouldHavePanels.size());
 			List<FlippingItem> itemsOnCurrentPage = paginator.getCurrentPageItems(itemsThatShouldHavePanels);
 			List<FlippingItemPanel> newPanels = itemsOnCurrentPage.stream().map(item -> new FlippingItemPanel(plugin, itemManager.getImage(item.getItemId()), item)).collect(Collectors.toList());
@@ -205,104 +197,31 @@ public class FlippingPanel extends JPanel
 
 	/**
 	 * Handles rebuilding the flipping panel when a new offer event comes in. There are several cases
-	 * where we don't want to rebuild either because it is unnecessary or visually annoying for a user.
+	 * where we don't want to rebuildItemsDisplay either because it is unnecessary or visually annoying for a user.
 	 * @param offerEvent the new offer that just came in
 	 */
 	public void onNewOfferEventRebuild(OfferEvent offerEvent) {
-		boolean currentlySortedByTime = selectedSort == SORT.TIME || selectedSort == SORT.FAVORITE;
 		boolean newOfferEventAlreadyAtTop = activePanels.size() > 0 && activePanels.get(0).getFlippingItem().getItemId() == offerEvent.getItemId();
-		if (currentlySortedByTime && newOfferEventAlreadyAtTop) {
+		if (newOfferEventAlreadyAtTop) {
 			refreshPricesForFlippingItemPanel(offerEvent.getItemId());
 			return;
 		}
 		//it's annoying when you have searched an item up or an item is
 		//highlighted and then the panel is rebuilt due to an offer coming in. This guard prevents that.
 		if (!isItemHighlighted() && !currentlySearching) {
-			rebuild(plugin.viewTradesForCurrentView());
+			rebuild(plugin.viewItemsForCurrentView());
 		}
 	}
 
-	public List<FlippingItem> sortTradeList(List<FlippingItem> tradeList)
-	{
+	public List<FlippingItem> getItemsToDisplay(List<FlippingItem> tradeList) {
 		List<FlippingItem> result = new ArrayList<>(tradeList);
-
-		if (result.isEmpty())
-		{
+		if (result.isEmpty()) {
 			return result;
 		}
-		if (selectedSort == null) {
-			selectedSort = SORT.TIME;
+		if (favoriteSelected && isItemHighlighted()) {
+			result = result.stream().filter(FlippingItem::isFavorite).collect(Collectors.toList());
 		}
-
-		switch (selectedSort)
-		{
-			case TIME:
-				sortByTime(result);
-				break;
-			case FAVORITE:
-				if (isItemHighlighted()){
-					//when the item is highlighted we always want to show it. If the sort is set to favorite and the
-					//highlighted item is not a favorite, the filtering will prevent it from being shown, so we don't want to
-					//filter in that case.
-					break;
-				}
-				result = result.stream().filter(item -> item.isFavorite()).collect(Collectors.toList());
-				sortByTime(result); //when it is on favorites you also want it to be sorted by time
-				break;
-			case PROFIT:
-				result.sort((item1, item2) ->
-				{
-					if (item1 == null || item2 == null)
-					{
-						return -1;
-					}
-					if ((item1.getLatestInstaBuy().isPresent() && item1.getLatestInstaSell().isPresent()) && (!item2.getLatestInstaSell().isPresent() || !item2.getLatestInstaBuy().isPresent()))
-					{
-						return -1;
-					}
-
-					if ((item2.getLatestInstaBuy().isPresent() && item2.getLatestInstaSell().isPresent()) && (!item1.getLatestInstaSell().isPresent() || !item1.getLatestInstaBuy().isPresent()))
-					{
-						return 1;
-					}
-
-					if ((!item2.getLatestInstaBuy().isPresent() || !item2.getLatestInstaSell().isPresent()) && (!item1.getLatestInstaSell().isPresent() || !item1.getLatestInstaBuy().isPresent()))
-					{
-						return 0;
-					}
-
-					boolean shouldIncludeMarginCheck = plugin.getConfig().marginCheckLoss();
-					boolean shouldUseRemainingGeLimit = plugin.getConfig().geLimitProfit();
-					return item2.getPotentialProfit(shouldIncludeMarginCheck, shouldUseRemainingGeLimit).orElse(0) - item1.getPotentialProfit(shouldIncludeMarginCheck, shouldUseRemainingGeLimit).orElse(0);
-				});
-				break;
-			case ROI:
-				result.sort((item1, item2) -> {
-					if ((item1.getLatestInstaBuy().isPresent() && item1.getLatestInstaSell().isPresent()) && (!item2.getLatestInstaSell().isPresent() || !item2.getLatestInstaBuy().isPresent()))
-					{
-						return -1;
-					}
-
-					if ((item2.getLatestInstaBuy().isPresent() && item2.getLatestInstaSell().isPresent()) && (!item1.getLatestInstaSell().isPresent() || !item1.getLatestInstaBuy().isPresent()))
-					{
-						return 1;
-					}
-
-					if ((!item2.getLatestInstaBuy().isPresent() || !item2.getLatestInstaSell().isPresent()) && (!item1.getLatestInstaSell().isPresent() || !item1.getLatestInstaBuy().isPresent()))
-					{
-						return 0;
-					}
-
-					int item1ProfitEach = item1.getLatestInstaSell().get().getPrice() - item1.getLatestInstaBuy().get().getPrice();
-					int item2ProfitEach = item2.getLatestInstaSell().get().getPrice() - item2.getLatestInstaBuy().get().getPrice();
-
-					float item1roi = (float) item1ProfitEach / item1.getLatestInstaBuy().get().getPrice() * 100;
-					float item2roi = (float) item2ProfitEach / item2.getLatestInstaBuy().get().getPrice() * 100;
-
-					return Float.compare(item1roi, item2roi);
-				});
-				break;
-		}
+		sortByTime(result); //when it is on favorites you also want it to be sorted by time
 		return result;
 	}
 
@@ -337,27 +256,26 @@ public class FlippingPanel extends JPanel
 		favoriteButton.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
-				if (selectedSort == SORT.FAVORITE) {
+				if (favoriteSelected) {
 					favoriteButton.setIcon(Icons.SMALL_STAR_OFF_ICON);
-					selectedSort = null;
 				}
 				else {
 					favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
-					selectedSort = SORT.FAVORITE;
 				}
-				rebuild(plugin.viewTradesForCurrentView());
+				favoriteSelected = !favoriteSelected;
+				rebuild(plugin.viewItemsForCurrentView());
 			}
 
 			@Override
 			public void mouseEntered(MouseEvent e) {
-				if (selectedSort != SORT.FAVORITE) {
+				if (!favoriteSelected) {
 					favoriteButton.setIcon(Icons.SMALL_STAR_HOVER_ICON);
 				}
 			}
 
 			@Override
 			public void mouseExited(MouseEvent e) {
-				if (selectedSort == SORT.FAVORITE) {
+				if (favoriteSelected) {
 					favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
 				}
 				else {
@@ -377,7 +295,7 @@ public class FlippingPanel extends JPanel
 			return;
 		}
 		itemHighlighted = false;
-		rebuild(plugin.viewTradesForCurrentView());
+		rebuild(plugin.viewItemsForCurrentView());
 	}
 
 	/**
@@ -413,11 +331,11 @@ public class FlippingPanel extends JPanel
 		if (Strings.isNullOrEmpty(lookup))
 		{
 			currentlySearching = false;
-			rebuild(plugin.viewTradesForCurrentView());
+			rebuild(plugin.viewItemsForCurrentView());
 			return;
 		}
 
-		Map<Integer, FlippingItem> currentFlippingItems = plugin.viewTradesForCurrentView().stream().collect(Collectors.toMap(f -> f.getItemId(), f -> f));
+		Map<Integer, FlippingItem> currentFlippingItems = plugin.viewItemsForCurrentView().stream().collect(Collectors.toMap(f -> f.getItemId(), f -> f));
 		List<FlippingItem> matchesInHistory = new ArrayList<>();
 		List<FlippingItem> matchesNotInHistory = new ArrayList<>();
 		for (ItemPrice itemInfo:  itemManager.search(lookup)) {
@@ -443,7 +361,7 @@ public class FlippingPanel extends JPanel
 		{
 			searchBar.setIcon(IconTextField.Icon.ERROR);
 			currentlySearching = false;
-			rebuild(plugin.viewTradesForCurrentView());
+			rebuild(plugin.viewItemsForCurrentView());
 			return;
 		}
 		searchBar.setIcon(IconTextField.Icon.SEARCH);
@@ -482,7 +400,7 @@ public class FlippingPanel extends JPanel
 						plugin.setAllFlippingItemsAsHidden();
 						setItemHighlighted(false);
 						cardLayout.show(flippingItemContainer, WELCOME_PANEL);
-						rebuild(plugin.viewTradesForCurrentView());
+						rebuild(plugin.viewItemsForCurrentView());
 					}
 				}
 			}

@@ -1,4 +1,4 @@
-package com.flippingutilities.ui.combinationflips;
+package com.flippingutilities.ui.recipeflips;
 
 import net.runelite.client.util.AsyncBufferedImage;
 import net.runelite.client.util.QuantityFormatter;
@@ -9,12 +9,12 @@ import java.awt.*;
 /**
  * Holds the item icon and multiplier text label along with the target value label
  */
-public class CombinationItemHeaderPanel extends JPanel {
+public class RecipeItemHeaderPanel extends JPanel {
 
     JLabel targetValueLabel;
     JLabel itemIconAndConsumedAmountLabel;
 
-    public CombinationItemHeaderPanel(AsyncBufferedImage itemImage) {
+    public RecipeItemHeaderPanel(AsyncBufferedImage itemImage) {
         setBackground(Color.BLACK);
 
         Icon itemIcon = new ImageIcon(itemImage);

@@ -374,7 +374,7 @@ public class HistoryManagerTest
 		//now lets add a completed offer for slot 1.
 		historyManager.updateHistory(Utils.offer(true, 50, 100, baseTime, 1, GrandExchangeOfferState.BOUGHT, 50));
 
-		//rebuild the compressed offers list
+		//rebuildItemsDisplay the compressed offers list
 		expectedCompressedEvents.clear();
 		expectedCompressedEvents.add(Utils.offer(true, 5, 100, baseTime, 2, GrandExchangeOfferState.BUYING, 1));
 		expectedCompressedEvents.add(Utils.offer(true, 50, 100, baseTime, 1, GrandExchangeOfferState.BOUGHT, 50));

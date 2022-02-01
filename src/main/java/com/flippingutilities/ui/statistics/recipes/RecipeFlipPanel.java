@@ -1,14 +1,14 @@
-package com.flippingutilities.ui.statistics;
+package com.flippingutilities.ui.statistics.recipes;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.model.CombinationFlip;
-import com.flippingutilities.model.FlippingItem;
-import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.model.RecipeFlip;
 import com.flippingutilities.model.PartialOffer;
+import com.flippingutilities.model.RecipeFlipGroup;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
+import com.flippingutilities.utilities.Recipe;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
@@ -20,29 +20,33 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * The visual representation of a CombinationFlip. CombinationFlipPanels
+ * The visual representation of a RecipeFlip. RecipeFlipPanels
  * are shown in the "combos" tab of the trade history section of an item in the
  * statistics tab.
  */
-public class CombinationFlipPanel extends JPanel {
+public class RecipeFlipPanel extends JPanel {
     private JLabel timeDisplay;
-    private CombinationFlip combinationFlip;
+    private RecipeFlip recipeFlip;
     private FlippingPlugin plugin;
-    private FlippingItem item;
+    private Recipe recipe;
+    private RecipeFlipGroup recipeFlipGroup;
 
-    public CombinationFlipPanel(CombinationFlip combinationFlip, FlippingPlugin plugin, FlippingItem item) {
-        this.combinationFlip = combinationFlip;
+    public RecipeFlipPanel(RecipeFlipGroup recipeFlipGroup, RecipeFlip recipeFlip, Recipe recipe, FlippingPlugin plugin) {
+        this.recipeFlipGroup = recipeFlipGroup;
+        this.recipeFlip = recipeFlip;
         this.plugin = plugin;
-        this.item = item;
+        this.recipe = recipe;
         setBackground(CustomColors.DARK_GRAY);
         setBorder(new EmptyBorder(5,5,5,5));
         setLayout(new BorderLayout());
 
-        timeDisplay = createTimeDisplay(combinationFlip);
+        timeDisplay = createTimeDisplay(recipeFlip);
 
         add(createTitlePanel(), BorderLayout.NORTH);
         add(createProfitPanel(), BorderLayout.CENTER);
@@ -55,11 +59,9 @@ public class CombinationFlipPanel extends JPanel {
         titlePanel.setLayout(new DynamicGridLayout(2,1));
         titlePanel.setBackground(CustomColors.DARK_GRAY);
 
-        String actionText = combinationFlip.getParent().offer.isBuy()? "Broke" : "Constructed";
-        String parentName = combinationFlip.getParent().getOffer().getItemName();
-        String quantityInCombination = QuantityFormatter.formatNumber(combinationFlip.getParent().amountConsumed);
+        String recipeQuantity = QuantityFormatter.formatNumber(recipeFlip.getRecipeCountMade(recipe));
 
-        JLabel quantityLabel = new JLabel(quantityInCombination + "x");
+        JLabel quantityLabel = new JLabel(recipeQuantity + "x");
         quantityLabel.setFont(FontManager.getRunescapeSmallFont());
 
         JPanel quantityAndTimePanel = new JPanel();
@@ -67,7 +69,7 @@ public class CombinationFlipPanel extends JPanel {
         quantityAndTimePanel.add(quantityLabel);
         quantityAndTimePanel.add(timeDisplay);
 
-        JLabel itemNameAndActionLabel = new JLabel(actionText + " " +  parentName, SwingConstants.CENTER);
+        JLabel itemNameAndActionLabel = new JLabel(recipe.getName(), SwingConstants.CENTER);
         itemNameAndActionLabel.setFont(FontManager.getRunescapeSmallFont());
         itemNameAndActionLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
 
@@ -76,27 +78,79 @@ public class CombinationFlipPanel extends JPanel {
         return titlePanel;
     }
 
-    private JLabel createTimeDisplay(CombinationFlip combinationFlip) {
-        OfferEvent offer = combinationFlip.getParent().offer;
+    private JLabel createTimeDisplay(RecipeFlip recipeFlip) {
         JLabel timeDisplay = new JLabel(
-                "(" + TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago)",
+                "(" + TimeFormatters.formatDurationTruncated(recipeFlip.getTimeOfCreation()) + " ago)",
                 SwingConstants.CENTER);
         timeDisplay.setFont(FontManager.getRunescapeSmallFont());
         return timeDisplay;
     }
 
-    private JPanel createDetailsPanel() {
-        List<JPanel> partialOfferPanels = new ArrayList<>();
-        partialOfferPanels.add(createPartialOfferPanel(List.of(combinationFlip.getParent()))); //parent po panel
-        partialOfferPanels.addAll( //children po panels
-                combinationFlip.getChildren().values().stream().map(
-                m -> createPartialOfferPanel(new ArrayList<>(m.values()))).
-                collect(Collectors.toList()));
+    private JPanel createComponentGroupPanel(Map<Integer, Map<String, PartialOffer>> partialOffers, boolean outputs) {
 
-        JPanel extraDetailsPanel = UIUtilities.stackPanelsVertically(partialOfferPanels, 2);
-        extraDetailsPanel.setBorder(new EmptyBorder(5,0,0,0));
-        extraDetailsPanel.setBackground(CustomColors.DARK_GRAY);
-        extraDetailsPanel.setVisible(false);
+        JLabel titleLabel = new JLabel(outputs? "OUTPUTS":"INPUTS", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
+        titleLabel.setBorder(new EmptyBorder(0,0,5,0));
+
+        JPanel componentGroupPanel = new JPanel(new DynamicGridLayout(1 + partialOffers.size(), 1));
+        componentGroupPanel.setBackground(CustomColors.DARK_GRAY);
+        componentGroupPanel.add(titleLabel);
+
+        partialOffers.forEach((itemId, partialOfferMap) -> {
+            componentGroupPanel.add(createComponentPanel(partialOfferMap));
+        });
+
+        return componentGroupPanel;
+    }
+
+    private JPanel createComponentPanel(Map<String, PartialOffer> partialOfferMap){
+        List<PartialOffer> partialOfferList = new ArrayList<>(partialOfferMap.values());
+        String itemName = partialOfferList.get(0).offer.getItemName();
+        int quantity = partialOfferList.stream().mapToInt(po -> po.amountConsumed).sum();
+        long avgPrice = partialOfferList.stream().mapToLong(po -> po.getOffer().getPrice()).sum()/quantity;
+
+        JLabel itemNameLabel = new JLabel(itemName, SwingConstants.CENTER);
+        itemNameLabel.setFont(FontManager.getRunescapeSmallFont());
+
+        JPanel quantityPanel = new JPanel(new BorderLayout());
+        quantityPanel.setBackground(CustomColors.DARK_GRAY);
+        JLabel quantityLabel = new JLabel("Quantity", SwingConstants.CENTER);
+        quantityLabel.setFont(FontManager.getRunescapeSmallFont());
+        JLabel quantityValueLabel = new JLabel(QuantityFormatter.formatNumber(quantity));
+        quantityValueLabel.setFont(FontManager.getRunescapeSmallFont());
+        quantityPanel.add(quantityLabel, BorderLayout.WEST);
+        quantityPanel.add(quantityValueLabel, BorderLayout.EAST);
+
+        JPanel pricePanel = new JPanel(new BorderLayout());
+        pricePanel.setBackground(CustomColors.DARK_GRAY);
+        JLabel priceLabel = new JLabel("Avg Price", SwingConstants.CENTER);
+        priceLabel.setFont(FontManager.getRunescapeSmallFont());
+        JLabel priceValueLabel = new JLabel(QuantityFormatter.formatNumber(avgPrice) + " gp");
+        priceValueLabel.setFont(FontManager.getRunescapeSmallFont());
+        pricePanel.add(priceLabel, BorderLayout.WEST);
+        pricePanel.add(priceValueLabel, BorderLayout.EAST);
+
+        JPanel itemPanel = new JPanel(new DynamicGridLayout(3,1));
+        itemPanel.setBackground(CustomColors.DARK_GRAY);
+        itemPanel.add(itemNameLabel);
+        itemPanel.add(quantityPanel);
+        itemPanel.add(pricePanel);
+
+        return itemPanel;
+    }
+
+    private JPanel createDetailsPanel() {
+
+        JPanel inputPanel = createComponentGroupPanel(recipeFlip.getInputs(), false);
+        JPanel outputPanel = createComponentGroupPanel(recipeFlip.getOutputs(), true);
+
+        JPanel inputsAndOutputsPanel = new JPanel(new DynamicGridLayout(2,1));
+        inputsAndOutputsPanel.setBorder(new EmptyBorder(5,0,0,0));
+        inputsAndOutputsPanel.setBackground(CustomColors.DARK_GRAY);
+        inputsAndOutputsPanel.setVisible(false);
+
+        inputsAndOutputsPanel.add(inputPanel);
+        inputsAndOutputsPanel.add(outputPanel);
 
         JLabel expandDetailsLabel = new JLabel("Expand Details", SwingConstants.CENTER);
         Color c = expandDetailsLabel.getForeground();
@@ -107,8 +161,8 @@ public class CombinationFlipPanel extends JPanel {
         expandDetailsLabel.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                extraDetailsPanel.setVisible(!extraDetailsPanel.isVisible());
-                expandDetailsLabel.setText(extraDetailsPanel.isVisible()? "Collapse Details": "Expand Details");
+                inputsAndOutputsPanel.setVisible(!inputsAndOutputsPanel.isVisible());
+                expandDetailsLabel.setText(inputsAndOutputsPanel.isVisible()? "Collapse Details": "Expand Details");
             }
 
             @Override
@@ -132,7 +186,7 @@ public class CombinationFlipPanel extends JPanel {
         detailsPanel.setBackground(CustomColors.DARK_GRAY);
         detailsPanel.setBorder(new EmptyBorder(5,0,0,0));
         detailsPanel.add(expandDetailsPanel, BorderLayout.NORTH);
-        detailsPanel.add(extraDetailsPanel, BorderLayout.CENTER);
+        detailsPanel.add(inputsAndOutputsPanel, BorderLayout.CENTER);
 
         return detailsPanel;
     }
@@ -143,16 +197,18 @@ public class CombinationFlipPanel extends JPanel {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
-                    JOptionPane.showMessageDialog(null, "You cannot delete combo flips in the Accountwide view");
+                    JOptionPane.showMessageDialog(null, "You cannot delete recipe flips in the Accountwide view");
                     return;
                 }
-                final int result = JOptionPane.showOptionDialog(deleteIcon, "Are you sure you want to delete this combo flip?",
+                final int result = JOptionPane.showOptionDialog(deleteIcon, "Are you sure you want to delete this recipe flip?",
                         "Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
                         null, new String[]{"Yes", "No"}, "No");
 
                 if (result == JOptionPane.YES_OPTION) {
-                    item.deleteCombinationFlip(combinationFlip, plugin.viewTradesForCurrentView());
-                    plugin.getStatPanel().rebuild(plugin.viewTradesForCurrentView());
+                    recipeFlipGroup.deleteFlip(recipeFlip);
+                    plugin.setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
+                    plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+                    plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
                 }
             }
 
@@ -170,45 +226,9 @@ public class CombinationFlipPanel extends JPanel {
         return deleteIcon;
     }
 
-    private JPanel createPartialOfferPanel(List<PartialOffer> partialOffers) {
-        String itemName = partialOffers.get(0).offer.getItemName();
-        long quantity = partialOffers.stream().mapToLong(po -> po.amountConsumed).sum();
-        int itemPrice = (int) (partialOffers.stream().mapToLong(po -> po.offer.getPrice() * po.amountConsumed).sum()/quantity);
-
-        JLabel itemNameLabel = new JLabel(itemName, SwingConstants.CENTER);
-        itemNameLabel.setFont(FontManager.getRunescapeSmallFont());
-
-        JLabel quantityDescLabel = new JLabel("Quantity:");
-        JLabel quantityValueLabel = new JLabel(String.valueOf(quantity));
-
-        JLabel priceDescLabel = new JLabel("Price ea:");
-        JLabel priceValueLabel = new JLabel(QuantityFormatter.formatNumber(itemPrice) + " gp");
-
-        List.of(quantityDescLabel, quantityValueLabel, priceDescLabel, priceValueLabel).forEach(l -> l.setFont(FontManager.getRunescapeSmallFont()));
-
-        JPanel quantityPanel = new JPanel(new BorderLayout());
-        quantityPanel.setBackground(CustomColors.DARK_GRAY);
-        quantityPanel.add(quantityDescLabel, BorderLayout.WEST);
-        quantityPanel.add(quantityValueLabel, BorderLayout.EAST);
-
-        JPanel pricePanel = new JPanel(new BorderLayout());
-        pricePanel.setBackground(CustomColors.DARK_GRAY);
-        pricePanel.add(priceDescLabel, BorderLayout.WEST);
-        pricePanel.add(priceValueLabel, BorderLayout.EAST);
-
-        JPanel partialOfferPanel = new JPanel(new DynamicGridLayout(3,1));
-        partialOfferPanel.add(itemNameLabel);
-        partialOfferPanel.add(quantityPanel);
-        partialOfferPanel.add(pricePanel);
-
-        partialOfferPanel.setBackground(CustomColors.DARK_GRAY);
-
-        return partialOfferPanel;
-    }
-
     private JPanel createProfitPanel() {
-        long quantity = combinationFlip.getParent().amountConsumed;
-        long profit = combinationFlip.getProfit();
+        long quantity = recipeFlip.getRecipeCountMade(recipe);
+        long profit = recipeFlip.getProfit();
         long profitEach = profit/quantity;
         String profitString = UIUtilities.quantityToRSDecimalStack(profit, true) + " gp";
         String profitEachString = quantity == 1? "": " (" + UIUtilities.quantityToRSDecimalStack(profitEach, false) + " gp ea)";
@@ -221,7 +241,6 @@ public class CombinationFlipPanel extends JPanel {
         profitDescriptionLabel.setFont(FontManager.getRunescapeSmallFont());
 
         profitDescriptionLabel.setForeground(profit >= 0? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
-        profitValLabel.setForeground(profit >= 0? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
 
         JPanel profitPanel = new JPanel(new BorderLayout());
         profitPanel.setBackground(CustomColors.DARK_GRAY);
@@ -232,8 +251,7 @@ public class CombinationFlipPanel extends JPanel {
         return profitPanel;
     }
 
-    public void updateTimeDisplay() {
-        OfferEvent offer = combinationFlip.getParent().offer;
-        timeDisplay.setText("(" + TimeFormatters.formatDurationTruncated(offer.getTime()) + " ago)");
+    public void updateTimeLabels() {
+        timeDisplay.setText("(" + TimeFormatters.formatDurationTruncated(recipeFlip.getTimeOfCreation()) + " ago)");
     }
  }
