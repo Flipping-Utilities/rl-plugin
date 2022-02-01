@@ -42,19 +42,33 @@ public class FlippingItemContainerPanel extends JPanel {
     public void rebuild(List<FlippingItem> flippingItems) {
         activePanels.clear();
         flippingItemPanelsContainer.removeAll();
-
         paginator.updateTotalPages(flippingItems.size());
 
-        List<FlippingItem> itemsOnCurrentPage = paginator.getCurrentPageItems(flippingItems);
-        List<FlippingItemPanel> newPanels = itemsOnCurrentPage.stream().map(item -> new FlippingItemPanel(plugin, item)).collect(Collectors.toList());
-        UIUtilities.stackPanelsVertically((List) newPanels, flippingItemPanelsContainer, 5);
-        activePanels.addAll(newPanels);
+        if (!flippingItems.isEmpty()) {
+            List<FlippingItem> itemsOnCurrentPage = paginator.getCurrentPageItems(flippingItems);
+            List<FlippingItemPanel> newPanels = itemsOnCurrentPage.stream().map(item -> new FlippingItemPanel(plugin, item)).collect(Collectors.toList());
+            UIUtilities.stackPanelsVertically((List) newPanels, flippingItemPanelsContainer, 5);
+            activePanels.addAll(newPanels);
+        }
+        else {
+            flippingItemPanelsContainer.add(createHelpLabel());
+        }
     }
 
     public void showPanel(JPanel panel) {
         activePanels.clear();
         flippingItemPanelsContainer.removeAll();
         flippingItemPanelsContainer.add(panel);
+    }
+
+    private JLabel createHelpLabel() {
+        JLabel helpLabel = new JLabel(
+            "<html><body width='220' style='text-align:center;'>" +
+                "Make some trades to see your item history here!");
+        helpLabel.setFont(new Font("Whitney", Font.PLAIN, 15));
+        helpLabel.setBorder(new EmptyBorder(40,5,0,0));
+        helpLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        return helpLabel;
     }
 
     private JPanel createStatItemsPanelContainer() {
