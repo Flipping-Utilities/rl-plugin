@@ -275,7 +275,7 @@ public class RecipeFlipCreationPanel extends JPanel {
         itemIdToItem.forEach((itemId, item) -> {
             List<PartialOffer> partialOffers = item.map(fitem -> {
                 Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(itemId);
-                List<OfferEvent> offers = itemId == sourceOffer.getItemId()? new ArrayList<>(new ArrayList<>(Arrays.asList(sourceOffer))): fitem.getIntervalHistory(startOfInterval);
+                List<OfferEvent> offers = itemId == sourceOffer.getItemId()? new ArrayList<>(Arrays.asList(sourceOffer)): fitem.getIntervalHistory(startOfInterval);
                 Collections.reverse(offers);
 
                 return offers.stream().filter(o -> o.isBuy() == recipe.isInput(itemId) && o.isComplete()).
