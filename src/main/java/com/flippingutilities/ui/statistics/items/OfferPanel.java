@@ -22,6 +22,8 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -233,7 +235,7 @@ public class OfferPanel extends JPanel {
 
                 //If the user pressed "Yes"
                 if (result == JOptionPane.YES_OPTION) {
-                    plugin.deleteOffers(List.of(offer), item);
+                    plugin.deleteOffers(new ArrayList<>(Arrays.asList(offer)), item);
                     plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
                     plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 
