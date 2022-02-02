@@ -275,7 +275,7 @@ public class RecipeFlipCreationPanel extends JPanel {
         itemIdToItem.forEach((itemId, item) -> {
             List<PartialOffer> partialOffers = item.map(fitem -> {
                 Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(itemId);
-                List<OfferEvent> offers = itemId == sourceOffer.getItemId()? new ArrayList<>(List.of(sourceOffer)): fitem.getIntervalHistory(startOfInterval);
+                List<OfferEvent> offers = itemId == sourceOffer.getItemId()? new ArrayList<>(new ArrayList<>(Arrays.asList(sourceOffer))): fitem.getIntervalHistory(startOfInterval);
                 Collections.reverse(offers);
 
                 return offers.stream().filter(o -> o.isBuy() == recipe.isInput(itemId) && o.isComplete()).
@@ -371,7 +371,7 @@ public class RecipeFlipCreationPanel extends JPanel {
     private void handleItemsHittingTargetConsumptionValues() {
         //if the parent quantity in the recipe is not 1, gonna have to do the modding and stuff
         Map<Integer, List<PartialOffer>> idToPartialOffersSelected = selectedOffers.entrySet().stream().
-            map(e -> Map.entry(e.getKey(), new ArrayList<>(e.getValue().values()))).
+            map(e -> new AbstractMap.SimpleEntry<>(e.getKey(), new ArrayList<>(e.getValue().values()))).
             collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         Map<Integer, Integer> idToTargetValues = plugin.getTargetValuesForMaxRecipeCount(recipe, idToPartialOffersSelected, false);

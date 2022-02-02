@@ -47,10 +47,10 @@ public class RecipeFlip {
 
     private Map<Integer, Map<String, PartialOffer>> cloneComponents(Map<Integer, Map<String, PartialOffer>> component) {
         return component.entrySet().stream()
-            .map(e -> Map.entry(
+            .map(e -> new AbstractMap.SimpleEntry<>(
                 e.getKey(),
                 e.getValue().entrySet().stream()
-                    .map(entry -> Map.entry(entry.getKey(), entry.getValue().clone()))
+                    .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), entry.getValue().clone()))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }

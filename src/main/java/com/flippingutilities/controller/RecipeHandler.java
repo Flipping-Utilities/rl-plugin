@@ -89,10 +89,10 @@ public class RecipeHandler {
      * @return whether the given item id is in a recipe
      */
     public boolean isInRecipe(int itemId) {
-        if (idToRecipes.isEmpty()) {
-            return false;
+        if (idToRecipes.isPresent()) {
+            return idToRecipes.get().containsKey(itemId);
         }
-        return idToRecipes.get().containsKey(itemId);
+        return false;
     }
 
     /**
@@ -145,7 +145,7 @@ public class RecipeHandler {
      * Gets a mapping of item id to the recipes it is in.
      */
     private Optional<Map<Integer, List<Recipe>>> getItemIdToRecipes(Optional<List<Recipe>> optionalRecipes) {
-        if (optionalRecipes.isEmpty()) {
+        if (!optionalRecipes.isPresent()) {
             return Optional.empty();
         }
         Map<Integer, List<Recipe>> idToRecipes= new HashMap<>();
@@ -156,7 +156,7 @@ public class RecipeHandler {
                     idToRecipes.get(id).add(r);
                 }
                 else {
-                    idToRecipes.put(id, new ArrayList<>(List.of(r)));
+                    idToRecipes.put(id, new ArrayList<>(Arrays.asList(r)));
                 }
             });
         });
@@ -199,7 +199,7 @@ public class RecipeHandler {
         Map<Integer, Integer> itemIdToMaxRecipesThatCanBeMade = getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers, useRemainingOffer);
         int lowestRecipeCountThatCanBeMade = itemIdToMaxRecipesThatCanBeMade.values().stream().min(Comparator.comparingInt(i -> i)).get();
         return itemIdToQuantity.entrySet().stream().
-            map(e -> Map.entry(e.getKey(), e.getValue() * lowestRecipeCountThatCanBeMade)).
+            map(e -> new AbstractMap.SimpleEntry<>(e.getKey(), e.getValue() * lowestRecipeCountThatCanBeMade)).
             collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
@@ -220,14 +220,14 @@ public class RecipeHandler {
                 .sum();
             long quantityNeededForRecipe = itemIdToQuantity.get(itemId);
             int maxRecipesThatCanBeMade = (int) (totalQuantity / quantityNeededForRecipe);
-            return Map.entry(itemId, maxRecipesThatCanBeMade);
+            return new AbstractMap.SimpleEntry<>(itemId, maxRecipesThatCanBeMade);
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     public void addRecipeFlip(List<RecipeFlipGroup> recipeFlipGroups, RecipeFlip recipeFlip) {
         int someInputItemId = recipeFlip.getInputs().keySet().iterator().next();
         Optional<Recipe> recipeMaybe = getApplicableRecipe(someInputItemId, true);
-        if (recipeMaybe.isEmpty()) {
+        if (!recipeMaybe.isPresent()) {
             log.warn("not adding recipe, for some reason the recipe flip does not have an associated recipe");
             return;
         }
