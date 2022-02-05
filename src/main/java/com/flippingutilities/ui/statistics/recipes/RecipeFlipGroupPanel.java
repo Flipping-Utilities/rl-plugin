@@ -54,7 +54,7 @@ public class RecipeFlipGroupPanel extends JPanel {
         this.recipeFlipGroup = recipeFlipGroup;
         this.statsPanel = plugin.getStatPanel();
 
-        List<RecipeFlip> flips = recipeFlipGroup.getRecipeFlips();
+        List<RecipeFlip> flips = recipeFlipGroup.getFlipsInInterval(statsPanel.getStartOfInterval());
 
         this.recipeFlipPaginator = createPaginator(() -> updateBackgroundPanel(flips));
         recipeFlipPaginator.updateTotalPages(flips.size());

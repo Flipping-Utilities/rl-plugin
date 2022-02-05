@@ -3,10 +3,12 @@ package com.flippingutilities.ui.statistics.recipes;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.RecipeFlipGroup;
 import com.flippingutilities.ui.statistics.StatsPanel;
+import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.ui.DynamicGridLayout;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -50,7 +52,7 @@ public class RecipeGroupContainerPanel extends JPanel {
             activePanels.addAll(newPanels);
         }
         else {
-            recipeGroupContainer.add(createHelpLabel());
+            recipeGroupContainer.add(createHelpPanel());
         }
     }
 
@@ -60,17 +62,33 @@ public class RecipeGroupContainerPanel extends JPanel {
         recipeGroupContainer.add(panel);
     }
 
-    private JLabel createHelpLabel() {
-        JLabel helpLabel = new JLabel(
+    private JPanel createHelpPanel() {
+        JLabel picDesc = new JLabel(
             "<html><body width='220' style='text-align:center;'>" +
-                "You currently have no recipe flips for this interval. You can create a recipe flip by going to an offer for an item " +
-                "and clicking on the recipe flip button.<br><br> " +
-                "<b>That button will only be there if that item has a recipe associated with it</b>.<br><br> " +
-                "If a recipe is missing, contact us on discord and we will add it!");
-        helpLabel.setFont(new Font("Whitney", Font.PLAIN, 15));
-        helpLabel.setBorder(new EmptyBorder(20,5,0,0));
-        helpLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        return helpLabel;
+                "Create a recipe flip by going to an offer for an item " +
+                "and clicking on the recipe flip button.<br><br> ", SwingConstants.CENTER);
+        picDesc.setFont(new Font("Whitney", Font.PLAIN, 15));
+        picDesc.setIcon(Icons.RECIPE_HELP);
+        picDesc.setBorder(new EmptyBorder(20,5,0,0));
+        picDesc.setHorizontalTextPosition(JLabel.CENTER);
+        picDesc.setVerticalTextPosition(JLabel.NORTH);
+
+        JLabel additionalInfoLabel = new JLabel("<html><body width='220' style='text-align:center;'>" +
+            "This button will only be there if that item has a recipe associated with it</b>.<br><br> ",
+            SwingConstants.CENTER);
+        additionalInfoLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
+
+        JLabel contactUsLabel = new JLabel("<html><body width='220' style='text-align:center;'>" +
+            "If a recipe is missing, contact us on discord and we will add it!", SwingConstants.CENTER);
+        contactUsLabel.setFont(new Font("Whitney", Font.ITALIC, 10));
+
+        JPanel helpPanel = new JPanel(new DynamicGridLayout(3,1));
+        helpPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        helpPanel.add(picDesc);
+        helpPanel.add(additionalInfoLabel);
+        helpPanel.add(contactUsLabel);
+
+        return helpPanel;
     }
 
     private JPanel createRecipeGroupContainer() {

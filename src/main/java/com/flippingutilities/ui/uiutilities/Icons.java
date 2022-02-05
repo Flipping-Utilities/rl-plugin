@@ -123,6 +123,8 @@ public class Icons {
 
     public static final ImageIcon CONSTRUCTION;
 
+    public static final ImageIcon RECIPE_HELP;
+
     static
     {
         final BufferedImage openIcon = ImageUtil
@@ -309,5 +311,8 @@ public class Icons {
 
         final BufferedImage construction = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/construction.png");
         CONSTRUCTION = new ImageIcon(construction);
+
+        final BufferedImage recipeHelp = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/recipehelp.png");
+        RECIPE_HELP = new ImageIcon(recipeHelp);
     }
 }
