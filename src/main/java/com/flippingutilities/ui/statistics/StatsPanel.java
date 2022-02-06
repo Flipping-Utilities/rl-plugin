@@ -231,7 +231,6 @@ public class StatsPanel extends JPanel
 			if (itemsToDisplay.isEmpty() && currentlySearching) flippingItemContainerPanel.showPanel(createEmptySearchPanel());
 			revalidate();
 			repaint();
-
 		});
 	}
 

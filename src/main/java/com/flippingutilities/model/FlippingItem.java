@@ -223,12 +223,14 @@ public class FlippingItem implements Searchable
 		if (item1.getLatestActivityTime().compareTo(item2.getLatestActivityTime()) >= 0)
 		{
 			item1.getHistory().getCompressedOfferEvents().addAll(item2.getHistory().getCompressedOfferEvents());
+			item1.getHistory().getCompressedOfferEvents().sort(Comparator.comparing(OfferEvent::getTime));
 			item1.setFavorite(item1.isFavorite() || item2.isFavorite());
 			return item1;
 		}
 		else
 		{
 			item2.getHistory().getCompressedOfferEvents().addAll(item1.getHistory().getCompressedOfferEvents());
+			item2.getHistory().getCompressedOfferEvents().sort(Comparator.comparing(OfferEvent::getTime));
 			item2.setFavorite(item2.isFavorite() || item1.isFavorite());
 			return item2;
 		}
