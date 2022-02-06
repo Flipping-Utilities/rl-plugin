@@ -62,7 +62,7 @@ public class RecipeFlipGroupPanel extends JPanel {
         recipeFlipPanels = createRecipeFlipPanels(flips);
         putPanelsOnBackgroundPanel(new ArrayList<>(recipeFlipPanels), recipeFlipsBackgroundPanel, recipeFlipPaginator);
 
-        JLabel[] descriptionLabels = {new JLabel("Total Profit: "), new JLabel("Avg. Profit ea: "), new JLabel("Avg. ROI: "), new JLabel("Quantity Flipped: ")};
+        JLabel[] descriptionLabels = {new JLabel("Total Profit: "), new JLabel("Avg. Profit ea: "), new JLabel("Avg. ROI: "), new JLabel("Recipes Made: ")};
 
         JLabel[] valueLabels = {totalProfitValLabel, profitEachValLabel, roiValLabel, quantityFlipped};
 
