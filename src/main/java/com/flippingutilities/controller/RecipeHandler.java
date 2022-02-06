@@ -198,6 +198,11 @@ public class RecipeHandler {
         Map<Integer, Integer> itemIdToQuantity = recipe.getItemIdToQuantity();
         Map<Integer, Integer> itemIdToMaxRecipesThatCanBeMade = getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers, useRemainingOffer);
         int lowestRecipeCountThatCanBeMade = itemIdToMaxRecipesThatCanBeMade.values().stream().min(Comparator.comparingInt(i -> i)).get();
+        //if there are items with such few buys/sells that a recipe can't be made, avoid returning target values of 0
+        //as we still want to make it clear what the min amount needed for at least one recipe creation is
+        if (lowestRecipeCountThatCanBeMade == 0) {
+            return itemIdToQuantity;
+        }
         return itemIdToQuantity.entrySet().stream().
             map(e -> new AbstractMap.SimpleEntry<>(e.getKey(), e.getValue() * lowestRecipeCountThatCanBeMade)).
             collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
