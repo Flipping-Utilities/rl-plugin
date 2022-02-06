@@ -389,7 +389,7 @@ public class StatsPanel extends JPanel
 			taxPaid += recipeFlips.stream().mapToLong(RecipeFlip::getTaxPaid).sum();
 			totalProfit += recipeFlips.stream().mapToLong(RecipeFlip::getProfit).sum();
 			totalExpenses += recipeFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
-			totalFlips += recipeFlips.stream().mapToLong(rf -> rf.getRecipeCountMade(recipeFlipGroup.getRecipe())).sum();
+			totalFlips += recipeFlips.size();
 		}
 
 		updateTotalProfitDisplay(totalProfit);
