@@ -218,7 +218,7 @@ public class FlippingPanel extends JPanel
 		if (result.isEmpty()) {
 			return result;
 		}
-		if (favoriteSelected && isItemHighlighted()) {
+		if (favoriteSelected && !isItemHighlighted()) {
 			result = result.stream().filter(FlippingItem::isFavorite).collect(Collectors.toList());
 		}
 		sortByTime(result); //when it is on favorites you also want it to be sorted by time
@@ -340,9 +340,9 @@ public class FlippingPanel extends JPanel
 		List<FlippingItem> matchesNotInHistory = new ArrayList<>();
 		for (ItemPrice itemInfo:  itemManager.search(lookup)) {
 			if (currentFlippingItems.containsKey(itemInfo.getId())) {
-				FlippingItem shallowCopy = currentFlippingItems.get(itemInfo.getId()).shallowClone();
-				shallowCopy.setValidFlippingPanelItem(true);
-				matchesInHistory.add(shallowCopy);
+				FlippingItem flippingItem = currentFlippingItems.get(itemInfo.getId());
+				flippingItem.setValidFlippingPanelItem(true);
+				matchesInHistory.add(flippingItem);
 			}
 			else {
 				ItemStats itemStats = plugin.getItemManager().getItemStats(itemInfo.getId(), false);

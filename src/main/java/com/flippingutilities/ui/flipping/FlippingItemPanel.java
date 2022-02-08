@@ -723,6 +723,11 @@ public class FlippingItemPanel extends JPanel
 			@Override
 			public void mousePressed(MouseEvent e)
 			{
+				if ("NA".equals(flippingItem.getFlippedBy()) && !flippingItem.isFavorite()) {
+					JOptionPane.showMessageDialog(null,
+						"You cannot favorite this item as you haven't traded it at least once");
+					return;
+				}
 				if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE))
 				{
 					plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
@@ -730,6 +735,7 @@ public class FlippingItemPanel extends JPanel
 				else {
 					plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 				}
+
 				flippingItem.setFavorite(!flippingItem.isFavorite());
 				favoriteIcon.setIcon(flippingItem.isFavorite()? Icons.STAR_ON_ICON:Icons.STAR_OFF_ICON);
 
