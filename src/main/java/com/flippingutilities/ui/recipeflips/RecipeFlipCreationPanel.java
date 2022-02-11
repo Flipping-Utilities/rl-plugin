@@ -442,7 +442,6 @@ public class RecipeFlipCreationPanel extends JPanel {
         finishButton.setFocusPainted(false);
         finishButton.addActionListener(e -> {
             RecipeFlip recipeFlip = new RecipeFlip(recipe, selectedOffers);
-            log.info("recipe when creating recipe is: {}", recipe);
             plugin.addRecipeFlip(recipeFlip, recipe);
             plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
             plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
