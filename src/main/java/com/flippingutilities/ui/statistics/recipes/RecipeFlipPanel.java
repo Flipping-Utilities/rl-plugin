@@ -9,6 +9,7 @@ import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.Recipe;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
  * are shown in the "combos" tab of the trade history section of an item in the
  * statistics tab.
  */
+@Slf4j
 public class RecipeFlipPanel extends JPanel {
     private JLabel timeDisplay;
     private RecipeFlip recipeFlip;
@@ -228,6 +230,15 @@ public class RecipeFlipPanel extends JPanel {
 
     private JPanel createProfitPanel() {
         long quantity = recipeFlip.getRecipeCountMade(recipe);
+        if (quantity == 0) {
+            JPanel panel = new JPanel(new BorderLayout());
+            panel.setBackground(CustomColors.DARK_GRAY);
+            JLabel label = new JLabel("Mismatched recipe flip (delete it)", SwingConstants.CENTER);
+            label.setFont(FontManager.getRunescapeSmallFont());
+            label.setForeground(CustomColors.TOMATO);
+            panel.add(label, BorderLayout.CENTER);
+            return panel;
+        }
         long profit = recipeFlip.getProfit();
         long profitEach = profit/quantity;
         String profitString = UIUtilities.quantityToRSDecimalStack(profit, true) + " gp";

@@ -941,9 +941,9 @@ public class FlippingPlugin extends Plugin {
     public Map<String, PartialOffer> getOfferIdToPartialOffer(int itemId) {
         return recipeHandler.getOfferIdToPartialOffer(viewRecipeFlipGroupsForCurrentView(), itemId);
     }
-    public void addRecipeFlip(RecipeFlip recipeFlip) {
+    public void addRecipeFlip(RecipeFlip recipeFlip, Recipe recipe) {
         AccountData account = dataHandler.getAccountData(accountCurrentlyViewed);
-        recipeHandler.addRecipeFlip(account.getRecipeFlipGroups(), recipeFlip);
+        recipeHandler.addRecipeFlip(account.getRecipeFlipGroups(), recipeFlip, recipe);
         updateSinceLastRecipeFlipGroupAccountWideBuild = true;
     }
 
