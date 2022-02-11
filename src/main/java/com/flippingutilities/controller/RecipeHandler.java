@@ -229,14 +229,7 @@ public class RecipeHandler {
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    public void addRecipeFlip(List<RecipeFlipGroup> recipeFlipGroups, RecipeFlip recipeFlip) {
-        int someInputItemId = recipeFlip.getInputs().keySet().iterator().next();
-        Optional<Recipe> recipeMaybe = getApplicableRecipe(someInputItemId, true);
-        if (!recipeMaybe.isPresent()) {
-            log.warn("not adding recipe, for some reason the recipe flip does not have an associated recipe");
-            return;
-        }
-        Recipe recipe = recipeMaybe.get();
+    public void addRecipeFlip(List<RecipeFlipGroup> recipeFlipGroups, RecipeFlip recipeFlip, Recipe recipe) {
         for (RecipeFlipGroup recipeFlipGroup : recipeFlipGroups) {
             if (recipe.equals(recipeFlipGroup.getRecipe())) {
                 recipeFlipGroup.addRecipeFlip(recipeFlip);
