@@ -31,6 +31,7 @@ import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.Section;
 import com.flippingutilities.ui.uiutilities.*;
+import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.WikiItemMargins;
 import com.flippingutilities.utilities.WikiRequest;
 import lombok.Getter;
@@ -723,11 +724,10 @@ public class FlippingItemPanel extends JPanel
 			@Override
 			public void mousePressed(MouseEvent e)
 			{
-				if ("NA".equals(flippingItem.getFlippedBy()) && !flippingItem.isFavorite()) {
-					JOptionPane.showMessageDialog(null,
-						"You cannot favorite this item as you haven't traded it at least once");
-					return;
+				if (Constants.DUMMY_ITEM.equals(flippingItem.getFlippedBy()) && !flippingItem.isFavorite()) {
+					plugin.addFavoritedItem(flippingItem);
 				}
+
 				if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE))
 				{
 					plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
@@ -736,7 +736,11 @@ public class FlippingItemPanel extends JPanel
 					plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 				}
 
-				flippingItem.setFavorite(!flippingItem.isFavorite());
+				boolean isDummyItemInAccountwide = Constants.DUMMY_ITEM.equals(flippingItem.getFlippedBy()) && plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE);
+				if (!isDummyItemInAccountwide) {
+					flippingItem.setFavorite(!flippingItem.isFavorite());
+				}
+
 				favoriteIcon.setIcon(flippingItem.isFavorite()? Icons.STAR_ON_ICON:Icons.STAR_OFF_ICON);
 
 				if (flippingItem.isFavorite()) {

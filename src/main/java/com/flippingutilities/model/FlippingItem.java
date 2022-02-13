@@ -26,6 +26,7 @@
 
 package com.flippingutilities.model;
 
+import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.Searchable;
 import com.google.gson.annotations.SerializedName;
 import lombok.AllArgsConstructor;
@@ -74,6 +75,7 @@ public class FlippingItem implements Searchable
 
 	@SerializedName("fB")
 	@Getter
+	@Setter
 	private String flippedBy;
 
 	//whether the item should be on the flipping panel or not.
@@ -126,24 +128,7 @@ public class FlippingItem implements Searchable
 		this.itemId = itemId;
 		this.totalGELimit = totalGeLimit;
 		this.flippedBy = flippedBy;
-	}
-
-	public FlippingItem shallowClone() {
-		return new FlippingItem(
-				itemId,
-				itemName,
-				totalGELimit,
-				history,
-				flippedBy,
-				validFlippingPanelItem,
-				favorite,
-				favoriteCode,
-				latestInstaBuy,
-				latestInstaSell,
-				latestBuy,
-				latestSell,
-				latestActivityTime,
-				expand);
+		this.latestActivityTime = Constants.DUMMY_ITEM.equals(flippedBy)? Instant.EPOCH : Instant.now();
 	}
 
 	public FlippingItem clone()

@@ -33,6 +33,8 @@ import com.flippingutilities.ui.offereditor.OfferEditorContainerPanel;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
+import com.flippingutilities.utilities.Constants;
+import com.flippingutilities.utilities.Searchable;
 import com.flippingutilities.utilities.WikiRequest;
 import com.google.common.base.Strings;
 import lombok.Getter;
@@ -83,6 +85,7 @@ public class FlippingPanel extends JPanel
 
 	@Getter
 	private OfferEditorContainerPanel offerEditorContainerPanel;
+	private IconTextField searchBar;
 
 	private boolean currentlySearching;
 	private boolean favoriteSelected;
@@ -125,7 +128,7 @@ public class FlippingPanel extends JPanel
 		flippingItemContainer.add(scrollPane, ITEMS_PANEL);
 		flippingItemContainer.add(welcomeWrapper, WELCOME_PANEL);
 
-		IconTextField searchBar = UIUtilities.createSearchBar(plugin.getExecutor(),
+		searchBar = UIUtilities.createSearchBar(plugin.getExecutor(),
 				(sBar) -> plugin.getClientThread().invoke(() -> this.updateSearch(sBar)));
 		searchBar.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 
@@ -213,7 +216,7 @@ public class FlippingPanel extends JPanel
 		}
 	}
 
-	public List<FlippingItem> getItemsToDisplay(List<FlippingItem> tradeList) {
+	private List<FlippingItem> getItemsToDisplay(List<FlippingItem> tradeList) {
 		List<FlippingItem> result = new ArrayList<>(tradeList);
 		if (result.isEmpty()) {
 			return result;
@@ -221,8 +224,36 @@ public class FlippingPanel extends JPanel
 		if (favoriteSelected && !isItemHighlighted()) {
 			result = result.stream().filter(FlippingItem::isFavorite).collect(Collectors.toList());
 		}
-		sortByTime(result); //when it is on favorites you also want it to be sorted by time
+		result = getResultsForCurrentSearchQuery(result);
+		sortByTime(result);
 		return result;
+	}
+
+	private List<FlippingItem> getResultsForCurrentSearchQuery(List<FlippingItem> items) {
+		String lookup = searchBar.getText().toLowerCase();
+		if (!currentlySearching || Strings.isNullOrEmpty(lookup)) {
+			return items;
+		}
+		Map<Integer, FlippingItem> currentFlippingItems = items.stream().collect(Collectors.toMap(f -> f.getItemId(), f -> f));
+		List<FlippingItem> matchesInHistory = new ArrayList<>();
+		List<FlippingItem> matchesNotInHistory = new ArrayList<>();
+		for (ItemPrice itemInfo:  itemManager.search(lookup)) {
+			if (currentFlippingItems.containsKey(itemInfo.getId())) {
+				FlippingItem flippingItem = currentFlippingItems.get(itemInfo.getId());
+				flippingItem.setValidFlippingPanelItem(true);
+				matchesInHistory.add(flippingItem);
+			}
+			else {
+				FlippingItem dummyFlippingItem = new FlippingItem(itemInfo.getId(), itemInfo.getName(), 0, Constants.DUMMY_ITEM);
+				dummyFlippingItem.setValidFlippingPanelItem(true);
+				matchesNotInHistory.add(dummyFlippingItem);
+			}
+		}
+
+		List<FlippingItem> allMatches = new ArrayList<>();
+		allMatches.addAll(matchesInHistory);
+		allMatches.addAll(matchesNotInHistory);
+		return allMatches;
 	}
 
 	private void sortByTime(List<FlippingItem> items) {
@@ -335,38 +366,9 @@ public class FlippingPanel extends JPanel
 			return;
 		}
 
-		Map<Integer, FlippingItem> currentFlippingItems = plugin.viewItemsForCurrentView().stream().collect(Collectors.toMap(f -> f.getItemId(), f -> f));
-		List<FlippingItem> matchesInHistory = new ArrayList<>();
-		List<FlippingItem> matchesNotInHistory = new ArrayList<>();
-		for (ItemPrice itemInfo:  itemManager.search(lookup)) {
-			if (currentFlippingItems.containsKey(itemInfo.getId())) {
-				FlippingItem flippingItem = currentFlippingItems.get(itemInfo.getId());
-				flippingItem.setValidFlippingPanelItem(true);
-				matchesInHistory.add(flippingItem);
-			}
-			else {
-				ItemStats itemStats = plugin.getItemManager().getItemStats(itemInfo.getId(), false);
-				int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
-				FlippingItem dummyFlippingItem = new FlippingItem(itemInfo.getId(), itemInfo.getName(), geLimit, "NA");
-				dummyFlippingItem.setValidFlippingPanelItem(true);
-				matchesNotInHistory.add(dummyFlippingItem);
-			}
-		}
-
-		List<FlippingItem> allMatches = new ArrayList<>();
-
-		allMatches.addAll(matchesInHistory);
-		allMatches.addAll(matchesNotInHistory);
-		if (allMatches.isEmpty())
-		{
-			searchBar.setIcon(IconTextField.Icon.ERROR);
-			currentlySearching = false;
-			rebuild(plugin.viewItemsForCurrentView());
-			return;
-		}
 		searchBar.setIcon(IconTextField.Icon.SEARCH);
 		currentlySearching = true;
-		rebuild(allMatches);
+		rebuild(plugin.viewItemsForCurrentView());
 	}
 
 	public void refreshPricesForFlippingItemPanel(int itemId) {
@@ -375,49 +377,5 @@ public class FlippingPanel extends JPanel
 				panel.setValueLabels();
 			}
 		}
-	}
-
-	private JLabel createResetButton() {
-		JLabel resetIcon = new JLabel(Icons.TRASH_ICON_OFF);
-		resetIcon.setBorder(new EmptyBorder(0,0,8,0));
-		resetIcon.setToolTipText("Reset trade history");
-		resetIcon.setPreferredSize(Icons.ICON_SIZE);
-		resetIcon.addMouseListener(new MouseAdapter()
-		{
-			@Override
-			public void mousePressed(MouseEvent e)
-			{
-				if (SwingUtilities.isLeftMouseButton(e))
-				{
-					//Display warning message
-					final int result = JOptionPane.showOptionDialog(resetIcon, "Are you sure you want to reset the flipping panel?",
-							"Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
-							null, new String[]{"Yes", "No"}, "No");
-
-					//If the user pressed "Yes"
-					if (result == JOptionPane.YES_OPTION)
-					{
-						plugin.setAllFlippingItemsAsHidden();
-						setItemHighlighted(false);
-						cardLayout.show(flippingItemContainer, WELCOME_PANEL);
-						rebuild(plugin.viewItemsForCurrentView());
-					}
-				}
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e)
-			{
-				resetIcon.setIcon(Icons.TRASH_ICON);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e)
-			{
-				resetIcon.setIcon(Icons.TRASH_ICON_OFF);
-			}
-		});
-
-		return resetIcon;
 	}
 }

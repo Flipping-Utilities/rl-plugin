@@ -918,11 +918,6 @@ public class FlippingPlugin extends Plugin {
     public Map<Integer, Optional<FlippingItem>> getItemsInRecipe(Recipe recipe) {
         return recipeHandler.getItemsInRecipe(recipe, getItemsForCurrentView());
     }
-    //see RecipeHandler.isInRecipe
-    public boolean isInRecipe(int itemId) {
-        return recipeHandler.isInRecipe(itemId);
-    }
-
     //see RecipeHandler.getApplicableRecipe
     public Optional<Recipe> getApplicableRecipe(int parentId, boolean isBuy) {
         return recipeHandler.getApplicableRecipe(parentId, isBuy);
@@ -935,9 +930,6 @@ public class FlippingPlugin extends Plugin {
     public Map<Integer, Integer> getItemIdToMaxRecipesThatCanBeMade(Recipe recipe, Map<Integer, List<PartialOffer>> itemIdToPartialOffers, boolean useRemainingOffer) {
         return recipeHandler.getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers, useRemainingOffer);
     }
-    public Optional<RecipeFlipGroup> findRecipeGroup(Recipe recipe) {
-        return recipeHandler.findRecipeFlipGroup(viewRecipeFlipGroupsForCurrentView(), recipe);
-    }
     public Map<String, PartialOffer> getOfferIdToPartialOffer(int itemId) {
         return recipeHandler.getOfferIdToPartialOffer(viewRecipeFlipGroupsForCurrentView(), itemId);
     }
@@ -945,6 +937,35 @@ public class FlippingPlugin extends Plugin {
         AccountData account = dataHandler.getAccountData(accountCurrentlyViewed);
         recipeHandler.addRecipeFlip(account.getRecipeFlipGroups(), recipeFlip, recipe);
         updateSinceLastRecipeFlipGroupAccountWideBuild = true;
+    }
+
+    /**
+     * Adds the dummy item that was favorited to the trades list. Dummy items are created for display purposes
+     * when items are searched for/highlighted but they don't actually exist in history. However, if a user then
+     * favorites it, we need to add it to the history.
+     */
+    public void addFavoritedItem(FlippingItem flippingItem) {
+        flippingItem.setFlippedBy(getAccountCurrentlyViewed());
+        //avoid adding in case an account has the item already
+        if (accountCurrentlyViewed.equals(FlippingPlugin.ACCOUNT_WIDE)) {
+
+            for (String accountName : dataHandler.getCurrentAccounts()) {
+                List<FlippingItem> items = dataHandler.viewAccountData(accountName).getTrades();
+                if (items.stream().noneMatch(item -> item.getItemId() == flippingItem.getItemId())) {
+                    items.add(0, flippingItem);
+                    flippingItem.setFlippedBy(accountName);
+                    markAccountTradesAsHavingChanged(accountName);
+                }
+            }
+            updateSinceLastItemAccountWideBuild = true;
+        }
+        else {
+            List<FlippingItem> items = dataHandler.getAccountData(accountCurrentlyViewed).getTrades();
+            if (items.stream().noneMatch(item -> item.getItemId() == flippingItem.getItemId())) {
+                items.add(0, flippingItem);
+            }
+            updateSinceLastItemAccountWideBuild = true;
+        }
     }
 
     @Subscribe
