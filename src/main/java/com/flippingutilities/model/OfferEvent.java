@@ -100,7 +100,7 @@ public class OfferEvent
 	 * @return post tax values
 	 */
 	public int getPrice() {
-		if (buy || time.getEpochSecond() < Constants.GE_TAX_START) {
+		if (buy || time.getEpochSecond() < Constants.GE_TAX_START || itemId == Constants.BOND_ID) {
 			return price;
 		}
 		if (price >= Constants.MAX_PRICE_FOR_GE_TAX) {
