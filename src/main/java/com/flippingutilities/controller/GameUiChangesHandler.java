@@ -5,6 +5,7 @@ import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.offereditor.AbstractOfferEditorPanel;
 import com.flippingutilities.ui.offereditor.OfferEditorContainerPanel;
 import com.flippingutilities.ui.widgets.OfferEditor;
+import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.WikiRequest;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -221,7 +222,7 @@ public class GameUiChangesHandler {
 
     private void highlightOffer(int itemId) {
         highlightedItemId = itemId;
-        Optional<FlippingItem> itemInHistory = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == highlightedItemId && item.getValidFlippingPanelItem()).findFirst();
+        Optional<FlippingItem> itemInHistory = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == highlightedItemId).findFirst();
         if (itemInHistory.isPresent()) {
             highlightedItem = itemInHistory;
         }
@@ -229,7 +230,7 @@ public class GameUiChangesHandler {
             String itemName = plugin.getItemManager().getItemComposition(highlightedItemId).getName();
             ItemStats itemStats = plugin.getItemManager().getItemStats(highlightedItemId, false);
             int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
-            FlippingItem dummyFlippingItem = new FlippingItem(highlightedItemId, itemName, geLimit, "NA");
+            FlippingItem dummyFlippingItem = new FlippingItem(highlightedItemId, itemName, geLimit, Constants.DUMMY_ITEM);
             dummyFlippingItem.setValidFlippingPanelItem(true);
             highlightedItem = Optional.of(dummyFlippingItem);
         }

@@ -31,6 +31,7 @@ import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.Section;
 import com.flippingutilities.ui.uiutilities.*;
+import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.WikiItemMargins;
 import com.flippingutilities.utilities.WikiRequest;
 import lombok.Getter;
@@ -712,8 +713,7 @@ public class FlippingItemPanel extends JPanel
 	 *
 	 * @return
 	 */
-	private JLabel createFavoriteIcon()
-	{
+	private JLabel createFavoriteIcon() {
 		JLabel favoriteIcon = new JLabel();
 		favoriteIcon.setIcon(flippingItem.isFavorite() ? Icons.STAR_ON_ICON : Icons.STAR_OFF_ICON);
 		favoriteIcon.setAlignmentX(Component.RIGHT_ALIGNMENT);
@@ -723,11 +723,12 @@ public class FlippingItemPanel extends JPanel
 			@Override
 			public void mousePressed(MouseEvent e)
 			{
-				if ("NA".equals(flippingItem.getFlippedBy()) && !flippingItem.isFavorite()) {
-					JOptionPane.showMessageDialog(null,
-						"You cannot favorite this item as you haven't traded it at least once");
-					return;
+				boolean wasDummy = false;
+				if (Constants.DUMMY_ITEM.equals(flippingItem.getFlippedBy())) {
+					wasDummy = true;
+					plugin.addFavoritedItem(flippingItem);
 				}
+
 				if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE))
 				{
 					plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
@@ -736,7 +737,12 @@ public class FlippingItemPanel extends JPanel
 					plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 				}
 
-				flippingItem.setFavorite(!flippingItem.isFavorite());
+				//if it was a dummy item and in the accountwide view, it has already had its favorite set by setFavoriteOnAllAccounts
+				boolean wasDummyAndAccountwide = wasDummy && plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE);
+				if (!wasDummyAndAccountwide) {
+					flippingItem.setFavorite(!flippingItem.isFavorite());
+				}
+
 				favoriteIcon.setIcon(flippingItem.isFavorite()? Icons.STAR_ON_ICON:Icons.STAR_OFF_ICON);
 
 				if (flippingItem.isFavorite()) {
