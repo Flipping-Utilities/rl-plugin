@@ -945,26 +945,27 @@ public class FlippingPlugin extends Plugin {
      * favorites it, we need to add it to the history.
      */
     public void addFavoritedItem(FlippingItem flippingItem) {
-        //avoid adding in case an account has the item already
         if (accountCurrentlyViewed.equals(FlippingPlugin.ACCOUNT_WIDE)) {
             for (String accountName : dataHandler.getCurrentAccounts()) {
-                List<FlippingItem> items = dataHandler.viewAccountData(accountName).getTrades();
-                if (items.stream().noneMatch(item -> item.getItemId() == flippingItem.getItemId())) {
-                    flippingItem.setFlippedBy(accountName);
-                    items.add(0, flippingItem);
-                    markAccountTradesAsHavingChanged(accountName);
-                    updateSinceLastItemAccountWideBuild = true;
-                }
+                addFavoritedItem(flippingItem, accountName);
             }
         }
         else {
-            List<FlippingItem> items = dataHandler.getAccountData(accountCurrentlyViewed).getTrades();
-            if (items.stream().noneMatch(item -> item.getItemId() == flippingItem.getItemId())) {
-                flippingItem.setFlippedBy(getAccountCurrentlyViewed());
-                items.add(0, flippingItem);
-                markAccountTradesAsHavingChanged(accountCurrentlyViewed);
-                updateSinceLastItemAccountWideBuild = true;
-            }
+            addFavoritedItem(flippingItem, accountCurrentlyViewed);
+        }
+    }
+
+    private void addFavoritedItem(FlippingItem flippingItem, String accountName) {
+        List<FlippingItem> items = dataHandler.getAccountData(accountName).getTrades();
+        Optional<FlippingItem> existingItem = items.stream().filter(item -> item.getItemId() == flippingItem.getItemId()).findFirst();
+        if (existingItem.isPresent()) {
+            existingItem.get().setFavorite(true);
+        }
+        else {
+            flippingItem.setFlippedBy(accountName);
+            items.add(0, flippingItem);
+            markAccountTradesAsHavingChanged(accountName);
+            updateSinceLastItemAccountWideBuild = true;
         }
     }
 
