@@ -218,9 +218,7 @@ public class FlippingPanel extends JPanel
 
 	private List<FlippingItem> getItemsToDisplay(List<FlippingItem> tradeList) {
 		List<FlippingItem> result = new ArrayList<>(tradeList);
-//		if (result.isEmpty()) {
-//			return result;
-//		}
+
 		if (favoriteSelected && !isItemHighlighted()) {
 			result = result.stream().filter(FlippingItem::isFavorite).collect(Collectors.toList());
 		}
