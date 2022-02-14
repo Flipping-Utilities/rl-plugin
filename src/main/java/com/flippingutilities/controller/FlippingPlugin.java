@@ -945,26 +945,26 @@ public class FlippingPlugin extends Plugin {
      * favorites it, we need to add it to the history.
      */
     public void addFavoritedItem(FlippingItem flippingItem) {
-        flippingItem.setFlippedBy(getAccountCurrentlyViewed());
         //avoid adding in case an account has the item already
         if (accountCurrentlyViewed.equals(FlippingPlugin.ACCOUNT_WIDE)) {
-
             for (String accountName : dataHandler.getCurrentAccounts()) {
                 List<FlippingItem> items = dataHandler.viewAccountData(accountName).getTrades();
                 if (items.stream().noneMatch(item -> item.getItemId() == flippingItem.getItemId())) {
-                    items.add(0, flippingItem);
                     flippingItem.setFlippedBy(accountName);
+                    items.add(0, flippingItem);
                     markAccountTradesAsHavingChanged(accountName);
+                    updateSinceLastItemAccountWideBuild = true;
                 }
             }
-            updateSinceLastItemAccountWideBuild = true;
         }
         else {
             List<FlippingItem> items = dataHandler.getAccountData(accountCurrentlyViewed).getTrades();
             if (items.stream().noneMatch(item -> item.getItemId() == flippingItem.getItemId())) {
+                flippingItem.setFlippedBy(getAccountCurrentlyViewed());
                 items.add(0, flippingItem);
+                markAccountTradesAsHavingChanged(accountCurrentlyViewed);
+                updateSinceLastItemAccountWideBuild = true;
             }
-            updateSinceLastItemAccountWideBuild = true;
         }
     }
 
