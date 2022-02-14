@@ -63,6 +63,7 @@ public class NewOfferEventPipelineHandler {
         if (!screenedOfferEvent.isPresent()) {
             return;
         }
+        log.info("offer event: {}", screenedOfferEvent);
 
         OfferEvent finalizedOfferEvent = screenedOfferEvent.get();
         

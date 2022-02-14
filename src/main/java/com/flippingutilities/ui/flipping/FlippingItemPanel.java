@@ -713,8 +713,7 @@ public class FlippingItemPanel extends JPanel
 	 *
 	 * @return
 	 */
-	private JLabel createFavoriteIcon()
-	{
+	private JLabel createFavoriteIcon() {
 		JLabel favoriteIcon = new JLabel();
 		favoriteIcon.setIcon(flippingItem.isFavorite() ? Icons.STAR_ON_ICON : Icons.STAR_OFF_ICON);
 		favoriteIcon.setAlignmentX(Component.RIGHT_ALIGNMENT);
@@ -724,7 +723,9 @@ public class FlippingItemPanel extends JPanel
 			@Override
 			public void mousePressed(MouseEvent e)
 			{
-				if (Constants.DUMMY_ITEM.equals(flippingItem.getFlippedBy()) && !flippingItem.isFavorite()) {
+				boolean wasDummy = false;
+				if (Constants.DUMMY_ITEM.equals(flippingItem.getFlippedBy())) {
+					wasDummy = true;
 					plugin.addFavoritedItem(flippingItem);
 				}
 
@@ -736,8 +737,9 @@ public class FlippingItemPanel extends JPanel
 					plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 				}
 
-				boolean isDummyItemInAccountwide = Constants.DUMMY_ITEM.equals(flippingItem.getFlippedBy()) && plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE);
-				if (!isDummyItemInAccountwide) {
+				//if it was a dummy item and in the accountwide view, it has already had its favorite set by setFavoriteOnAllAccounts
+				boolean wasDummyAndAccountwide = wasDummy && plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE);
+				if (!wasDummyAndAccountwide) {
 					flippingItem.setFavorite(!flippingItem.isFavorite());
 				}
 

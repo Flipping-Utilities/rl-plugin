@@ -347,7 +347,7 @@ public class FlippingItem implements Searchable
 		latestSell = history.getLatestOfferThatMatchesPredicate(offer -> !offer.isBuy());
 		latestInstaBuy = history.getLatestOfferThatMatchesPredicate(offer -> offer.isBuy() & offer.isMarginCheck());
 		latestInstaSell = history.getLatestOfferThatMatchesPredicate(offer -> !offer.isBuy() & offer.isMarginCheck());
-		latestActivityTime = history.getCompressedOfferEvents().size() == 0? Instant.now() : history.getCompressedOfferEvents().get(history.getCompressedOfferEvents().size()-1).getTime();
+		latestActivityTime = history.getCompressedOfferEvents().size() == 0? Instant.EPOCH : history.getCompressedOfferEvents().get(history.getCompressedOfferEvents().size()-1).getTime();
 	}
 
 	private void setOfferMadeBy() {
