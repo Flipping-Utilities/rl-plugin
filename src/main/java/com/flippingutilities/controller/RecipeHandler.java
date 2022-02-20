@@ -124,21 +124,22 @@ public class RecipeHandler {
      * warspear, the applicable recipe would be the one where the guthan set was in the inputs and the warspear
      * was in the outputs.
      */
-    public Optional<Recipe> getApplicableRecipe(int itemId, boolean isBuy) {
+    public List<Recipe> getApplicableRecipes(int itemId, boolean isBuy) {
         if (!isInRecipe(itemId)) {
-            return Optional.empty();
+            return new ArrayList<>();
         }
         List<Recipe> recipesWithTheItem = idToRecipes.get().get(itemId);
+        List<Recipe> applicableRecipes = new ArrayList<>();
         for (Recipe recipe : recipesWithTheItem) {
             boolean isItemInInputs = recipe.isInput(itemId);
             if (isBuy && isItemInInputs) {
-                return Optional.of(recipe);
+                applicableRecipes.add(recipe);
             }
             if (!isBuy && !isItemInInputs) {
-                return Optional.of(recipe);
+                applicableRecipes.add(recipe);
             }
         }
-        return Optional.empty();
+        return applicableRecipes;
     }
 
     /**

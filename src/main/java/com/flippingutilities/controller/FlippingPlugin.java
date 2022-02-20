@@ -918,9 +918,9 @@ public class FlippingPlugin extends Plugin {
     public Map<Integer, Optional<FlippingItem>> getItemsInRecipe(Recipe recipe) {
         return recipeHandler.getItemsInRecipe(recipe, getItemsForCurrentView());
     }
-    //see RecipeHandler.getApplicableRecipe
-    public Optional<Recipe> getApplicableRecipe(int parentId, boolean isBuy) {
-        return recipeHandler.getApplicableRecipe(parentId, isBuy);
+    //see RecipeHandler.getApplicableRecipes
+    public List<Recipe> getApplicableRecipes(int parentId, boolean isBuy) {
+        return recipeHandler.getApplicableRecipes(parentId, isBuy);
     }
     //see RecipeHandler.getTargetValuesForMaxRecipeCount
     public Map<Integer, Integer> getTargetValuesForMaxRecipeCount(Recipe recipe, Map<Integer, List<PartialOffer>> itemIdToPartialOffers, boolean useRemainingOffer) {
