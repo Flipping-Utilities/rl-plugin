@@ -5,7 +5,7 @@ import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.ui.MasterPanel;
-import com.flippingutilities.ui.recipeflips.RecipeFlipCreationPanel;
+import com.flippingutilities.ui.recipeflips.RecipeOfferSelectionPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
@@ -24,7 +24,6 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 /**
  * The offer panel displays an offer's price, quantity, time bought, total cost,
@@ -170,7 +169,7 @@ public class OfferPanel extends JPanel {
     private JPanel createIconPanel() {
         JPanel iconPanel = new JPanel(new BorderLayout());
         iconPanel.setBackground(CustomColors.DARK_GRAY);
-        boolean hasRecipe = plugin.getApplicableRecipe(offer.getItemId(), offer.isBuy()).isPresent();
+        boolean hasRecipe = plugin.getApplicableRecipes(offer.getItemId(), offer.isBuy()).isPresent();
         if (hasRecipe && offer.isComplete()) {
             JLabel deleteIcon = createDeleteIcon();
             deleteIcon.setBorder(new EmptyBorder(0,5,0,0));
@@ -206,8 +205,8 @@ public class OfferPanel extends JPanel {
                     return;
                 }
                 MasterPanel m = plugin.getMasterPanel();
-                RecipeFlipCreationPanel recipeFlipCreationPanel = new RecipeFlipCreationPanel(plugin, offer);
-                JDialog loginModal = UIUtilities.createModalFromPanel(m, recipeFlipCreationPanel);
+                RecipeOfferSelectionPanel recipeOfferSelectionPanel = new RecipeOfferSelectionPanel(plugin, offer);
+                JDialog loginModal = UIUtilities.createModalFromPanel(m, recipeOfferSelectionPanel);
                 loginModal.pack();
                 loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, Math.max(m.getLocationOnScreen().y - loginModal.getHeight()/2,0) + 100);
                 loginModal.setVisible(true);
