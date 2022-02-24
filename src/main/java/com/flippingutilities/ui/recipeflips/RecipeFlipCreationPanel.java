@@ -88,11 +88,6 @@ public class RecipeFlipCreationPanel extends JPanel {
                     Math.max(m.getLocationOnScreen().y - recipeOfferSelectionModal.getHeight()/2, 0) + 100);
                 recipeOfferSelectionModal.setVisible(true);
 
-//                removeAll();
-//                add(r);
-//                setBorder(new EmptyBorder(0,0,0,0));
-//                modal.pack();
-//                modal.setLocation(Math.max(20, m.getLocationOnScreen().x - modal.getWidth() - 10), Math.max(m.getLocationOnScreen().y - modal.getHeight()/2,0) + 100);
                 revalidate();
                 repaint();
             }
@@ -112,14 +107,18 @@ public class RecipeFlipCreationPanel extends JPanel {
 
         recipe.getInputIds().forEach( id -> {
             AsyncBufferedImage itemImage = plugin.getItemManager().getImage(id);
-            recipeIconPanel.add(new JLabel(new ImageIcon(itemImage)));
+            JLabel iconLabel = new JLabel();
+            itemImage.addTo(iconLabel);
+            recipeIconPanel.add(iconLabel);
         });
 
         recipeIconPanel.add(new JLabel(Icons.RIGHT_ARROW_LARGE));
 
         recipe.getOutputIds().forEach( id -> {
             AsyncBufferedImage itemImage = plugin.getItemManager().getImage(id);
-            recipeIconPanel.add(new JLabel(new ImageIcon(itemImage)));
+            JLabel iconLabel = new JLabel();
+            itemImage.addTo(iconLabel);
+            recipeIconPanel.add(iconLabel);
         });
 
         JLabel recipeNameLabel = new JLabel(recipe.getName(), SwingConstants.CENTER);
