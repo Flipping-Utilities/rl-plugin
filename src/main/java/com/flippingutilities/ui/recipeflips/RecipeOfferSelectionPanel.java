@@ -43,11 +43,11 @@ public class RecipeOfferSelectionPanel extends JPanel {
     Recipe recipe;
     Map<Integer, RecipeItemHeaderPanel> idToHeader;
 
-    public RecipeOfferSelectionPanel(FlippingPlugin plugin, OfferEvent sourceOffer, ) {
+    public RecipeOfferSelectionPanel(FlippingPlugin plugin, OfferEvent sourceOffer, Recipe recipe) {
         this.plugin = plugin;
         this.sourceOffer = sourceOffer;
+        this.recipe = recipe;
 
-        recipe = plugin.getApplicableRecipes(sourceOffer.getItemId(), sourceOffer.isBuy()).get();
         Map<Integer, Optional<FlippingItem>> itemsInRecipe = plugin.getItemsInRecipe(recipe);
 
         selectedOffers = initSelectedOffers(itemsInRecipe);
