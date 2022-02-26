@@ -243,4 +243,11 @@ public class UIUtilities
 		});
 		return iconLabel;
 	}
+
+	public static String maybePluralize(String word, int count) {
+		if (count > 1) {
+			return word + "s";
+		}
+		return word;
+	}
 }

@@ -137,8 +137,9 @@ public class RecipeFlipCreationPanel extends JPanel {
 
         JLabel numRecipesLabel = new JLabel(
             String.format(
-                "Showing %d recipes for %s %s",
+                "Showing %d %s for %s %s",
                 recipes.size(),
+                UIUtilities.maybePluralize("recipe", recipes.size()),
                 sourceOffer.isBuy()? "buying":"selling",
                 sourceOffer.getItemName()
             ),
