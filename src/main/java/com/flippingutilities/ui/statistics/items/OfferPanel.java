@@ -6,10 +6,12 @@ import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.ui.MasterPanel;
 import com.flippingutilities.ui.recipeflips.RecipeFlipCreationPanel;
+import com.flippingutilities.ui.recipeflips.RecipeOfferSelectionPanel;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
+import com.flippingutilities.utilities.Recipe;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
@@ -24,7 +26,6 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 /**
  * The offer panel displays an offer's price, quantity, time bought, total cost,
@@ -170,7 +171,7 @@ public class OfferPanel extends JPanel {
     private JPanel createIconPanel() {
         JPanel iconPanel = new JPanel(new BorderLayout());
         iconPanel.setBackground(CustomColors.DARK_GRAY);
-        boolean hasRecipe = plugin.getApplicableRecipe(offer.getItemId(), offer.isBuy()).isPresent();
+        boolean hasRecipe = !plugin.getApplicableRecipes(offer.getItemId(), offer.isBuy()).isEmpty();
         if (hasRecipe && offer.isComplete()) {
             JLabel deleteIcon = createDeleteIcon();
             deleteIcon.setBorder(new EmptyBorder(0,5,0,0));
@@ -207,10 +208,13 @@ public class OfferPanel extends JPanel {
                 }
                 MasterPanel m = plugin.getMasterPanel();
                 RecipeFlipCreationPanel recipeFlipCreationPanel = new RecipeFlipCreationPanel(plugin, offer);
-                JDialog loginModal = UIUtilities.createModalFromPanel(m, recipeFlipCreationPanel);
-                loginModal.pack();
-                loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, Math.max(m.getLocationOnScreen().y - loginModal.getHeight()/2,0) + 100);
-                loginModal.setVisible(true);
+                JDialog recipeFlipCreationModal = UIUtilities.createModalFromPanel(m, recipeFlipCreationPanel);
+                recipeFlipCreationPanel.setModal(recipeFlipCreationModal);
+                recipeFlipCreationModal.pack();
+                recipeFlipCreationModal.setLocation(
+                    Math.max(20, m.getLocationOnScreen().x - recipeFlipCreationModal.getWidth() - 10),
+                    Math.max(m.getLocationOnScreen().y - recipeFlipCreationModal.getHeight()/2, 0) + 100);
+                recipeFlipCreationModal.setVisible(true);
             }
         });
         return recipeFlipButton;
