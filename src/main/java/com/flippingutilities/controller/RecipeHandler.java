@@ -1,10 +1,7 @@
 package com.flippingutilities.controller;
 
 import com.flippingutilities.model.*;
-import com.flippingutilities.utilities.PotionDose;
-import com.flippingutilities.utilities.PotionGroup;
-import com.flippingutilities.utilities.Recipe;
-import com.flippingutilities.utilities.SORT;
+import com.flippingutilities.utilities.*;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
@@ -167,12 +164,22 @@ public class RecipeHandler {
         List<Recipe> applicableDecantRecipes = new ArrayList<>();
 
         PotionGroup potionGroup = idToPotionGroup.get().get(itemId);
-        /**
-         * you can decant into every other dose
-         */
 
-        List<PotionDose> doses = potionGroup.getDoses().stream().filter(d -> d.getId() != itemId).collect(Collectors.toList());
-
+        PotionDose sourceDose = potionGroup.getDoses().stream().filter(d -> d.getId() == itemId).findAny().get();
+        List<PotionDose> otherDoses = potionGroup.getDoses().stream().filter(d -> d.getId() != itemId).collect(Collectors.toList());
+        for (PotionDose otherDose : otherDoses) {
+            PotionDose inputDose = isBuy? sourceDose:otherDose;
+            PotionDose outputDose = isBuy? otherDose:sourceDose;
+            long lcm = MathUtils.lcm(sourceDose.getDose(), otherDose.getDose());
+            RecipeItem inputDoseRecipeItem = new RecipeItem(inputDose.getId(), (int) (lcm/inputDose.getDose()));
+            RecipeItem outputDoseRecipeItem = new RecipeItem(outputDose.getId(), (int) (lcm/outputDose.getDose()));
+            String recipeName = String.format("Decanting %s(%d) -> %s(%d)",potionGroup.getName(), inputDose.getDose(), potionGroup.getName(), outputDose.getDose());
+            Recipe recipe = new Recipe(
+                new ArrayList<>(Arrays.asList(inputDoseRecipeItem)),
+                new ArrayList<>(Arrays.asList(outputDoseRecipeItem)),
+                recipeName);
+            applicableDecantRecipes.add(recipe);
+        }
 
         return applicableDecantRecipes;
 
