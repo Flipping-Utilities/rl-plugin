@@ -1,13 +1,13 @@
 package com.flippingutilities.utilities;
 
-import com.flippingutilities.model.PartialOffer;
-import com.google.gson.annotations.SerializedName;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Data
+@AllArgsConstructor
 public class Recipe {
     List<RecipeItem> inputs;
     List<RecipeItem> outputs;

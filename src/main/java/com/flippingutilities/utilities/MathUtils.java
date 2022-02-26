@@ -1,6 +1,6 @@
 package com.flippingutilities.utilities;
 
-public class mathUtils {
+public class MathUtils {
 
     public static long gcd(long a, long b) {
         while (b > 0) {
