@@ -17,11 +17,11 @@ public class RecipeItemHeaderPanel extends JPanel {
     public RecipeItemHeaderPanel(AsyncBufferedImage itemImage) {
         setBackground(Color.BLACK);
 
-        Icon itemIcon = new ImageIcon(itemImage);
-        itemIconAndConsumedAmountLabel = new JLabel(itemIcon);
+        itemIconAndConsumedAmountLabel = new JLabel();
         itemIconAndConsumedAmountLabel.setHorizontalTextPosition(SwingConstants.RIGHT);
         itemIconAndConsumedAmountLabel.setFont(new Font("Whitney", Font.PLAIN, 20));
         itemIconAndConsumedAmountLabel.setText("x0");
+        itemImage.addTo(itemIconAndConsumedAmountLabel);
 
         targetValueLabel = new JLabel("/0");
         targetValueLabel.setFont(new Font("Whitney", Font.PLAIN, 12));
