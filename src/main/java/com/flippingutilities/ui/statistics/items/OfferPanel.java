@@ -208,11 +208,8 @@ public class OfferPanel extends JPanel {
                 }
                 MasterPanel m = plugin.getMasterPanel();
                 RecipeFlipCreationPanel recipeFlipCreationPanel = new RecipeFlipCreationPanel(plugin, offer);
-                Recipe r = plugin.getApplicableRecipes(offer.getItemId(), offer.isBuy()).get(0);
-//                RecipeOfferSelectionPanel recipeFlipCreationPanel = new RecipeOfferSelectionPanel(plugin, offer, r);
                 JDialog recipeFlipCreationModal = UIUtilities.createModalFromPanel(m, recipeFlipCreationPanel);
                 recipeFlipCreationPanel.setModal(recipeFlipCreationModal);
-
                 recipeFlipCreationModal.pack();
                 recipeFlipCreationModal.setLocation(
                     Math.max(20, m.getLocationOnScreen().x - recipeFlipCreationModal.getWidth() - 10),
