@@ -108,8 +108,18 @@ public class RecipeFlipPanel extends JPanel {
 
     private JPanel createComponentPanel(Map<String, PartialOffer> partialOfferMap){
         List<PartialOffer> partialOfferList = new ArrayList<>(partialOfferMap.values());
+
         String itemName = partialOfferList.get(0).offer.getItemName();
         int quantity = partialOfferList.stream().mapToInt(po -> po.amountConsumed).sum();
+        if (quantity == 0) {
+            JPanel panel = new JPanel(new BorderLayout());
+            panel.setBackground(CustomColors.DARK_GRAY);
+            JLabel label = new JLabel("Corrupted recipe flip (delete it)", SwingConstants.CENTER);
+            label.setFont(FontManager.getRunescapeSmallFont());
+            label.setForeground(CustomColors.TOMATO);
+            panel.add(label, BorderLayout.CENTER);
+            return panel;
+        }
         long avgPrice = partialOfferList.stream().mapToLong(po -> po.getOffer().getPrice() * po.amountConsumed).sum()/quantity;
 
         JLabel itemNameLabel = new JLabel(itemName, SwingConstants.CENTER);
@@ -143,7 +153,6 @@ public class RecipeFlipPanel extends JPanel {
     }
 
     private JPanel createDetailsPanel() {
-
         JPanel inputPanel = createComponentGroupPanel(recipeFlip.getInputs(), false);
         JPanel outputPanel = createComponentGroupPanel(recipeFlip.getOutputs(), true);
 
@@ -210,6 +219,7 @@ public class RecipeFlipPanel extends JPanel {
                 if (result == JOptionPane.YES_OPTION) {
                     recipeFlipGroup.deleteFlip(recipeFlip);
                     plugin.setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
+                    plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
                     plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
                     plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
                 }
