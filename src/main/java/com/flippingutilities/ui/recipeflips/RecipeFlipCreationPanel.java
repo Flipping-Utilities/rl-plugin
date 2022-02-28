@@ -18,7 +18,6 @@ import javax.swing.border.MatteBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.math.BigInteger;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -71,7 +70,7 @@ public class RecipeFlipCreationPanel extends JPanel {
             new MatteBorder(1, 1, 1, 1, CustomColors.DARK_GRAY),
             new EmptyBorder(5,0,8,0)));
 
-        JPanel recipeIconPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel recipeIconPanel = new JPanel();
         recipeIconPanel.setBackground(Color.BLACK);
 
         recipePanel.addMouseListener(new MouseAdapter() {
