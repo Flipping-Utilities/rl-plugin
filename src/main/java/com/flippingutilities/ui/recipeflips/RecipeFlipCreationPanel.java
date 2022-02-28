@@ -70,7 +70,7 @@ public class RecipeFlipCreationPanel extends JPanel {
             new MatteBorder(1, 1, 1, 1, CustomColors.DARK_GRAY),
             new EmptyBorder(5,0,8,0)));
 
-        JPanel recipeIconPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel recipeIconPanel = new JPanel();
         recipeIconPanel.setBackground(Color.BLACK);
 
         recipePanel.addMouseListener(new MouseAdapter() {

@@ -250,4 +250,31 @@ public class UIUtilities
 		}
 		return word;
 	}
+
+	/**
+	 * Example:
+	 * You have the string "1234567", which is too large for displaying purposes.
+	 * You want a string of only length 6 and it should clearly convey some truncation
+	 * occurred, like "123..."
+	 *
+	 * truncateText("12345678999999", 6) = "123..."
+	 * truncateText("1234567", 6) = "123..."
+	 * truncateText("123456", 6) = "123456"
+	 *
+	 * @param text text to be truncated
+	 * @param length desired length, including the ellipses
+	 * @return truncated text
+	 */
+	public static String truncateText(String text, int length) {
+		String ellipses = "...";
+		if (length <= ellipses.length()) {
+			return text;
+		}
+		if (text.length() <= length) {
+			return text;
+		}
+
+		return text.substring(0, length - ellipses.length()) + ellipses;
+
+	}
 }
