@@ -42,6 +42,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
     JLabel profitNumberLabel = new JLabel("+0");
     Recipe recipe;
     Map<Integer, RecipeItemHeaderPanel> idToHeader;
+    List<JSpinner> numberPickers = new ArrayList<>();
 
     public RecipeOfferSelectionPanel(FlippingPlugin plugin, OfferEvent sourceOffer, Recipe recipe) {
         this.plugin = plugin;
@@ -199,6 +200,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
         numberPicker.addChangeListener(e -> {
             this.numberPickerHandler(e, partialOffer.getOffer(), offerPanel, headerPanel);
         });
+        numberPickers.add(numberPicker);
 
         offerPanelWithPicker.add(numberPicker, BorderLayout.WEST);
         offerPanelWithPicker.add(offerPanel, BorderLayout.CENTER);
@@ -445,6 +447,8 @@ public class RecipeOfferSelectionPanel extends JPanel {
             plugin.addRecipeFlip(recipeFlip, recipe);
             plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
             plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+
+            numberPickers.forEach(picker -> picker.setEnabled(false));
 
             bottomPanel.removeAll();
 
