@@ -1,8 +1,7 @@
 package com.flippingutilities.controller;
 
 import com.flippingutilities.model.*;
-import com.flippingutilities.utilities.Recipe;
-import com.flippingutilities.utilities.SORT;
+import com.flippingutilities.utilities.*;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
@@ -26,12 +25,15 @@ public class RecipeHandler {
 
     private Gson gson;
     private final Optional<Map<Integer, List<Recipe>>> idToRecipes;
+    private final Optional<Map<Integer, PotionGroup>> idToPotionGroup;
     private OkHttpClient httpClient;
 
     public RecipeHandler(Gson gson, OkHttpClient httpClient) {
         this.gson = gson;
         this.httpClient = httpClient;
         this.idToRecipes = getItemIdToRecipes(loadRecipes());
+        this.idToPotionGroup = getItemIdToPotionGroup(loadPotionGroups());
+
         if (idToRecipes.isPresent()) {
             log.info("Successfully loaded recipes");
         }
@@ -85,12 +87,16 @@ public class RecipeHandler {
         return mergedRecipeFlipGroups;
     }
 
-    /**
-     * @return whether the given item id is in a recipe
-     */
-    public boolean isInRecipe(int itemId) {
+    private boolean isInRegularRecipe(int itemId) {
         if (idToRecipes.isPresent()) {
             return idToRecipes.get().containsKey(itemId);
+        }
+        return false;
+    }
+
+    private boolean isInDecantRecipe(int itemId) {
+        if (idToPotionGroup.isPresent()) {
+            return idToPotionGroup.get().containsKey(itemId);
         }
         return false;
     }
@@ -117,6 +123,13 @@ public class RecipeHandler {
         return itemIdToItems;
     }
 
+    public List<Recipe> getApplicableRecipes(int itemId, boolean isBuy) {
+        List<Recipe> applicableRecipes = new ArrayList<>();
+        applicableRecipes.addAll(getApplicableDecantRecipes(itemId, isBuy));
+        applicableRecipes.addAll(getApplicableRegularRecipes(itemId, isBuy));
+        return applicableRecipes;
+    }
+
     /**
      * Gets the applicable recipe given an item id and whether you are buying/selling the item.
      * For example, if you are buying a guthan warspear, the applicable recipe is the one where the
@@ -124,22 +137,50 @@ public class RecipeHandler {
      * warspear, the applicable recipe would be the one where the guthan set was in the inputs and the warspear
      * was in the outputs.
      */
-    public List<Recipe> getApplicableRecipes(int itemId, boolean isBuy) {
-        if (!isInRecipe(itemId)) {
+    private List<Recipe> getApplicableRegularRecipes(int itemId, boolean isBuy) {
+        if (!isInRegularRecipe(itemId)) {
             return new ArrayList<>();
         }
+        List<Recipe> applicableRegularRecipes = new ArrayList<>();
         List<Recipe> recipesWithTheItem = idToRecipes.get().get(itemId);
-        List<Recipe> applicableRecipes = new ArrayList<>();
         for (Recipe recipe : recipesWithTheItem) {
             boolean isItemInInputs = recipe.isInput(itemId);
             if (isBuy && isItemInInputs) {
-                applicableRecipes.add(recipe);
+                applicableRegularRecipes.add(recipe);
             }
             if (!isBuy && !isItemInInputs) {
-                applicableRecipes.add(recipe);
+                applicableRegularRecipes.add(recipe);
             }
         }
-        return applicableRecipes;
+        return applicableRegularRecipes;
+    }
+
+    private List<Recipe> getApplicableDecantRecipes(int itemId, boolean isBuy) {
+        if (!isInDecantRecipe(itemId)) {
+            return new ArrayList<>();
+        }
+
+        List<Recipe> applicableDecantRecipes = new ArrayList<>();
+
+        PotionGroup potionGroup = idToPotionGroup.get().get(itemId);
+
+        PotionDose sourceDose = potionGroup.getDoses().stream().filter(d -> d.getId() == itemId).findAny().get();
+        List<PotionDose> otherDoses = potionGroup.getDoses().stream().filter(d -> d.getId() != itemId).collect(Collectors.toList());
+        for (PotionDose otherDose : otherDoses) {
+            PotionDose inputDose = isBuy? sourceDose:otherDose;
+            PotionDose outputDose = isBuy? otherDose:sourceDose;
+            long lcm = MathUtils.lcm(sourceDose.getDose(), otherDose.getDose());
+            RecipeItem inputDoseRecipeItem = new RecipeItem(inputDose.getId(), (int) (lcm/inputDose.getDose()));
+            RecipeItem outputDoseRecipeItem = new RecipeItem(outputDose.getId(), (int) (lcm/outputDose.getDose()));
+            String recipeName = String.format("Decanting %s (%d)->(%d)",potionGroup.getName(), inputDose.getDose(), outputDose.getDose());
+            Recipe recipe = new Recipe(
+                new ArrayList<>(Arrays.asList(inputDoseRecipeItem)),
+                new ArrayList<>(Arrays.asList(outputDoseRecipeItem)),
+                recipeName);
+            applicableDecantRecipes.add(recipe);
+        }
+
+        return applicableDecantRecipes;
     }
 
     /**
@@ -163,6 +204,23 @@ public class RecipeHandler {
         });
 
         return Optional.of(idToRecipes);
+    }
+
+    private Optional<Map<Integer, PotionGroup>> getItemIdToPotionGroup(Optional<List<PotionGroup>> optionalPotionGroups) {
+        if (!optionalPotionGroups.isPresent()) {
+            return Optional.empty();
+        }
+
+        Map<Integer, PotionGroup> idToPotionGroup= new HashMap<>();
+        List<PotionGroup> potionGroups = optionalPotionGroups.get();
+        potionGroups.forEach(potionGroup -> {
+            potionGroup.getIds().forEach(id -> {
+                idToPotionGroup.put(id, potionGroup);
+            });
+        });
+
+        return Optional.of(idToPotionGroup);
+
     }
 
     /**
@@ -295,10 +353,24 @@ public class RecipeHandler {
         recipeFlipGroups.stream().filter(rfg -> rfg.isInGroup(itemId)).forEach(rfg -> rfg.deleteFlipsWithDeletedOffers(offers));
     }
 
+    private Optional<List<PotionGroup>> loadPotionGroups() {
+        return makeRequest(
+            "https://raw.githubusercontent.com/Flipping-Utilities/osrs-datasets/master/potions.json",
+            new TypeToken<List<PotionGroup>>() {}
+        );
+    }
+
     private Optional<List<Recipe>> loadRecipes() {
+        return makeRequest(
+            "https://raw.githubusercontent.com/Flipping-Utilities/osrs-datasets/master/recipes.json",
+            new TypeToken<List<Recipe>>() {}
+            );
+    }
+
+    private <T> Optional<T> makeRequest(String url, TypeToken<T> typeToken) {
         Request request = new Request.Builder()
-                .url("https://raw.githubusercontent.com/Flipping-Utilities/osrs-datasets/master/recipes.json")
-                .build();
+            .url(url)
+            .build();
 
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
@@ -310,7 +382,7 @@ public class RecipeHandler {
                 return Optional.empty();
             }
 
-            Type type = new TypeToken<List<Recipe>>() {}.getType();
+            Type type = typeToken.getType();
             return Optional.of(gson.fromJson(response.body().string(), type));
         } catch (IOException e) {
             log.warn("IOException when trying to fetch recipes: {}", ExceptionUtils.getStackTrace(e));
