@@ -123,7 +123,6 @@ public class RecipeHandler {
         return itemIdToItems;
     }
 
-
     public List<Recipe> getApplicableRecipes(int itemId, boolean isBuy) {
         List<Recipe> applicableRecipes = new ArrayList<>();
         applicableRecipes.addAll(getApplicableDecantRecipes(itemId, isBuy));
@@ -173,7 +172,7 @@ public class RecipeHandler {
             long lcm = MathUtils.lcm(sourceDose.getDose(), otherDose.getDose());
             RecipeItem inputDoseRecipeItem = new RecipeItem(inputDose.getId(), (int) (lcm/inputDose.getDose()));
             RecipeItem outputDoseRecipeItem = new RecipeItem(outputDose.getId(), (int) (lcm/outputDose.getDose()));
-            String recipeName = String.format("Decanting %s(%d) -> %s(%d)",potionGroup.getName(), inputDose.getDose(), potionGroup.getName(), outputDose.getDose());
+            String recipeName = String.format("Decanting %s (%d)->(%d)",potionGroup.getName(), inputDose.getDose(), outputDose.getDose());
             Recipe recipe = new Recipe(
                 new ArrayList<>(Arrays.asList(inputDoseRecipeItem)),
                 new ArrayList<>(Arrays.asList(outputDoseRecipeItem)),
@@ -182,7 +181,6 @@ public class RecipeHandler {
         }
 
         return applicableDecantRecipes;
-
     }
 
     /**

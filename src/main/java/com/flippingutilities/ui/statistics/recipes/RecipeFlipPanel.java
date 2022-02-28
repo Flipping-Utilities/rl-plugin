@@ -71,7 +71,8 @@ public class RecipeFlipPanel extends JPanel {
         quantityAndTimePanel.add(quantityLabel);
         quantityAndTimePanel.add(timeDisplay);
 
-        JLabel itemNameAndActionLabel = new JLabel(recipe.getName(), SwingConstants.CENTER);
+        String recipeDisplayName = UIUtilities.truncateText(recipe.getName(), 40);
+        JLabel itemNameAndActionLabel = new JLabel(recipeDisplayName, SwingConstants.CENTER);
         itemNameAndActionLabel.setFont(FontManager.getRunescapeSmallFont());
         itemNameAndActionLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
 
@@ -109,7 +110,7 @@ public class RecipeFlipPanel extends JPanel {
         List<PartialOffer> partialOfferList = new ArrayList<>(partialOfferMap.values());
         String itemName = partialOfferList.get(0).offer.getItemName();
         int quantity = partialOfferList.stream().mapToInt(po -> po.amountConsumed).sum();
-        long avgPrice = partialOfferList.stream().mapToLong(po -> po.getOffer().getPrice()).sum()/quantity;
+        long avgPrice = partialOfferList.stream().mapToLong(po -> po.getOffer().getPrice() * po.amountConsumed).sum()/quantity;
 
         JLabel itemNameLabel = new JLabel(itemName, SwingConstants.CENTER);
         itemNameLabel.setFont(FontManager.getRunescapeSmallFont());
