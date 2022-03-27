@@ -75,11 +75,9 @@ public class FlippingItemPanel extends JPanel
 	JLabel wikiBuyTimeVal = new JLabel();
 	JLabel wikiSellTimeVal = new JLabel();
 	JLabel instaSellVal = new JLabel();
-	JLabel instaSellValPostTax = new JLabel();
 	JLabel instaBuyVal = new JLabel();
 	JLabel latestBuyPriceVal = new JLabel();
 	JLabel latestSellPriceVal = new JLabel();
-	JLabel latestSellPricePostTaxVal = new JLabel();
 	JLabel profitEachVal = new JLabel();
 	JLabel potentialProfitVal = new JLabel();
 	JLabel roiLabelVal = new JLabel();
@@ -525,7 +523,7 @@ public class FlippingItemPanel extends JPanel
 
 	private void styleValueLabels() {
 		Arrays.asList(latestBuyPriceVal, latestSellPriceVal, instaSellVal, instaBuyVal, profitEachVal, potentialProfitVal,
-				roiLabelVal, geLimitVal, latestSellPricePostTaxVal, instaSellValPostTax).
+				roiLabelVal, geLimitVal).
 				forEach(label -> {
 					label.setHorizontalAlignment(JLabel.RIGHT);
 					label.setFont(plugin.getFont());
@@ -533,9 +531,6 @@ public class FlippingItemPanel extends JPanel
 
 		instaSellVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 		instaBuyVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
-
-		latestSellPricePostTaxVal.setFont(new Font("Whitney", Font.PLAIN, 8));
-		instaSellValPostTax.setFont(new Font("Whitney", Font.PLAIN, 8));
 
 		profitEachVal.setForeground(CustomColors.PROFIT_COLOR);
 		potentialProfitVal.setForeground(CustomColors.PROFIT_COLOR);
@@ -828,12 +823,10 @@ public class FlippingItemPanel extends JPanel
 		Optional<Float> roi =  flippingItem.getCurrentRoi();
 
 		instaSellVal.setText(latestInstaSell.isPresent() ? String.format(NUM_FORMAT, latestInstaSell.get().getPreTaxPrice()) + " gp":"N/A");
-		instaSellValPostTax.setText(latestInstaSell.isPresent() ? String.format(NUM_FORMAT, latestInstaSell.get().getPrice()) + " gp":"N/A");
 		instaBuyVal.setText(latestInstaBuy.isPresent() ? String.format(NUM_FORMAT, latestInstaBuy.get().getPrice()) + " gp" : "N/A");
 
 		latestBuyPriceVal.setText(latestBuy.isPresent() ? String.format(NUM_FORMAT, latestBuy.get().getPrice()) + " gp" : "N/A");
 		latestSellPriceVal.setText(latestSell.isPresent() ? String.format(NUM_FORMAT, latestSell.get().getPreTaxPrice()) + " gp" : "N/A");
-		latestSellPricePostTaxVal.setText(latestSell.isPresent() ? String.format(NUM_FORMAT, latestSell.get().getPrice()) + " gp" : "N/A");
 
 		profitEachVal.setText(profitEach.isPresent()? QuantityFormatter.quantityToRSDecimalStack(profitEach.get()) + " gp": "N/A");
 		potentialProfitVal.setText(potentialProfit.isPresent() ? QuantityFormatter.quantityToRSDecimalStack(potentialProfit.get()) + " gp": "N/A");
