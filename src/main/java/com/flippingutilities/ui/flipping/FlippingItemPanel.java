@@ -75,9 +75,11 @@ public class FlippingItemPanel extends JPanel
 	JLabel wikiBuyTimeVal = new JLabel();
 	JLabel wikiSellTimeVal = new JLabel();
 	JLabel instaSellVal = new JLabel();
+	JLabel instaSellValPostTax = new JLabel();
 	JLabel instaBuyVal = new JLabel();
 	JLabel latestBuyPriceVal = new JLabel();
 	JLabel latestSellPriceVal = new JLabel();
+	JLabel latestSellPricePostTaxVal = new JLabel();
 	JLabel profitEachVal = new JLabel();
 	JLabel potentialProfitVal = new JLabel();
 	JLabel roiLabelVal = new JLabel();
@@ -245,8 +247,8 @@ public class FlippingItemPanel extends JPanel
 	private JPanel createPanelForSectionLabel(String labelName) {
 		JPanel panel = new JPanel(new BorderLayout());
 		panel.setBackground(getBackground());
-		JLabel descriptionLabel;
-		JLabel valueLabel;
+		JComponent descriptionLabel;
+		JComponent valueLabel;
 		switch (labelName) {
 			case Section.WIKI_BUY_PRICE:
 				descriptionLabel = wikiBuyText;
@@ -256,25 +258,39 @@ public class FlippingItemPanel extends JPanel
 				descriptionLabel = wikiSellText;
 				valueLabel = wikiSellVal;
 				break;
-			case Section.PRICE_CHECK_BUY_PRICE:
-				descriptionLabel = instaSellText;
+			case Section.LAST_INSTA_SELL_PRICE:
+				JLabel instaSellPreTaxLabel = new JLabel("Pre tax");
+				instaSellPreTaxLabel.setFont(new Font("Whitney", Font.ITALIC, 6));
+
+				JPanel instaSellDescPanel = new JPanel(new DynamicGridLayout(2,1));
+				instaSellDescPanel.setBackground(CustomColors.DARK_GRAY);
+				instaSellDescPanel.add(instaSellText);
+				instaSellDescPanel.add(instaSellPreTaxLabel);
+
+				descriptionLabel = instaSellDescPanel;
 				valueLabel = instaSellVal;
-				makePropertyPanelEditable(panel, instaSellVal, instaSellText);
 				break;
-			case Section.PRICE_CHECK_SELL_PRICE:
+			case Section.LAST_INSTA_BUY_PRICE:
 				descriptionLabel = instaBuyText;
 				valueLabel = instaBuyVal;
 				makePropertyPanelEditable(panel, instaBuyVal, instaBuyText);
 				break;
-			case Section.LATEST_BUY_PRICE:
+			case Section.LAST_BUY_PRICE:
 				descriptionLabel = latestBuyPriceText;
 				valueLabel = latestBuyPriceVal;
 				makePropertyPanelEditable(panel, latestBuyPriceVal, latestBuyPriceText);
 				break;
-			case Section.LATEST_SELL_PRICE:
-				descriptionLabel = latestSellPriceText;
+			case Section.LAST_SELL_PRICE:
+				JLabel preTaxLabel = new JLabel("Pre tax");
+				preTaxLabel.setFont(new Font("Whitney", Font.ITALIC, 6));
+
+				JPanel sellDescPanel = new JPanel(new DynamicGridLayout(2,1));
+				sellDescPanel.setBackground(CustomColors.DARK_GRAY);
+				sellDescPanel.add(latestSellPriceText);
+				sellDescPanel.add(preTaxLabel);
+
+				descriptionLabel = sellDescPanel;
 				valueLabel = latestSellPriceVal;
-				makePropertyPanelEditable(panel, latestSellPriceVal, latestSellPriceText);
 				break;
 			case Section.PROFIT_EACH:
 				descriptionLabel = profitEachText;
@@ -509,7 +525,7 @@ public class FlippingItemPanel extends JPanel
 
 	private void styleValueLabels() {
 		Arrays.asList(latestBuyPriceVal, latestSellPriceVal, instaSellVal, instaBuyVal, profitEachVal, potentialProfitVal,
-				roiLabelVal, geLimitVal).
+				roiLabelVal, geLimitVal, latestSellPricePostTaxVal, instaSellValPostTax).
 				forEach(label -> {
 					label.setHorizontalAlignment(JLabel.RIGHT);
 					label.setFont(plugin.getFont());
@@ -517,6 +533,9 @@ public class FlippingItemPanel extends JPanel
 
 		instaSellVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 		instaBuyVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+
+		latestSellPricePostTaxVal.setFont(new Font("Whitney", Font.PLAIN, 8));
+		instaSellValPostTax.setFont(new Font("Whitney", Font.PLAIN, 8));
 
 		profitEachVal.setForeground(CustomColors.PROFIT_COLOR);
 		potentialProfitVal.setForeground(CustomColors.PROFIT_COLOR);
@@ -557,10 +576,10 @@ public class FlippingItemPanel extends JPanel
 				});
 
 		/* Tooltips */
-		instaSellText.setToolTipText("The buy price according to your latest margin check. This is the price you insta sold the item for");
-		instaBuyText.setToolTipText("The sell price according to your latest margin check. This is the price you insta bought the item for");
+		instaSellText.setToolTipText("This is the price you insta sold the item for (pre tax)");
+		instaBuyText.setToolTipText("This is the price you insta bought the item for");
 		latestBuyPriceText.setToolTipText("The last price you bought this item for");
-		latestSellPriceText.setToolTipText("The last price you sold this item for");
+		latestSellPriceText.setToolTipText("The last price you sold this item for (pre tax)");
 		profitEachText.setToolTipText("The profit margin according to your latest margin check");
 		potentialProfitText.setToolTipText("The potential profit according to your latest margin check and GE 4-hour limit");
 		geLimitText.setToolTipText("Remaining ge limit");
@@ -797,8 +816,8 @@ public class FlippingItemPanel extends JPanel
 	}
 
 	public void setValueLabels() {
-		Optional<OfferEvent> latestMarginCheckBuy = flippingItem.getLatestInstaBuy();
-		Optional<OfferEvent> latestMarginCheckSell = flippingItem.getLatestInstaSell();
+		Optional<OfferEvent> latestInstaBuy = flippingItem.getLatestInstaBuy();
+		Optional<OfferEvent> latestInstaSell = flippingItem.getLatestInstaSell();
 
 		Optional<OfferEvent> latestBuy = flippingItem.getLatestBuy();
 		Optional<OfferEvent> latestSell = flippingItem.getLatestSell();
@@ -808,11 +827,13 @@ public class FlippingItemPanel extends JPanel
 
 		Optional<Float> roi =  flippingItem.getCurrentRoi();
 
-		instaSellVal.setText(latestMarginCheckSell.isPresent() ? String.format(NUM_FORMAT, latestMarginCheckSell.get().getPrice()) + " gp":"N/A");
-		instaBuyVal.setText(latestMarginCheckBuy.isPresent() ? String.format(NUM_FORMAT, latestMarginCheckBuy.get().getPrice()) + " gp" : "N/A");
+		instaSellVal.setText(latestInstaSell.isPresent() ? String.format(NUM_FORMAT, latestInstaSell.get().getPreTaxPrice()) + " gp":"N/A");
+		instaSellValPostTax.setText(latestInstaSell.isPresent() ? String.format(NUM_FORMAT, latestInstaSell.get().getPrice()) + " gp":"N/A");
+		instaBuyVal.setText(latestInstaBuy.isPresent() ? String.format(NUM_FORMAT, latestInstaBuy.get().getPrice()) + " gp" : "N/A");
 
 		latestBuyPriceVal.setText(latestBuy.isPresent() ? String.format(NUM_FORMAT, latestBuy.get().getPrice()) + " gp" : "N/A");
-		latestSellPriceVal.setText(latestSell.isPresent() ? String.format(NUM_FORMAT, latestSell.get().getPrice()) + " gp" : "N/A");
+		latestSellPriceVal.setText(latestSell.isPresent() ? String.format(NUM_FORMAT, latestSell.get().getPreTaxPrice()) + " gp" : "N/A");
+		latestSellPricePostTaxVal.setText(latestSell.isPresent() ? String.format(NUM_FORMAT, latestSell.get().getPrice()) + " gp" : "N/A");
 
 		profitEachVal.setText(profitEach.isPresent()? QuantityFormatter.quantityToRSDecimalStack(profitEach.get()) + " gp": "N/A");
 		potentialProfitVal.setText(potentialProfit.isPresent() ? QuantityFormatter.quantityToRSDecimalStack(potentialProfit.get()) + " gp": "N/A");

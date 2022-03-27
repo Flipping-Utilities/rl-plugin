@@ -75,10 +75,10 @@ public class AccountWideData {
         importantSection.defaultExpanded = true;
         importantSection.showLabel(Section.WIKI_BUY_PRICE, true);
         importantSection.showLabel(Section.WIKI_SELL_PRICE, true);
-        importantSection.showLabel(Section.LATEST_BUY_PRICE, true);
-        importantSection.showLabel(Section.LATEST_SELL_PRICE, true);
-        importantSection.showLabel(Section.PRICE_CHECK_BUY_PRICE, true);
-        importantSection.showLabel(Section.PRICE_CHECK_SELL_PRICE, true);
+        importantSection.showLabel(Section.LAST_BUY_PRICE, true);
+        importantSection.showLabel(Section.LAST_SELL_PRICE, true);
+        importantSection.showLabel(Section.LAST_INSTA_SELL_PRICE, true);
+        importantSection.showLabel(Section.LAST_INSTA_BUY_PRICE, true);
 
         otherSection.showLabel(Section.PROFIT_EACH, true);
         otherSection.showLabel(Section.POTENTIAL_PROFIT, true);
