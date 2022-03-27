@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class GeHistoryTabExtractor {
     private static Pattern MULTI_ITEM_PATTERN = Pattern.compile(">= (.*) each");
-    private static Pattern SINGLE_ITEM_PATTERN = Pattern.compile(">(.*) coins");
+    private static Pattern SINGLE_ITEM_PATTERN = Pattern.compile(">(.*) coin");
     private static Pattern ORIGINAL_PRICE_PATTERN = Pattern.compile("\\((.*) -");
 
     public static List<OfferEvent> convertWidgetsToOfferEvents(Widget[] widgets) {

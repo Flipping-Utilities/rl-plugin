@@ -191,7 +191,7 @@ public class RecipeHandler {
             return Optional.empty();
         }
         Map<Integer, List<Recipe>> idToRecipes= new HashMap<>();
-        List<Recipe> recipes = optionalRecipes.get();
+        List<Recipe> recipes = optionalRecipes.get().stream().filter(r -> !r.getIds().contains(995)).collect(Collectors.toList());
         recipes.forEach(r -> {
             r.getIds().forEach(id -> {
                 if (idToRecipes.containsKey(id)) {

@@ -16,6 +16,8 @@ import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
 import java.awt.*;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.Collections;
@@ -23,6 +25,7 @@ import java.util.Comparator;
 import java.util.List;
 
 public class RecipeFlipCreationPanel extends JPanel {
+    static boolean offerSelectionPanelOpen = false;
     FlippingPlugin plugin;
     OfferEvent sourceOffer;
     @Setter
@@ -76,12 +79,21 @@ public class RecipeFlipCreationPanel extends JPanel {
         recipePanel.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                if (offerSelectionPanelOpen) {
+                    JOptionPane.showMessageDialog(null, "You must close the other recipe creation menu before opening another one");
+                    return;
+                }
                 modal.dispose();
-
                 MasterPanel m = plugin.getMasterPanel();
                 RecipeOfferSelectionPanel recipeOfferSelectionPanel = new RecipeOfferSelectionPanel(plugin, sourceOffer, recipe);
-
+                offerSelectionPanelOpen = true;
                 JDialog recipeOfferSelectionModal = UIUtilities.createModalFromPanel(m, recipeOfferSelectionPanel);
+                recipeOfferSelectionModal.addComponentListener(new ComponentAdapter() {
+                    @Override
+                    public void componentHidden(ComponentEvent e) {
+                        offerSelectionPanelOpen = false;
+                    }
+                });
                 recipeOfferSelectionModal.pack();
                 recipeOfferSelectionModal.setLocation(
                     Math.max(20, m.getLocationOnScreen().x - recipeOfferSelectionModal.getWidth() - 10),
