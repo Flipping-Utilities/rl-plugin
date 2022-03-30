@@ -333,7 +333,7 @@ public class FlippingItem implements Searchable
 
 	public Optional<Integer> getCurrentProfitEach() {
 		return getLatestInstaBuy().isPresent() && getLatestInstaSell().isPresent()?
-				Optional.of(getLatestInstaBuy().get().getPrice() - getLatestInstaSell().get().getPrice()) : Optional.empty();
+				Optional.of(getLatestInstaBuy().get().getPrice() - getLatestInstaSell().get().getPreTaxPrice()) : Optional.empty();
 	}
 
 	/**
