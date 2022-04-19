@@ -32,6 +32,7 @@ import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.Section;
 import com.flippingutilities.ui.uiutilities.*;
 import com.flippingutilities.utilities.Constants;
+import com.flippingutilities.utilities.GeTax;
 import com.flippingutilities.utilities.WikiItemMargins;
 import com.flippingutilities.utilities.WikiRequest;
 import lombok.Getter;
@@ -817,9 +818,6 @@ public class FlippingItemPanel extends JPanel
 		Optional<OfferEvent> latestBuy = flippingItem.getLatestBuy();
 		Optional<OfferEvent> latestSell = flippingItem.getLatestSell();
 
-		Optional<Integer> profitEach = flippingItem.getCurrentProfitEach();
-		Optional<Integer> potentialProfit = flippingItem.getPotentialProfit(plugin.getConfig().marginCheckLoss(), plugin.getConfig().geLimitProfit());
-
 		Optional<Float> roi =  flippingItem.getCurrentRoi();
 
 		instaSellVal.setText(latestInstaSell.isPresent() ? String.format(NUM_FORMAT, latestInstaSell.get().getPreTaxPrice()) + " gp":"N/A");
@@ -828,19 +826,15 @@ public class FlippingItemPanel extends JPanel
 		latestBuyPriceVal.setText(latestBuy.isPresent() ? String.format(NUM_FORMAT, latestBuy.get().getPrice()) + " gp" : "N/A");
 		latestSellPriceVal.setText(latestSell.isPresent() ? String.format(NUM_FORMAT, latestSell.get().getPreTaxPrice()) + " gp" : "N/A");
 
-		profitEachVal.setText(profitEach.isPresent()? QuantityFormatter.quantityToRSDecimalStack(profitEach.get()) + " gp": "N/A");
-		potentialProfitVal.setText(potentialProfit.isPresent() ? QuantityFormatter.quantityToRSDecimalStack(potentialProfit.get()) + " gp": "N/A");
-
-		roiLabelVal.setText(roi.isPresent()? String.format("%.2f", roi.get()) + "%" : "N/A");
-		//Color gradient red-yellow-green depending on ROI.
-		roiLabelVal.setForeground(UIUtilities.gradiatePercentage(roi.orElse(0F), plugin.getConfig().roiGradientMax()));
+		//the three of these will be set by wiki vals as they are dependent on em
+		profitEachVal.setText("N/A");
+		potentialProfitVal.setText("N/A");
+		roiLabelVal.setText("N/A");
 
 		if (flippingItem.getTotalGELimit() > 0) {
 			geLimitVal.setText(String.format(NUM_FORMAT, flippingItem.getRemainingGeLimit()));
 		} else {
 			geLimitVal.setText(String.format(NUM_FORMAT, flippingItem.getItemsBoughtThisLimitWindow()));
-			//can't have potential profit if the limit is unknown
-			potentialProfitVal.setText("N/A");
 		}
 		updateWikiLabels(plugin.getLastWikiRequest(), plugin.getTimeOfLastWikiRequest());
 	}
@@ -878,6 +872,21 @@ public class FlippingItemPanel extends JPanel
 		}
 		wikiBuyVal.setText(wikiItemInfo.getHigh()==0? "No data":QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
 		wikiSellVal.setText(wikiItemInfo.getLow()==0? "No data":QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
+
+		if (wikiItemInfo.getHigh() != 0 && wikiItemInfo.getLow() != 0) {
+			int profitEach = GeTax.getPostTaxPrice(wikiItemInfo.getHigh()) - wikiItemInfo.getLow();
+			profitEachVal.setText(QuantityFormatter.quantityToRSDecimalStack(profitEach) + " gp");
+
+			float roi = ((float)profitEach/ wikiItemInfo.getLow()) * 100;
+			roiLabelVal.setText(String.format("%.2f", roi) + "%");
+			//Color gradient red-yellow-green depending on ROI.
+			roiLabelVal.setForeground(UIUtilities.gradiatePercentage(roi, plugin.getConfig().roiGradientMax()));
+			int geLimit = plugin.getConfig().geLimitProfit()? flippingItem.getRemainingGeLimit() : flippingItem.getTotalGELimit();
+			if (flippingItem.getTotalGELimit() > 0) {
+				int potentialProfit = profitEach * geLimit;
+				potentialProfitVal.setText(QuantityFormatter.quantityToRSDecimalStack(potentialProfit) + " gp");
+			}
+		}
 		updateWikiTimeLabels();
 	}
 

@@ -28,6 +28,7 @@ package com.flippingutilities.model;
 
 
 import com.flippingutilities.utilities.Constants;
+import com.flippingutilities.utilities.GeTax;
 import com.google.gson.annotations.SerializedName;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -103,11 +104,8 @@ public class OfferEvent
 		if (buy || time.getEpochSecond() < Constants.GE_TAX_START || itemId == Constants.BOND_ID) {
 			return price;
 		}
-		if (price >= Constants.MAX_PRICE_FOR_GE_TAX) {
-			return price - Constants.GE_TAX_CAP;
-		}
-		int tax = (int)Math.floor(price * Constants.GE_TAX);
-		return price - tax;
+
+		return GeTax.getPostTaxPrice(price);
 	}
 
 	public int getPreTaxPrice() {
