@@ -91,6 +91,7 @@ public class RecipeFlipCreationPanel extends JPanel {
                 recipeOfferSelectionModal.addComponentListener(new ComponentAdapter() {
                     @Override
                     public void componentHidden(ComponentEvent e) {
+                        recipeOfferSelectionModal.dispose();
                         offerSelectionPanelOpen = false;
                     }
                 });
