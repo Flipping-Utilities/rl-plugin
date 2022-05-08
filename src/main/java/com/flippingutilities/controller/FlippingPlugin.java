@@ -488,6 +488,8 @@ public class FlippingPlugin extends Plugin {
         log.info("changing view to {}", selectedName);
         accountCurrentlyViewed = selectedName;
         List<FlippingItem> itemsForCurrentView = viewItemsForCurrentView();
+        statPanel.resetPaginators();
+        flippingPanel.getPaginator().setPageNumber(1);
         statPanel.rebuildItemsDisplay(itemsForCurrentView);
         statPanel.rebuildRecipesDisplay(viewRecipeFlipGroupsForCurrentView());
         flippingPanel.rebuild(itemsForCurrentView);

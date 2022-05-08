@@ -159,7 +159,7 @@ public class DataHandler {
             log.info("successfully loaded account wide data");
             return accountWideData;
         }
-        catch (IOException e) {
+        catch (Exception e) {
             log.info("couldn't load accountwide data", e);
             AccountWideData accountWideData = new AccountWideData();
             accountWideData.setDefaults();

@@ -39,6 +39,10 @@ public class FlippingItemContainerPanel extends JPanel {
         add(paginator, BorderLayout.SOUTH);
     }
 
+    public void resetPaginator() {
+        paginator.setPageNumber(1);
+    }
+
     public void rebuild(List<FlippingItem> flippingItems) {
         activePanels.clear();
         flippingItemPanelsContainer.removeAll();

@@ -359,6 +359,7 @@ public class FlippingPanel extends JPanel
 		//When the clear button is pressed, this is run.
 		if (Strings.isNullOrEmpty(lookup))
 		{
+			paginator.setPageNumber(1);
 			currentlySearching = false;
 			rebuild(plugin.viewItemsForCurrentView());
 			return;
@@ -366,6 +367,7 @@ public class FlippingPanel extends JPanel
 
 		searchBar.setIcon(IconTextField.Icon.SEARCH);
 		currentlySearching = true;
+		paginator.setPageNumber(1);
 		rebuild(plugin.viewItemsForCurrentView());
 	}
 

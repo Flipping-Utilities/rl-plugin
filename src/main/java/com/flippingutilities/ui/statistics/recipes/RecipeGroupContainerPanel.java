@@ -40,6 +40,10 @@ public class RecipeGroupContainerPanel extends JPanel {
         add(paginator, BorderLayout.SOUTH);
     }
 
+    public void resetPaginator() {
+        paginator.setPageNumber(1);
+    }
+
     public void rebuild(List<RecipeFlipGroup> recipeFlipGroups) {
         activePanels.clear();
         recipeGroupContainer.removeAll();
