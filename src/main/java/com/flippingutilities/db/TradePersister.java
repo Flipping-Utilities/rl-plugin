@@ -99,7 +99,7 @@ public class TradePersister
 	 * @return a map of display name to that account's data
 	 * @throws IOException handled in FlippingPlugin
 	 */
-	public Map<String, AccountData> loadAllAccounts() throws IOException
+	public Map<String, AccountData> loadAllAccounts()
 	{
 		Map<String, AccountData> accountsData = new HashMap<>();
 		for (File f : PARENT_DIRECTORY.listFiles())
@@ -110,18 +110,26 @@ public class TradePersister
 			}
 			String displayName = f.getName().split("\\.")[0];
 			log.info("loading data for {}", displayName);
-			AccountData accountData = loadFromFile(f);
-			if (accountData == null)
-			{
-				log.info("data for {} is null for some reason, setting it to a empty AccountData object", displayName);
-				accountData = new AccountData();
-			}
+			try {
+				AccountData accountData = loadFromFile(f);
+				if (accountData == null)
+				{
+					log.warn("data for {} is null for some reason, setting it to a empty AccountData object", displayName);
+					accountData = new AccountData();
+				}
 
-			accountsData.put(displayName, accountData);
+				accountsData.put(displayName, accountData);
+			}
+			catch (Exception e) {
+				log.warn("Couldn't load data for {}, setting it to empty AccountData object", displayName, e);
+				accountsData.put(displayName, new AccountData());
+			}
 		}
 
 		return accountsData;
 	}
+
+
 
 	public AccountData loadAccount(String displayName) throws IOException
 	{
