@@ -31,7 +31,6 @@ import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
 import java.util.*;
 
 /**
@@ -125,34 +124,26 @@ public class DataHandler {
     }
 
     public void loadData() {
+        log.info("Initiating load on startup");
         try {
-            log.info("initiating load");
             TradePersister.setupFlippingFolder();
-            accountWideData = fetchAccountWideData();
-            accountSpecificData = fetchAllAccountData();
         }
-        catch (IOException e) {
-            log.info("error while loading data, setting accountwidedata and accountspecific to defaults", e);
+        catch (Exception e) {
+            log.warn("Couldn't set up flipping folder, setting defaults", e);
             accountWideData = new AccountWideData();
             accountWideData.setDefaults();
             accountSpecificData = new HashMap<>();
             accountWideDataChanged = true;
+            return;
         }
-    }
 
-    public void loadAccountWideData() {
-        log.info("updating account wide data");
         accountWideData = fetchAccountWideData();
-    }
-
-    public void loadAccountData(String displayName) {
-        log.info("loading data for {}", displayName);
-        accountSpecificData.put(displayName, fetchAccountData(displayName));
+        accountSpecificData = fetchAndPrepareAllAccountData();
     }
 
     private AccountWideData fetchAccountWideData() {
         try {
-            log.info("loading account wide data");
+            log.info("Fetching account wide data");
             AccountWideData accountWideData = plugin.tradePersister.loadAccountWideData();
             boolean didActuallySetDefaults = accountWideData.setDefaults();
             accountWideDataChanged = didActuallySetDefaults;
@@ -160,7 +151,7 @@ public class DataHandler {
             return accountWideData;
         }
         catch (Exception e) {
-            log.info("couldn't load accountwide data", e);
+            log.warn("couldn't load accountwide data, setting defaults", e);
             AccountWideData accountWideData = new AccountWideData();
             accountWideData.setDefaults();
             accountWideDataChanged = true;
@@ -168,23 +159,51 @@ public class DataHandler {
         }
     }
 
-    private Map<String, AccountData> fetchAllAccountData()
+    private Map<String, AccountData> fetchAndPrepareAllAccountData()
     {
-        try
-        {
-            Map<String, AccountData> trades = plugin.tradePersister.loadAllAccounts();
-            trades.values().forEach(accountData -> {
+        Map<String, AccountData> accounts = fetchAllAccountData();
+        prepareAllAccountData(accounts);
+        log.info("Finished loading and preparing all accounts");
+        return accounts;
+    }
+
+    private void prepareAllAccountData(Map<String, AccountData> allAccountData) {
+
+        for (String displayName : allAccountData.keySet()) {
+            AccountData accountData = allAccountData.get(displayName);
+            try {
                 accountData.startNewSession();
                 accountData.prepareForUse(plugin);
-            });
-            log.info("successfully loaded trades");
-            return trades;
+            }
+
+            catch (Exception e) {
+                log.warn("Couldn't prepare account data for {} due to {}, setting default", displayName, e);
+                AccountData newAccountData = new AccountData();
+                newAccountData.startNewSession();
+                newAccountData.prepareForUse(plugin);
+                allAccountData.put(displayName, newAccountData);
+            }
         }
-        catch (IOException e)
-        {
-            log.info("couldn't load trades, error: " + e);
+    }
+
+    private Map<String, AccountData> fetchAllAccountData() {
+        try {
+            return plugin.tradePersister.loadAllAccounts();
+        }
+        catch (Exception e) {
+            log.warn("error propagated from tradePersister.loadAllAccounts() when fetching all account data, returning empty hashmap", e);
             return new HashMap<>();
         }
+    }
+
+    public void loadAccountWideData() {
+        log.info("Loading account wide data");
+        accountWideData = fetchAccountWideData();
+    }
+
+    public void loadAccountData(String displayName) {
+        log.info("loading data for {}", displayName);
+        accountSpecificData.put(displayName, fetchAccountData(displayName));
     }
 
     private AccountData fetchAccountData(String displayName)
@@ -195,9 +214,9 @@ public class DataHandler {
             accountData.prepareForUse(plugin);
             return accountData;
         }
-        catch (IOException e)
+        catch (Exception e)
         {
-            log.info("couldn't load trades for {}, e = " + e, displayName);
+            log.warn("couldn't load trades for {}, e = " + e, displayName);
             return new AccountData();
         }
     }
@@ -217,7 +236,7 @@ public class DataHandler {
             plugin.tradePersister.storeTrades(displayName, data);
             log.info("successfully stored trades for {}", displayName);
         }
-        catch (IOException e)
+        catch (Exception e)
         {
             log.info("couldn't store trades, error = " + e);
         }
@@ -228,7 +247,7 @@ public class DataHandler {
             plugin.tradePersister.storeTrades("accountwide", accountWideData);
             log.info("successfully stored account wide data");
         }
-        catch (IOException e) {
+        catch (Exception e) {
             log.info("couldn't store trades", e);
         }
     }
