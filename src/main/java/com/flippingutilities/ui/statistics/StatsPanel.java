@@ -223,6 +223,11 @@ public class StatsPanel extends JPanel
 		return tabGroup;
 	}
 
+	public void resetPaginators() {
+		flippingItemContainerPanel.resetPaginator();
+		recipeGroupContainerPanel.resetPaginator();
+	}
+
 	public void rebuildItemsDisplay(List<FlippingItem> flippingItems) {
 		SwingUtilities.invokeLater(() -> {
 			List<FlippingItem> itemsToDisplay = getItemsToDisplay(flippingItems);
@@ -272,12 +277,15 @@ public class StatsPanel extends JPanel
 		if (Strings.isNullOrEmpty(lookup)) {
 			searchBar.setIcon(IconTextField.Icon.SEARCH);
 			currentlySearching = false;
+			this.flippingItemContainerPanel.resetPaginator();
+			this.recipeGroupContainerPanel.resetPaginator();
 			this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
 			this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 			return;
 		}
-
 		currentlySearching = true;
+		this.flippingItemContainerPanel.resetPaginator();
+		this.recipeGroupContainerPanel.resetPaginator();
 		this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
 		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 	}
@@ -594,6 +602,8 @@ public class StatsPanel extends JPanel
 				return;
 			}
 		}
+		this.flippingItemContainerPanel.resetPaginator();
+		this.recipeGroupContainerPanel.resetPaginator();
 		this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
 		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 	}
