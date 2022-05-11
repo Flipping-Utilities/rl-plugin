@@ -111,7 +111,7 @@ public class GameUiChangesHandler {
                     int instaSellPrice = 0;
                     int wikiInstaSellPrice = 0;
                     if (selectedItem.isPresent() && selectedItem.get().getLatestInstaSell().isPresent()) {
-                        instaSellPrice = selectedItem.get().getLatestInstaSell().get().getPrice();
+                        instaSellPrice = selectedItem.get().getLatestInstaSell().get().getPreTaxPrice();
                     }
                     if (wikiRequest != null && wikiRequest.getData().containsKey(highlightedItemId) && wikiRequest.getData().get(highlightedItemId).getLow() != 0) {
                         wikiInstaSellPrice = wikiRequest.getData().get(highlightedItemId).getLow();
