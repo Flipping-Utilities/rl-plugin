@@ -122,7 +122,7 @@ public class OptionHandler {
             throw new InvalidOptionException("item was not bought or sold");
         } else {
             if (item.get().getLatestInstaSell().isPresent()) {
-                return item.get().getLatestInstaSell().get().getPrice();
+                return item.get().getLatestInstaSell().get().getPreTaxPrice();
             } else {
                 throw new InvalidOptionException("item does not have an insta sell price");
             }
@@ -134,7 +134,7 @@ public class OptionHandler {
             throw new InvalidOptionException("item was not bought or sold");
         } else {
             if (item.get().getLatestSell().isPresent()) {
-                return item.get().getLatestSell().get().getPrice();
+                return item.get().getLatestSell().get().getPreTaxPrice();
             } else {
                 throw new InvalidOptionException("item does not have a sell");
             }
