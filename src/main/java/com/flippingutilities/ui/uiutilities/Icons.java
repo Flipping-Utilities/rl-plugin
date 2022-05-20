@@ -125,6 +125,8 @@ public class Icons {
 
     public static final ImageIcon RECIPE_HELP;
 
+    public static final BufferedImage account;
+
     static
     {
         final BufferedImage openIcon = ImageUtil
@@ -145,7 +147,7 @@ public class Icons {
         SETTINGS_ICON = new ImageIcon(settingsIcon);
         SETTINGS_ICON_OFF = new ImageIcon(ImageUtil.alphaOffset(settingsIcon, 0.53f));
 
-        final BufferedImage accountIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/gnome.png");
+        BufferedImage accountIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/gnome.png");
         GNOME_CHILD = new ImageIcon(accountIcon);
 
         final BufferedImage deleteButton = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/deleteButton.png");
@@ -314,5 +316,7 @@ public class Icons {
 
         final BufferedImage recipeHelp = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/recipehelp.png");
         RECIPE_HELP = new ImageIcon(recipeHelp);
+
+        account = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/gnome.png");
     }
 }

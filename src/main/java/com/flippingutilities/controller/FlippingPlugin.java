@@ -28,7 +28,7 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.db.TradePersister;
-import com.flippingutilities.jobs.SlotStateSenderJob;
+import com.flippingutilities.jobs.SlotSenderJob;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.MasterPanel;
 import com.flippingutilities.ui.flipping.FlippingPanel;
@@ -37,6 +37,7 @@ import com.flippingutilities.ui.login.LoginPanel;
 import com.flippingutilities.ui.settings.SettingsPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
+import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.jobs.CacheUpdaterJob;
 import com.flippingutilities.utilities.*;
@@ -169,7 +170,7 @@ public class FlippingPlugin extends Plugin {
     //updates the cache by monitoring the directory and loading a file's contents into the cache if it has been changed
     private CacheUpdaterJob cacheUpdaterJob;
     private WikiDataFetcherJob wikiDataFetcherJob;
-    private SlotStateSenderJob slotStateSenderJob;
+    private SlotSenderJob slotStateSenderJob;
 
     private ScheduledFuture slotTimersTask;
     private Instant startUpTime = Instant.now();
@@ -252,6 +253,8 @@ public class FlippingPlugin extends Plugin {
                 onLoggedInGameState();
             }
             //stops scheduling this task
+//            client.getWidgetSpriteCache().reset();
+//            client.getSpriteOverrides().put(8718, ImageUtil.getImageSpritePixels(Icons.account,client));
             return true;
         });
     }
@@ -504,7 +507,7 @@ public class FlippingPlugin extends Plugin {
         wikiDataFetcherJob.subscribe(this::onWikiFetch);
         wikiDataFetcherJob.start();
 
-        slotStateSenderJob = new SlotStateSenderJob(this, httpClient);
+        slotStateSenderJob = new SlotSenderJob(this, httpClient);
         slotStateSenderJob.subscribe((success) -> loginPanel.onSlotRequest(success));
         slotStateSenderJob.start();
     }
@@ -648,7 +651,10 @@ public class FlippingPlugin extends Plugin {
     }
 
 
-    public void rebuildTradeTimers() {
+    public void setWidgetsOnSlotTimers() {
+//        SpriteID
+//        client.getSpriteOverrides()
+//        ImageUtil.getImageSpritePixels()
         for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
             SlotActivityTimer timer = dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().get(slotIndex);
 
