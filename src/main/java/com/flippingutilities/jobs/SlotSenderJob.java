@@ -20,7 +20,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 @Slf4j
-public class SlotStateSenderJob {
+public class SlotSenderJob {
     FlippingPlugin plugin;
     ScheduledExecutorService executor;
     OkHttpClient httpClient;
@@ -30,7 +30,7 @@ public class SlotStateSenderJob {
     public static int PERIOD = 10; //seconds
     public boolean justLoggedIn = false;
 
-    public SlotStateSenderJob(FlippingPlugin plugin, OkHttpClient httpClient) {
+    public SlotSenderJob(FlippingPlugin plugin, OkHttpClient httpClient) {
         this.plugin = plugin;
         this.httpClient = httpClient;
         this.executor = Executors.newSingleThreadScheduledExecutor();

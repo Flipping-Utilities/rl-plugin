@@ -4,7 +4,9 @@ import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.offereditor.AbstractOfferEditorPanel;
 import com.flippingutilities.ui.offereditor.OfferEditorContainerPanel;
+import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.widgets.OfferEditor;
+import com.flippingutilities.ui.widgets.SlotStateWidget;
 import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.WikiRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +18,7 @@ import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.widgets.*;
+import net.runelite.client.util.ImageUtil;
 import net.runelite.http.api.item.ItemStats;
 
 import java.util.Optional;
@@ -32,6 +35,7 @@ public class GameUiChangesHandler {
     private static final int GE_OFFER_INIT_STATE_CHILD_ID = 18;
     private static final int GE_HISTORY_TAB_WIDGET_ID = 149;
     FlippingPlugin plugin;
+    boolean flag = true;
 
     boolean quantityOrPriceChatboxOpen;
     Optional<FlippingItem> highlightedItem = Optional.empty();
@@ -205,18 +209,54 @@ public class GameUiChangesHandler {
     }
 
     public void onScriptPostFired(ScriptPostFired event) {
+
         //ge history interface closed, so the geHistoryTabPanel should no longer show
         if (event.getScriptId() == 29) {
             plugin.getMasterPanel().selectPreviouslySelectedTab();
         }
 
+
+
         if (event.getScriptId() == 804) {
+            log.info("the script thing is firing!");
+            if (flag) {
+//                flag = false;
+                createSlotStateWidgets();
+            }
             //Fired after every GE offer slot redraw
             //This seems to happen after any offer updates or if buttons are pressed inside the interface
             //https://github.com/RuneStar/cs2-scripts/blob/a144f1dceb84c3efa2f9e90648419a11ee48e7a2/scripts/%5Bclientscript%2Cge_offers_switchpanel%5D.cs2
             if (plugin.getConfig().slotTimersEnabled()) {
-                plugin.rebuildTradeTimers();
+                plugin.setWidgetsOnSlotTimers();
             }
+        }
+    }
+
+    public void createSlotStateWidgets() {
+        log.info("creating slot state widgets");
+        for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
+//            SlotActivityTimer timer = dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().get(slotIndex);
+            SlotStateWidget w = new SlotStateWidget();
+
+            //Get the offer slots from the window container
+            //We add one to the index, as the first widget is the text above the offer slots
+            Widget offerSlot = plugin.getClient().getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, 5).getStaticChildren()[slotIndex + 1];
+
+
+            if (offerSlot == null) {
+                return;
+            }
+
+            plugin.getClientThread().invokeLater(() -> {
+                w.setWidget(offerSlot);
+            });
+
+
+//            if (timer.getSlotWidget() == null) {
+//                timer.setWidget(offerSlot);
+//            }
+
+//            clientThread.invokeLater(timer::updateTimerDisplay);
         }
     }
 
