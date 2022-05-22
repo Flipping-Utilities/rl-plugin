@@ -10,9 +10,7 @@ import com.flippingutilities.ui.widgets.SlotStateWidget;
 import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.WikiRequest;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.Client;
-import net.runelite.api.FontID;
-import net.runelite.api.VarClientInt;
+import net.runelite.api.*;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.events.VarbitChanged;
@@ -209,6 +207,21 @@ public class GameUiChangesHandler {
     }
 
     public void onScriptPostFired(ScriptPostFired event) {
+        if (event.getScriptId() == 782) {
+            log.info("ge invetory items container thing");
+        }
+        if (event.getScriptId() == 783) {
+            log.info("ge invetory items container child thing");
+        }
+
+        if (event.getScriptId() == 706) {
+            log.info("collect ALL slot script thing fired");
+        }
+
+        to prevent the collect thing from removing the widget changes on the slot
+            i can lsiten on the ge invetory container script event thing
+            it may not be an issue really but if i want to prevent rapid fire widget
+            reconstructions, i can check if the widget is actually null first
 
         //ge history interface closed, so the geHistoryTabPanel should no longer show
         if (event.getScriptId() == 29) {
@@ -217,15 +230,17 @@ public class GameUiChangesHandler {
 
 
 
+        //Fired after every GE offer slot redraw
+        //This seems to happen after any offer updates or if buttons are pressed inside the interface
+        //https://github.com/RuneStar/cs2-scripts/blob/a144f1dceb84c3efa2f9e90648419a11ee48e7a2/scripts/%5Bclientscript%2Cge_offers_switchpanel%5D.cs2
+        //need to redraw stuff when this happens as all widgets get reset
         if (event.getScriptId() == 804) {
             log.info("the script thing is firing!");
             if (flag) {
 //                flag = false;
                 createSlotStateWidgets();
             }
-            //Fired after every GE offer slot redraw
-            //This seems to happen after any offer updates or if buttons are pressed inside the interface
-            //https://github.com/RuneStar/cs2-scripts/blob/a144f1dceb84c3efa2f9e90648419a11ee48e7a2/scripts/%5Bclientscript%2Cge_offers_switchpanel%5D.cs2
+
             if (plugin.getConfig().slotTimersEnabled()) {
                 plugin.setWidgetsOnSlotTimers();
             }
@@ -248,6 +263,7 @@ public class GameUiChangesHandler {
             }
 
             plugin.getClientThread().invokeLater(() -> {
+//                plugin.getClient().getSpriteOverrides().put(SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL, ImageUtil.getImageSpritePixels(Icons.gnome, plugin.getClient()));
                 w.setWidget(offerSlot);
             });
 

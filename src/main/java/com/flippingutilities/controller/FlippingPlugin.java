@@ -38,6 +38,7 @@ import com.flippingutilities.ui.settings.SettingsPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.uiutilities.Icons;
+import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.jobs.CacheUpdaterJob;
 import com.flippingutilities.utilities.*;
@@ -57,6 +58,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ClientShutdown;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.game.SpriteManager;
 import net.runelite.client.input.KeyListener;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
@@ -120,6 +122,9 @@ public class FlippingPlugin extends Plugin {
 
     @Inject
     private KeyManager keyManager;
+
+    @Inject
+    private SpriteManager spriteManager;
 
     @Inject
     @Getter
@@ -252,9 +257,14 @@ public class FlippingPlugin extends Plugin {
                 log.info("user is already logged in when they downloaded/enabled the plugin");
                 onLoggedInGameState();
             }
+            UIUtilities.setAltGeSprites(spriteManager, client);
+            //client.getSpriteOverrides().put(SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL, ImageUtil.getImageSpritePixels(Icons.gnome,client));
+
+
             //stops scheduling this task
 //            client.getWidgetSpriteCache().reset();
-//            client.getSpriteOverrides().put(8718, ImageUtil.getImageSpritePixels(Icons.account,client));
+//            client.getSpriteOverrides().put(1120, ImageUtil.getImageSpritePixels(Icons.account,client));
+//            client.getSpriteOverrides().put(132111, ImageUtil.getImageSpritePixels(Icons.account,client));
             return true;
         });
     }

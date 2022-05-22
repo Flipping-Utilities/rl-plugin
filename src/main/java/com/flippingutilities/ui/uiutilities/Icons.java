@@ -6,6 +6,7 @@ import net.runelite.client.util.ImageUtil;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.time.Instant;
 
 public class Icons {
     public static final Dimension ICON_SIZE = new Dimension(32, 32);
@@ -125,10 +126,28 @@ public class Icons {
 
     public static final ImageIcon RECIPE_HELP;
 
-    public static final BufferedImage account;
+
+    public static final BufferedImage geBorderBottom;
+    public static final BufferedImage geCornerBottomLeft;
+    public static final BufferedImage geCornerBottomRight;
+    public static final BufferedImage geCornerTopLeft;
+    public static final BufferedImage geCornerTopRight;
+    public static final BufferedImage geHorizontalLine;
+    public static final BufferedImage geIntersectionLeft;
+    public static final BufferedImage getGeIntersectionRight;
+    public static final BufferedImage geBorderLeft;
+    public static final BufferedImage geBorderRight;
+    public static final BufferedImage geBorderTop;
+    public static final BufferedImage geItemBox;
+
+    public static final BufferedImage gnome;
 
     static
     {
+
+        long start = Instant.now().toEpochMilli();
+        System.out.println("YEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEET " + Instant.now().getEpochSecond());
+
         final BufferedImage openIcon = ImageUtil
                 .getResourceStreamFromClass(FlippingPlugin.class, "/small_open_arrow.png");
         CLOSE_ICON = new ImageIcon(openIcon);
@@ -175,7 +194,7 @@ public class Icons {
         SORT_BY_PROFIT_HALF_ON_ICON = new ImageIcon(sortByProfitOff.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
         SORT_BY_RECENT_HALF_ON_ICON = new ImageIcon(sortByRecentOff.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
         SORT_BY_ROI_HALF_ON_ICON = new ImageIcon(sortByRoiOff.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
-
+        System.out.println("MDILELLELELELELLELE");
         STAR_OFF_ICON = new ImageIcon(ImageUtil.alphaOffset(starOff, 0.53f).getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
         SORT_BY_RECENT_OFF_ICON = new ImageIcon(ImageUtil.alphaOffset(sortByRecentOff, 0.53f).getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
         SORT_BY_ROI_OFF_ICON = new ImageIcon(ImageUtil.alphaOffset(sortByRoiOff, 0.53f).getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
@@ -315,8 +334,25 @@ public class Icons {
         CONSTRUCTION = new ImageIcon(construction);
 
         final BufferedImage recipeHelp = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/recipehelp.png");
+
         RECIPE_HELP = new ImageIcon(recipeHelp);
 
-        account = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/gnome.png");
+        geBorderBottom = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/ge-sprites/border_offer_bottom.png");
+        geCornerBottomLeft = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/ge-sprites/border_offer_corner_bottom_left.png");
+        geCornerBottomRight = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/ge-sprites/border_offer_corner_bottom_right.png");
+        geCornerTopLeft = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/ge-sprites/border_offer_corner_top_left.png");
+        geCornerTopRight = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/ge-sprites/border_offer_corner_top_right.png");
+        geHorizontalLine = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/ge-sprites/border_offer_horizontal.png");
+        geIntersectionLeft = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/ge-sprites/border_offer_intersection_left.png");
+        getGeIntersectionRight = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/ge-sprites/border_offer_intersection_right.png");
+        geBorderLeft = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/ge-sprites/border_offer_left.png");
+        geBorderRight = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/ge-sprites/border_offer_right.png");
+        geBorderTop = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/ge-sprites/border_offer_top.png");
+        geItemBox = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/ge-sprites/selected_item_box.png");
+
+        gnome = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/gnome.png");
+
+        long end = Instant.now().toEpochMilli();
+        System.out.println(end-start);
     }
 }
