@@ -293,43 +293,4 @@ public class UIUtilities
 		g.dispose();
 		return dyed;
 	}
-
-	public static void setAltGeSprites(SpriteManager spriteManager, Client client) {
-		Map<Integer, BufferedImage> idToSpriteImage = new HashMap<>();
-		idToSpriteImage.put(SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL, Icons.geBorderTop);
-		idToSpriteImage.put(SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL_989, Icons.geBorderBottom);
-		idToSpriteImage.put(SpriteID.UNKNOWN_BORDER_EDGE_VERTICAL, Icons.geBorderLeft);
-		idToSpriteImage.put(SpriteID.UNKNOWN_BORDER_EDGE_VERTICAL_990, Icons.geBorderRight);
-		idToSpriteImage.put(SpriteID.UNKNOWN_BORDER_CORNER_TOP_LEFT, Icons.geCornerTopLeft);
-		idToSpriteImage.put(SpriteID.UNKNOWN_BORDER_CORNER_TOP_RIGHT, Icons.geCornerTopRight);
-		idToSpriteImage.put(SpriteID.UNKNOWN_BORDER_CORNER_BOTTOM_LEFT, Icons.geCornerBottomLeft);
-		idToSpriteImage.put(SpriteID.UNKNOWN_BORDER_CORNER_BOTTOM_RIGHT, Icons.geCornerBottomRight);
-		idToSpriteImage.put(SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL_995, Icons.geHorizontalLine);
-		idToSpriteImage.put(SpriteID.UNKNOWN_BORDER_INTERSECTION_LEFT, Icons.geIntersectionLeft);
-		idToSpriteImage.put(SpriteID.UNKNOWN_BORDER_INTERSECTION_RIGHT, Icons.getGeIntersectionRight);
-		idToSpriteImage.put(SpriteID.GE_SELECTED_ITEM_BOX, Icons.geItemBox);
-
-
-		/**
-		 * 987 top slot, 5th child
-		 * 989 bottom slot border, 6th child
-		 * 988 left slot border, 7th
-		 * 990 right slot border, 8th
-		 * 991 top left, 9th
-		 * 992 top right, 10th
-		 * 993 bottom left, 11th
-		 * 994 bottom right, 12th
-		 * 995 top middle bar thing, 13th
-		 * 996 top middle bar left, 14th
-		 * 997 top middle bar right, 15th
-		 * 1120 behind item icon, 17th
-		 */
-
-		idToSpriteImage.forEach((id, image) -> {
-			//new Color(65, 50, 50)
-
-//			BufferedImage dyedImage = dye(image,new Color(131, 54, 54));
-			//client.getSpriteOverrides().put(id, ImageUtil.getImageSpritePixels(image, client));
-		});
-	}
 }
