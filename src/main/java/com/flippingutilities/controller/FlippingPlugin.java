@@ -37,6 +37,7 @@ import com.flippingutilities.ui.login.LoginPanel;
 import com.flippingutilities.ui.settings.SettingsPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
+import com.flippingutilities.ui.uiutilities.GeSpriteLoader;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
@@ -257,10 +258,9 @@ public class FlippingPlugin extends Plugin {
                 log.info("user is already logged in when they downloaded/enabled the plugin");
                 onLoggedInGameState();
             }
-            UIUtilities.setAltGeSprites(spriteManager, client);
             //client.getSpriteOverrides().put(SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL, ImageUtil.getImageSpritePixels(Icons.gnome,client));
 
-
+            GeSpriteLoader.setClientSpriteOverrides(client);
             //stops scheduling this task
 //            client.getWidgetSpriteCache().reset();
 //            client.getSpriteOverrides().put(1120, ImageUtil.getImageSpritePixels(Icons.account,client));
@@ -662,9 +662,6 @@ public class FlippingPlugin extends Plugin {
 
 
     public void setWidgetsOnSlotTimers() {
-//        SpriteID
-//        client.getSpriteOverrides()
-//        ImageUtil.getImageSpritePixels()
         for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
             SlotActivityTimer timer = dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().get(slotIndex);
 

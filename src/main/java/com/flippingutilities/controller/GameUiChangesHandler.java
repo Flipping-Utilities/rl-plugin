@@ -218,17 +218,15 @@ public class GameUiChangesHandler {
             log.info("collect ALL slot script thing fired");
         }
 
-        to prevent the collect thing from removing the widget changes on the slot
-            i can lsiten on the ge invetory container script event thing
-            it may not be an issue really but if i want to prevent rapid fire widget
-            reconstructions, i can check if the widget is actually null first
+//        to prevent the collect thing from removing the widget changes on the slot
+//            i can lsiten on the ge invetory container script event thing
+//            it may not be an issue really but if i want to prevent rapid fire widget
+//            reconstructions, i can check if the widget is actually null first
 
         //ge history interface closed, so the geHistoryTabPanel should no longer show
         if (event.getScriptId() == 29) {
             plugin.getMasterPanel().selectPreviouslySelectedTab();
         }
-
-
 
         //Fired after every GE offer slot redraw
         //This seems to happen after any offer updates or if buttons are pressed inside the interface
