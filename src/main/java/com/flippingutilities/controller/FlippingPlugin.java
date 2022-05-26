@@ -28,6 +28,7 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.db.TradePersister;
+import com.flippingutilities.jobs.SlotFetcherJob;
 import com.flippingutilities.jobs.SlotSenderJob;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.MasterPanel;
@@ -38,10 +39,10 @@ import com.flippingutilities.ui.settings.SettingsPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.uiutilities.GeSpriteLoader;
-import com.flippingutilities.ui.uiutilities.Icons;
-import com.flippingutilities.ui.uiutilities.UIUtilities;
+import com.flippingutilities.ui.uiutilities.WidgetConstants;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.jobs.CacheUpdaterJob;
+import com.flippingutilities.ui.widgets.SlotStateDrawer;
 import com.flippingutilities.utilities.*;
 import com.flippingutilities.jobs.WikiDataFetcherJob;
 import com.google.common.primitives.Shorts;
@@ -177,6 +178,7 @@ public class FlippingPlugin extends Plugin {
     private CacheUpdaterJob cacheUpdaterJob;
     private WikiDataFetcherJob wikiDataFetcherJob;
     private SlotSenderJob slotStateSenderJob;
+    private SlotFetcherJob slotFetcherJob;
 
     private ScheduledFuture slotTimersTask;
     private Instant startUpTime = Instant.now();
@@ -206,6 +208,7 @@ public class FlippingPlugin extends Plugin {
     public TradePersister tradePersister;
     private RecipeHandler recipeHandler;
     private FlippingItemHandler flippingItemHandler;
+    private SlotStateDrawer slotStateDrawer;
 
     @Override
     protected void startUp() {
@@ -221,6 +224,7 @@ public class FlippingPlugin extends Plugin {
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
         apiAuthHandler = new apiAuthHandler(this);
         apiRequestHandler = new ApiRequestHandler(this);
+        slotStateDrawer = new SlotStateDrawer(this);
 
         flippingPanel = new FlippingPanel(this);
         statPanel = new StatsPanel(this);
@@ -286,6 +290,7 @@ public class FlippingPlugin extends Plugin {
         clientToolbar.removeNavigation(navButton);
     }
 
+    //called when the X button on the client is pressed
     @Subscribe(priority = 101)
     public void onClientShutdown(ClientShutdown clientShutdownEvent) {
         if (generalRepeatingTasks != null) {
@@ -299,6 +304,7 @@ public class FlippingPlugin extends Plugin {
         cacheUpdaterJob.stop();
         wikiDataFetcherJob.stop();
         slotStateSenderJob.stop();
+        slotFetcherJob.stop();
     }
 
     @Subscribe
@@ -520,12 +526,17 @@ public class FlippingPlugin extends Plugin {
         slotStateSenderJob = new SlotSenderJob(this, httpClient);
         slotStateSenderJob.subscribe((success) -> loginPanel.onSlotRequest(success));
         slotStateSenderJob.start();
+
+        slotFetcherJob = new SlotFetcherJob(this, httpClient, executor);
+        slotFetcherJob.subscribe((r) -> slotStateDrawer.setRemoteAccountSlots(r));
+        slotFetcherJob.start();
     }
 
     private void onWikiFetch(WikiRequest wikiRequest, Instant timeOfRequestCompletion) {
         lastWikiRequest = wikiRequest;
         timeOfLastWikiRequest = timeOfRequestCompletion;
         flippingPanel.updateWikiDisplays(wikiRequest, timeOfRequestCompletion);
+        slotStateDrawer.setWikiRequest(wikiRequest);
     }
 
     /**
@@ -660,6 +671,10 @@ public class FlippingPlugin extends Plugin {
         }
     }
 
+    public void setWidgetsOnSlotStateDrawer() {
+        Widget[] slotWidgets = client.getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, WidgetConstants.SLOT_CONTAINER).getStaticChildren();
+        slotStateDrawer.setSlotWidgets(slotWidgets);
+    }
 
     public void setWidgetsOnSlotTimers() {
         for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
@@ -667,7 +682,7 @@ public class FlippingPlugin extends Plugin {
 
             //Get the offer slots from the window container
             //We add one to the index, as the first widget is the text above the offer slots
-            Widget offerSlot = client.getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, 5).getStaticChildren()[slotIndex + 1];
+            Widget offerSlot = client.getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, WidgetConstants.SLOT_CONTAINER).getStaticChildren()[slotIndex + 1];
 
             if (offerSlot == null) {
                 return;
@@ -924,7 +939,7 @@ public class FlippingPlugin extends Plugin {
                                 slotsPanel.updateTimerDisplays(slotWidgetTimer.getSlotIndex(), slotWidgetTimer.createFormattedTimeString());
                                 slotWidgetTimer.updateTimerDisplay();
                             } catch (Exception e) {
-                                log.info("exception when trying to update timer. e: {}", e);
+                                log.error("exception when trying to update timer", e);
                             }
                         })), 1000, 1000, TimeUnit.MILLISECONDS);
     }

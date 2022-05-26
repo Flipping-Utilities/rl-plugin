@@ -2,6 +2,7 @@ package com.flippingutilities.ui.uiutilities;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import net.runelite.api.Client;
+import net.runelite.api.widgets.WidgetID;
 import net.runelite.client.util.ImageUtil;
 
 import java.awt.image.BufferedImage;
@@ -23,7 +24,6 @@ public class GeSpriteLoader {
     public static final int LEFT_INTERSECTION_CHILD_IDX = 14;
     public static final int RIGHT_INTERSECTION_CHILD_IDX = 15;
     public static final int ITEM_BOX_CHILD_IDX = 17;
-
 
     public static final List<Integer> DYNAMIC_CHILDREN_IDXS = Arrays.asList(
         BOTTOM_CHILD_IDX, BOTTOM_LEFT_CHILD_IDX,BOTTOM_RIGHT_CHILD_IDX,

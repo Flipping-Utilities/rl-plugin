@@ -7,7 +7,7 @@ import java.util.List;
 
 @Data
 @NoArgsConstructor
-public class RemoteSlotsResponse {
+public class RemoteAccountSlots {
     String rsn;
-    List<RemoteSlot> remoteSlots;
+    List<RemoteSlot> slots;
 }

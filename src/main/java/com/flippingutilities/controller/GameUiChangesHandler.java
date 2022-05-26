@@ -4,9 +4,7 @@ import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.offereditor.AbstractOfferEditorPanel;
 import com.flippingutilities.ui.offereditor.OfferEditorContainerPanel;
-import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.widgets.OfferEditor;
-import com.flippingutilities.ui.widgets.SlotStateWidget;
 import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.WikiRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +14,6 @@ import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.widgets.*;
-import net.runelite.client.util.ImageUtil;
 import net.runelite.http.api.item.ItemStats;
 
 import java.util.Optional;
@@ -184,6 +181,10 @@ public class GameUiChangesHandler {
         }
     }
 
+    /**
+     * Can't use this for resetting the widgets on the slot widget handlers bc no WidgetLoaded
+     * events are fired when the widgets are redrawn (?).
+     */
     public void onWidgetLoaded(WidgetLoaded event) {
         //ge history widget loaded
         //GE_HISTORY_TAB_WIDGET_ID does not load when history tab is opened from the banker right click. It only loads when
@@ -206,71 +207,27 @@ public class GameUiChangesHandler {
         }
     }
 
+    /**
+     * script 804 is Fired after every GE offer slot redraw
+     * This seems to happen after any offer updates or if buttons are pressed inside the interface
+     * https://github.com/RuneStar/cs2-scripts/blob/a144f1dceb84c3efa2f9e90648419a11ee48e7a2/scripts/%5Bclientscript%2Cge_offers_switchpanel%5D.cs2
+     * need to redraw stuff when this happens as all widgets get reset
+     *
+     * script 782 fires at most of the times 804 is fired but also when the collect button is pressed
+     * which is important bc that resets the widgets too
+     */
     public void onScriptPostFired(ScriptPostFired event) {
-        if (event.getScriptId() == 782) {
-            log.info("ge invetory items container thing");
-        }
-        if (event.getScriptId() == 783) {
-            log.info("ge invetory items container child thing");
-        }
-
-        if (event.getScriptId() == 706) {
-            log.info("collect ALL slot script thing fired");
-        }
-
-//        to prevent the collect thing from removing the widget changes on the slot
-//            i can lsiten on the ge invetory container script event thing
-//            it may not be an issue really but if i want to prevent rapid fire widget
-//            reconstructions, i can check if the widget is actually null first
-
         //ge history interface closed, so the geHistoryTabPanel should no longer show
         if (event.getScriptId() == 29) {
             plugin.getMasterPanel().selectPreviouslySelectedTab();
         }
 
-        //Fired after every GE offer slot redraw
-        //This seems to happen after any offer updates or if buttons are pressed inside the interface
-        //https://github.com/RuneStar/cs2-scripts/blob/a144f1dceb84c3efa2f9e90648419a11ee48e7a2/scripts/%5Bclientscript%2Cge_offers_switchpanel%5D.cs2
-        //need to redraw stuff when this happens as all widgets get reset
-        if (event.getScriptId() == 804) {
-            log.info("the script thing is firing!");
-            if (flag) {
-//                flag = false;
-                createSlotStateWidgets();
-            }
-
-            if (plugin.getConfig().slotTimersEnabled()) {
-                plugin.setWidgetsOnSlotTimers();
-            }
+        if (event.getScriptId() == 782 || event.getScriptId() == 804) {
+           plugin.setWidgetsOnSlotStateDrawer();
         }
-    }
 
-    public void createSlotStateWidgets() {
-        log.info("creating slot state widgets");
-        for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
-//            SlotActivityTimer timer = dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().get(slotIndex);
-            SlotStateWidget w = new SlotStateWidget();
-
-            //Get the offer slots from the window container
-            //We add one to the index, as the first widget is the text above the offer slots
-            Widget offerSlot = plugin.getClient().getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, 5).getStaticChildren()[slotIndex + 1];
-
-
-            if (offerSlot == null) {
-                return;
-            }
-
-            plugin.getClientThread().invokeLater(() -> {
-//                plugin.getClient().getSpriteOverrides().put(SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL, ImageUtil.getImageSpritePixels(Icons.gnome, plugin.getClient()));
-                w.setWidget(offerSlot);
-            });
-
-
-//            if (timer.getSlotWidget() == null) {
-//                timer.setWidget(offerSlot);
-//            }
-
-//            clientThread.invokeLater(timer::updateTimerDisplay);
+        if (event.getScriptId() == 804 && plugin.getConfig().slotTimersEnabled()) {
+            plugin.setWidgetsOnSlotTimers();
         }
     }
 
