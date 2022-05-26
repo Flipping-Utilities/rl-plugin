@@ -4,19 +4,16 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.utilities.SlotState;
-import com.flippingutilities.utilities.SlotsUpdate;
-import com.flippingutilities.utilities.WikiRequest;
+import com.flippingutilities.utilities.AccountSlotsUpdate;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import okhttp3.*;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 @Slf4j
@@ -25,7 +22,7 @@ public class SlotSenderJob {
     ScheduledExecutorService executor;
     OkHttpClient httpClient;
     Future slotStateSenderTask;
-    SlotsUpdate previouslySentSlotUpdate;
+    AccountSlotsUpdate previouslySentSlotUpdate;
     List<Consumer<Integer>> subscribers = new ArrayList<>();
     public static int PERIOD = 10; //seconds
     public boolean justLoggedIn = false;
@@ -58,21 +55,21 @@ public class SlotSenderJob {
         }
 
         List<SlotState> currentSlotStates = this.getCurrentSlots();
-        SlotsUpdate slotsUpdate = new SlotsUpdate(plugin.getCurrentlyLoggedInAccount(), currentSlotStates);
-        if (slotsUpdate.equals(this.previouslySentSlotUpdate) && !justLoggedIn) {
+        AccountSlotsUpdate accountSlotsUpdate = new AccountSlotsUpdate(plugin.getCurrentlyLoggedInAccount(), currentSlotStates);
+        if (accountSlotsUpdate.equals(this.previouslySentSlotUpdate) && !justLoggedIn) {
             log.debug("no updates to slots since the last time I sent them, not sending any requests.");
             subscribers.forEach(subscriber -> subscriber.accept(0));
             return;
         }
         justLoggedIn = false;
-        plugin.getApiRequestHandler().updateGeSlots(slotsUpdate)
+        plugin.getApiRequestHandler().updateGeSlots(accountSlotsUpdate)
                 .whenComplete((response, exception) -> {
                     if (exception != null) {
                         log.debug("could not send slot update successfully", exception);
                         subscribers.forEach(subscriber -> subscriber.accept(2));
 
                     } else {
-                        previouslySentSlotUpdate = slotsUpdate;
+                        previouslySentSlotUpdate = accountSlotsUpdate;
                         subscribers.forEach(subscriber -> subscriber.accept(1));
                         log.debug("sent slot update successfully!");
 

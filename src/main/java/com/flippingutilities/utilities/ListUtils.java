@@ -1,7 +1,10 @@
 package com.flippingutilities.utilities;
 
-import java.util.ArrayList;
-import java.util.List;
+
+import org.apache.commons.lang3.tuple.Pair;
+
+import java.util.*;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.IntStream;
 
@@ -32,5 +35,25 @@ public class ListUtils {
             }
         }
         return subLists;
+    }
+
+    /**
+     * Guava has a util function for converting a list to a map, but you are only
+     * allowed to provide it a function which generates the keys of the map...it will
+     * use the values of the list as the values of the map
+     *
+     * This method allows you to provide a function that generates a k,v pair based on
+     * a value in the provided list
+     */
+    public static <K, V, L> Map<K, V> toMap(
+        List<L> values,
+        Function<L, Pair<K,V>> keyValueFunction)
+    {
+        Map<K,V> m = new HashMap<>();
+        values.forEach(l -> {
+            Pair<K, V> pair = keyValueFunction.apply(l);
+            m.put(pair.getKey(), pair.getValue());
+        });
+        return m;
     }
 }

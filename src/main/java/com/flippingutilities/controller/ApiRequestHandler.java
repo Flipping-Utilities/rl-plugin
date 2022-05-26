@@ -1,9 +1,6 @@
 package com.flippingutilities.controller;
 
-import com.flippingutilities.utilities.OsrsAccount;
-import com.flippingutilities.utilities.SlotState;
-import com.flippingutilities.utilities.SlotsUpdate;
-import com.flippingutilities.utilities.TokenResponse;
+import com.flippingutilities.utilities.*;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
@@ -22,6 +19,7 @@ public class ApiRequestHandler {
     FlippingPlugin plugin;
     OkHttpClient httpClient;
     private static String BASE_API_URL = System.getenv("OSRS_CLOUD_API_BASE_URL") != null ? System.getenv("OSRS_CLOUD_API_BASE_URL")  : "https://api.osrs.cloud/v1/";
+    public static String SLOT_FETCH_URL = BASE_API_URL + "ge/slots";
     public static String SLOT_UPDATE_URL = BASE_API_URL + "ge/slots/update";
     public static String JWT_HEALTH_URL = BASE_API_URL + "auth/jwt/health";
     public static String JWT_REFRESH_URL = BASE_API_URL + "auth/refresh";
@@ -77,12 +75,12 @@ public class ApiRequestHandler {
 
     //don't care about the response body (if there is any), so we just return the entire response in case the caller
     //wants something.
-    public CompletableFuture<Integer> updateGeSlots(SlotsUpdate slotsUpdate) {
+    public CompletableFuture<Integer> updateGeSlots(AccountSlotsUpdate accountSlotsUpdate) {
         if (!plugin.getApiAuthHandler().isHasValidJWT()) {
             return null;
         }
         String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
-        String json = plugin.gson.newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(slotsUpdate);
+        String json = plugin.gson.newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(accountSlotsUpdate);
         RequestBody body = RequestBody.create(MediaType.parse("application/json"), json);
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
@@ -91,6 +89,24 @@ public class ApiRequestHandler {
                 url(SLOT_UPDATE_URL).
                 build();
         return getResponseFuture(request, new TypeToken<ApiResponse<Integer>>(){}).thenApply(r -> r.data);
+    }
+
+    /**
+     * Fetches ge slots from the api. The api returns more data than RemoteSlotsResponse, but I
+     * only kept the relevant fields for now.
+     */
+    public CompletableFuture<List<RemoteAccountSlots>> fetchGeSlots() {
+        if (!plugin.getApiAuthHandler().isHasValidJWT()) {
+            return null;
+        }
+        String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
+        Request request = new Request.Builder().
+            get().
+            header("User-Agent", "FlippingUtilities").
+            header("Authorization", "bearer " + jwt).
+            url(SLOT_FETCH_URL).
+            build();
+        return getResponseFuture(request, new TypeToken<ApiResponse<List<RemoteAccountSlots>>>(){}).thenApply(r -> r.data);
     }
 
     /**
@@ -149,7 +165,8 @@ public class ApiRequestHandler {
                 }
                 else {
                     try {
-                        ApiResponse<T> apiResponse = plugin.gson.fromJson(response.body().string(), type.getType());
+                        String body =  response.body().string();
+                        ApiResponse<T> apiResponse = plugin.gson.fromJson(body, type.getType());
                         if (apiResponse == null) {
                             future.completeExceptionally(new NullDtoException(request, response, type.toString()));
                         }

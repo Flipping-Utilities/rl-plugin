@@ -1,14 +1,14 @@
 package com.flippingutilities.utilities;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
 public class RemoteSlot {
-    Integer index;
+    int index;
     SlotPredictedState predictedState;
-    Integer timeInRange;
+    int timeInRange;
 }
-
-

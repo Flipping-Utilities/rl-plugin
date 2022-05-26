@@ -129,16 +129,20 @@ public class OfferEvent
 	 */
 	public boolean isComplete()
 	{
-		return
-			state == GrandExchangeOfferState.BOUGHT ||
-				state == GrandExchangeOfferState.SOLD ||
-				state == GrandExchangeOfferState.CANCELLED_BUY ||
-				state == GrandExchangeOfferState.CANCELLED_SELL;
+		return isComplete(state);
 	}
 
 	public boolean isCancelled()
 	{
 		return state == GrandExchangeOfferState.CANCELLED_BUY || state == GrandExchangeOfferState.CANCELLED_SELL;
+	}
+
+	public static boolean isComplete(GrandExchangeOfferState state) {
+		return
+			state == GrandExchangeOfferState.BOUGHT ||
+				state == GrandExchangeOfferState.SOLD ||
+				state == GrandExchangeOfferState.CANCELLED_BUY ||
+				state == GrandExchangeOfferState.CANCELLED_SELL;
 	}
 
 	/**
