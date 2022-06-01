@@ -1,9 +1,30 @@
 package com.flippingutilities.ui.uiutilities;
 
+import net.runelite.api.SpriteID;
+
 import java.util.Arrays;
 import java.util.List;
 
 public class CustomSpriteIds {
+    public static final int DEFAULT_GE_SLOT_BOTTOM = 989;
+    public static final int DEFAULT_GE_SLOT_BOTTOM_LEFT = 993;
+    public static final int DEFAULT_GE_SLOT_BOTTOM_RIGHT = 994;
+    public static final int DEFAULT_GE_SLOT_TOP_LEFT = 991;
+    public static final int DEFAULT_GE_SLOT_TOP_RIGHT = 992;
+    public static final int DEFAULT_GE_SLOT_HORIZONTAL = 995;
+    public static final int DEFAULT_GE_SLOT_INTERSECTION_LEFT = 996;
+    public static final int DEFAULT_GE_SLOT_INTERSECTION_RIGHT = 997;
+    public static final int DEFAULT_GE_SLOT_LEFT = 988;
+    public static final int DEFAULT_GE_SLOT_RIGHT = 990;
+    public static final int DEFAULT_GE_SLOT_TOP = 987;
+    public static final int DEFAULT_GE_SLOT_ITEM_BOX = SpriteID.GE_SELECTED_ITEM_BOX;
+    public static List<Integer> DEFAULT_SLOT_SPRITES = Arrays.asList(
+        DEFAULT_GE_SLOT_BOTTOM, DEFAULT_GE_SLOT_BOTTOM_LEFT, DEFAULT_GE_SLOT_BOTTOM_RIGHT,
+        DEFAULT_GE_SLOT_TOP_LEFT, DEFAULT_GE_SLOT_TOP_RIGHT, DEFAULT_GE_SLOT_HORIZONTAL,
+        DEFAULT_GE_SLOT_INTERSECTION_LEFT, DEFAULT_GE_SLOT_INTERSECTION_RIGHT, DEFAULT_GE_SLOT_LEFT,
+        DEFAULT_GE_SLOT_RIGHT, DEFAULT_GE_SLOT_TOP, DEFAULT_GE_SLOT_ITEM_BOX);
+
+    
     public static final int RED_GE_SLOT_BOTTOM = 9000;
     public static final int RED_GE_SLOT_BOTTOM_LEFT = 9001;
     public static final int RED_GE_SLOT_BOTTOM_RIGHT = 9002;

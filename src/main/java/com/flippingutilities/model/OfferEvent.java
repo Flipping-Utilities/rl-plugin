@@ -145,6 +145,12 @@ public class OfferEvent
 				state == GrandExchangeOfferState.CANCELLED_SELL;
 	}
 
+	public static boolean isBuy(GrandExchangeOfferState state) {
+		return state == GrandExchangeOfferState.BOUGHT
+			|| state == GrandExchangeOfferState.CANCELLED_BUY
+			|| state == GrandExchangeOfferState.BUYING;
+	}
+
 	/**
 	 * when an offer is complete, two events are generated: a buying/selling event and a bought/sold event.
 	 * this method identifies the redundant buying/selling event before the bought/sold event.

@@ -262,13 +262,8 @@ public class FlippingPlugin extends Plugin {
                 log.info("user is already logged in when they downloaded/enabled the plugin");
                 onLoggedInGameState();
             }
-            //client.getSpriteOverrides().put(SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL, ImageUtil.getImageSpritePixels(Icons.gnome,client));
 
             GeSpriteLoader.setClientSpriteOverrides(client);
-            //stops scheduling this task
-//            client.getWidgetSpriteCache().reset();
-//            client.getSpriteOverrides().put(1120, ImageUtil.getImageSpritePixels(Icons.account,client));
-//            client.getSpriteOverrides().put(132111, ImageUtil.getImageSpritePixels(Icons.account,client));
             return true;
         });
     }
