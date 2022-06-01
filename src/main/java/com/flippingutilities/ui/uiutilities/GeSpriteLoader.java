@@ -2,7 +2,6 @@ package com.flippingutilities.ui.uiutilities;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import net.runelite.api.Client;
-import net.runelite.api.widgets.WidgetID;
 import net.runelite.client.util.ImageUtil;
 
 import java.awt.image.BufferedImage;
@@ -31,9 +30,10 @@ public class GeSpriteLoader {
         LEFT_INTERSECTION_CHILD_IDX, RIGHT_INTERSECTION_CHILD_IDX,
         LEFT_CHILD_IDX, RIGHT_CHILD_IDX, TOP_CHILD_IDX, ITEM_BOX_CHILD_IDX);
 
-    public static Map<Integer, Integer> CHILDREN_IDX_TO_RED_SPRITE_ID = createChildIdToSpriteIdMap(CustomSpriteIds.RED_SLOT_SPRITES);
-    public static Map<Integer, Integer> CHILDREN_IDX_TO_BLUE_SPRITE_ID = createChildIdToSpriteIdMap(CustomSpriteIds.BLUE_SLOT_SPRITES);
-    public static Map<Integer, Integer> CHILDREN_IDX_TO_GREEN_SPRITE_ID = createChildIdToSpriteIdMap(CustomSpriteIds.GREEN_SLOT_SPRITES);
+    public static Map<Integer, Integer> CHILDREN_IDX_TO_DEFAULT_SPRITE_ID = createChildIdxToSpriteIdMap(CustomSpriteIds.DEFAULT_SLOT_SPRITES);
+    public static Map<Integer, Integer> CHILDREN_IDX_TO_RED_SPRITE_ID = createChildIdxToSpriteIdMap(CustomSpriteIds.RED_SLOT_SPRITES);
+    public static Map<Integer, Integer> CHILDREN_IDX_TO_BLUE_SPRITE_ID = createChildIdxToSpriteIdMap(CustomSpriteIds.BLUE_SLOT_SPRITES);
+    public static Map<Integer, Integer> CHILDREN_IDX_TO_GREEN_SPRITE_ID = createChildIdxToSpriteIdMap(CustomSpriteIds.GREEN_SLOT_SPRITES);
 
     private static List<String> FILE_NAMES = Arrays.asList(
         "border_offer_bottom.png",
@@ -65,7 +65,7 @@ public class GeSpriteLoader {
         }
     }
 
-    private static Map<Integer, Integer> createChildIdToSpriteIdMap(List<Integer> spriteIds) {
+    private static Map<Integer, Integer> createChildIdxToSpriteIdMap(List<Integer> spriteIds) {
         Map<Integer, Integer> childIdToSpriteIdMap = new HashMap<>();
         for (int i = 0; i < spriteIds.size(); i++) {
             childIdToSpriteIdMap.put(DYNAMIC_CHILDREN_IDXS.get(i), spriteIds.get(i));
