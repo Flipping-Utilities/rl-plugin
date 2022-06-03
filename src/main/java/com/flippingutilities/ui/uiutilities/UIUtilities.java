@@ -205,6 +205,8 @@ public class UIUtilities
 		//and so on. Whereas this just opens up popup menu with no border so this is more suited for the on hover
 		//popups.
 		//TODO why does thus even have to be a popup menu? Can't this just be a jlabel or jpanel?
+		//^ bc the jlabel and jpanel can't just show anywhere on the screen unfortunately. Maybe I'm doing something
+		//wrong but it seems only things like popups can be arbitrarily rendered anywhere
 		component.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseEntered(MouseEvent e) {
