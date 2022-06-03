@@ -9,12 +9,11 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.FontID;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
-import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetPositionMode;
-import net.runelite.api.widgets.WidgetSizeMode;
-import net.runelite.api.widgets.WidgetType;
+import net.runelite.api.SpriteID;
+import net.runelite.api.widgets.*;
 import org.apache.commons.lang3.tuple.Pair;
 
+import javax.swing.*;
 import java.awt.*;
 import java.time.Duration;
 import java.time.Instant;
@@ -28,7 +27,10 @@ public class SlotStateDrawer {
     FlippingPlugin plugin;
     WikiRequest wikiRequest;
     Widget[] slotWidgets;
-    Map<Integer, Widget> slotIdxTimeInRangeWidget = new HashMap<>();
+    Map<Integer, Widget> slotIdxToTimeInRangeWidget = new HashMap<>();
+    Map<Integer, Widget> slotIdxToDescWidget = new HashMap<>();
+    JPopupMenu popup = new JPopupMenu();
+    JPanel detailsPanel = new JPanel();
 
     public SlotStateDrawer(FlippingPlugin plugin) {
         this.plugin = plugin;
@@ -63,15 +65,15 @@ public class SlotStateDrawer {
     }
 
     private void draw() {
-        List<RemoteSlot> remoteSlots = getSlotStateToDraw();
+        List<Optional<RemoteSlot>> remoteSlots = getSlotStateToDraw();
         for (int i = 0; i < remoteSlots.size(); i++) {
-            RemoteSlot remoteSlot = remoteSlots.get(i);
+            Optional<RemoteSlot> maybeRemoteSlot = remoteSlots.get(i);
             Widget slotWidget = slotWidgets[i + 1];
-            if (remoteSlot == null) {
+            if (!maybeRemoteSlot.isPresent()) {
                 resetSlot(i, slotWidget);
             }
             else {
-                drawOnSlot(remoteSlot, slotWidget);
+                drawOnSlot(maybeRemoteSlot.get(), slotWidget);
             }
         }
     }
@@ -83,10 +85,14 @@ public class SlotStateDrawer {
             int spriteId = spriteIdMap.get(idx);
             child.setSpriteId(spriteId);
         });
-        Widget timeInRangeWidget = slotIdxTimeInRangeWidget.get(slotIdx);
+        Widget timeInRangeWidget = slotIdxToTimeInRangeWidget.get(slotIdx);
         if (timeInRangeWidget != null) {
             timeInRangeWidget.setHidden(true);
-            timeInRangeWidget.setOriginalHeight(0);
+        }
+
+        Widget descWidget = slotIdxToDescWidget.get(slotIdx);
+        if (descWidget != null) {
+            descWidget.setHidden(true);
         }
     }
 
@@ -112,7 +118,6 @@ public class SlotStateDrawer {
             child.setSpriteId(spriteId);
         });
 
-
         long secondsSinceLastUpdate =
             slot.getPredictedState() == SlotPredictedState.IN_RANGE
                 ? Instant.now().getEpochSecond() - slot.getLatestPredictedFilledTimestamp()
@@ -120,27 +125,135 @@ public class SlotStateDrawer {
         long latestTimeInRange = slot.getTimeInRange() + secondsSinceLastUpdate;
 
         if (latestTimeInRange > 0) {
-            log.info("slot {} time in range is {}", slot.getIndex(), latestTimeInRange);
-            Widget timeInRangeWidget = slotWidget.createChild(26, WidgetType.TEXT);
-            timeInRangeWidget.setText(TimeFormatters.formatDuration(Duration.ofSeconds(latestTimeInRange)));
-            timeInRangeWidget.setTextColor(Color.WHITE.getRGB());
-            timeInRangeWidget.setFontId(FontID.PLAIN_11);
-            timeInRangeWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
-            timeInRangeWidget.setOriginalX(45);
-            timeInRangeWidget.setOriginalY(60);
-            timeInRangeWidget.setWidthMode(WidgetSizeMode.MINUS);
-            timeInRangeWidget.setOriginalHeight(10);
-//        w.setOriginalWidth(20);
-            timeInRangeWidget.setXPositionMode(WidgetPositionMode.ABSOLUTE_CENTER);
-            timeInRangeWidget.setXTextAlignment(0);
-            timeInRangeWidget.setTextShadowed(true);
-            timeInRangeWidget.revalidate();
-            slotIdxTimeInRangeWidget.put(slot.getIndex(), timeInRangeWidget);
+            addTimeInRangeWidget(slotWidget, slot.getIndex(), latestTimeInRange);
+        }
+        if (slot.getPredictedState() != SlotPredictedState.UNKNOWN) {
+            addDescriptionWidget(slotWidget, slot.getIndex(), slot.getPredictedState());
         }
     }
 
-    private List<RemoteSlot> getSlotStateToDraw() {
-        List<RemoteSlot> slots = new ArrayList<>();
+    private void addDescriptionWidget(Widget slotWidget, int slotIdx, SlotPredictedState state) {
+        Color c = getDescriptionWidgetColor(state);
+        String text = getDescriptionWidgetText(state);
+        Widget existingWidget = slotIdxToDescWidget.get(slotIdx);
+        if (existingWidget == null || !isWidgetStillAttached(existingWidget)) {
+            Widget descriptionWidget = createGraphicWidget(slotWidget, state);
+            descriptionWidget.setText(text);
+            descriptionWidget.setTextColor(c.getRGB());
+            slotIdxToDescWidget.put(slotIdx, descriptionWidget);
+        }
+        else {
+            existingWidget.setHidden(false);
+            existingWidget.setText(text);
+            existingWidget.setTextColor(c.getRGB());
+        }
+    }
+
+    private void addTimeInRangeWidget(Widget slotWidget, int slotIdx, long latestTimeInRange) {
+        Widget existingWidget = slotIdxToTimeInRangeWidget.get(slotIdx);
+        if (existingWidget == null || !isWidgetStillAttached(existingWidget)) {
+            Widget timeInRangeWidget = createTimeInRangeWidget(slotWidget);
+            timeInRangeWidget.setText(TimeFormatters.formatDuration(Duration.ofSeconds(latestTimeInRange)));
+            slotIdxToTimeInRangeWidget.put(slotIdx, timeInRangeWidget);
+        }
+        else {
+            existingWidget.setHidden(false);
+            existingWidget.setText(TimeFormatters.formatDuration(Duration.ofSeconds(latestTimeInRange)));
+        }
+        log.info("slot {} time in range is {}", slotIdx, latestTimeInRange);
+    }
+
+    private Widget createGraphicWidget(Widget slotWidget, SlotPredictedState state) {
+        Widget descriptionWidget = slotWidget.createChild(-1, WidgetType.GRAPHIC);
+        descriptionWidget.setFontId(FontID.PLAIN_11);
+        descriptionWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
+        descriptionWidget.setOriginalX(88);
+        descriptionWidget.setOriginalY(50);
+        descriptionWidget.setSpriteId(SpriteID.BANK_SEARCH);
+        descriptionWidget.setWidthMode(WidgetSizeMode.ABSOLUTE);
+        descriptionWidget.setOriginalHeight(25);
+        descriptionWidget.setOriginalWidth(25);
+        descriptionWidget.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
+        descriptionWidget.setXTextAlignment(WidgetTextAlignment.LEFT);
+        descriptionWidget.setTextShadowed(true);
+        descriptionWidget.setHasListener(true);
+
+
+        SwingUtilities.invokeLater(() -> {
+
+
+            JPanel panel = new JPanel();
+            JLabel label = new JLabel("hello");
+            panel.add(label);
+            JPopupMenu popup = new JPopupMenu();
+            popup.add(panel);
+            descriptionWidget.setOnMouseOverListener((JavaScriptCallback) ev -> {
+                log.info("x {}, y {}", ev.getMouseX(), ev.getMouseY());
+                PointerInfo a = MouseInfo.getPointerInfo();
+                Point p = a.getLocation();
+                SwingUtilities.invokeLater(() -> {
+                    popup.setLocation(p.x, p.y);
+                    popup.setVisible(true);
+                });
+            });
+            descriptionWidget.setOnMouseLeaveListener((JavaScriptCallback) ev -> {
+                SwingUtilities.invokeLater(() -> {
+                    popup.setVisible(false);
+                });
+            });
+        });
+        descriptionWidget.revalidate();
+        return descriptionWidget;
+    }
+
+    private Color getDescriptionWidgetColor(SlotPredictedState state) {
+        if (state == SlotPredictedState.OUT_OF_RANGE) {
+            return new Color(255, 99, 71);
+        }
+        else if (state == SlotPredictedState.IN_RANGE) {
+            return new Color(35, 139, 172);
+        }
+        else {
+            return new Color(43, 208, 15);
+        }
+    }
+
+    private String getDescriptionWidgetText(SlotPredictedState state) {
+        if (state == SlotPredictedState.OUT_OF_RANGE) {
+            return "Undercut";
+        }
+        else if (state == SlotPredictedState.IN_RANGE) {
+            return "In range";
+        }
+        else {
+            return "Best offer";
+        }
+    }
+
+    private Widget createTimeInRangeWidget(Widget slotWidget) {
+        Widget timeInRangeWidget = slotWidget.createChild(-1, WidgetType.TEXT);
+        timeInRangeWidget.setTextColor(Color.WHITE.getRGB());
+        timeInRangeWidget.setFontId(FontID.PLAIN_11);
+        timeInRangeWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
+        timeInRangeWidget.setOriginalX(35);
+        timeInRangeWidget.setOriginalY(77);
+        timeInRangeWidget.setWidthMode(WidgetSizeMode.MINUS);
+        timeInRangeWidget.setOriginalHeight(10);
+        timeInRangeWidget.setXPositionMode(WidgetPositionMode.ABSOLUTE_CENTER);
+        timeInRangeWidget.setXTextAlignment(WidgetTextAlignment.LEFT);
+        timeInRangeWidget.setTextShadowed(true);
+        timeInRangeWidget.revalidate();
+        return timeInRangeWidget;
+    }
+
+    private boolean isWidgetStillAttached(Widget widget) {
+        Widget parent = widget.getParent();
+        Widget[] siblings = parent.getDynamicChildren();
+        return widget.getIndex() < siblings.length && siblings[widget.getIndex()] != null;
+    }
+
+    private List<Optional<RemoteSlot>> getSlotStateToDraw() {
+        List<Optional<RemoteSlot>> slots = new ArrayList<>();
         GrandExchangeOffer[] currentOffers = plugin.getClient().getGrandExchangeOffers();
         Map<Integer, OfferEvent> enrichedOffers = plugin.getDataHandler().getAccountData(plugin.getAccountCurrentlyViewed()).getLastOffers();
 
@@ -156,15 +269,15 @@ public class SlotStateDrawer {
             OfferEvent enrichedOffer = enrichedOffers.get(i);
 
             if (localSlot.getState() == GrandExchangeOfferState.EMPTY || OfferEvent.isComplete(localSlot.getState())) {
-                slots.add(null);
+                slots.add(Optional.empty());
                 continue;
             }
             if (remoteslot == null || !doesLocalSlotMatchWithRemote(localSlot, remoteslot)) {
-                clientGeOfferToRemoteSlot(i, localSlot, enrichedOffer).ifPresent(slots::add);
+                slots.add(clientGeOfferToRemoteSlot(i, localSlot, enrichedOffer));
                 continue;
             }
 
-            slots.add(remoteslot);
+            slots.add(Optional.of(remoteslot));
         }
         return slots;
     }
@@ -230,44 +343,4 @@ public class SlotStateDrawer {
             return SlotPredictedState.OUT_OF_RANGE;
         }
     }
-
-
-
-
-
-
-
-    private transient Widget slotWidget;
-    private transient Widget slotItemNameText;
-
-//    public void setWidget(Widget slotWidget)
-//    {
-//
-//        Color c = new Color(229, 94, 94);
-//        this.slotWidget = slotWidget;
-//        Widget w = slotWidget.createChild(26, WidgetType.TEXT);
-//
-
-//
-//        w.setText("UNDERCUT");
-//        w.setTextColor(c.getRGB());
-//        w.setFontId(FontID.PLAIN_11);
-//        w.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
-//        w.setOriginalX(45);
-//        w.setOriginalY(60);
-//        w.setWidthMode(WidgetSizeMode.MINUS);
-//        w.setOriginalHeight(10);
-////        w.setOriginalWidth(20);
-//        w.setXPositionMode(WidgetPositionMode.ABSOLUTE_CENTER);
-//        w.setXTextAlignment(0);
-//        w.setTextShadowed(true);
-//        w.revalidate();
-////        slotItemNameText = slotWidget.getChild(19);
-////        slotItemNameText.setText("Infinity hat<br><br>" + ColorUtil.wrapWithColorTag("UNDERCUT", c));
-
-//
-////        slotItemNameText.setText("<html>" + ColorUtil.wrapWithColorTag(itemName, c) + "<br>UNDERCUT </html>");
-////        slotStateString = slotItemNameText.getText();
-//        slotWidget.revalidate();
-//    }
 }
