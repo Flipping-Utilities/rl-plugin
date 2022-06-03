@@ -11,9 +11,13 @@ import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.SpriteID;
 import net.runelite.api.widgets.*;
+import net.runelite.client.ui.DynamicGridLayout;
+import net.runelite.client.ui.FontManager;
+import net.runelite.client.util.QuantityFormatter;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.time.Duration;
 import java.time.Instant;
@@ -22,7 +26,6 @@ import java.util.List;
 
 @Slf4j
 public class SlotStateDrawer {
-
     List<RemoteAccountSlots> remoteAccountSlots = new ArrayList<>();
     FlippingPlugin plugin;
     WikiRequest wikiRequest;
@@ -30,10 +33,12 @@ public class SlotStateDrawer {
     Map<Integer, Widget> slotIdxToTimeInRangeWidget = new HashMap<>();
     Map<Integer, Widget> slotIdxToDescWidget = new HashMap<>();
     JPopupMenu popup = new JPopupMenu();
-    JPanel detailsPanel = new JPanel();
+    SlotDetailsPanel detailsPanel = new SlotDetailsPanel();
+    List<Optional<RemoteSlot>> unifiedSlotStates = new ArrayList<>();
 
     public SlotStateDrawer(FlippingPlugin plugin) {
         this.plugin = plugin;
+        popup.add(detailsPanel);
     }
 
     public void setRemoteAccountSlots(List<RemoteAccountSlots> remoteAccountSlots) {
@@ -57,22 +62,21 @@ public class SlotStateDrawer {
     private void drawWrapper() {
         if (
             slotWidgets == null ||
-            plugin.getCurrentlyLoggedInAccount() == null
+                plugin.getCurrentlyLoggedInAccount() == null
         ) {
             return;
         }
-        plugin.getClientThread().invokeLater(this::draw);
+        this.unifiedSlotStates = getUnifiedSlotStates();
+        plugin.getClientThread().invokeLater(() -> draw(unifiedSlotStates));
     }
 
-    private void draw() {
-        List<Optional<RemoteSlot>> remoteSlots = getSlotStateToDraw();
+    private void draw(List<Optional<RemoteSlot>> remoteSlots) {
         for (int i = 0; i < remoteSlots.size(); i++) {
             Optional<RemoteSlot> maybeRemoteSlot = remoteSlots.get(i);
             Widget slotWidget = slotWidgets[i + 1];
             if (!maybeRemoteSlot.isPresent()) {
                 resetSlot(i, slotWidget);
-            }
-            else {
+            } else {
                 drawOnSlot(maybeRemoteSlot.get(), slotWidget);
             }
         }
@@ -103,11 +107,9 @@ public class SlotStateDrawer {
         Map<Integer, Integer> spriteMap = GeSpriteLoader.CHILDREN_IDX_TO_RED_SPRITE_ID;
         if (slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
             spriteMap = GeSpriteLoader.CHILDREN_IDX_TO_BLUE_SPRITE_ID;
-        }
-        else if (slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
+        } else if (slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
             spriteMap = GeSpriteLoader.CHILDREN_IDX_TO_RED_SPRITE_ID;
-        }
-        else if (slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
+        } else if (slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
             spriteMap = GeSpriteLoader.CHILDREN_IDX_TO_GREEN_SPRITE_ID;
         }
 
@@ -128,21 +130,20 @@ public class SlotStateDrawer {
             addTimeInRangeWidget(slotWidget, slot.getIndex(), latestTimeInRange);
         }
         if (slot.getPredictedState() != SlotPredictedState.UNKNOWN) {
-            addDescriptionWidget(slotWidget, slot.getIndex(), slot.getPredictedState());
+            addDescriptionWidget(slotWidget, slot);
         }
     }
 
-    private void addDescriptionWidget(Widget slotWidget, int slotIdx, SlotPredictedState state) {
-        Color c = getDescriptionWidgetColor(state);
-        String text = getDescriptionWidgetText(state);
-        Widget existingWidget = slotIdxToDescWidget.get(slotIdx);
+    private void addDescriptionWidget(Widget slotWidget, RemoteSlot slot) {
+        Color c = getDescriptionWidgetColor(slot.getPredictedState());
+        String text = getDescriptionWidgetText(slot.getPredictedState());
+        Widget existingWidget = slotIdxToDescWidget.get(slot.getIndex());
         if (existingWidget == null || !isWidgetStillAttached(existingWidget)) {
-            Widget descriptionWidget = createGraphicWidget(slotWidget, state);
+            Widget descriptionWidget = createDetailsWidget(slotWidget, slot);
             descriptionWidget.setText(text);
             descriptionWidget.setTextColor(c.getRGB());
-            slotIdxToDescWidget.put(slotIdx, descriptionWidget);
-        }
-        else {
+            slotIdxToDescWidget.put(slot.getIndex(), descriptionWidget);
+        } else {
             existingWidget.setHidden(false);
             existingWidget.setText(text);
             existingWidget.setTextColor(c.getRGB());
@@ -155,65 +156,66 @@ public class SlotStateDrawer {
             Widget timeInRangeWidget = createTimeInRangeWidget(slotWidget);
             timeInRangeWidget.setText(TimeFormatters.formatDuration(Duration.ofSeconds(latestTimeInRange)));
             slotIdxToTimeInRangeWidget.put(slotIdx, timeInRangeWidget);
-        }
-        else {
+        } else {
             existingWidget.setHidden(false);
             existingWidget.setText(TimeFormatters.formatDuration(Duration.ofSeconds(latestTimeInRange)));
         }
-        log.info("slot {} time in range is {}", slotIdx, latestTimeInRange);
     }
 
-    private Widget createGraphicWidget(Widget slotWidget, SlotPredictedState state) {
-        Widget descriptionWidget = slotWidget.createChild(-1, WidgetType.GRAPHIC);
-        descriptionWidget.setFontId(FontID.PLAIN_11);
-        descriptionWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
-        descriptionWidget.setOriginalX(88);
-        descriptionWidget.setOriginalY(50);
-        descriptionWidget.setSpriteId(SpriteID.BANK_SEARCH);
-        descriptionWidget.setWidthMode(WidgetSizeMode.ABSOLUTE);
-        descriptionWidget.setOriginalHeight(25);
-        descriptionWidget.setOriginalWidth(25);
-        descriptionWidget.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
-        descriptionWidget.setXTextAlignment(WidgetTextAlignment.LEFT);
-        descriptionWidget.setTextShadowed(true);
-        descriptionWidget.setHasListener(true);
+    private Widget createDetailsWidget(Widget slotWidget, RemoteSlot slot) {
+        Widget detailsWidget = slotWidget.createChild(-1, WidgetType.GRAPHIC);
+        detailsWidget.setFontId(FontID.PLAIN_11);
+        detailsWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
+        detailsWidget.setOriginalX(88);
+        detailsWidget.setOriginalY(50);
+        detailsWidget.setSpriteId(SpriteID.BANK_SEARCH);
+        detailsWidget.setWidthMode(WidgetSizeMode.ABSOLUTE);
+        detailsWidget.setOriginalHeight(25);
+        detailsWidget.setOriginalWidth(25);
+        detailsWidget.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
+        detailsWidget.setXTextAlignment(WidgetTextAlignment.LEFT);
+        detailsWidget.setTextShadowed(true);
+        detailsWidget.setHasListener(true);
 
+        detailsWidget.setOnMouseOverListener((JavaScriptCallback) ev -> {
+            SwingUtilities.invokeLater(() -> {
+                if (this.wikiRequest == null) {
+                    detailsPanel.updateDetails(null, null);
+                    return;
+                }
+                Optional<RemoteSlot> maybeRemoteSlot = unifiedSlotStates.get(slot.getIndex());
+                if (!maybeRemoteSlot.isPresent()) {
+                    detailsPanel.updateDetails(null, null);
+                    return;
+                }
 
-        SwingUtilities.invokeLater(() -> {
-
-
-            JPanel panel = new JPanel();
-            JLabel label = new JLabel("hello");
-            panel.add(label);
-            JPopupMenu popup = new JPopupMenu();
-            popup.add(panel);
-            descriptionWidget.setOnMouseOverListener((JavaScriptCallback) ev -> {
-                log.info("x {}, y {}", ev.getMouseX(), ev.getMouseY());
+                int itemId = maybeRemoteSlot.get().getItemId();
+                WikiItemMargins margins = this.wikiRequest.getData().get(itemId);
                 PointerInfo a = MouseInfo.getPointerInfo();
                 Point p = a.getLocation();
-                SwingUtilities.invokeLater(() -> {
-                    popup.setLocation(p.x, p.y);
-                    popup.setVisible(true);
-                });
-            });
-            descriptionWidget.setOnMouseLeaveListener((JavaScriptCallback) ev -> {
-                SwingUtilities.invokeLater(() -> {
-                    popup.setVisible(false);
-                });
+                detailsPanel.updateDetails(maybeRemoteSlot.get(), margins);
+                popup.pack();
+                popup.setLocation(p.x, p.y);
+                popup.setVisible(true);
             });
         });
-        descriptionWidget.revalidate();
-        return descriptionWidget;
+
+        detailsWidget.setOnMouseLeaveListener((JavaScriptCallback) ev -> {
+            SwingUtilities.invokeLater(() -> {
+                popup.setVisible(false);
+            });
+        });
+
+        detailsWidget.revalidate();
+        return detailsWidget;
     }
 
     private Color getDescriptionWidgetColor(SlotPredictedState state) {
         if (state == SlotPredictedState.OUT_OF_RANGE) {
             return new Color(255, 99, 71);
-        }
-        else if (state == SlotPredictedState.IN_RANGE) {
+        } else if (state == SlotPredictedState.IN_RANGE) {
             return new Color(35, 139, 172);
-        }
-        else {
+        } else {
             return new Color(43, 208, 15);
         }
     }
@@ -221,11 +223,9 @@ public class SlotStateDrawer {
     private String getDescriptionWidgetText(SlotPredictedState state) {
         if (state == SlotPredictedState.OUT_OF_RANGE) {
             return "Undercut";
-        }
-        else if (state == SlotPredictedState.IN_RANGE) {
+        } else if (state == SlotPredictedState.IN_RANGE) {
             return "In range";
-        }
-        else {
+        } else {
             return "Best offer";
         }
     }
@@ -252,7 +252,7 @@ public class SlotStateDrawer {
         return widget.getIndex() < siblings.length && siblings[widget.getIndex()] != null;
     }
 
-    private List<Optional<RemoteSlot>> getSlotStateToDraw() {
+    private List<Optional<RemoteSlot>> getUnifiedSlotStates() {
         List<Optional<RemoteSlot>> slots = new ArrayList<>();
         GrandExchangeOffer[] currentOffers = plugin.getClient().getGrandExchangeOffers();
         Map<Integer, OfferEvent> enrichedOffers = plugin.getDataHandler().getAccountData(plugin.getAccountCurrentlyViewed()).getLastOffers();
@@ -330,17 +330,77 @@ public class SlotStateDrawer {
     }
 
     SlotPredictedState getPredictedState(boolean buy, int listedPrice, int instaSell, int instaBuy) {
-        boolean isBetterThanWiki = buy? listedPrice > Math.max(instaBuy, instaSell) : listedPrice < Math.min(instaSell, instaBuy);
-        boolean isInRange = buy? listedPrice >= Math.min(instaSell, instaBuy) : listedPrice <= Math.max(instaBuy, instaSell);
+        boolean isBetterThanWiki = buy ? listedPrice > Math.max(instaBuy, instaSell) : listedPrice < Math.min(instaSell, instaBuy);
+        boolean isInRange = buy ? listedPrice >= Math.min(instaSell, instaBuy) : listedPrice <= Math.max(instaBuy, instaSell);
 
         if (isBetterThanWiki) {
             return SlotPredictedState.BETTER_THAN_WIKI;
-        }
-        else if (isInRange) {
+        } else if (isInRange) {
             return SlotPredictedState.IN_RANGE;
-        }
-        else {
+        } else {
             return SlotPredictedState.OUT_OF_RANGE;
         }
+    }
+}
+
+class SlotDetailsPanel extends JPanel {
+    JLabel wikiInstaBuy = new JLabel();
+    JLabel wikiInstaSell = new JLabel();
+    JLabel wikiInstaBuyAge = new JLabel();
+    JLabel wikiInstaSellAge = new JLabel();
+
+    SlotDetailsPanel() {
+        super();
+        setLayout(new BorderLayout());
+        setBorder(new EmptyBorder(10, 15, 10, 15));
+
+        JLabel title = new JLabel("Quick Look", JLabel.CENTER);
+        title.setFont(new Font("Whitney", Font.BOLD + Font.ITALIC, 12));
+
+        JLabel wikiInstaBuyDesc = new JLabel("Wiki Insta Buy");
+        JLabel wikiInstaSellDesc = new JLabel("Wiki Insta Sell");
+        JLabel wikiInstaBuyAgeDesc = new JLabel("Wiki Insta Buy Age");
+        JLabel wikiInstaSellAgeDesc = new JLabel("Wiki Insta Sell Age");
+
+        Arrays.asList(wikiInstaBuyDesc, wikiInstaSellDesc, wikiInstaBuyAgeDesc, wikiInstaSellAgeDesc, wikiInstaBuy,
+            wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setFont(FontManager.getRunescapeSmallFont()));
+
+        JPanel wikiPanel = new JPanel(new DynamicGridLayout(4, 2, 10, 2));
+        wikiPanel.setBorder(new EmptyBorder(10,0,0,0));
+        wikiPanel.add(wikiInstaBuyDesc);
+        wikiPanel.add(wikiInstaBuy);
+        wikiPanel.add(wikiInstaSellDesc);
+        wikiPanel.add(wikiInstaSell);
+
+        wikiPanel.add(wikiInstaBuyAgeDesc);
+        wikiPanel.add(wikiInstaBuyAge);
+        wikiPanel.add(wikiInstaSellAgeDesc);
+        wikiPanel.add(wikiInstaSellAge);
+
+        add(title, BorderLayout.NORTH);
+        add(wikiPanel, BorderLayout.CENTER);
+    }
+
+    public void updateDetails(RemoteSlot slot, WikiItemMargins wikiItemInfo) {
+        if (wikiItemInfo == null || slot == null) {
+            wikiInstaBuyAge.setText("No data");
+            wikiInstaSellAge.setText("No data");
+            wikiInstaBuy.setText("No data");
+            wikiInstaSell.setText("No data");
+            return;
+        }
+        if (wikiItemInfo.getHighTime() == 0) {
+            wikiInstaBuyAge.setText("No data");
+        } else {
+            wikiInstaBuyAge.setText(TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getHighTime())));
+        }
+        if (wikiItemInfo.getLowTime() == 0) {
+            wikiInstaSellAge.setText("No data");
+        } else {
+            wikiInstaSellAge.setText(TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getLowTime())));
+        }
+
+        wikiInstaBuy.setText(wikiItemInfo.getHigh() == 0 ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
+        wikiInstaSell.setText(wikiItemInfo.getLow() == 0 ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
     }
 }
