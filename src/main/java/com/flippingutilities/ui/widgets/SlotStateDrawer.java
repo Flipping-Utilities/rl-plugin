@@ -2,6 +2,7 @@ package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.GeSpriteLoader;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.flippingutilities.utilities.*;
@@ -11,6 +12,7 @@ import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.SpriteID;
 import net.runelite.api.widgets.*;
+import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.util.QuantityFormatter;
@@ -130,23 +132,18 @@ public class SlotStateDrawer {
             addTimeInRangeWidget(slotWidget, slot.getIndex(), latestTimeInRange);
         }
         if (slot.getPredictedState() != SlotPredictedState.UNKNOWN) {
-            addDescriptionWidget(slotWidget, slot);
+            addQuicklookWidget(slotWidget, slot);
         }
     }
 
-    private void addDescriptionWidget(Widget slotWidget, RemoteSlot slot) {
-        Color c = getDescriptionWidgetColor(slot.getPredictedState());
-        String text = getDescriptionWidgetText(slot.getPredictedState());
+    private void addQuicklookWidget(Widget slotWidget, RemoteSlot slot) {
+        log.info("adding quick look widget on slot {}", slot.getIndex());
         Widget existingWidget = slotIdxToDescWidget.get(slot.getIndex());
         if (existingWidget == null || !isWidgetStillAttached(existingWidget)) {
-            Widget descriptionWidget = createDetailsWidget(slotWidget, slot);
-            descriptionWidget.setText(text);
-            descriptionWidget.setTextColor(c.getRGB());
-            slotIdxToDescWidget.put(slot.getIndex(), descriptionWidget);
+            Widget quicklookWidget = createQuicklookWidget(slotWidget, slot);
+            slotIdxToDescWidget.put(slot.getIndex(), quicklookWidget);
         } else {
             existingWidget.setHidden(false);
-            existingWidget.setText(text);
-            existingWidget.setTextColor(c.getRGB());
         }
     }
 
@@ -162,16 +159,16 @@ public class SlotStateDrawer {
         }
     }
 
-    private Widget createDetailsWidget(Widget slotWidget, RemoteSlot slot) {
+    private Widget createQuicklookWidget(Widget slotWidget, RemoteSlot slot) {
         Widget detailsWidget = slotWidget.createChild(-1, WidgetType.GRAPHIC);
         detailsWidget.setFontId(FontID.PLAIN_11);
         detailsWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
-        detailsWidget.setOriginalX(88);
-        detailsWidget.setOriginalY(50);
+        detailsWidget.setOriginalX(90);
+        detailsWidget.setOriginalY(52);
         detailsWidget.setSpriteId(SpriteID.BANK_SEARCH);
         detailsWidget.setWidthMode(WidgetSizeMode.ABSOLUTE);
-        detailsWidget.setOriginalHeight(25);
-        detailsWidget.setOriginalWidth(25);
+        detailsWidget.setOriginalHeight(22);
+        detailsWidget.setOriginalWidth(22);
         detailsWidget.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
         detailsWidget.setXTextAlignment(WidgetTextAlignment.LEFT);
         detailsWidget.setTextShadowed(true);
@@ -212,11 +209,11 @@ public class SlotStateDrawer {
 
     private Color getDescriptionWidgetColor(SlotPredictedState state) {
         if (state == SlotPredictedState.OUT_OF_RANGE) {
-            return new Color(255, 99, 71);
+            return CustomColors.TOMATO;
         } else if (state == SlotPredictedState.IN_RANGE) {
-            return new Color(35, 139, 172);
+            return CustomColors.IN_RANGE;
         } else {
-            return new Color(43, 208, 15);
+            return ColorScheme.GRAND_EXCHANGE_PRICE;
         }
     }
 
@@ -348,11 +345,15 @@ class SlotDetailsPanel extends JPanel {
     JLabel wikiInstaSell = new JLabel();
     JLabel wikiInstaBuyAge = new JLabel();
     JLabel wikiInstaSellAge = new JLabel();
+    JLabel summary = new JLabel("", JLabel.CENTER);
 
     SlotDetailsPanel() {
         super();
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(10, 15, 10, 15));
+
+        wikiInstaBuy.setForeground(Color.WHITE);
+        wikiInstaSell.setForeground(Color.WHITE);
 
         JLabel title = new JLabel("Quick Look", JLabel.CENTER);
         title.setFont(new Font("Whitney", Font.BOLD + Font.ITALIC, 12));
@@ -361,6 +362,11 @@ class SlotDetailsPanel extends JPanel {
         JLabel wikiInstaSellDesc = new JLabel("Wiki Insta Sell");
         JLabel wikiInstaBuyAgeDesc = new JLabel("Wiki Insta Buy Age");
         JLabel wikiInstaSellAgeDesc = new JLabel("Wiki Insta Sell Age");
+
+        //being lazy...just want to separate the rows that hold the wiki price vals from the rows that hold the wiki time
+        //vals
+        wikiInstaBuyAgeDesc.setBorder(new EmptyBorder(5,0,0,0));
+        wikiInstaBuyAge.setBorder(new EmptyBorder(5,0,0,0));
 
         Arrays.asList(wikiInstaBuyDesc, wikiInstaSellDesc, wikiInstaBuyAgeDesc, wikiInstaSellAgeDesc, wikiInstaBuy,
             wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setFont(FontManager.getRunescapeSmallFont()));
@@ -377,11 +383,22 @@ class SlotDetailsPanel extends JPanel {
         wikiPanel.add(wikiInstaSellAgeDesc);
         wikiPanel.add(wikiInstaSellAge);
 
+        JPanel summaryPanel = new JPanel(new BorderLayout());
+        summaryPanel.add(summary);
+
         add(title, BorderLayout.NORTH);
         add(wikiPanel, BorderLayout.CENTER);
+        add(summaryPanel, BorderLayout.SOUTH);
     }
 
     public void updateDetails(RemoteSlot slot, WikiItemMargins wikiItemInfo) {
+        wikiInstaBuy.setForeground(Color.WHITE);
+        wikiInstaSell.setForeground(Color.WHITE);
+        wikiInstaBuyAge.setForeground(Color.WHITE);
+        wikiInstaSellAge.setForeground(Color.WHITE);
+        Map<Integer, JLabel> m = new HashMap<>();
+        m.put(wikiItemInfo.getHigh(), wikiInstaBuy);
+        m.put(wikiItemInfo.getLow(), wikiInstaSell);
         if (wikiItemInfo == null || slot == null) {
             wikiInstaBuyAge.setText("No data");
             wikiInstaSellAge.setText("No data");
@@ -402,5 +419,61 @@ class SlotDetailsPanel extends JPanel {
 
         wikiInstaBuy.setText(wikiItemInfo.getHigh() == 0 ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
         wikiInstaSell.setText(wikiItemInfo.getLow() == 0 ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
+
+        int max = Math.max(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
+        int min = Math.min(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
+
+        if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
+            m.get(max).setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+            summary.setText(
+                String.format("buy offer is ultra competitive: %s is >= %s",
+                    QuantityFormatter.formatNumber(slot.getOfferPrice()),
+                    QuantityFormatter.formatNumber(max)
+                    ));
+        }
+        else if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
+            m.get(min).setForeground(CustomColors.IN_RANGE);
+            summary.setText(
+                String.format("buy offer is competitive: %s >= %s < %s",
+                    QuantityFormatter.formatNumber(slot.getOfferPrice()),
+                    QuantityFormatter.formatNumber(min)
+                ));
+        }
+        else if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
+            m.get(min).setForeground(CustomColors.TOMATO);
+            summary.setText(
+                String.format("buy offer is not competitive: %s < %s",
+                    QuantityFormatter.formatNumber(slot.getOfferPrice()),
+                    QuantityFormatter.formatNumber(min)
+                ));
+        }
+        else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
+            m.get(min).setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+            summary.setText(
+                String.format("sell offer is ultra competitive: %s < %s",
+                    QuantityFormatter.formatNumber(slot.getOfferPrice()),
+                    QuantityFormatter.formatNumber(min)
+                ));
+        }
+        else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
+            m.get(max).setForeground(CustomColors.IN_RANGE);
+            summary.setText(
+                String.format("sell offer is competitive: %s < %s",
+                    QuantityFormatter.formatNumber(slot.getOfferPrice()),
+                    QuantityFormatter.formatNumber(max)
+                ));
+        }
+        else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
+            m.get(max).setForeground(CustomColors.TOMATO);
+            summary.setText(
+                String.format("sell offer is not competitive: %s > %s",
+                    QuantityFormatter.formatNumber(slot.getOfferPrice()),
+                    QuantityFormatter.formatNumber(max)
+                ));
+        }
+    }
+
+    private String getSummaryText() {
+        return "";
     }
 }
