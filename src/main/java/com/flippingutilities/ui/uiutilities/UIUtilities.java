@@ -152,8 +152,21 @@ public class UIUtilities
 		}
 	}
 
+	/**
+	 * for some reason ColorUtil.wrapWithColorTag() doesn't work sometimes, but using this
+	 * diff method of coloring does
+	 */
 	public static String colorText(String s, Color color) {
 		return String.format("<span style='color:%s;'>%s</span>",ColorUtil.colorToHexCode(color), s);
+	}
+
+	/**
+	 * on popups, setForeground doesn't color things appropriately, its always more
+	 * dull than the actual color. This method uses html to specify the
+	 * color which for some reason displays a much more accurate color than setForeground.
+	 */
+	public static void recolorLabel(JLabel label, Color c) {
+		label.setText("<html>" + colorText(label.getText(), c) + "</html>");
 	}
 
 	public static String buildWikiLink(int itemId) {
