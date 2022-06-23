@@ -3,7 +3,6 @@ package com.flippingutilities.utilities;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import net.runelite.api.GrandExchangeOfferState;
 
 @Data
 @NoArgsConstructor

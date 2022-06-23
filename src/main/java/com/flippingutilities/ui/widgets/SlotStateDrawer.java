@@ -34,7 +34,7 @@ public class SlotStateDrawer {
     WikiRequest wikiRequest;
     Widget[] slotWidgets;
     Map<Integer, Widget> slotIdxToTimeInRangeWidget = new HashMap<>();
-    Map<Integer, Widget> slotIdxToDescWidget = new HashMap<>();
+    Map<Integer, Widget> slotIdxToQuickLookWidget = new HashMap<>();
     JPopupMenu popup = new JPopupMenu();
     QuickLookPanel quickLookPanel = new QuickLookPanel();
     List<Optional<RemoteSlot>> unifiedSlotStates = new ArrayList<>();
@@ -98,9 +98,9 @@ public class SlotStateDrawer {
             timeInRangeWidget.setHidden(true);
         }
 
-        Widget descWidget = slotIdxToDescWidget.get(slotIdx);
-        if (descWidget != null) {
-            descWidget.setHidden(true);
+        Widget quickLookWidget = slotIdxToQuickLookWidget.get(slotIdx);
+        if (quickLookWidget != null) {
+            quickLookWidget.setHidden(true);
         }
     }
 
@@ -133,20 +133,24 @@ public class SlotStateDrawer {
         if (latestTimeInRange > 0) {
             addTimeInRangeWidget(slotWidget, slot.getIndex(), latestTimeInRange);
         }
-        if (slot.getPredictedState() != SlotPredictedState.UNKNOWN) {
-            addQuicklookWidget(slotWidget, slot);
-        }
+        addQuicklookWidget(slotWidget, slot);
     }
 
     private void addQuicklookWidget(Widget slotWidget, RemoteSlot slot) {
-        Widget existingWidget = slotIdxToDescWidget.get(slot.getIndex());
-        if (existingWidget == null || !isWidgetStillAttached(existingWidget)) {
+        Widget existingQuickLookWidget = slotIdxToQuickLookWidget.get(slot.getIndex());
+        if (existingQuickLookWidget != null) {
+            boolean isWidgetStillAttached = isWidgetStillAttached(existingQuickLookWidget);
+            if (isWidgetStillAttached) {
+                log.info("widget is still attached, slot: {}, quicklook widget idx: {}, parent dynamic children len: {}", slot.getIndex(), existingQuickLookWidget.getIndex(), existingQuickLookWidget.getParent().getDynamicChildren().length);
+            }
+        }
+        if (existingQuickLookWidget == null || !isWidgetStillAttached(existingQuickLookWidget)) {
             log.info("readding widget on slot {}", slot.getIndex());
             Widget quicklookWidget = createQuicklookWidget(slotWidget, slot);
-            slotIdxToDescWidget.put(slot.getIndex(), quicklookWidget);
+            slotIdxToQuickLookWidget.put(slot.getIndex(), quicklookWidget);
         } else {
             log.info("setting widget to not hidden on slot {}", slot.getIndex());
-            existingWidget.setHidden(false);
+            existingQuickLookWidget.setHidden(false);
         }
     }
 
@@ -252,7 +256,7 @@ public class SlotStateDrawer {
                 slots.add(Optional.empty());
                 continue;
             }
-            if (remoteslot == null || !doesLocalSlotMatchWithRemote(localSlot, remoteslot)) {
+            if (remoteslot == null || !doesLocalSlotMatchWithRemote(localSlot, remoteslot) || remoteslot.getPredictedState() == SlotPredictedState.UNKNOWN) {
                 slots.add(clientGeOfferToRemoteSlot(i, localSlot, enrichedOffer));
                 continue;
             }
@@ -329,6 +333,7 @@ public class SlotStateDrawer {
  * and what you can do to make it competitive. This essentially provides a faster way
  * to get margin info then finding the item in the sidebar (via searching or clicking on the offer).
  */
+@Slf4j
 class QuickLookPanel extends JPanel {
     JLabel wikiInstaBuy = new JLabel("", JLabel.RIGHT);
     JLabel wikiInstaSell = new JLabel("", JLabel.RIGHT);
@@ -388,6 +393,7 @@ class QuickLookPanel extends JPanel {
     }
 
     public void updateDetails(RemoteSlot slot, WikiItemMargins wikiItemInfo) {
+        log.info("updating details on ql slot: {}", slot.toString());
         Arrays.asList(wikiInstaBuy, wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setForeground(Color.WHITE));
         if (wikiItemInfo == null || slot == null) {
             Arrays.asList(wikiInstaBuy, wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setText("No data"));
@@ -403,6 +409,7 @@ class QuickLookPanel extends JPanel {
         wikiInstaSell.setText(wikiItemInfo.getLow() == 0 ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
 
         toMakeOfferCompetitiveTest.setText("");
+        offerCompetitivenessText.setText("");
 
         int max = Math.max(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
         int min = Math.min(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
