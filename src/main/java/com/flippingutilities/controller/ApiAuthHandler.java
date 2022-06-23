@@ -48,6 +48,7 @@ public class ApiAuthHandler {
         plugin.getApiRequestHandler().getUser().whenComplete((user, exception) -> {
             if (exception != null) {
                 log.info("failed to get user, error: ", exception);
+                isPremium = false;
             }
             else {
                 log.info("got user, premium status: {}", user.isPremium());
