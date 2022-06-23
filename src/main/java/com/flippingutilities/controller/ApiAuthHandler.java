@@ -16,14 +16,16 @@ import java.util.stream.Collectors;
  * logins and fire off some action whenever a login happens.
  */
 @Slf4j
-public class apiAuthHandler {
+public class ApiAuthHandler {
     FlippingPlugin plugin;
     @Getter
     private boolean hasValidJWT;
     private Set<String> successfullyRegisteredRsns = new HashSet<>();
     List<Runnable> loginSubscriberActions = new ArrayList<>();
+    @Getter
+    private boolean isPremium;
 
-    public apiAuthHandler(FlippingPlugin plugin) {
+    public ApiAuthHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
     }
 
@@ -39,17 +41,34 @@ public class apiAuthHandler {
         return this.hasValidJWT && successfullyRegisteredRsns.contains(displayName);
     }
 
+    public void checkPremiumStatus() {
+        if (!hasValidJWT) {
+            return;
+        }
+        plugin.getApiRequestHandler().getUser().whenComplete((user, exception) -> {
+            if (exception != null) {
+                log.info("failed to get user, error: ", exception);
+            }
+            else {
+                log.info("got user, premium status: {}", user.isPremium());
+                isPremium = user.isPremium();
+            }
+        });
+    }
+
     /**
      * Checks if the existing JWT has expired, and if so, gets a refreshed JWT. The setting of validJwt is purely
      * to stop the plugin from making useless requests, the api will safely reject invalid jwts itself.
      *
      * This should be called on client start up
      */
-    public void checkExistingJwt() {
+    public CompletableFuture<String> checkExistingJwt() {
+        CompletableFuture<String> future = new CompletableFuture<>();
         String jwtString = plugin.getDataHandler().getAccountWideData().getJwt();
         if (jwtString == null) {
             log.info("no jwt stored locally, not attempting to check existing jwt");
-            return;
+            future.complete("no jwt");
+            return future;
         }
         try {
             Jwt jwt = Jwt.fromString(jwtString, plugin.gson);
@@ -57,13 +76,14 @@ public class apiAuthHandler {
                 //TODO use master panel to display message about having to relog using a new token from flopper
                 log.info("jwt is expired, prompting user to re log");
                 hasValidJWT = false;
-                return;
+                future.complete("expired");
+                return future;
             }
-            if (jwt.shouldRefresh()) {
+            else if (jwt.shouldRefresh()) {
                 log.info("jwt should refresh");
                 hasValidJWT = true; //so it passes the check in refreshJwt
                 CompletableFuture<String> newJwtFuture = plugin.getApiRequestHandler().refreshJwt(jwtString);
-                newJwtFuture.whenComplete((newJwt, exception) -> {
+                return newJwtFuture.whenComplete((newJwt, exception) -> {
                     if (exception != null) {
                         log.info("failed to refresh jwt, error: ", exception);
                         hasValidJWT = false; //validJwt is false by default, just setting it here for clarity
@@ -80,12 +100,16 @@ public class apiAuthHandler {
                 log.info("jwt is valid");
                 hasValidJWT = true;
                 loginSubscriberActions.forEach(Runnable::run);
+                future.complete("valid jwt");
+                return future;
             }
         }
         //this catch clause is just for the Jwt.fromString line
         catch (Exception e) {
-            log.info("failed to check existing jwt error: ", e);
+            log.info("failed to check existing jwt, error: ", e);
+            future.complete("error");
         }
+        return future;
     }
 
     public CompletableFuture<Set<String>> checkRsn(String displayName) {
@@ -105,16 +129,16 @@ public class apiAuthHandler {
                 return plugin.getApiRequestHandler().registerNewAccount(displayName).
                         thenApply(acc -> {
                             successfullyRegisteredRsns.add(acc.getRsn());
-                            log.debug("added rsn: {} to successfullyRegisteredRsns", acc.getRsn());
+                            log.info("added rsn: {} to successfullyRegisteredRsns", acc.getRsn());
                             return successfullyRegisteredRsns;
                         }).
                         exceptionally(e -> {
-                            log.debug("could not register display name: {}, error: {}", displayName, e);
+                            log.info("could not register display name: {}, error: {}", displayName, e);
                             return successfullyRegisteredRsns;
                 });
             }
         }).exceptionally(e -> {
-            log.debug("could not check rsn", e);
+            log.info("could not check rsn", e);
             return successfullyRegisteredRsns;
         });
     }
@@ -135,6 +159,7 @@ public class apiAuthHandler {
                 if (plugin.getCurrentlyLoggedInAccount() != null) {
                     checkRsn(plugin.getCurrentlyLoggedInAccount());
                 }
+                checkPremiumStatus();
             }
         });
 

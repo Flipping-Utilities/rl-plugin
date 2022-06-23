@@ -193,7 +193,7 @@ public class FlippingPlugin extends Plugin {
     private GameUiChangesHandler gameUiChangesHandler;
     private NewOfferEventPipelineHandler newOfferEventPipelineHandler;
     @Getter
-    private apiAuthHandler apiAuthHandler;
+    private ApiAuthHandler apiAuthHandler;
     @Getter
     private ApiRequestHandler apiRequestHandler;
 
@@ -222,7 +222,7 @@ public class FlippingPlugin extends Plugin {
         dataHandler = new DataHandler(this);
         gameUiChangesHandler = new GameUiChangesHandler(this);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
-        apiAuthHandler = new apiAuthHandler(this);
+        apiAuthHandler = new ApiAuthHandler(this);
         apiRequestHandler = new ApiRequestHandler(this);
         slotStateDrawer = new SlotStateDrawer(this);
 
@@ -255,7 +255,8 @@ public class FlippingPlugin extends Plugin {
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
             startJobs();
-            apiAuthHandler.checkExistingJwt();
+            apiAuthHandler.checkExistingJwt().
+                whenComplete((s, e) -> apiAuthHandler.checkPremiumStatus());
 
             //this is only relevant if the user downloads/enables the plugin after they login.
             if (client.getGameState() == GameState.LOGGED_IN) {
