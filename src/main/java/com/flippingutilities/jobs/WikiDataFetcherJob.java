@@ -60,7 +60,9 @@ public class WikiDataFetcherJob {
     //then masterpanel.isVisible() will correctly return false.
     private boolean shouldFetch() {
         boolean lastRequestMoreThan60SecondsAgo = timeOfLastRequestCompletion == null || Instant.now().minus(60, ChronoUnit.SECONDS).isAfter(timeOfLastRequestCompletion);
-        return plugin.getMasterPanel().isVisible() && !inFlightRequest && lastRequestMoreThan60SecondsAgo;
+        //for the purpose of SlotStateDrawer, we need wiki data even if the master panel is not visible, but only
+        //if the user is premium.
+        return (plugin.getMasterPanel().isVisible() || plugin.getApiAuthHandler().isPremium()) && !inFlightRequest && lastRequestMoreThan60SecondsAgo;
     }
 
     public void attemptToFetchWikiData() {

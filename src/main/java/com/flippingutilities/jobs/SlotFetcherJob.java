@@ -48,14 +48,15 @@ public class SlotFetcherJob {
     }
 
     private void fetchSlots() {
-        if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount())) {
+        if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount()) ||
+            !plugin.getApiAuthHandler().isPremium()) {
             return;
         }
 
         plugin.getApiRequestHandler().fetchGeSlots()
             .whenComplete((response, exception) -> {
                 if (exception != null) {
-                    log.debug("could not send fetch slots successfully", exception);
+                    log.debug("could not fetch slots successfully", exception);
                 } else {
                     if (this.areSlotResponsesEqual(previousRemoteAccountSlots, response)) {
                         previousRemoteAccountSlots = response;

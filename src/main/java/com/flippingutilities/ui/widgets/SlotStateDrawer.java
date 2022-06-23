@@ -22,8 +22,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -67,7 +65,8 @@ public class SlotStateDrawer {
     private void drawWrapper() {
         if (
             slotWidgets == null ||
-                plugin.getCurrentlyLoggedInAccount() == null
+            plugin.getCurrentlyLoggedInAccount() == null ||
+            !plugin.getApiAuthHandler().isPremium()
         ) {
             return;
         }
@@ -324,6 +323,12 @@ public class SlotStateDrawer {
     }
 }
 
+/**
+ * The panel that is displayed when you hover over the magnifying glass widget. This panel
+ * contains the wiki margins of the item, and whether your offer is competitive or not
+ * and what you can do to make it competitive. This essentially provides a faster way
+ * to get margin info then finding the item in the sidebar (via searching or clicking on the offer).
+ */
 class QuickLookPanel extends JPanel {
     JLabel wikiInstaBuy = new JLabel("", JLabel.RIGHT);
     JLabel wikiInstaSell = new JLabel("", JLabel.RIGHT);
@@ -406,7 +411,7 @@ class QuickLookPanel extends JPanel {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(max), ColorScheme.GRAND_EXCHANGE_PRICE);
             offerCompetitivenessText.setText(
                 String.format("<html> buy offer is ultra competitive: %s &gt= %s </html>",
-                    QuantityFormatter.formatNumber(slot.getOfferPrice()),
+                    UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(max), ColorScheme.GRAND_EXCHANGE_PRICE)
                     ));
         }
@@ -415,7 +420,7 @@ class QuickLookPanel extends JPanel {
             offerCompetitivenessText.setText(
                 String.format("<html> buy offer is competitive: %s &gt= %s &lt %s </html>",
                     UIUtilities.colorText(QuantityFormatter.formatNumber(min), CustomColors.IN_RANGE),
-                    QuantityFormatter.formatNumber(slot.getOfferPrice()),
+                    UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(max), ColorScheme.GRAND_EXCHANGE_PRICE)
                 ));
         }
@@ -423,7 +428,7 @@ class QuickLookPanel extends JPanel {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(min), CustomColors.TOMATO);
             offerCompetitivenessText.setText(
                 String.format("<html> buy offer is not competitive: %s &lt %s </html>",
-                    QuantityFormatter.formatNumber(slot.getOfferPrice()),
+                    UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(min), CustomColors.TOMATO)
                 ));
             toMakeOfferCompetitiveTest.setText(
@@ -435,7 +440,7 @@ class QuickLookPanel extends JPanel {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(min), ColorScheme.GRAND_EXCHANGE_PRICE);
             offerCompetitivenessText.setText(
                 String.format("<html> sell offer is ultra competitive: %s &lt= %s </html>",
-                    QuantityFormatter.formatNumber(slot.getOfferPrice()),
+                    UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()),Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(min), ColorScheme.GRAND_EXCHANGE_PRICE)
                 ));
         }
@@ -444,7 +449,7 @@ class QuickLookPanel extends JPanel {
             offerCompetitivenessText.setText(
                 String.format("<html> sell offer is competitive: %s &gt %s &lt= %s </html>",
                     UIUtilities.colorText(QuantityFormatter.formatNumber(min), CustomColors.IN_RANGE),
-                    QuantityFormatter.formatNumber(slot.getOfferPrice()),
+                    UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(max), ColorScheme.GRAND_EXCHANGE_PRICE)
                 ));
         }
@@ -452,7 +457,7 @@ class QuickLookPanel extends JPanel {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(max), CustomColors.TOMATO);
             offerCompetitivenessText.setText(
                 String.format("<html> sell offer is not competitive: %s &gt %s</html>",
-                    QuantityFormatter.formatNumber(slot.getOfferPrice()),
+                    UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(max), CustomColors.TOMATO)
                 ));
             toMakeOfferCompetitiveTest.setText(

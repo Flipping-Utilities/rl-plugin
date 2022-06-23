@@ -23,14 +23,27 @@ public class ApiRequestHandler {
     public static String SLOT_UPDATE_URL = BASE_API_URL + "ge/slots/update";
     public static String JWT_HEALTH_URL = BASE_API_URL + "auth/jwt/health";
     public static String JWT_REFRESH_URL = BASE_API_URL + "auth/refresh";
+    public static String USER_URL = BASE_API_URL + "user/self";
     public static String ACCOUNT_URL = BASE_API_URL + "account/self";
     public static String ACCOUNT_REGISTRATION_URL = BASE_API_URL + "account/register";
     public static String TOKEN_URL = BASE_API_URL + "auth/token";
 
-
     public ApiRequestHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
         this.httpClient = plugin.getHttpClient();
+    }
+
+    public CompletableFuture<User> getUser() {
+        if (!plugin.getApiAuthHandler().isHasValidJWT()) {
+            return null;
+        }
+        String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
+        Request request = new Request.Builder().
+            header("User-Agent", "FlippingUtilities").
+            header("Authorization", "bearer " + jwt).
+            url(USER_URL).
+            build();
+        return getResponseFuture(request, new TypeToken<ApiResponse<User>>(){}).thenApply(r -> r.data);
     }
 
     public CompletableFuture<List<OsrsAccount>> getUserAccounts() {
@@ -156,12 +169,6 @@ public class ApiRequestHandler {
             public void onResponse(Call call, Response response) {
                 if (!response.isSuccessful()) {
                     future.completeExceptionally(new BadStatusCodeException(request, response));
-                    try {
-                        log.debug("response not successful. Response: {}, response body: {}", response, response.body().string());
-                    }
-                    catch (Exception e) {
-                        log.debug("couldn't read response body when accessing it to see why the response status code was bad");
-                    }
                 }
                 else {
                     try {
@@ -188,6 +195,15 @@ public class ApiRequestHandler {
         });
         return future;
     }
+
+    public static String getResponseBody(Response response) {
+        try {
+            return response.body().string();
+        }
+        catch (Exception e) {
+            return "Could not fetch response body";
+        }
+    }
 }
 
 
@@ -196,7 +212,7 @@ class BadStatusCodeException extends Exception {
     Response response;
 
     public BadStatusCodeException(Request request, Response response) {
-        super(String.format("Request: %s resulted in bad status code in response: %s", request, response));
+        super(String.format("Request: %s resulted in bad status code in response: %s, body %s", request, response, ApiRequestHandler.getResponseBody(response)));
         this.request = request;
         this.response = response;
     }
