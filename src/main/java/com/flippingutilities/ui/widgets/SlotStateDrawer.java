@@ -138,18 +138,10 @@ public class SlotStateDrawer {
 
     private void addQuicklookWidget(Widget slotWidget, RemoteSlot slot) {
         Widget existingQuickLookWidget = slotIdxToQuickLookWidget.get(slot.getIndex());
-        if (existingQuickLookWidget != null) {
-            boolean isWidgetStillAttached = isWidgetStillAttached(existingQuickLookWidget);
-            if (isWidgetStillAttached) {
-                log.info("widget is still attached, slot: {}, quicklook widget idx: {}, parent dynamic children len: {}", slot.getIndex(), existingQuickLookWidget.getIndex(), existingQuickLookWidget.getParent().getDynamicChildren().length);
-            }
-        }
         if (existingQuickLookWidget == null || !isWidgetStillAttached(existingQuickLookWidget)) {
-            log.info("readding widget on slot {}", slot.getIndex());
             Widget quicklookWidget = createQuicklookWidget(slotWidget, slot);
             slotIdxToQuickLookWidget.put(slot.getIndex(), quicklookWidget);
         } else {
-            log.info("setting widget to not hidden on slot {}", slot.getIndex());
             existingQuickLookWidget.setHidden(false);
         }
     }
@@ -393,7 +385,6 @@ class QuickLookPanel extends JPanel {
     }
 
     public void updateDetails(RemoteSlot slot, WikiItemMargins wikiItemInfo) {
-        log.info("updating details on ql slot: {}", slot.toString());
         Arrays.asList(wikiInstaBuy, wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setForeground(Color.WHITE));
         if (wikiItemInfo == null || slot == null) {
             Arrays.asList(wikiInstaBuy, wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setText("No data"));
