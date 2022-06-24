@@ -41,7 +41,10 @@ public class ApiAuthHandler {
         return this.hasValidJWT && successfullyRegisteredRsns.contains(displayName);
     }
 
-    public void checkPremiumStatus() {
+    /**
+     * Checks if the user is premium, and if so, sets the premium status
+     */
+    public void setPremiumStatus() {
         if (!hasValidJWT) {
             return;
         }
@@ -81,21 +84,7 @@ public class ApiAuthHandler {
                 return future;
             }
             else if (jwt.shouldRefresh()) {
-                log.info("jwt should refresh");
-                hasValidJWT = true; //so it passes the check in refreshJwt
-                CompletableFuture<String> newJwtFuture = plugin.getApiRequestHandler().refreshJwt(jwtString);
-                return newJwtFuture.whenComplete((newJwt, exception) -> {
-                    if (exception != null) {
-                        log.info("failed to refresh jwt, error: ", exception);
-                        hasValidJWT = false; //validJwt is false by default, just setting it here for clarity
-                    }
-                    else {
-                        plugin.getDataHandler().getAccountWideData().setJwt(newJwt);
-                        hasValidJWT = true;
-                        log.info("successfully refreshed jwt");
-                        loginSubscriberActions.forEach(Runnable::run);
-                    }
-                });
+                return refreshJwt(jwtString);
             }
             else {
                 log.info("jwt is valid");
@@ -111,6 +100,24 @@ public class ApiAuthHandler {
             future.complete("error");
         }
         return future;
+    }
+
+    private CompletableFuture<String> refreshJwt(String jwtString) {
+        log.info("refresh jwt");
+        hasValidJWT = true; //so it passes the check in refreshJwt
+        CompletableFuture<String> newJwtFuture = plugin.getApiRequestHandler().refreshJwt(jwtString);
+        return newJwtFuture.whenComplete((newJwt, exception) -> {
+            if (exception != null) {
+                log.info("failed to refresh jwt, error: ", exception);
+                hasValidJWT = false; //validJwt is false by default, just setting it here for clarity
+            }
+            else {
+                plugin.getDataHandler().getAccountWideData().setJwt(newJwt);
+                hasValidJWT = true;
+                log.info("successfully refreshed jwt");
+                loginSubscriberActions.forEach(Runnable::run);
+            }
+        });
     }
 
     public CompletableFuture<Set<String>> checkRsn(String displayName) {
@@ -130,16 +137,16 @@ public class ApiAuthHandler {
                 return plugin.getApiRequestHandler().registerNewAccount(displayName).
                         thenApply(acc -> {
                             successfullyRegisteredRsns.add(acc.getRsn());
-                            log.info("added rsn: {} to successfullyRegisteredRsns", acc.getRsn());
+                            log.debug("added rsn: {} to successfullyRegisteredRsns", acc.getRsn());
                             return successfullyRegisteredRsns;
                         }).
                         exceptionally(e -> {
-                            log.info("could not register display name: {}, error: {}", displayName, e);
+                            log.debug("could not register display name: {}, error: {}", displayName, e);
                             return successfullyRegisteredRsns;
                 });
             }
         }).exceptionally(e -> {
-            log.info("could not check rsn", e);
+            log.debug("could not check rsn", e);
             return successfullyRegisteredRsns;
         });
     }
@@ -160,7 +167,7 @@ public class ApiAuthHandler {
                 if (plugin.getCurrentlyLoggedInAccount() != null) {
                     checkRsn(plugin.getCurrentlyLoggedInAccount());
                 }
-                checkPremiumStatus();
+                setPremiumStatus();
             }
         });
 

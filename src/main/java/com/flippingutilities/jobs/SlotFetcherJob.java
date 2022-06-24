@@ -20,7 +20,7 @@ public class SlotFetcherJob {
     FlippingPlugin plugin;
     ScheduledExecutorService executor;
     OkHttpClient httpClient;
-    Future slotStateSenderTask;
+    Future slotFetcherTask;
     List<RemoteAccountSlots> previousRemoteAccountSlots;
     List<Consumer<List<RemoteAccountSlots>>> subscribers = new ArrayList<>();
     public static int PERIOD = 5; //seconds
@@ -36,13 +36,13 @@ public class SlotFetcherJob {
     }
 
     public void start() {
-        slotStateSenderTask = executor.scheduleAtFixedRate(this::fetchSlots, 10, PERIOD, TimeUnit.SECONDS);
+        slotFetcherTask = executor.scheduleAtFixedRate(this::fetchSlots, 10, PERIOD, TimeUnit.SECONDS);
         log.info("started slot fetcher job");
     }
 
     public void stop() {
-        if (!slotStateSenderTask.isCancelled() && !slotStateSenderTask.isCancelled()) {
-            slotStateSenderTask.cancel(true);
+        if (!slotFetcherTask.isCancelled()) {
+            slotFetcherTask.cancel(true);
             log.info("shut down slot fetcher job");
         }
     }

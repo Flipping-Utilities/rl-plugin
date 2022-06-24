@@ -43,7 +43,7 @@ public class SlotSenderJob {
     }
 
     public void stop() {
-        if (!slotStateSenderTask.isCancelled() && !slotStateSenderTask.isCancelled()) {
+        if (!slotStateSenderTask.isCancelled()) {
             slotStateSenderTask.cancel(true);
             log.info("shut down slot sender job");
         }

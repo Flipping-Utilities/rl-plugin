@@ -255,8 +255,7 @@ public class FlippingPlugin extends Plugin {
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
             startJobs();
-            apiAuthHandler.checkExistingJwt().
-                whenComplete((s, e) -> apiAuthHandler.checkPremiumStatus());
+            apiAuthHandler.checkExistingJwt().thenRun(() -> apiAuthHandler.setPremiumStatus());
 
             //this is only relevant if the user downloads/enables the plugin after they login.
             if (client.getGameState() == GameState.LOGGED_IN) {
@@ -667,6 +666,11 @@ public class FlippingPlugin extends Plugin {
         }
     }
 
+    /**
+     * What hands the slot widgets on the screen to the SlotStateDrawer. This is called by
+     * the GameUiChangesHandler in response to the appropriate UI changes that cause the
+     * slot widgets to appear/get rebuilt.
+     */
     public void setWidgetsOnSlotStateDrawer() {
         Widget[] slotWidgets = client.getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, WidgetConstants.SLOT_CONTAINER).getStaticChildren();
         slotStateDrawer.setSlotWidgets(slotWidgets);

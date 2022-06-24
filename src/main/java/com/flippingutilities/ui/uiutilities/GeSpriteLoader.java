@@ -10,7 +10,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Loads the sprite images into memory and then sets them in the
+ * client sprite overrides. Also maintains a mapping of the dynamic
+ * children indices and the custom sprite ids they map to.
+ */
 public class GeSpriteLoader {
+    //the indexes of the widgets in the dynamic child list of the slot widget
     public static final int TOP_CHILD_IDX = 5;
     public static final int BOTTOM_CHILD_IDX = 6;
     public static final int LEFT_CHILD_IDX = 7;
@@ -56,6 +62,10 @@ public class GeSpriteLoader {
         setClientSpriteOverrides(client, "blue", CustomSpriteIds.BLUE_SLOT_SPRITES);
     }
 
+    /**
+     * Associates the custom sprite ids with the sprite image. To actually change a sprite on screen, we later make
+     * the widget with the sprite we want to change have its sprite id = to some custom sprite id here
+     */
     private static void setClientSpriteOverrides(Client client, String color, List<Integer> spriteIds) {
         for (int i = 0; i < spriteIds.size(); i++) {
             int spriteId = spriteIds.get(i);

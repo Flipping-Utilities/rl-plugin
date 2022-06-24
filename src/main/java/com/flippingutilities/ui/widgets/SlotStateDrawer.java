@@ -27,6 +27,22 @@ import java.time.Instant;
 import java.util.*;
 import java.util.List;
 
+/**
+ * This class is responsible for enhancing slots in the ge interface. It
+ * 1. adds color to slots to mark the offers as competitive or not
+ * 2. adds a widget that shows some preview info on the competitiveness of the offer
+ * 3. adds a widget to show how long the offer has been competitive since the last time
+ *    it was updated.
+ *
+ * This class requires three pieces/types of data for drawing on/enhancing the slots.
+ * 1. remote slots from the server
+ * 2. wiki margins
+ * 3. actual slot widgets
+ *
+ * It is fed this data by the plugin (sourcing it from other components like the jobs). Everytime
+ * it is fed new data, it builds a representation of what it should draw (see getUnifiedSlotStates),
+ * and then draws it on the slot (see drawWrapper)
+ */
 @Slf4j
 public class SlotStateDrawer {
     List<RemoteAccountSlots> remoteAccountSlots = new ArrayList<>();
@@ -62,6 +78,9 @@ public class SlotStateDrawer {
         drawWrapper();
     }
 
+    /**
+     * Thin wrapper around draw to decide if drawing should take place.
+     */
     private void drawWrapper() {
         if (
             slotWidgets == null ||
@@ -74,6 +93,9 @@ public class SlotStateDrawer {
         plugin.getClientThread().invokeLater(() -> draw(unifiedSlotStates));
     }
 
+    /**
+     * Draws the enhancements on the slot
+     */
     private void draw(List<Optional<RemoteSlot>> remoteSlots) {
         for (int i = 0; i < remoteSlots.size(); i++) {
             Optional<RemoteSlot> maybeRemoteSlot = remoteSlots.get(i);
@@ -86,6 +108,10 @@ public class SlotStateDrawer {
         }
     }
 
+    /**
+     * Hides all the slot enhancements that were previously drawn on the slot. This is
+     * done when the slot was once populated with an offer but is now empty.
+     */
     private void resetSlot(int slotIdx, Widget slotWidget) {
         Map<Integer, Integer> spriteIdMap = GeSpriteLoader.CHILDREN_IDX_TO_DEFAULT_SPRITE_ID;
         GeSpriteLoader.DYNAMIC_CHILDREN_IDXS.forEach(idx -> {
@@ -136,6 +162,10 @@ public class SlotStateDrawer {
         addQuicklookWidget(slotWidget, slot);
     }
 
+    /**
+     * This is the image widget (the magnifying glass widget) that a user can hover over to
+     * see some quick details about the competitiveness of their offer.
+     */
     private void addQuicklookWidget(Widget slotWidget, RemoteSlot slot) {
         Widget existingQuickLookWidget = slotIdxToQuickLookWidget.get(slot.getIndex());
         if (existingQuickLookWidget == null || !isWidgetStillAttached(existingQuickLookWidget)) {
@@ -146,6 +176,10 @@ public class SlotStateDrawer {
         }
     }
 
+    /**
+     * This is the text widget that shows how long the offer has been competitive since
+     * the last time it was updated.
+     */
     private void addTimeInRangeWidget(Widget slotWidget, int slotIdx, long latestTimeInRange) {
         Widget existingWidget = slotIdxToTimeInRangeWidget.get(slotIdx);
         if (existingWidget == null || !isWidgetStillAttached(existingWidget)) {
@@ -222,12 +256,27 @@ public class SlotStateDrawer {
         return timeInRangeWidget;
     }
 
+    /**
+     * Determines if the widget is still actually on the screen. This is useful for deciding
+     * whether we should reuse the old widget, or create a new one.
+     */
     private boolean isWidgetStillAttached(Widget widget) {
         Widget parent = widget.getParent();
         Widget[] siblings = parent.getDynamicChildren();
         return widget.getIndex() < siblings.length && siblings[widget.getIndex()] != null;
     }
 
+    /**
+     * Builds a list of RemoteSlots that represent the most up to date state of an account's
+     * offers based on the data from the server and local data. RemoteSlot is the actual structure
+     * we get back from the server. However, the RemoteSlot we return from this method may not contain
+     * the data that the server sent as we prefer local slot data if there are any mismatches between local
+     * data and remote data. The reason I've used RemoteSlot as the structure to carry the info, even when
+     * we use local data, is because i didn't want to define a new class just for that...
+     *
+     * The reason we use remote slot data from the server even though local data mostly suffices is because
+     * the remote slot data has the timeInRange.
+     */
     private List<Optional<RemoteSlot>> getUnifiedSlotStates() {
         List<Optional<RemoteSlot>> slots = new ArrayList<>();
         GrandExchangeOffer[] currentOffers = plugin.getClient().getGrandExchangeOffers();
@@ -248,6 +297,7 @@ public class SlotStateDrawer {
                 slots.add(Optional.empty());
                 continue;
             }
+            //prefer local slot info if remote slot from server is not present or doesn't match local slot
             if (remoteslot == null || !doesLocalSlotMatchWithRemote(localSlot, remoteslot) || remoteslot.getPredictedState() == SlotPredictedState.UNKNOWN) {
                 slots.add(clientGeOfferToRemoteSlot(i, localSlot, enrichedOffer));
                 continue;
@@ -283,6 +333,10 @@ public class SlotStateDrawer {
         }
     }
 
+    /**
+     * Turns a local slot structure into a RemoteSlot structure. I turn everything into a RemoteSlot just because
+     * its already defined and contains all the right fields.
+     */
     private Optional<RemoteSlot> clientGeOfferToRemoteSlot(int index, GrandExchangeOffer offer, OfferEvent enrichedOffer) {
         if (wikiRequest == null) {
             return Optional.empty();
