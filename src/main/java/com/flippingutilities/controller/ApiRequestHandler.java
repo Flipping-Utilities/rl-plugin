@@ -10,7 +10,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-
 /**
  * This class is responsible for wrapping the api. All api interactions must go through this class.
  */
@@ -168,7 +167,7 @@ public class ApiRequestHandler {
             @Override
             public void onResponse(Call call, Response response) {
                 if (!response.isSuccessful()) {
-                    future.completeExceptionally(new BadStatusCodeException(request, response));
+                    future.completeExceptionally(new BadStatusCodeException(request, response, getResponseBody(response)));
                 }
                 else {
                     try {
@@ -179,7 +178,7 @@ public class ApiRequestHandler {
                         }
                         else if (apiResponse.errors.size() > 0) {
                             //TODO better exception here
-                            future.completeExceptionally(new BadStatusCodeException(request, response));
+                            future.completeExceptionally(new BadStatusCodeException(request, response, body));
                         }
                         else {
                             future.complete(apiResponse);
@@ -211,8 +210,8 @@ class BadStatusCodeException extends Exception {
     Request request;
     Response response;
 
-    public BadStatusCodeException(Request request, Response response) {
-        super(String.format("Request: %s resulted in bad status code in response: %s, body %s", request, response, ApiRequestHandler.getResponseBody(response)));
+    public BadStatusCodeException(Request request, Response response, String body) {
+        super(String.format("Request: %s resulted in bad status code in response: %s, body %s", request, response, body));
         this.request = request;
         this.response = response;
     }

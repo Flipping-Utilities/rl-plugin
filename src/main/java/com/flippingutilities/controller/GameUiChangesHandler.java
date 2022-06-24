@@ -30,17 +30,13 @@ public class GameUiChangesHandler {
     private static final int GE_OFFER_INIT_STATE_CHILD_ID = 18;
     private static final int GE_HISTORY_TAB_WIDGET_ID = 149;
     FlippingPlugin plugin;
-    boolean flag = true;
-
     boolean quantityOrPriceChatboxOpen;
     Optional<FlippingItem> highlightedItem = Optional.empty();
     int highlightedItemId;
 
-
     GameUiChangesHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
     }
-
 
     public void onVarClientIntChanged(VarClientIntChanged event) {
         Client client = plugin.getClient();
