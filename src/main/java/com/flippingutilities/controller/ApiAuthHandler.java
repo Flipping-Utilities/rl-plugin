@@ -2,11 +2,13 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.utilities.Jwt;
 import com.flippingutilities.utilities.OsrsAccount;
+import com.flippingutilities.utilities.User;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -21,7 +23,8 @@ public class ApiAuthHandler {
     @Getter
     private boolean hasValidJWT;
     private Set<String> successfullyRegisteredRsns = new HashSet<>();
-    List<Runnable> loginSubscriberActions = new ArrayList<>();
+    List<Runnable> validJwtSubscriberActions = new ArrayList<>();
+    List<Consumer<Boolean>> premiumCheckSubscribers = new ArrayList<>();
     @Getter
     private boolean isPremium;
 
@@ -30,7 +33,11 @@ public class ApiAuthHandler {
     }
 
     public void subscribeToLogin(Runnable r) {
-        this.loginSubscriberActions.add(r);
+        this.validJwtSubscriberActions.add(r);
+    }
+    
+    public void subscribeToPremiumChecking(Consumer<Boolean> consumer) {
+        this.premiumCheckSubscribers.add(consumer);
     }
 
     /**
@@ -57,6 +64,7 @@ public class ApiAuthHandler {
                 log.info("got user, premium status: {}", user.isPremium());
                 isPremium = user.isPremium();
             }
+            premiumCheckSubscribers.forEach(c -> c.accept(isPremium));
         });
     }
 
@@ -67,12 +75,10 @@ public class ApiAuthHandler {
      * This should be called on client start up
      */
     public CompletableFuture<String> checkExistingJwt() {
-        CompletableFuture<String> future = new CompletableFuture<>();
         String jwtString = plugin.getDataHandler().getAccountWideData().getJwt();
         if (jwtString == null) {
             log.info("no jwt stored locally, not attempting to check existing jwt");
-            future.complete("no jwt");
-            return future;
+            return CompletableFuture.completedFuture("no jwt");
         }
         try {
             Jwt jwt = Jwt.fromString(jwtString, plugin.gson);
@@ -80,8 +86,7 @@ public class ApiAuthHandler {
                 //TODO use master panel to display message about having to relog using a new token from flopper
                 log.info("jwt is expired, prompting user to re log");
                 hasValidJWT = false;
-                future.complete("expired");
-                return future;
+                return CompletableFuture.completedFuture("expired");
             }
             else if (jwt.shouldRefresh()) {
                 return refreshJwt(jwtString);
@@ -89,17 +94,15 @@ public class ApiAuthHandler {
             else {
                 log.info("jwt is valid");
                 hasValidJWT = true;
-                loginSubscriberActions.forEach(Runnable::run);
-                future.complete("valid jwt");
-                return future;
+                validJwtSubscriberActions.forEach(Runnable::run);
+                return CompletableFuture.completedFuture("valid jwt");
             }
         }
         //this catch clause is just for the Jwt.fromString line
         catch (Exception e) {
             log.info("failed to check existing jwt, error: ", e);
-            future.complete("error");
+            return CompletableFuture.completedFuture("error");
         }
-        return future;
     }
 
     private CompletableFuture<String> refreshJwt(String jwtString) {
@@ -115,7 +118,7 @@ public class ApiAuthHandler {
                 plugin.getDataHandler().getAccountWideData().setJwt(newJwt);
                 hasValidJWT = true;
                 log.info("successfully refreshed jwt");
-                loginSubscriberActions.forEach(Runnable::run);
+                validJwtSubscriberActions.forEach(Runnable::run);
             }
         });
     }
@@ -162,7 +165,7 @@ public class ApiAuthHandler {
             else {
                 plugin.getDataHandler().getAccountWideData().setJwt(jwt);
                 hasValidJWT = true;
-                loginSubscriberActions.forEach(Runnable::run);
+                validJwtSubscriberActions.forEach(Runnable::run);
                 log.info("successfully logged in with token!");
                 if (plugin.getCurrentlyLoggedInAccount() != null) {
                     checkRsn(plugin.getCurrentlyLoggedInAccount());

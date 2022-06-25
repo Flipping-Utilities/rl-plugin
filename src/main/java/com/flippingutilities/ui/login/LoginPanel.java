@@ -27,10 +27,20 @@ public class LoginPanel extends JPanel{
     Instant timeOfLastSuccessfulRequest;
     boolean errorWhenSendingSlotRequest;
     boolean notSendingRequestDueToNoChange;
+    JPanel loggedInPanel;
 
     public LoginPanel(FlippingPlugin plugin) {
         this.plugin = plugin;
         plugin.getApiAuthHandler().subscribeToLogin(this::showLoggedInView);
+        plugin.getApiAuthHandler().subscribeToPremiumChecking((isPremium) -> {
+            if (isPremium) {
+                loggedInPanel.add(createSlotEnhancementTogglePanel(), BorderLayout.SOUTH);
+            }
+            else {
+                loggedInPanel.add(new JLabel("not premium", JLabel.CENTER));
+            }
+        });
+
         add(createLoggedOutPanel());
         Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(this::checkHealth, 5, 1, TimeUnit.SECONDS);
     }
@@ -84,7 +94,10 @@ public class LoginPanel extends JPanel{
     public void showLoggedInView() {
         SwingUtilities.invokeLater(() -> {
             removeAll();
-            add(createLoggedInPanel());
+            if (loggedInPanel == null) {
+                loggedInPanel = createLoggedInPanel();
+            }
+            add(loggedInPanel);
             revalidate();
             repaint();
             if (this.onViewChange != null) {
@@ -132,6 +145,20 @@ public class LoginPanel extends JPanel{
         loggedInPanel.add(headerLabel, BorderLayout.NORTH);
         loggedInPanel.add(healthPanel, BorderLayout.CENTER);
         return loggedInPanel;
+    }
+
+    private JPanel createSlotEnhancementTogglePanel() {
+        JLabel toggleLabel = new JLabel("slot enhancement");
+        toggleLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
+        toggleLabel.setForeground(CustomColors.CHEESE);
+
+        JToggleButton toggleButton = UIUtilities.createToggleButton();
+        toggleButton.addItemListener(i -> plugin.toggleEnhancedSlots(toggleButton.isSelected()));
+
+        JPanel toggleSlotEnhancementPanel = new JPanel(new BorderLayout());
+        toggleSlotEnhancementPanel.add(toggleLabel, BorderLayout.WEST);
+        toggleSlotEnhancementPanel.add(toggleButton, BorderLayout.EAST);
+        return toggleSlotEnhancementPanel;
     }
 
     private JPanel createLoggedOutPanel() {
