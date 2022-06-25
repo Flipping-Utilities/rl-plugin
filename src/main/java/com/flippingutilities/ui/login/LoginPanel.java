@@ -33,12 +33,16 @@ public class LoginPanel extends JPanel{
         this.plugin = plugin;
         plugin.getApiAuthHandler().subscribeToLogin(this::showLoggedInView);
         plugin.getApiAuthHandler().subscribeToPremiumChecking((isPremium) -> {
-            if (isPremium) {
-                loggedInPanel.add(createSlotEnhancementTogglePanel(), BorderLayout.SOUTH);
-            }
-            else {
-                loggedInPanel.add(new JLabel("not premium", JLabel.CENTER));
-            }
+            SwingUtilities.invokeLater(() -> {
+                if (isPremium) {
+                    loggedInPanel.add(createSlotEnhancementTogglePanel(), BorderLayout.SOUTH);
+                }
+                else {
+                    loggedInPanel.add(new JLabel("not premium", JLabel.CENTER), BorderLayout.SOUTH);
+                }
+                revalidate();
+                repaint();
+            });
         });
 
         add(createLoggedOutPanel());
@@ -148,11 +152,12 @@ public class LoginPanel extends JPanel{
     }
 
     private JPanel createSlotEnhancementTogglePanel() {
-        JLabel toggleLabel = new JLabel("slot enhancement");
+        JLabel toggleLabel = new JLabel("Slot enhancement");
         toggleLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
         toggleLabel.setForeground(CustomColors.CHEESE);
 
         JToggleButton toggleButton = UIUtilities.createToggleButton();
+        toggleButton.setSelected(plugin.shouldEnhanceSlots());
         toggleButton.addItemListener(i -> plugin.toggleEnhancedSlots(toggleButton.isSelected()));
 
         JPanel toggleSlotEnhancementPanel = new JPanel(new BorderLayout());

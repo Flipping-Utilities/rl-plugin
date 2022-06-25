@@ -104,24 +104,6 @@ public class ApiRequestHandler {
     }
 
     /**
-     * Fetches ge slots from the api. The api returns more data than RemoteSlotsResponse, but I
-     * only kept the relevant fields for now.
-     */
-    public CompletableFuture<List<RemoteAccountSlots>> fetchGeSlots() {
-        if (!plugin.getApiAuthHandler().isHasValidJWT()) {
-            return null;
-        }
-        String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
-        Request request = new Request.Builder().
-            get().
-            header("User-Agent", "FlippingUtilities").
-            header("Authorization", "bearer " + jwt).
-            url(SLOT_FETCH_URL).
-            build();
-        return getResponseFuture(request, new TypeToken<ApiResponse<List<RemoteAccountSlots>>>(){}).thenApply(r -> r.data);
-    }
-
-    /**
      * Authenticates with the api using the token provided by Flopper and returns the jwt which is used to communicate
      * with the other api endpoints.
      * <p>

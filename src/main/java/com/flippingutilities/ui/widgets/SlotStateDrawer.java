@@ -17,52 +17,44 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.util.QuantityFormatter;
-import org.apache.commons.lang3.tuple.Pair;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.List;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
 
 /**
  * This class is responsible for enhancing slots in the ge interface. It
  * 1. adds color to slots to mark the offers as competitive or not
  * 2. adds a widget that shows some preview info on the competitiveness of the offer
- * 3. adds a widget to show how long the offer has been competitive since the last time
- *    it was updated.
- *
- * This class requires three pieces/types of data for drawing on/enhancing the slots.
- * 1. remote slots from the server
- * 2. wiki margins
- * 3. actual slot widgets
- *
+ * <p>
+ * <p>
+ * This class requires two pieces/types of data for drawing on/enhancing the slots.
+ * 1. wiki margins
+ * 2. actual slot widgets
+ * <p>
  * It is fed this data by the plugin (sourcing it from other components like the jobs). Everytime
- * it is fed new data, it builds a representation of what it should draw (see getCombinedSlotStates),
+ * it is fed new data, it builds a representation of what it should draw (see createSlotRepresentation),
  * and then draws it on the slot (see drawWrapper)
  */
 @Slf4j
 public class SlotStateDrawer {
-    List<RemoteAccountSlots> remoteAccountSlots = new ArrayList<>();
     FlippingPlugin plugin;
     WikiRequest wikiRequest;
     Widget[] slotWidgets;
-    Map<Integer, Widget> slotIdxToTimeInRangeWidget = new HashMap<>();
     Map<Integer, Widget> slotIdxToQuickLookWidget = new HashMap<>();
     JPopupMenu popup = new JPopupMenu();
     QuickLookPanel quickLookPanel = new QuickLookPanel();
-    List<Optional<RemoteSlot>> unifiedSlotStates = new ArrayList<>();
+    List<Optional<SlotInfo>> slotInfos = new ArrayList<>();
 
     public SlotStateDrawer(FlippingPlugin plugin) {
         this.plugin = plugin;
         popup.add(quickLookPanel);
-    }
-
-    public void setRemoteAccountSlots(List<RemoteAccountSlots> remoteAccountSlots) {
-        this.remoteAccountSlots = remoteAccountSlots;
-        drawWrapper();
     }
 
     public void setWikiRequest(WikiRequest wikiRequest) {
@@ -81,25 +73,25 @@ public class SlotStateDrawer {
     /**
      * Thin wrapper around draw to decide if drawing should take place.
      */
-    private void drawWrapper() {
+    public void drawWrapper() {
         if (
             slotWidgets == null ||
-            plugin.getCurrentlyLoggedInAccount() == null ||
-            !plugin.getApiAuthHandler().isPremium() ||
-            !plugin.shouldEnhanceSlots()
+                plugin.getCurrentlyLoggedInAccount() == null ||
+                !plugin.getApiAuthHandler().isPremium() ||
+                !plugin.shouldEnhanceSlots()
         ) {
             return;
         }
-        this.unifiedSlotStates = getCombinedSlotStates();
-        plugin.getClientThread().invokeLater(() -> draw(unifiedSlotStates));
+        this.slotInfos = createSlotRepresentation();
+        plugin.getClientThread().invokeLater(() -> draw(slotInfos));
     }
 
     /**
      * Draws the enhancements on the slot
      */
-    private void draw(List<Optional<RemoteSlot>> unifiedSlots) {
+    private void draw(List<Optional<SlotInfo>> unifiedSlots) {
         for (int i = 0; i < unifiedSlots.size(); i++) {
-            Optional<RemoteSlot> maybeUnifiedSlot = unifiedSlots.get(i);
+            Optional<SlotInfo> maybeUnifiedSlot = unifiedSlots.get(i);
             Widget slotWidget = slotWidgets[i + 1];
             if (!maybeUnifiedSlot.isPresent()) {
                 resetSlot(i, slotWidget);
@@ -113,7 +105,7 @@ public class SlotStateDrawer {
         if (slotWidgets == null) {
             return;
         }
-        for (int i=0; i< 8; i++) {
+        for (int i = 0; i < 8; i++) {
             Widget slotWidget = slotWidgets[i + 1];
             resetSlot(i, slotWidget);
         }
@@ -131,18 +123,14 @@ public class SlotStateDrawer {
             child.setSpriteId(spriteId);
         });
 
-        Widget timeInRangeWidget = slotIdxToTimeInRangeWidget.get(slotIdx);
-        if (timeInRangeWidget != null) {
-            timeInRangeWidget.setHidden(true);
-        }
-
         Widget quickLookWidget = slotIdxToQuickLookWidget.get(slotIdx);
         if (quickLookWidget != null) {
             quickLookWidget.setHidden(true);
+            slotIdxToQuickLookWidget.remove(slotIdx);
         }
     }
 
-    private void drawOnSlot(RemoteSlot slot, Widget slotWidget) {
+    private void drawOnSlot(SlotInfo slot, Widget slotWidget) {
         if (slotWidget.isHidden()) {
             return;
         }
@@ -162,15 +150,6 @@ public class SlotStateDrawer {
             child.setSpriteId(spriteId);
         });
 
-        long secondsSinceLastUpdate =
-            slot.getPredictedState() == SlotPredictedState.IN_RANGE
-                ? Instant.now().getEpochSecond() - slot.getLatestPredictedFilledTimestamp()
-                : 0;
-        long latestTimeInRange = slot.getTimeInRange() + secondsSinceLastUpdate;
-
-        if (latestTimeInRange > 0) {
-            addTimeInRangeWidget(slotWidget, slot.getIndex(), latestTimeInRange);
-        }
         addQuicklookWidget(slotWidget, slot);
     }
 
@@ -178,7 +157,7 @@ public class SlotStateDrawer {
      * This is the image widget (the magnifying glass widget) that a user can hover over to
      * see some quick details about the competitiveness of their offer.
      */
-    private void addQuicklookWidget(Widget slotWidget, RemoteSlot slot) {
+    private void addQuicklookWidget(Widget slotWidget, SlotInfo slot) {
         Widget existingQuickLookWidget = slotIdxToQuickLookWidget.get(slot.getIndex());
         if (existingQuickLookWidget == null || !isWidgetStillAttached(existingQuickLookWidget)) {
             Widget quicklookWidget = createQuicklookWidget(slotWidget, slot);
@@ -188,23 +167,7 @@ public class SlotStateDrawer {
         }
     }
 
-    /**
-     * This is the text widget that shows how long the offer has been competitive since
-     * the last time it was updated.
-     */
-    private void addTimeInRangeWidget(Widget slotWidget, int slotIdx, long latestTimeInRange) {
-        Widget existingWidget = slotIdxToTimeInRangeWidget.get(slotIdx);
-        if (existingWidget == null || !isWidgetStillAttached(existingWidget)) {
-            Widget timeInRangeWidget = createTimeInRangeWidget(slotWidget);
-            timeInRangeWidget.setText(TimeFormatters.formatDuration(Duration.ofSeconds(latestTimeInRange)));
-            slotIdxToTimeInRangeWidget.put(slotIdx, timeInRangeWidget);
-        } else {
-            existingWidget.setHidden(false);
-            existingWidget.setText(TimeFormatters.formatDuration(Duration.ofSeconds(latestTimeInRange)));
-        }
-    }
-
-    private Widget createQuicklookWidget(Widget slotWidget, RemoteSlot slot) {
+    private Widget createQuicklookWidget(Widget slotWidget, SlotInfo slot) {
         Widget quickLookWidget = slotWidget.createChild(-1, WidgetType.GRAPHIC);
         quickLookWidget.setFontId(FontID.PLAIN_11);
         quickLookWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
@@ -225,7 +188,7 @@ public class SlotStateDrawer {
                     quickLookPanel.updateDetails(null, null);
                     return;
                 }
-                Optional<RemoteSlot> maybeRemoteSlot = unifiedSlotStates.get(slot.getIndex());
+                Optional<SlotInfo> maybeRemoteSlot = slotInfos.get(slot.getIndex());
                 if (!maybeRemoteSlot.isPresent()) {
                     quickLookPanel.updateDetails(null, null);
                     return;
@@ -252,22 +215,6 @@ public class SlotStateDrawer {
         return quickLookWidget;
     }
 
-    private Widget createTimeInRangeWidget(Widget slotWidget) {
-        Widget timeInRangeWidget = slotWidget.createChild(-1, WidgetType.TEXT);
-        timeInRangeWidget.setTextColor(Color.WHITE.getRGB());
-        timeInRangeWidget.setFontId(FontID.PLAIN_11);
-        timeInRangeWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
-        timeInRangeWidget.setOriginalX(35);
-        timeInRangeWidget.setOriginalY(77);
-        timeInRangeWidget.setWidthMode(WidgetSizeMode.MINUS);
-        timeInRangeWidget.setOriginalHeight(10);
-        timeInRangeWidget.setXPositionMode(WidgetPositionMode.ABSOLUTE_CENTER);
-        timeInRangeWidget.setXTextAlignment(WidgetTextAlignment.LEFT);
-        timeInRangeWidget.setTextShadowed(true);
-        timeInRangeWidget.revalidate();
-        return timeInRangeWidget;
-    }
-
     /**
      * Determines if the widget is still actually on the screen. This is useful for deciding
      * whether we should reuse the old widget, or create a new one.
@@ -279,51 +226,26 @@ public class SlotStateDrawer {
     }
 
     /**
-     * Builds a list of RemoteSlots that represent the most up to date state of an account's
-     * offers based on the data from the server and local data. RemoteSlot is the actual structure
-     * we get back from the server. However, the RemoteSlot we return from this method may only contains
-     * the timeInRange data from the server sent RemoteSlot, the rest of the data is from the local slot.
-     * The reason I've used RemoteSlot as the structure to carry the info, even when
-     * we use local data, is because I didn't want to define a new class just for that...
-     *
-     * The reason we use remote slot data from the server even though local data mostly suffices is because
-     * the remote slot data has the timeInRange.
+     * Builds a representation of the slots to draw
      */
-    private List<Optional<RemoteSlot>> getCombinedSlotStates() {
-        List<Optional<RemoteSlot>> slots = new ArrayList<>();
+    private List<Optional<SlotInfo>> createSlotRepresentation() {
+        List<Optional<SlotInfo>> slots = new ArrayList<>();
         GrandExchangeOffer[] currentOffers = plugin.getClient().getGrandExchangeOffers();
-        Map<Integer, OfferEvent> enrichedOffers = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
-
-        String rsn = plugin.getCurrentlyLoggedInAccount();
-        Optional<RemoteAccountSlots> maybeRemoteAccountSlots = remoteAccountSlots.stream().filter(r -> r.getRsn().equals(rsn)).findFirst();
-        Map<Integer, RemoteSlot> idxToRemoteSlot = maybeRemoteAccountSlots
-            .map(accountSlots -> ListUtils.toMap(accountSlots.getSlots(), r -> Pair.of(r.getIndex(), r)))
-            .orElseGet(HashMap::new);
 
         for (int i = 0; i < currentOffers.length; i++) {
             GrandExchangeOffer localSlot = currentOffers[i];
-            RemoteSlot remoteslot = idxToRemoteSlot.get(i);
-            OfferEvent enrichedOffer = enrichedOffers.get(i);
 
             if (localSlot.getState() == GrandExchangeOfferState.EMPTY || OfferEvent.isComplete(localSlot.getState())) {
                 slots.add(Optional.empty());
                 continue;
             }
 
-            Optional<RemoteSlot> combinedSlot = clientGeOfferToRemoteSlot(i, localSlot, enrichedOffer);
-            if (remoteslot != null & combinedSlot.isPresent()) {
-                combinedSlot.get().setTimeInRange(remoteslot.getTimeInRange());
-            }
-            slots.add(combinedSlot);
+            slots.add(clientGeOfferToRemoteSlot(i, localSlot));
         }
         return slots;
     }
 
-    /**
-     * Turns a local slot structure into a RemoteSlot structure. I turn everything into a RemoteSlot just because
-     * its already defined and contains all the right fields.
-     */
-    private Optional<RemoteSlot> clientGeOfferToRemoteSlot(int index, GrandExchangeOffer offer, OfferEvent enrichedOffer) {
+    private Optional<SlotInfo> clientGeOfferToRemoteSlot(int index, GrandExchangeOffer offer) {
         if (wikiRequest == null) {
             return Optional.empty();
         }
@@ -342,7 +264,7 @@ public class SlotStateDrawer {
         boolean isBuy = offer.getState() == GrandExchangeOfferState.BUYING;
         SlotPredictedState predictedState = getPredictedState(isBuy, listedPrice, margins.getLow(), margins.getHigh());
 
-        return Optional.of(new RemoteSlot(index, predictedState, 0, itemId, listedPrice, isBuy, "ACTIVE", enrichedOffer.getTime().getEpochSecond()));
+        return Optional.of(new SlotInfo(index, predictedState, itemId, listedPrice, isBuy));
     }
 
     SlotPredictedState getPredictedState(boolean buy, int listedPrice, int instaSell, int instaBuy) {
@@ -381,7 +303,7 @@ class QuickLookPanel extends JPanel {
 
         offerCompetitivenessText.setFont(FontManager.getRunescapeBoldFont());
         toMakeOfferCompetitiveTest.setFont(FontManager.getRunescapeSmallFont());
-        toMakeOfferCompetitiveTest.setBorder(new EmptyBorder(3,0,0,0));
+        toMakeOfferCompetitiveTest.setBorder(new EmptyBorder(3, 0, 0, 0));
 
         wikiInstaBuy.setForeground(Color.WHITE);
         wikiInstaSell.setForeground(Color.WHITE);
@@ -396,14 +318,14 @@ class QuickLookPanel extends JPanel {
 
         //being lazy...just want to separate the rows that hold the wiki price vals from the rows that hold the wiki time
         //vals
-        wikiInstaBuyAgeDesc.setBorder(new EmptyBorder(5,0,0,0));
-        wikiInstaBuyAge.setBorder(new EmptyBorder(5,0,0,0));
+        wikiInstaBuyAgeDesc.setBorder(new EmptyBorder(5, 0, 0, 0));
+        wikiInstaBuyAge.setBorder(new EmptyBorder(5, 0, 0, 0));
 
         Arrays.asList(wikiInstaBuyDesc, wikiInstaSellDesc, wikiInstaBuyAgeDesc, wikiInstaSellAgeDesc, wikiInstaBuy,
             wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setFont(FontManager.getRunescapeSmallFont()));
 
         JPanel wikiPanel = new JPanel(new DynamicGridLayout(4, 2, 10, 2));
-        wikiPanel.setBorder(new EmptyBorder(10,10,0,10));
+        wikiPanel.setBorder(new EmptyBorder(10, 10, 0, 10));
         wikiPanel.add(wikiInstaBuyDesc);
         wikiPanel.add(wikiInstaBuy);
         wikiPanel.add(wikiInstaSellDesc);
@@ -414,8 +336,8 @@ class QuickLookPanel extends JPanel {
         wikiPanel.add(wikiInstaSellAgeDesc);
         wikiPanel.add(wikiInstaSellAge);
 
-        JPanel summaryPanel = new JPanel(new DynamicGridLayout(2,1));
-        summaryPanel.setBorder(new EmptyBorder(10,0,0,0));
+        JPanel summaryPanel = new JPanel(new DynamicGridLayout(2, 1));
+        summaryPanel.setBorder(new EmptyBorder(10, 0, 0, 0));
         summaryPanel.add(offerCompetitivenessText);
         summaryPanel.add(toMakeOfferCompetitiveTest);
 
@@ -424,7 +346,7 @@ class QuickLookPanel extends JPanel {
         add(summaryPanel, BorderLayout.SOUTH);
     }
 
-    public void updateDetails(RemoteSlot slot, WikiItemMargins wikiItemInfo) {
+    public void updateDetails(SlotInfo slot, WikiItemMargins wikiItemInfo) {
         Arrays.asList(wikiInstaBuy, wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setForeground(Color.WHITE));
         if (wikiItemInfo == null || slot == null) {
             Arrays.asList(wikiInstaBuy, wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setText("No data"));
@@ -434,8 +356,8 @@ class QuickLookPanel extends JPanel {
         wikiMarginToLabel.put(wikiItemInfo.getHigh(), wikiInstaBuy);
         wikiMarginToLabel.put(wikiItemInfo.getLow(), wikiInstaSell);
 
-        wikiInstaBuyAge.setText(wikiItemInfo.getHighTime() == 0? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getHighTime())));
-        wikiInstaSellAge.setText(wikiItemInfo.getLowTime() == 0? "No data":TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getLowTime())));
+        wikiInstaBuyAge.setText(wikiItemInfo.getHighTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getHighTime())));
+        wikiInstaSellAge.setText(wikiItemInfo.getLowTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getLowTime())));
         wikiInstaBuy.setText(wikiItemInfo.getHigh() == 0 ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
         wikiInstaSell.setText(wikiItemInfo.getLow() == 0 ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
 
@@ -451,9 +373,8 @@ class QuickLookPanel extends JPanel {
                 String.format("<html> buy offer is ultra competitive: %s &gt= %s </html>",
                     UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(max), ColorScheme.GRAND_EXCHANGE_PRICE)
-                    ));
-        }
-        else if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
+                ));
+        } else if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(min), CustomColors.IN_RANGE);
             UIUtilities.recolorLabel(wikiMarginToLabel.get(max), ColorScheme.GRAND_EXCHANGE_PRICE);
             offerCompetitivenessText.setText(
@@ -462,8 +383,7 @@ class QuickLookPanel extends JPanel {
                     UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(max), ColorScheme.GRAND_EXCHANGE_PRICE)
                 ));
-        }
-        else if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
+        } else if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(min), CustomColors.TOMATO);
             offerCompetitivenessText.setText(
                 String.format("<html> buy offer is not competitive: %s &lt %s </html>",
@@ -474,16 +394,14 @@ class QuickLookPanel extends JPanel {
                 String.format("<html> set price to &gt= %s </html>",
                     UIUtilities.colorText(QuantityFormatter.formatNumber(min), CustomColors.TOMATO)
                 ));
-        }
-        else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
+        } else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(min), ColorScheme.GRAND_EXCHANGE_PRICE);
             offerCompetitivenessText.setText(
                 String.format("<html> sell offer is ultra competitive: %s &lt= %s </html>",
-                    UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()),Color.WHITE),
+                    UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(min), ColorScheme.GRAND_EXCHANGE_PRICE)
                 ));
-        }
-        else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
+        } else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(min), ColorScheme.GRAND_EXCHANGE_PRICE);
             UIUtilities.recolorLabel(wikiMarginToLabel.get(max), CustomColors.IN_RANGE);
             offerCompetitivenessText.setText(
@@ -492,8 +410,7 @@ class QuickLookPanel extends JPanel {
                     UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(max), CustomColors.IN_RANGE)
                 ));
-        }
-        else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
+        } else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(max), CustomColors.TOMATO);
             offerCompetitivenessText.setText(
                 String.format("<html> sell offer is not competitive: %s &gt %s</html>",
@@ -506,4 +423,14 @@ class QuickLookPanel extends JPanel {
                 ));
         }
     }
+}
+
+@Data
+@AllArgsConstructor
+class SlotInfo {
+    int index;
+    SlotPredictedState predictedState;
+    int itemId;
+    int offerPrice;
+    boolean isBuyOffer;
 }
