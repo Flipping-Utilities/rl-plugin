@@ -4,6 +4,7 @@ import com.flippingutilities.utilities.Jwt;
 import com.flippingutilities.utilities.OsrsAccount;
 import com.flippingutilities.utilities.User;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
@@ -21,11 +22,13 @@ import java.util.stream.Collectors;
 public class ApiAuthHandler {
     FlippingPlugin plugin;
     @Getter
+    @Setter
     private boolean hasValidJWT;
     private Set<String> successfullyRegisteredRsns = new HashSet<>();
     List<Runnable> validJwtSubscriberActions = new ArrayList<>();
     List<Consumer<Boolean>> premiumCheckSubscribers = new ArrayList<>();
     @Getter
+    @Setter
     private boolean isPremium;
 
     public ApiAuthHandler(FlippingPlugin plugin) {

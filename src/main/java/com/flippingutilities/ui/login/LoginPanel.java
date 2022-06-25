@@ -4,6 +4,7 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.components.IconTextField;
@@ -23,26 +24,17 @@ public class LoginPanel extends JPanel{
     FlippingPlugin plugin;
     Runnable onViewChange;
     public boolean showingLoggedInView;
-    JLabel slotFeatureHealthLabel = new JLabel("Inactive (not logged in)");
     Instant timeOfLastSuccessfulRequest;
     boolean errorWhenSendingSlotRequest;
     boolean notSendingRequestDueToNoChange;
-    JPanel loggedInPanel;
+    LoggedInPanel loggedInPanel;
 
     public LoginPanel(FlippingPlugin plugin) {
         this.plugin = plugin;
+        this.loggedInPanel = new LoggedInPanel(plugin, this::showLoggedOutView);
         plugin.getApiAuthHandler().subscribeToLogin(this::showLoggedInView);
         plugin.getApiAuthHandler().subscribeToPremiumChecking((isPremium) -> {
-            SwingUtilities.invokeLater(() -> {
-                if (isPremium) {
-                    loggedInPanel.add(createSlotEnhancementTogglePanel(), BorderLayout.SOUTH);
-                }
-                else {
-                    loggedInPanel.add(new JLabel("not premium", JLabel.CENTER), BorderLayout.SOUTH);
-                }
-                revalidate();
-                repaint();
-            });
+            loggedInPanel.showPremiumFeaturesHealth(isPremium);
         });
 
         add(createLoggedOutPanel());
@@ -54,29 +46,30 @@ public class LoginPanel extends JPanel{
     }
 
     private void checkHealth() {
+        if (!showingLoggedInView) {
+            return;
+        }
         SwingUtilities.invokeLater(() -> {
             if (plugin.getCurrentlyLoggedInAccount() == null) {
                 timeOfLastSuccessfulRequest = null;
-                slotFeatureHealthLabel.setText("Inactive (not logged in)");
+                loggedInPanel.setSlotFeatureHealthText("Inactive (not logged in)");
             }
             else if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount())) {
-                slotFeatureHealthLabel.setText("Inactive (not registered yet)");
+                loggedInPanel.setSlotFeatureHealthText("Inactive (not registered yet)");
             }
             else if (timeOfLastSuccessfulRequest == null) {
-                slotFeatureHealthLabel.setText("Active (starting up)");
+                loggedInPanel.setSlotFeatureHealthText("Active (starting up)");
             }
             else if (notSendingRequestDueToNoChange) {
-                slotFeatureHealthLabel.setText("Active (no slot change detected)");
+                loggedInPanel.setSlotFeatureHealthText("Active (no slot change detected)");
             }
             else if (errorWhenSendingSlotRequest) {
-                slotFeatureHealthLabel.setText("Inactive (error on slot update)");
+                loggedInPanel.setSlotFeatureHealthText("Inactive (error on slot update)");
             }
             else {
                 long diff = Instant.now().getEpochSecond() - timeOfLastSuccessfulRequest.getEpochSecond();
-                slotFeatureHealthLabel.setText(String.format("Active (%ds since last update)", diff));
+                loggedInPanel.setSlotFeatureHealthText(String.format("Active (%ds since last update)", diff));
             }
-            revalidate();
-            repaint();
         });
     }
 
@@ -98,9 +91,6 @@ public class LoginPanel extends JPanel{
     public void showLoggedInView() {
         SwingUtilities.invokeLater(() -> {
             removeAll();
-            if (loggedInPanel == null) {
-                loggedInPanel = createLoggedInPanel();
-            }
             add(loggedInPanel);
             revalidate();
             repaint();
@@ -122,50 +112,6 @@ public class LoginPanel extends JPanel{
             }
         });
     }
-
-    private JPanel createLoggedInPanel() {
-        JPanel loggedInPanel = new JPanel(new BorderLayout());
-        loggedInPanel.setBorder(new EmptyBorder(10,20,20,20));
-        loggedInPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-
-        JLabel headerLabel = new JLabel("Health", JLabel.CENTER);
-        headerLabel.setFont(new Font("Whitney", Font.PLAIN + Font.BOLD, 16));
-        headerLabel.setForeground(CustomColors.CHEESE);
-
-        JPanel healthPanel = new JPanel(new BorderLayout());
-        healthPanel.setBorder(new EmptyBorder(10,0,0,0));
-
-        JPanel slotSendingHealthPanel = new JPanel(new BorderLayout());
-        JLabel slotFeatureHealthRight = new JLabel("Slot sending feature: ");
-        slotFeatureHealthRight.setFont(new Font("Whitney", Font.PLAIN, 10));
-        slotFeatureHealthRight.setForeground(CustomColors.CHEESE);
-        slotFeatureHealthLabel.setFont(new Font("Whitney", Font.PLAIN + Font.ITALIC, 10));
-
-        slotSendingHealthPanel.add(slotFeatureHealthRight, BorderLayout.WEST);
-        slotSendingHealthPanel.add(slotFeatureHealthLabel, BorderLayout.EAST);
-
-        healthPanel.add(slotSendingHealthPanel, BorderLayout.CENTER);
-
-        loggedInPanel.add(headerLabel, BorderLayout.NORTH);
-        loggedInPanel.add(healthPanel, BorderLayout.CENTER);
-        return loggedInPanel;
-    }
-
-    private JPanel createSlotEnhancementTogglePanel() {
-        JLabel toggleLabel = new JLabel("Slot enhancement");
-        toggleLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
-        toggleLabel.setForeground(CustomColors.CHEESE);
-
-        JToggleButton toggleButton = UIUtilities.createToggleButton();
-        toggleButton.setSelected(plugin.shouldEnhanceSlots());
-        toggleButton.addItemListener(i -> plugin.toggleEnhancedSlots(toggleButton.isSelected()));
-
-        JPanel toggleSlotEnhancementPanel = new JPanel(new BorderLayout());
-        toggleSlotEnhancementPanel.add(toggleLabel, BorderLayout.WEST);
-        toggleSlotEnhancementPanel.add(toggleButton, BorderLayout.EAST);
-        return toggleSlotEnhancementPanel;
-    }
-
     private JPanel createLoggedOutPanel() {
         JPanel loggedOutPanel = new JPanel(new BorderLayout());
         loggedOutPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
