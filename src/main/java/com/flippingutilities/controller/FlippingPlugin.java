@@ -28,7 +28,6 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.db.TradePersister;
-import com.flippingutilities.jobs.SlotFetcherJob;
 import com.flippingutilities.jobs.SlotSenderJob;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.MasterPanel;
@@ -74,6 +73,7 @@ import okhttp3.*;
 
 import javax.inject.Inject;
 import java.awt.*;
+import java.awt.Point;
 import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.IOException;
@@ -178,7 +178,6 @@ public class FlippingPlugin extends Plugin {
     private CacheUpdaterJob cacheUpdaterJob;
     private WikiDataFetcherJob wikiDataFetcherJob;
     private SlotSenderJob slotStateSenderJob;
-    private SlotFetcherJob slotFetcherJob;
 
     private ScheduledFuture slotTimersTask;
     private Instant startUpTime = Instant.now();
@@ -299,7 +298,6 @@ public class FlippingPlugin extends Plugin {
         cacheUpdaterJob.stop();
         wikiDataFetcherJob.stop();
         slotStateSenderJob.stop();
-        slotFetcherJob.stop();
     }
 
     @Subscribe
@@ -521,10 +519,6 @@ public class FlippingPlugin extends Plugin {
         slotStateSenderJob = new SlotSenderJob(this, httpClient);
         slotStateSenderJob.subscribe((success) -> loginPanel.onSlotRequest(success));
         slotStateSenderJob.start();
-
-        slotFetcherJob = new SlotFetcherJob(this, httpClient, executor);
-        slotFetcherJob.subscribe((r) -> slotStateDrawer.setRemoteAccountSlots(r));
-        slotFetcherJob.start();
     }
 
     private void onWikiFetch(WikiRequest wikiRequest, Instant timeOfRequestCompletion) {
@@ -1002,7 +996,10 @@ public class FlippingPlugin extends Plugin {
     public void toggleEnhancedSlots(boolean shouldEnhance) {
         dataHandler.getAccountWideData().setEnhancedSlots(shouldEnhance);
         dataHandler.markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
-        if (!shouldEnhance) {
+        if (shouldEnhance) {
+            slotStateDrawer.drawWrapper();
+        }
+        else {
             getClientThread().invokeLater(() -> slotStateDrawer.resetAllSlots());
         }
     }
