@@ -40,7 +40,7 @@ import java.util.List;
  * 3. actual slot widgets
  *
  * It is fed this data by the plugin (sourcing it from other components like the jobs). Everytime
- * it is fed new data, it builds a representation of what it should draw (see getUnifiedSlotStates),
+ * it is fed new data, it builds a representation of what it should draw (see getCombinedSlotStates),
  * and then draws it on the slot (see drawWrapper)
  */
 @Slf4j
@@ -85,26 +85,37 @@ public class SlotStateDrawer {
         if (
             slotWidgets == null ||
             plugin.getCurrentlyLoggedInAccount() == null ||
-            !plugin.getApiAuthHandler().isPremium()
+            !plugin.getApiAuthHandler().isPremium() ||
+            !plugin.shouldEnhanceSlots()
         ) {
             return;
         }
-        this.unifiedSlotStates = getUnifiedSlotStates();
+        this.unifiedSlotStates = getCombinedSlotStates();
         plugin.getClientThread().invokeLater(() -> draw(unifiedSlotStates));
     }
 
     /**
      * Draws the enhancements on the slot
      */
-    private void draw(List<Optional<RemoteSlot>> remoteSlots) {
-        for (int i = 0; i < remoteSlots.size(); i++) {
-            Optional<RemoteSlot> maybeRemoteSlot = remoteSlots.get(i);
+    private void draw(List<Optional<RemoteSlot>> unifiedSlots) {
+        for (int i = 0; i < unifiedSlots.size(); i++) {
+            Optional<RemoteSlot> maybeUnifiedSlot = unifiedSlots.get(i);
             Widget slotWidget = slotWidgets[i + 1];
-            if (!maybeRemoteSlot.isPresent()) {
+            if (!maybeUnifiedSlot.isPresent()) {
                 resetSlot(i, slotWidget);
             } else {
-                drawOnSlot(maybeRemoteSlot.get(), slotWidget);
+                drawOnSlot(maybeUnifiedSlot.get(), slotWidget);
             }
+        }
+    }
+
+    public void resetAllSlots() {
+        if (slotWidgets == null) {
+            return;
+        }
+        for (int i=0; i< 8; i++) {
+            Widget slotWidget = slotWidgets[i + 1];
+            resetSlot(i, slotWidget);
         }
     }
 
@@ -119,6 +130,7 @@ public class SlotStateDrawer {
             int spriteId = spriteIdMap.get(idx);
             child.setSpriteId(spriteId);
         });
+
         Widget timeInRangeWidget = slotIdxToTimeInRangeWidget.get(slotIdx);
         if (timeInRangeWidget != null) {
             timeInRangeWidget.setHidden(true);
@@ -269,15 +281,15 @@ public class SlotStateDrawer {
     /**
      * Builds a list of RemoteSlots that represent the most up to date state of an account's
      * offers based on the data from the server and local data. RemoteSlot is the actual structure
-     * we get back from the server. However, the RemoteSlot we return from this method may not contain
-     * the data that the server sent as we prefer local slot data if there are any mismatches between local
-     * data and remote data. The reason I've used RemoteSlot as the structure to carry the info, even when
-     * we use local data, is because i didn't want to define a new class just for that...
+     * we get back from the server. However, the RemoteSlot we return from this method may only contains
+     * the timeInRange data from the server sent RemoteSlot, the rest of the data is from the local slot.
+     * The reason I've used RemoteSlot as the structure to carry the info, even when
+     * we use local data, is because I didn't want to define a new class just for that...
      *
      * The reason we use remote slot data from the server even though local data mostly suffices is because
      * the remote slot data has the timeInRange.
      */
-    private List<Optional<RemoteSlot>> getUnifiedSlotStates() {
+    private List<Optional<RemoteSlot>> getCombinedSlotStates() {
         List<Optional<RemoteSlot>> slots = new ArrayList<>();
         GrandExchangeOffer[] currentOffers = plugin.getClient().getGrandExchangeOffers();
         Map<Integer, OfferEvent> enrichedOffers = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
@@ -297,40 +309,14 @@ public class SlotStateDrawer {
                 slots.add(Optional.empty());
                 continue;
             }
-            //prefer local slot info if remote slot from server is not present or doesn't match local slot
-            if (remoteslot == null || !doesLocalSlotMatchWithRemote(localSlot, remoteslot) || remoteslot.getPredictedState() == SlotPredictedState.UNKNOWN) {
-                slots.add(clientGeOfferToRemoteSlot(i, localSlot, enrichedOffer));
-                continue;
-            }
 
-            slots.add(Optional.of(remoteslot));
+            Optional<RemoteSlot> combinedSlot = clientGeOfferToRemoteSlot(i, localSlot, enrichedOffer);
+            if (remoteslot != null & combinedSlot.isPresent()) {
+                combinedSlot.get().setTimeInRange(remoteslot.getTimeInRange());
+            }
+            slots.add(combinedSlot);
         }
         return slots;
-    }
-
-    private boolean doesLocalSlotMatchWithRemote(GrandExchangeOffer localSlot, RemoteSlot remoteSlot) {
-        return localSlot.getItemId() == remoteSlot.getItemId() &&
-            localSlot.getPrice() == remoteSlot.getOfferPrice() &&
-            doesLocalSlotStateMatchWithRemote(localSlot, remoteSlot);
-    }
-
-    private boolean doesLocalSlotStateMatchWithRemote(GrandExchangeOffer localSlot, RemoteSlot remoteSlot) {
-        switch (localSlot.getState()) {
-            case SOLD:
-                return !remoteSlot.isBuyOffer() && remoteSlot.getState().equals("FILLED");
-            case BOUGHT:
-                return remoteSlot.isBuyOffer() && remoteSlot.getState().equals("FILLED");
-            case BUYING:
-                return remoteSlot.isBuyOffer() && remoteSlot.getState().equals("ACTIVE");
-            case SELLING:
-                return !remoteSlot.isBuyOffer() && remoteSlot.getState().equals("ACTIVE");
-            case CANCELLED_BUY:
-                return remoteSlot.isBuyOffer() && remoteSlot.getState().equals("CANCELLED");
-            case CANCELLED_SELL:
-                return !remoteSlot.isBuyOffer() && remoteSlot.getState().equals("CANCELLED");
-            default:
-                return false;
-        }
     }
 
     /**
@@ -469,8 +455,9 @@ class QuickLookPanel extends JPanel {
         }
         else if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(min), CustomColors.IN_RANGE);
+            UIUtilities.recolorLabel(wikiMarginToLabel.get(max), ColorScheme.GRAND_EXCHANGE_PRICE);
             offerCompetitivenessText.setText(
-                String.format("<html> buy offer is competitive: %s &gt= %s &lt %s </html>",
+                String.format("<html> buy offer is competitive: %s &lt= %s &lt %s </html>",
                     UIUtilities.colorText(QuantityFormatter.formatNumber(min), CustomColors.IN_RANGE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(max), ColorScheme.GRAND_EXCHANGE_PRICE)
@@ -497,12 +484,13 @@ class QuickLookPanel extends JPanel {
                 ));
         }
         else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
+            UIUtilities.recolorLabel(wikiMarginToLabel.get(min), ColorScheme.GRAND_EXCHANGE_PRICE);
             UIUtilities.recolorLabel(wikiMarginToLabel.get(max), CustomColors.IN_RANGE);
             offerCompetitivenessText.setText(
-                String.format("<html> sell offer is competitive: %s &gt %s &lt= %s </html>",
-                    UIUtilities.colorText(QuantityFormatter.formatNumber(min), CustomColors.IN_RANGE),
+                String.format("<html> sell offer is competitive: %s &lt %s &lt= %s </html>",
+                    UIUtilities.colorText(QuantityFormatter.formatNumber(min), ColorScheme.GRAND_EXCHANGE_PRICE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
-                    UIUtilities.colorText(QuantityFormatter.formatNumber(max), ColorScheme.GRAND_EXCHANGE_PRICE)
+                    UIUtilities.colorText(QuantityFormatter.formatNumber(max), CustomColors.IN_RANGE)
                 ));
         }
         else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {

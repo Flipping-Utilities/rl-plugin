@@ -999,6 +999,18 @@ public class FlippingPlugin extends Plugin {
         }
     }
 
+    public void toggleEnhancedSlots(boolean shouldEnhance) {
+        dataHandler.getAccountWideData().setEnhancedSlots(shouldEnhance);
+        dataHandler.markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
+        if (!shouldEnhance) {
+            getClientThread().invokeLater(() -> slotStateDrawer.resetAllSlots());
+        }
+    }
+
+    public boolean shouldEnhanceSlots() {
+        return dataHandler.getAccountWideData().isEnhancedSlots();
+    }
+
     @Subscribe
     public void onGrandExchangeSearched(GrandExchangeSearched event) {
         final String input = client.getVar(VarClientStr.INPUT_TEXT);
