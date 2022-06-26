@@ -626,6 +626,7 @@ public class StatsPanel extends JPanel
 
 	private JLabel createResetButton() {
 		JLabel resetIcon = new JLabel(Icons.TRASH_ICON_OFF);
+		resetIcon.setBorder(new EmptyBorder(0,12,0,0));
 		resetIcon.setPreferredSize(Icons.ICON_SIZE);
 		resetIcon.setToolTipText("Reset Statistics");
 		resetIcon.addMouseListener(new MouseAdapter()
@@ -669,6 +670,7 @@ public class StatsPanel extends JPanel
 	private JLabel createDownloadButton() {
 		JPanel parent = this;
 		JLabel downloadIcon = new JLabel(Icons.DONWLOAD_ICON_OFF);
+		downloadIcon.setBorder(new EmptyBorder(0,12,0,0));
 		downloadIcon.setPreferredSize(Icons.ICON_SIZE);
 		downloadIcon.setToolTipText("Export to CSV");
 		downloadIcon.addMouseListener(new MouseAdapter() {
@@ -718,12 +720,12 @@ public class StatsPanel extends JPanel
 
 		JPanel searchAndDownloadPanel = new JPanel(new BorderLayout());
 		searchAndDownloadPanel.add(searchBar, BorderLayout.CENTER);
-		searchAndDownloadPanel.add(this.createDownloadButton(), BorderLayout.EAST);
+		searchAndDownloadPanel.add(createResetButton(), BorderLayout.EAST);
 		searchAndDownloadPanel.setBorder(new EmptyBorder(5,0,0,0));
 
 		JPanel timeIntervalDropdownAndResetPanel = new JPanel(new BorderLayout());
 		timeIntervalDropdownAndResetPanel.add(timeIntervalDropdown, BorderLayout.CENTER);
-		timeIntervalDropdownAndResetPanel.add(createResetButton(), BorderLayout.EAST);
+		timeIntervalDropdownAndResetPanel.add(createDownloadButton(), BorderLayout.EAST);
 
 		topPanel.add(timeIntervalDropdownAndResetPanel, BorderLayout.NORTH);
 		topPanel.add(searchAndDownloadPanel, BorderLayout.CENTER);
