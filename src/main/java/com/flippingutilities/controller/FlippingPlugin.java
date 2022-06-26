@@ -254,6 +254,7 @@ public class FlippingPlugin extends Plugin {
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
             startJobs();
+            apiAuthHandler.subscribeToPremiumChecking((isPremium) -> { if (isPremium) WikiDataFetcherJob.requestInterval = 30; });
             apiAuthHandler.checkExistingJwt().thenRun(() -> apiAuthHandler.setPremiumStatus());
 
             //this is only relevant if the user downloads/enables the plugin after they login.

@@ -27,6 +27,7 @@
 package com.flippingutilities.ui.flipping;
 
 import com.flippingutilities.controller.FlippingPlugin;
+import com.flippingutilities.jobs.WikiDataFetcherJob;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.Section;
@@ -902,13 +903,13 @@ public class FlippingItemPanel extends JPanel
 		//probably don't need this. Should always be non null if wikiRequest is not null
 		if (timeOfRequestCompletion != null) {
 			long secondsSinceLastRequestCompleted = Instant.now().getEpochSecond() - timeOfRequestCompletion.getEpochSecond();
-			if (secondsSinceLastRequestCompleted >= 60) {
+			if (secondsSinceLastRequestCompleted >= WikiDataFetcherJob.requestInterval) {
 				wikiRequestCountDownTimer.setText("0");
 				refreshIconLabel.setEnabled(true);
 			}
 			else {
 				refreshIconLabel.setEnabled(false);
-				wikiRequestCountDownTimer.setText(String.valueOf(60 - secondsSinceLastRequestCompleted));
+				wikiRequestCountDownTimer.setText(String.valueOf(WikiDataFetcherJob.requestInterval - secondsSinceLastRequestCompleted));
 			}
 		}
 
