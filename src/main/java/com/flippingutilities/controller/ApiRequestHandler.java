@@ -1,9 +1,6 @@
 package com.flippingutilities.controller;
 
-import com.flippingutilities.utilities.OsrsAccount;
-import com.flippingutilities.utilities.SlotState;
-import com.flippingutilities.utilities.SlotsUpdate;
-import com.flippingutilities.utilities.TokenResponse;
+import com.flippingutilities.utilities.*;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
@@ -13,7 +10,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-
 /**
  * This class is responsible for wrapping the api. All api interactions must go through this class.
  */
@@ -22,17 +18,31 @@ public class ApiRequestHandler {
     FlippingPlugin plugin;
     OkHttpClient httpClient;
     private static String BASE_API_URL = System.getenv("OSRS_CLOUD_API_BASE_URL") != null ? System.getenv("OSRS_CLOUD_API_BASE_URL")  : "https://api.osrs.cloud/v1/";
+    public static String SLOT_FETCH_URL = BASE_API_URL + "ge/slots";
     public static String SLOT_UPDATE_URL = BASE_API_URL + "ge/slots/update";
     public static String JWT_HEALTH_URL = BASE_API_URL + "auth/jwt/health";
     public static String JWT_REFRESH_URL = BASE_API_URL + "auth/refresh";
+    public static String USER_URL = BASE_API_URL + "user/self";
     public static String ACCOUNT_URL = BASE_API_URL + "account/self";
     public static String ACCOUNT_REGISTRATION_URL = BASE_API_URL + "account/register";
     public static String TOKEN_URL = BASE_API_URL + "auth/token";
 
-
     public ApiRequestHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
         this.httpClient = plugin.getHttpClient();
+    }
+
+    public CompletableFuture<User> getUser() {
+        if (!plugin.getApiAuthHandler().isHasValidJWT()) {
+            return null;
+        }
+        String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
+        Request request = new Request.Builder().
+            header("User-Agent", "FlippingUtilities").
+            header("Authorization", "bearer " + jwt).
+            url(USER_URL).
+            build();
+        return getResponseFuture(request, new TypeToken<ApiResponse<User>>(){}).thenApply(r -> r.data);
     }
 
     public CompletableFuture<List<OsrsAccount>> getUserAccounts() {
@@ -77,12 +87,12 @@ public class ApiRequestHandler {
 
     //don't care about the response body (if there is any), so we just return the entire response in case the caller
     //wants something.
-    public CompletableFuture<Integer> updateGeSlots(SlotsUpdate slotsUpdate) {
+    public CompletableFuture<Integer> updateGeSlots(AccountSlotsUpdate accountSlotsUpdate) {
         if (!plugin.getApiAuthHandler().isHasValidJWT()) {
             return null;
         }
         String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
-        String json = plugin.gson.newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(slotsUpdate);
+        String json = plugin.gson.newBuilder().setDateFormat(SlotState.DATE_FORMAT).create().toJson(accountSlotsUpdate);
         RequestBody body = RequestBody.create(MediaType.parse("application/json"), json);
         Request request = new Request.Builder().
                 header("User-Agent", "FlippingUtilities").
@@ -139,23 +149,18 @@ public class ApiRequestHandler {
             @Override
             public void onResponse(Call call, Response response) {
                 if (!response.isSuccessful()) {
-                    future.completeExceptionally(new BadStatusCodeException(request, response));
-                    try {
-                        log.debug("response not successful. Response: {}, response body: {}", response, response.body().string());
-                    }
-                    catch (Exception e) {
-                        log.debug("couldn't read response body when accessing it to see why the response status code was bad");
-                    }
+                    future.completeExceptionally(new BadStatusCodeException(request, response, getResponseBody(response)));
                 }
                 else {
                     try {
-                        ApiResponse<T> apiResponse = plugin.gson.fromJson(response.body().string(), type.getType());
+                        String body =  response.body().string();
+                        ApiResponse<T> apiResponse = plugin.gson.fromJson(body, type.getType());
                         if (apiResponse == null) {
                             future.completeExceptionally(new NullDtoException(request, response, type.toString()));
                         }
                         else if (apiResponse.errors.size() > 0) {
                             //TODO better exception here
-                            future.completeExceptionally(new BadStatusCodeException(request, response));
+                            future.completeExceptionally(new BadStatusCodeException(request, response, body));
                         }
                         else {
                             future.complete(apiResponse);
@@ -171,6 +176,15 @@ public class ApiRequestHandler {
         });
         return future;
     }
+
+    public static String getResponseBody(Response response) {
+        try {
+            return response.body().string();
+        }
+        catch (Exception e) {
+            return "Could not fetch response body";
+        }
+    }
 }
 
 
@@ -178,8 +192,8 @@ class BadStatusCodeException extends Exception {
     Request request;
     Response response;
 
-    public BadStatusCodeException(Request request, Response response) {
-        super(String.format("Request: %s resulted in bad status code in response: %s", request, response));
+    public BadStatusCodeException(Request request, Response response, String body) {
+        super(String.format("Request: %s resulted in bad status code in response: %s, body %s", request, response, body));
         this.request = request;
         this.response = response;
     }

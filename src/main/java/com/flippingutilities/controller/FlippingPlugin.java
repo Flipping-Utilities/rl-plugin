@@ -28,7 +28,7 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.db.TradePersister;
-import com.flippingutilities.jobs.SlotStateSenderJob;
+import com.flippingutilities.jobs.SlotSenderJob;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.MasterPanel;
 import com.flippingutilities.ui.flipping.FlippingPanel;
@@ -37,8 +37,11 @@ import com.flippingutilities.ui.login.LoginPanel;
 import com.flippingutilities.ui.settings.SettingsPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
+import com.flippingutilities.ui.uiutilities.GeSpriteLoader;
+import com.flippingutilities.ui.uiutilities.WidgetConstants;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.jobs.CacheUpdaterJob;
+import com.flippingutilities.ui.widgets.SlotStateDrawer;
 import com.flippingutilities.utilities.*;
 import com.flippingutilities.jobs.WikiDataFetcherJob;
 import com.google.common.primitives.Shorts;
@@ -56,6 +59,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ClientShutdown;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.game.SpriteManager;
 import net.runelite.client.input.KeyListener;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
@@ -69,6 +73,7 @@ import okhttp3.*;
 
 import javax.inject.Inject;
 import java.awt.*;
+import java.awt.Point;
 import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.IOException;
@@ -121,6 +126,9 @@ public class FlippingPlugin extends Plugin {
     private KeyManager keyManager;
 
     @Inject
+    private SpriteManager spriteManager;
+
+    @Inject
     @Getter
     private OkHttpClient httpClient;
 
@@ -169,7 +177,7 @@ public class FlippingPlugin extends Plugin {
     //updates the cache by monitoring the directory and loading a file's contents into the cache if it has been changed
     private CacheUpdaterJob cacheUpdaterJob;
     private WikiDataFetcherJob wikiDataFetcherJob;
-    private SlotStateSenderJob slotStateSenderJob;
+    private SlotSenderJob slotStateSenderJob;
 
     private ScheduledFuture slotTimersTask;
     private Instant startUpTime = Instant.now();
@@ -184,7 +192,7 @@ public class FlippingPlugin extends Plugin {
     private GameUiChangesHandler gameUiChangesHandler;
     private NewOfferEventPipelineHandler newOfferEventPipelineHandler;
     @Getter
-    private apiAuthHandler apiAuthHandler;
+    private ApiAuthHandler apiAuthHandler;
     @Getter
     private ApiRequestHandler apiRequestHandler;
 
@@ -199,6 +207,7 @@ public class FlippingPlugin extends Plugin {
     public TradePersister tradePersister;
     private RecipeHandler recipeHandler;
     private FlippingItemHandler flippingItemHandler;
+    private SlotStateDrawer slotStateDrawer;
 
     @Override
     protected void startUp() {
@@ -212,8 +221,9 @@ public class FlippingPlugin extends Plugin {
         dataHandler = new DataHandler(this);
         gameUiChangesHandler = new GameUiChangesHandler(this);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
-        apiAuthHandler = new apiAuthHandler(this);
+        apiAuthHandler = new ApiAuthHandler(this);
         apiRequestHandler = new ApiRequestHandler(this);
+        slotStateDrawer = new SlotStateDrawer(this);
 
         flippingPanel = new FlippingPanel(this);
         statPanel = new StatsPanel(this);
@@ -244,14 +254,16 @@ public class FlippingPlugin extends Plugin {
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
             startJobs();
-            apiAuthHandler.checkExistingJwt();
+            apiAuthHandler.subscribeToPremiumChecking((isPremium) -> { if (isPremium) WikiDataFetcherJob.requestInterval = 30; });
+            apiAuthHandler.checkExistingJwt().thenRun(() -> apiAuthHandler.setPremiumStatus());
 
             //this is only relevant if the user downloads/enables the plugin after they login.
             if (client.getGameState() == GameState.LOGGED_IN) {
                 log.info("user is already logged in when they downloaded/enabled the plugin");
                 onLoggedInGameState();
             }
-            //stops scheduling this task
+
+            GeSpriteLoader.setClientSpriteOverrides(client);
             return true;
         });
     }
@@ -273,6 +285,7 @@ public class FlippingPlugin extends Plugin {
         clientToolbar.removeNavigation(navButton);
     }
 
+    //called when the X button on the client is pressed
     @Subscribe(priority = 101)
     public void onClientShutdown(ClientShutdown clientShutdownEvent) {
         if (generalRepeatingTasks != null) {
@@ -504,7 +517,7 @@ public class FlippingPlugin extends Plugin {
         wikiDataFetcherJob.subscribe(this::onWikiFetch);
         wikiDataFetcherJob.start();
 
-        slotStateSenderJob = new SlotStateSenderJob(this, httpClient);
+        slotStateSenderJob = new SlotSenderJob(this, httpClient);
         slotStateSenderJob.subscribe((success) -> loginPanel.onSlotRequest(success));
         slotStateSenderJob.start();
     }
@@ -513,6 +526,7 @@ public class FlippingPlugin extends Plugin {
         lastWikiRequest = wikiRequest;
         timeOfLastWikiRequest = timeOfRequestCompletion;
         flippingPanel.updateWikiDisplays(wikiRequest, timeOfRequestCompletion);
+        slotStateDrawer.setWikiRequest(wikiRequest);
     }
 
     /**
@@ -647,14 +661,23 @@ public class FlippingPlugin extends Plugin {
         }
     }
 
+    /**
+     * What hands the slot widgets on the screen to the SlotStateDrawer. This is called by
+     * the GameUiChangesHandler in response to the appropriate UI changes that cause the
+     * slot widgets to appear/get rebuilt.
+     */
+    public void setWidgetsOnSlotStateDrawer() {
+        Widget[] slotWidgets = client.getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, WidgetConstants.SLOT_CONTAINER).getStaticChildren();
+        slotStateDrawer.setSlotWidgets(slotWidgets);
+    }
 
-    public void rebuildTradeTimers() {
+    public void setWidgetsOnSlotTimers() {
         for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
             SlotActivityTimer timer = dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().get(slotIndex);
 
             //Get the offer slots from the window container
             //We add one to the index, as the first widget is the text above the offer slots
-            Widget offerSlot = client.getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, 5).getStaticChildren()[slotIndex + 1];
+            Widget offerSlot = client.getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, WidgetConstants.SLOT_CONTAINER).getStaticChildren()[slotIndex + 1];
 
             if (offerSlot == null) {
                 return;
@@ -911,7 +934,7 @@ public class FlippingPlugin extends Plugin {
                                 slotsPanel.updateTimerDisplays(slotWidgetTimer.getSlotIndex(), slotWidgetTimer.createFormattedTimeString());
                                 slotWidgetTimer.updateTimerDisplay();
                             } catch (Exception e) {
-                                log.info("exception when trying to update timer. e: {}", e);
+                                log.error("exception when trying to update timer", e);
                             }
                         })), 1000, 1000, TimeUnit.MILLISECONDS);
     }
@@ -969,6 +992,21 @@ public class FlippingPlugin extends Plugin {
             markAccountTradesAsHavingChanged(accountName);
             updateSinceLastItemAccountWideBuild = true;
         }
+    }
+
+    public void toggleEnhancedSlots(boolean shouldEnhance) {
+        dataHandler.getAccountWideData().setEnhancedSlots(shouldEnhance);
+        dataHandler.markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
+        if (shouldEnhance) {
+            slotStateDrawer.drawWrapper();
+        }
+        else {
+            getClientThread().invokeLater(() -> slotStateDrawer.resetAllSlots());
+        }
+    }
+
+    public boolean shouldEnhanceSlots() {
+        return dataHandler.getAccountWideData().isEnhancedSlots();
     }
 
     @Subscribe

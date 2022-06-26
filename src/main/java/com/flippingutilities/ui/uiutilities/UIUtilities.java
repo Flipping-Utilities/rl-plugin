@@ -28,13 +28,13 @@ package com.flippingutilities.ui.uiutilities;
 
 import com.flippingutilities.ui.flipping.FlippingPanel;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.Client;
+import net.runelite.api.SpriteID;
+import net.runelite.client.game.SpriteManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.IconTextField;
-import net.runelite.client.util.ColorUtil;
-import net.runelite.client.util.LinkBrowser;
-import net.runelite.client.util.QuantityFormatter;
-import net.runelite.client.util.SwingUtil;
+import net.runelite.client.util.*;
 
 import javax.swing.*;
 import java.awt.*;
@@ -47,9 +47,8 @@ import java.awt.image.BufferedImage;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.text.NumberFormat;
+import java.util.*;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -153,8 +152,21 @@ public class UIUtilities
 		}
 	}
 
+	/**
+	 * for some reason ColorUtil.wrapWithColorTag() doesn't work sometimes, but using this
+	 * diff method of coloring does
+	 */
 	public static String colorText(String s, Color color) {
 		return String.format("<span style='color:%s;'>%s</span>",ColorUtil.colorToHexCode(color), s);
+	}
+
+	/**
+	 * on popups, setForeground doesn't color things appropriately, its always more
+	 * dull than the actual color. This method uses html to specify the
+	 * color which for some reason displays a much more accurate color than setForeground.
+	 */
+	public static void recolorLabel(JLabel label, Color c) {
+		label.setText("<html>" + colorText(label.getText(), c) + "</html>");
 	}
 
 	public static String buildWikiLink(int itemId) {
@@ -206,6 +218,8 @@ public class UIUtilities
 		//and so on. Whereas this just opens up popup menu with no border so this is more suited for the on hover
 		//popups.
 		//TODO why does thus even have to be a popup menu? Can't this just be a jlabel or jpanel?
+		//^ bc the jlabel and jpanel can't just show anywhere on the screen unfortunately. Maybe I'm doing something
+		//wrong but it seems only things like popups can be arbitrarily rendered anywhere
 		component.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseEntered(MouseEvent e) {
@@ -275,6 +289,5 @@ public class UIUtilities
 		}
 
 		return text.substring(0, length - ellipses.length()) + ellipses;
-
 	}
 }

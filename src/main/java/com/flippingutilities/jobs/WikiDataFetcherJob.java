@@ -22,7 +22,7 @@ import java.util.function.BiConsumer;
  */
 @Slf4j
 public class WikiDataFetcherJob {
-
+    public static int requestInterval = 60; //seconds
     static final String API = "https://prices.runescape.wiki/api/v1/osrs/latest";
     FlippingPlugin plugin;
     ScheduledExecutorService executor;
@@ -31,7 +31,6 @@ public class WikiDataFetcherJob {
     Future wikiDataFetchTask;
     Instant timeOfLastRequestCompletion;
     boolean inFlightRequest = false;
-
 
     public WikiDataFetcherJob(FlippingPlugin plugin, OkHttpClient httpClient) {
         this.plugin = plugin;
@@ -59,8 +58,10 @@ public class WikiDataFetcherJob {
     //as long as they haven't opened another plugin. But if they have another plugin open or they haven't opened flipping utils
     //then masterpanel.isVisible() will correctly return false.
     private boolean shouldFetch() {
-        boolean lastRequestMoreThan60SecondsAgo = timeOfLastRequestCompletion == null || Instant.now().minus(60, ChronoUnit.SECONDS).isAfter(timeOfLastRequestCompletion);
-        return plugin.getMasterPanel().isVisible() && !inFlightRequest && lastRequestMoreThan60SecondsAgo;
+        boolean lastRequestOldEnough = timeOfLastRequestCompletion == null || Instant.now().minus(requestInterval, ChronoUnit.SECONDS).isAfter(timeOfLastRequestCompletion);
+        //for the purpose of SlotStateDrawer, we need wiki data even if the master panel is not visible, but only
+        //if the user is premium.
+        return (plugin.getMasterPanel().isVisible() || plugin.getApiAuthHandler().isPremium()) && !inFlightRequest && lastRequestOldEnough;
     }
 
     public void attemptToFetchWikiData() {
