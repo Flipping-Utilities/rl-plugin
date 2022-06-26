@@ -138,7 +138,7 @@ public class MasterPanel extends PluginPanel
 		JPanel centerPanel = new JPanel();
 		centerPanel.setBorder(new EmptyBorder(0,0,6,43));
 
-		JLabel githubIcon = UIUtilities.createIcon(Icons.GITHUB_ICON, Icons.GITHUB_ICON_ON, "https://github.com/Belieal/flipping-utilities", "Click to go to Flipping Utilities github");
+		JLabel githubIcon = UIUtilities.createIcon(Icons.GITHUB_ICON, Icons.GITHUB_ICON_ON, "https://github.com/Flipping-Utilities/rl-plugin", "Click to go to Flipping Utilities github");
 		JLabel twitterIcon = UIUtilities.createIcon(Icons.TWITTER_ICON, Icons.TWITTER_ICON_ON, "https://twitter.com/flippingutils", "Click to go to Flipping Utilities twitter");
 		JLabel discordIcon = UIUtilities.createIcon(Icons.DISCORD_ICON, Icons.DISCORD_ICON_ON, "https://discord.gg/GDqVgMH26s","Click to go to Flipping Utilities discord");
 
