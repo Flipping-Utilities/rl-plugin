@@ -2,11 +2,14 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.utilities.Jwt;
 import com.flippingutilities.utilities.OsrsAccount;
+import com.flippingutilities.utilities.User;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -16,19 +19,28 @@ import java.util.stream.Collectors;
  * logins and fire off some action whenever a login happens.
  */
 @Slf4j
-public class apiAuthHandler {
+public class ApiAuthHandler {
     FlippingPlugin plugin;
     @Getter
+    @Setter
     private boolean hasValidJWT;
     private Set<String> successfullyRegisteredRsns = new HashSet<>();
-    List<Runnable> loginSubscriberActions = new ArrayList<>();
+    List<Runnable> validJwtSubscriberActions = new ArrayList<>();
+    List<Consumer<Boolean>> premiumCheckSubscribers = new ArrayList<>();
+    @Getter
+    @Setter
+    private boolean isPremium;
 
-    public apiAuthHandler(FlippingPlugin plugin) {
+    public ApiAuthHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
     }
 
     public void subscribeToLogin(Runnable r) {
-        this.loginSubscriberActions.add(r);
+        this.validJwtSubscriberActions.add(r);
+    }
+    
+    public void subscribeToPremiumChecking(Consumer<Boolean> consumer) {
+        this.premiumCheckSubscribers.add(consumer);
     }
 
     /**
@@ -40,16 +52,36 @@ public class apiAuthHandler {
     }
 
     /**
+     * Checks if the user is premium, and if so, sets the premium status
+     */
+    public void setPremiumStatus() {
+        if (!hasValidJWT) {
+            return;
+        }
+        plugin.getApiRequestHandler().getUser().whenComplete((user, exception) -> {
+            if (exception != null) {
+                log.info("failed to get user, error: ", exception);
+                isPremium = false;
+            }
+            else {
+                log.info("got user, premium status: {}", user.isPremium());
+                isPremium = user.isPremium();
+            }
+            premiumCheckSubscribers.forEach(c -> c.accept(isPremium));
+        });
+    }
+
+    /**
      * Checks if the existing JWT has expired, and if so, gets a refreshed JWT. The setting of validJwt is purely
      * to stop the plugin from making useless requests, the api will safely reject invalid jwts itself.
      *
      * This should be called on client start up
      */
-    public void checkExistingJwt() {
+    public CompletableFuture<String> checkExistingJwt() {
         String jwtString = plugin.getDataHandler().getAccountWideData().getJwt();
         if (jwtString == null) {
             log.info("no jwt stored locally, not attempting to check existing jwt");
-            return;
+            return CompletableFuture.completedFuture("no jwt");
         }
         try {
             Jwt jwt = Jwt.fromString(jwtString, plugin.gson);
@@ -57,35 +89,41 @@ public class apiAuthHandler {
                 //TODO use master panel to display message about having to relog using a new token from flopper
                 log.info("jwt is expired, prompting user to re log");
                 hasValidJWT = false;
-                return;
+                return CompletableFuture.completedFuture("expired");
             }
-            if (jwt.shouldRefresh()) {
-                log.info("jwt should refresh");
-                hasValidJWT = true; //so it passes the check in refreshJwt
-                CompletableFuture<String> newJwtFuture = plugin.getApiRequestHandler().refreshJwt(jwtString);
-                newJwtFuture.whenComplete((newJwt, exception) -> {
-                    if (exception != null) {
-                        log.info("failed to refresh jwt, error: ", exception);
-                        hasValidJWT = false; //validJwt is false by default, just setting it here for clarity
-                    }
-                    else {
-                        plugin.getDataHandler().getAccountWideData().setJwt(newJwt);
-                        hasValidJWT = true;
-                        log.info("successfully refreshed jwt");
-                        loginSubscriberActions.forEach(Runnable::run);
-                    }
-                });
+            else if (jwt.shouldRefresh()) {
+                return refreshJwt(jwtString);
             }
             else {
                 log.info("jwt is valid");
                 hasValidJWT = true;
-                loginSubscriberActions.forEach(Runnable::run);
+                validJwtSubscriberActions.forEach(Runnable::run);
+                return CompletableFuture.completedFuture("valid jwt");
             }
         }
         //this catch clause is just for the Jwt.fromString line
         catch (Exception e) {
-            log.info("failed to check existing jwt error: ", e);
+            log.info("failed to check existing jwt, error: ", e);
+            return CompletableFuture.completedFuture("error");
         }
+    }
+
+    private CompletableFuture<String> refreshJwt(String jwtString) {
+        log.info("refresh jwt");
+        hasValidJWT = true; //so it passes the check in refreshJwt
+        CompletableFuture<String> newJwtFuture = plugin.getApiRequestHandler().refreshJwt(jwtString);
+        return newJwtFuture.whenComplete((newJwt, exception) -> {
+            if (exception != null) {
+                log.info("failed to refresh jwt, error: ", exception);
+                hasValidJWT = false; //validJwt is false by default, just setting it here for clarity
+            }
+            else {
+                plugin.getDataHandler().getAccountWideData().setJwt(newJwt);
+                hasValidJWT = true;
+                log.info("successfully refreshed jwt");
+                validJwtSubscriberActions.forEach(Runnable::run);
+            }
+        });
     }
 
     public CompletableFuture<Set<String>> checkRsn(String displayName) {
@@ -130,11 +168,12 @@ public class apiAuthHandler {
             else {
                 plugin.getDataHandler().getAccountWideData().setJwt(jwt);
                 hasValidJWT = true;
-                loginSubscriberActions.forEach(Runnable::run);
+                validJwtSubscriberActions.forEach(Runnable::run);
                 log.info("successfully logged in with token!");
                 if (plugin.getCurrentlyLoggedInAccount() != null) {
                     checkRsn(plugin.getCurrentlyLoggedInAccount());
                 }
+                setPremiumStatus();
             }
         });
 

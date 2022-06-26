@@ -8,9 +8,7 @@ import com.flippingutilities.ui.widgets.OfferEditor;
 import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.WikiRequest;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.Client;
-import net.runelite.api.FontID;
-import net.runelite.api.VarClientInt;
+import net.runelite.api.*;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.events.VarbitChanged;
@@ -32,16 +30,13 @@ public class GameUiChangesHandler {
     private static final int GE_OFFER_INIT_STATE_CHILD_ID = 18;
     private static final int GE_HISTORY_TAB_WIDGET_ID = 149;
     FlippingPlugin plugin;
-
     boolean quantityOrPriceChatboxOpen;
     Optional<FlippingItem> highlightedItem = Optional.empty();
     int highlightedItemId;
 
-
     GameUiChangesHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
     }
-
 
     public void onVarClientIntChanged(VarClientIntChanged event) {
         Client client = plugin.getClient();
@@ -182,6 +177,10 @@ public class GameUiChangesHandler {
         }
     }
 
+    /**
+     * Can't use this for resetting the widgets on the slot widget handlers bc no WidgetLoaded
+     * events are fired when the widgets are redrawn (?).
+     */
     public void onWidgetLoaded(WidgetLoaded event) {
         //ge history widget loaded
         //GE_HISTORY_TAB_WIDGET_ID does not load when history tab is opened from the banker right click. It only loads when
@@ -204,19 +203,27 @@ public class GameUiChangesHandler {
         }
     }
 
+    /**
+     * script 804 is Fired after every GE offer slot redraw
+     * This seems to happen after any offer updates or if buttons are pressed inside the interface
+     * https://github.com/RuneStar/cs2-scripts/blob/a144f1dceb84c3efa2f9e90648419a11ee48e7a2/scripts/%5Bclientscript%2Cge_offers_switchpanel%5D.cs2
+     * need to redraw stuff when this happens as all widgets get reset
+     *
+     * script 782 fires at most of the times 804 is fired but also when the collect button is pressed
+     * which is important bc that resets the widgets too
+     */
     public void onScriptPostFired(ScriptPostFired event) {
         //ge history interface closed, so the geHistoryTabPanel should no longer show
         if (event.getScriptId() == 29) {
             plugin.getMasterPanel().selectPreviouslySelectedTab();
         }
 
-        if (event.getScriptId() == 804) {
-            //Fired after every GE offer slot redraw
-            //This seems to happen after any offer updates or if buttons are pressed inside the interface
-            //https://github.com/RuneStar/cs2-scripts/blob/a144f1dceb84c3efa2f9e90648419a11ee48e7a2/scripts/%5Bclientscript%2Cge_offers_switchpanel%5D.cs2
-            if (plugin.getConfig().slotTimersEnabled()) {
-                plugin.rebuildTradeTimers();
-            }
+        if (event.getScriptId() == 782 || event.getScriptId() == 804) {
+           plugin.setWidgetsOnSlotStateDrawer();
+        }
+
+        if (event.getScriptId() == 804 && plugin.getConfig().slotTimersEnabled()) {
+            plugin.setWidgetsOnSlotTimers();
         }
     }
 
