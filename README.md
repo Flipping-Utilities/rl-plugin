@@ -260,4 +260,4 @@ There may be some failed URLs when it comes to Platinum Tokens, particularly wit
 
 - We're also fixing some critical bugs that caused issues with registering and storing trades. We've not fully found a fix for the bug yet, however we've significantly reduced its disruptive behavior.
 
-*If you notice any bugs or have any suggestions, let us know by making an [issue](https://github.com/Belieal/flipping-utilities/issues) or PM us on Discord (#Belieal6600) or (gaymersriseup#4026)! I'm also happy to answer any questions that you may have. :)*
+*If you notice any bugs or have any suggestions, let us know by making an [issue](https://github.com/Flipping-Utilities/rl-plugin/issues) or PM us on Discord @ gamersriseup#4026 or Anyny0#4452! I'm also happy to answer any questions that you may have. :)*
