@@ -87,7 +87,7 @@ public class OfferEditor {
         nonWikiText.setOnOpListener((JavaScriptCallback) ev ->
         {
             client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(quantity + "*");
-            client.setVar(VarClientStr.INPUT_TEXT, String.valueOf(quantity));
+            client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(quantity));
         });
     }
 
@@ -106,7 +106,7 @@ public class OfferEditor {
             nonWikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
                 client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(instaSellPrice + "*");
-                client.setVar(VarClientStr.INPUT_TEXT, String.valueOf(instaSellPrice));
+                client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(instaSellPrice));
             });
         } else {
             nonWikiText.setText("no sell tracked");
@@ -118,7 +118,7 @@ public class OfferEditor {
             wikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
                 client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(wikiInstaSellPrice + "*");
-                client.setVar(VarClientStr.INPUT_TEXT, String.valueOf(wikiInstaSellPrice));
+                client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(wikiInstaSellPrice));
             });
         } else {
             wikiText.setText("No wiki data");
@@ -140,7 +140,7 @@ public class OfferEditor {
             nonWikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
                 client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(instaBuyPrice + "*");
-                client.setVar(VarClientStr.INPUT_TEXT, String.valueOf(instaBuyPrice));
+                client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(instaBuyPrice));
             });
         } else {
             nonWikiText.setText("no buy tracked");
@@ -152,7 +152,7 @@ public class OfferEditor {
             wikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
                 client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(wikiInstaBuyPrice + "*");
-                client.setVar(VarClientStr.INPUT_TEXT, String.valueOf(wikiInstaBuyPrice));
+                client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(wikiInstaBuyPrice));
             });
         } else {
             wikiText.setText("No wiki data");
