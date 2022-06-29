@@ -277,7 +277,7 @@ public class LoginPanel extends JPanel{
 
                 if (result == JOptionPane.YES_OPTION)
                 {
-                    plugin.getApiAuthHandler().loginWithToken(tokenField.getText()).exceptionally((exception) -> {
+                    plugin.getApiAuthHandler().loginWithToken(tokenField.getText().trim()).exceptionally((exception) -> {
                         SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(loginButton, "Authentication error, contact us on discord for help!", "Authentication error 😔",  JOptionPane.ERROR_MESSAGE));
                         return null;
                     });
