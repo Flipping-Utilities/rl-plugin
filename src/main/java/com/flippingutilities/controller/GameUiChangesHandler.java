@@ -37,17 +37,15 @@ public class GameUiChangesHandler {
     Optional<FlippingItem> highlightedItem = Optional.empty();
     int highlightedItemId;
 
-
     GameUiChangesHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
     }
 
-
     public void onVarClientIntChanged(VarClientIntChanged event) {
         Client client = plugin.getClient();
 
-        if (event.getIndex() == VarClientInt.INPUT_TYPE.getIndex()
-                && client.getVarcIntValue(VarClientInt.INPUT_TYPE.getIndex()) == 14
+        if (event.getIndex() == VarClientInt.INPUT_TYPE
+                && client.getVarcIntValue(VarClientInt.INPUT_TYPE) == 14
                 && client.getWidget(WidgetInfo.CHATBOX_GE_SEARCH_RESULTS) != null) {
             plugin.getClientThread().invokeLater(() -> {
                 Widget geSearchResultBox = client.getWidget(WidgetInfo.CHATBOX_GE_SEARCH_RESULTS);
@@ -68,8 +66,8 @@ public class GameUiChangesHandler {
         }
 
         if (quantityOrPriceChatboxOpen
-                && event.getIndex() == VarClientInt.INPUT_TYPE.getIndex()
-                && client.getVarcIntValue(VarClientInt.INPUT_TYPE.getIndex()) == 0
+                && event.getIndex() == VarClientInt.INPUT_TYPE
+                && client.getVarcIntValue(VarClientInt.INPUT_TYPE) == 0
         ) {
             quantityOrPriceChatboxOpen = false;
 
@@ -77,9 +75,9 @@ public class GameUiChangesHandler {
         }
 
         //Check that it was the chat input that got enabled.
-        if (event.getIndex() != VarClientInt.INPUT_TYPE.getIndex()
+        if (event.getIndex() != VarClientInt.INPUT_TYPE
                 || client.getWidget(WidgetInfo.CHATBOX_TITLE) == null
-                || client.getVarcIntValue(VarClientInt.INPUT_TYPE.getIndex()) != 7
+                || client.getVarcIntValue(VarClientInt.INPUT_TYPE) != 7
                 || client.getWidget(WidgetInfo.GRAND_EXCHANGE_OFFER_CONTAINER) == null) {
             return;
         }
