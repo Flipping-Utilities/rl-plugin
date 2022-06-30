@@ -895,7 +895,7 @@ public class FlippingPlugin extends Plugin {
                         try {
                             int optionValue = calculateOptionValue(option);
                             client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(optionValue + "*");
-                            client.setVar(VarClientStr.INPUT_TEXT, String.valueOf(optionValue));
+                            client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(optionValue));
                             flippingPanel.getOfferEditorContainerPanel().highlightPressedOption(keyPressed);
                             e.consume();
                         } catch (InvalidOptionException ex) {
@@ -1011,7 +1011,7 @@ public class FlippingPlugin extends Plugin {
 
     @Subscribe
     public void onGrandExchangeSearched(GrandExchangeSearched event) {
-        final String input = client.getVar(VarClientStr.INPUT_TEXT);
+        final String input = client.getVarcStrValue(VarClientStr.INPUT_TEXT);
         Set<Integer> ids = dataHandler.viewAccountData(currentlyLoggedInAccount).
                 getTrades()
                 .stream()
