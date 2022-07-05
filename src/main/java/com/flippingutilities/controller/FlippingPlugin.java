@@ -207,6 +207,7 @@ public class FlippingPlugin extends Plugin {
     public TradePersister tradePersister;
     private RecipeHandler recipeHandler;
     private FlippingItemHandler flippingItemHandler;
+    @Getter
     private SlotStateDrawer slotStateDrawer;
 
     @Override
