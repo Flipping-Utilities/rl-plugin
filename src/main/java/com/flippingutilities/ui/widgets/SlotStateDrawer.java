@@ -70,6 +70,10 @@ public class SlotStateDrawer {
         drawWrapper();
     }
 
+    public void hideQuickLookPanel() {
+        popup.setVisible(false);
+    }
+
     /**
      * Thin wrapper around draw to decide if drawing should take place.
      */
