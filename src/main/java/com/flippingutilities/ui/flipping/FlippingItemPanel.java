@@ -330,8 +330,7 @@ public class FlippingItemPanel extends JPanel
 		searchIconLabel.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
-				log.info(UIUtilities.buildWikiLink(flippingItem.getItemId()));
-				LinkBrowser.browse(UIUtilities.buildWikiLink(flippingItem.getItemId()));
+				LinkBrowser.browse(UIUtilities.buildOurWebsiteLink(flippingItem.getItemId()));
 			}
 
 			@Override
