@@ -174,6 +174,10 @@ public class UIUtilities
 		return "https://prices.runescape.wiki/osrs/item/" + itemId;
 	}
 
+	public static String buildOurWebsiteLink(int itemId) {
+		return "https://prices.osrs.cloud/item/" + itemId;
+	}
+
 	public static IconTextField createSearchBar(ScheduledExecutorService executor, Consumer<IconTextField> onSearch) {
 		final Future<?>[] runningRequest = {null};
 		IconTextField searchBar = new IconTextField();
