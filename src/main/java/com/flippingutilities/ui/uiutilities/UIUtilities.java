@@ -175,7 +175,7 @@ public class UIUtilities
 	}
 
 	public static String buildOurWebsiteLink(int itemId) {
-		return "https://prices.osrs.cloud/item/" + itemId;
+		return "https://prices.osrs.cloud/item/" + itemId + "?utm_source=plugin";
 	}
 
 	public static IconTextField createSearchBar(ScheduledExecutorService executor, Consumer<IconTextField> onSearch) {
