@@ -35,14 +35,14 @@ This tab displays info most relevant to you when actively flipping
 The item cards are highly customizable, allowing you to pick what information to show in which section.
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/customize.png">
+  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/customize.png" width="300" height="415">
 </p>
 
 ### The Statistics Tab
 This tab records your trading history, down to every single individual offer you made.
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/stats.png">
+  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/stats.png" width="300" height="600">
 </p>
 
 The item cards can be expanded
@@ -52,12 +52,12 @@ The item cards can be expanded
 
 The trade history for each item can be expanded to see the offers:
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/offers.png">
+  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/offers.png" width="300" height="500">
 </p>
 
 And the flips:
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/flips.png">
+  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/flips.png" width="300" height="500">
 </p>
 
 
