@@ -42,7 +42,7 @@ The item cards are highly customizable, allowing you to pick what information to
 This tab records your trading history, down to every single individual offer you made.
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/stats.png" width="300" height="600">
+  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/stats.png" width="300" height="950">
 </p>
 
 The item cards can be expanded
@@ -77,13 +77,13 @@ be present on the offer card. Click it and select the appropriate recipe
 adjust the inputs and outputs if necessary, then combine
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/recipeCreationStep.png">
+  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/recipeCreationStep.png" width="500" height="450">
 </p>
 
 view your recipe flips in the "recipes" tab of the stats tab
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/viewRecipes.png">
+  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/viewRecipes.png" width="300" height="633">
 </p>
 
 ## Additional Features
