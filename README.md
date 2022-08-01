@@ -29,7 +29,7 @@ The plugin is divided into three tabs: the slots tab, flipping tab and statistic
 This tab displays info most relevant to you when actively flipping
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/flipping.png">
+  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/flippingsmall.png">
 </p>
 
 The item cards are highly customizable, allowing you to pick what information to show in which section.
