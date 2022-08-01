@@ -71,13 +71,13 @@ Go to your offers for an item in the stats tab. If there is a recipe for that it
 be present on the offer card. Click it and select the appropriate recipe
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/recipeCreation.png">
+  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/recipeCreation.png" width="500" height="450">
 </p>
 
 adjust the inputs and outputs if necessary, then combine
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/recipeCreationStep.png" width="500" height="450">
+  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/recipeCreationStep.png">
 </p>
 
 view your recipe flips in the "recipes" tab of the stats tab
