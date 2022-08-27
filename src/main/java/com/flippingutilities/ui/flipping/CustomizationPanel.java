@@ -74,9 +74,6 @@ public class CustomizationPanel extends JPanel {
 
     private JPanel createPanelForSectionLabel(Section section, String labelName) {
         boolean labelUsedInOtherSection = labelUsedInAnotherSection(section, labelName);
-        if (labelName.equals(Section.MARGIN_CHECK_PROFIT_EACH)) {
-            System.out.printf("is used in other section %s%n", labelUsedInOtherSection);
-        }
         JPanel sectionLabelPanel = new JPanel(new BorderLayout());
         sectionLabelPanel.setBackground(Color.BLACK.darker());
         JLabel sectionLabel = new JLabel(labelUsedInOtherSection? labelName + " (disabled: used in other section)" :labelName);
