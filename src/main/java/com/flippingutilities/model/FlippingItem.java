@@ -27,6 +27,7 @@
 package com.flippingutilities.model;
 
 import com.flippingutilities.utilities.Constants;
+import com.flippingutilities.utilities.GeTax;
 import com.flippingutilities.utilities.Searchable;
 import com.google.gson.annotations.SerializedName;
 import lombok.AllArgsConstructor;
@@ -333,7 +334,7 @@ public class FlippingItem implements Searchable
 
 	public Optional<Integer> getCurrentProfitEach() {
 		return getLatestInstaBuy().isPresent() && getLatestInstaSell().isPresent()?
-				Optional.of(getLatestInstaBuy().get().getPrice() - getLatestInstaSell().get().getPreTaxPrice()) : Optional.empty();
+				Optional.of(GeTax.getPostTaxPrice(getLatestInstaBuy().get().getPrice()) - getLatestInstaSell().get().getPreTaxPrice()) : Optional.empty();
 	}
 
 	/**

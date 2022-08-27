@@ -81,7 +81,8 @@ public class AccountWideData {
         importantSection.showLabel(Section.LAST_INSTA_SELL_PRICE, true);
         importantSection.showLabel(Section.LAST_INSTA_BUY_PRICE, true);
 
-        otherSection.showLabel(Section.PROFIT_EACH, true);
+        otherSection.showLabel(Section.WIKI_PROFIT_EACH, true);
+        otherSection.showLabel(Section.MARGIN_CHECK_PROFIT_EACH, true);
         otherSection.showLabel(Section.POTENTIAL_PROFIT, true);
         otherSection.showLabel(Section.REMAINING_GE_LIMIT, true);
         otherSection.showLabel(Section.ROI, true);
