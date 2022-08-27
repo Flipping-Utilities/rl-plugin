@@ -80,10 +80,11 @@ public class FlippingItemPanel extends JPanel
 	JLabel instaBuyVal = new JLabel();
 	JLabel latestBuyPriceVal = new JLabel();
 	JLabel latestSellPriceVal = new JLabel();
-	JLabel profitEachVal = new JLabel();
-	JLabel potentialProfitVal = new JLabel();
-	JLabel roiLabelVal = new JLabel();
+	JLabel wikiProfitEachVal = new JLabel();
+	JLabel wikiPotentialProfitVal = new JLabel();
+	JLabel wikiRoiLabelVal = new JLabel();
 	JLabel geLimitVal = new JLabel();
+	JLabel marginCheckProfitEachVal = new JLabel();
 	JLabel geRefreshCountdownLabel = new JLabel();
 	JLabel wikiRequestCountDownTimer = new JLabel();
 	//local time the ge limit will reset
@@ -98,9 +99,10 @@ public class FlippingItemPanel extends JPanel
 	JLabel instaBuyText = new JLabel("Last insta buy: ");
 	JLabel latestBuyPriceText = new JLabel("Last buy price: ");
 	JLabel latestSellPriceText = new JLabel("Last sell price: ");
-	JLabel profitEachText = new JLabel("Profit each: ");
-	JLabel potentialProfitText = new JLabel("Potential profit: ");
-	JLabel roiText = new JLabel("ROI:", JLabel.CENTER);
+	JLabel wikiProfitEachText = new JLabel("Wiki profit ea: ");
+	JLabel marginCheckProfitEachText = new JLabel("MC profit ea: ");
+	JLabel wikiPotentialProfitText = new JLabel("Potential profit: ");
+	JLabel wikiRoiText = new JLabel("ROI:", JLabel.CENTER);
 	JLabel geLimitText = new JLabel("GE limit:",JLabel.CENTER);
 
 	JPanel itemInfo;
@@ -292,17 +294,17 @@ public class FlippingItemPanel extends JPanel
 				descriptionLabel = sellDescPanel;
 				valueLabel = latestSellPriceVal;
 				break;
-			case Section.PROFIT_EACH:
-				descriptionLabel = profitEachText;
-				valueLabel = profitEachVal;
+			case Section.WIKI_PROFIT_EACH:
+				descriptionLabel = wikiProfitEachText;
+				valueLabel = wikiProfitEachVal;
 				break;
 			case Section.POTENTIAL_PROFIT:
-				descriptionLabel = potentialProfitText;
-				valueLabel = potentialProfitVal;
+				descriptionLabel = wikiPotentialProfitText;
+				valueLabel = wikiPotentialProfitVal;
 				break;
 			case Section.ROI:
-				descriptionLabel = roiText;
-				valueLabel = roiLabelVal;
+				descriptionLabel = wikiRoiText;
+				valueLabel = wikiRoiLabelVal;
 				break;
 			case Section.REMAINING_GE_LIMIT:
 				descriptionLabel = geLimitText;
@@ -311,6 +313,10 @@ public class FlippingItemPanel extends JPanel
 			case Section.GE_LIMIT_REFRESH_TIMER:
 				//no description or value label for this. The timer is a panel itself.
 				return createGeTimerPanel();
+			case Section.MARGIN_CHECK_PROFIT_EACH:
+				descriptionLabel = marginCheckProfitEachText;
+				valueLabel = marginCheckProfitEachVal;
+				break;
 			default:
 				//this should never be reached
 				return new JPanel();
@@ -523,8 +529,8 @@ public class FlippingItemPanel extends JPanel
 	}
 
 	private void styleValueLabels() {
-		Arrays.asList(latestBuyPriceVal, latestSellPriceVal, instaSellVal, instaBuyVal, profitEachVal, potentialProfitVal,
-				roiLabelVal, geLimitVal).
+		Arrays.asList(latestBuyPriceVal, latestSellPriceVal, instaSellVal, instaBuyVal, wikiProfitEachVal, marginCheckProfitEachVal, wikiPotentialProfitVal,
+			wikiRoiLabelVal, geLimitVal).
 				forEach(label -> {
 					label.setHorizontalAlignment(JLabel.RIGHT);
 					label.setFont(plugin.getFont());
@@ -533,8 +539,9 @@ public class FlippingItemPanel extends JPanel
 		instaSellVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 		instaBuyVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 
-		profitEachVal.setForeground(CustomColors.PROFIT_COLOR);
-		potentialProfitVal.setForeground(CustomColors.PROFIT_COLOR);
+		wikiProfitEachVal.setForeground(CustomColors.PROFIT_COLOR);
+		marginCheckProfitEachVal.setForeground(CustomColors.SOFT_ALCH);
+		wikiPotentialProfitVal.setForeground(CustomColors.PROFIT_COLOR);
 
 		geRefreshCountdownLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
 		geRefreshCountdownLabel.setFont(FontManager.getRunescapeBoldFont());
@@ -548,7 +555,7 @@ public class FlippingItemPanel extends JPanel
 		geRefreshAtLabel.setToolTipText("This shows the local time when the ge limit will refresh");
 		geRefreshAtLabel.setBorder(new EmptyBorder(0,0,0,20));
 
-		roiLabelVal.setToolTipText("<html>Return on investment:<br>Percentage of profit relative to gp invested</html>");
+		wikiRoiLabelVal.setToolTipText("<html>Return on investment:<br>Percentage of profit relative to gp invested</html>");
 
 		wikiBuyVal.setFont(CustomFonts.SMALLER_RS_BOLD_FONT);
 		wikiBuyVal.setForeground(Color.WHITE);
@@ -565,7 +572,7 @@ public class FlippingItemPanel extends JPanel
 	}
 
 	private void styleDescriptionLabels() {
-		Arrays.asList(wikiBuyText, wikiSellText, latestBuyPriceText, latestSellPriceText, instaSellText, instaBuyText, profitEachText, potentialProfitText, geLimitText, roiText).
+		Arrays.asList(wikiBuyText, wikiSellText, latestBuyPriceText, latestSellPriceText, instaSellText, instaBuyText, wikiProfitEachText, marginCheckProfitEachText, wikiPotentialProfitText, geLimitText, wikiRoiText).
 				forEach(label -> {
 					label.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
 					label.setFont(plugin.getFont());
@@ -576,8 +583,9 @@ public class FlippingItemPanel extends JPanel
 		instaBuyText.setToolTipText("This is the price you insta bought the item for");
 		latestBuyPriceText.setToolTipText("The last price you bought this item for");
 		latestSellPriceText.setToolTipText("The last price you sold this item for (pre tax)");
-		profitEachText.setToolTipText("The profit margin according to your latest margin check");
-		potentialProfitText.setToolTipText("The potential profit according to your latest margin check and GE 4-hour limit");
+		wikiProfitEachText.setToolTipText("The profit margin according to the wiki insta buy and insta sell prices, after tax");
+		marginCheckProfitEachText.setToolTipText("The profit margin according to your last insta buy and insta sell price, after tax");
+		wikiPotentialProfitText.setToolTipText("The potential profit according to the wiki profit margin and the item's limit");
 		geLimitText.setToolTipText("Remaining ge limit");
 
 		if (flippingItem.getTotalGELimit() <= 0) {
@@ -818,6 +826,8 @@ public class FlippingItemPanel extends JPanel
 		Optional<OfferEvent> latestBuy = flippingItem.getLatestBuy();
 		Optional<OfferEvent> latestSell = flippingItem.getLatestSell();
 
+
+		Optional<Integer> profitEach = flippingItem.getCurrentProfitEach();
 		Optional<Float> roi =  flippingItem.getCurrentRoi();
 
 		instaSellVal.setText(latestInstaSell.isPresent() ? String.format(NUM_FORMAT, latestInstaSell.get().getPreTaxPrice()) + " gp":"N/A");
@@ -826,10 +836,12 @@ public class FlippingItemPanel extends JPanel
 		latestBuyPriceVal.setText(latestBuy.isPresent() ? String.format(NUM_FORMAT, latestBuy.get().getPrice()) + " gp" : "N/A");
 		latestSellPriceVal.setText(latestSell.isPresent() ? String.format(NUM_FORMAT, latestSell.get().getPreTaxPrice()) + " gp" : "N/A");
 
+		marginCheckProfitEachVal.setText(profitEach.isPresent()? QuantityFormatter.quantityToRSDecimalStack(profitEach.get()) + " gp": "N/A");
+
 		//the three of these will be set by wiki vals as they are dependent on em
-		profitEachVal.setText("N/A");
-		potentialProfitVal.setText("N/A");
-		roiLabelVal.setText("N/A");
+		wikiProfitEachVal.setText("N/A");
+		wikiPotentialProfitVal.setText("N/A");
+		wikiRoiLabelVal.setText("N/A");
 
 		if (flippingItem.getTotalGELimit() > 0) {
 			geLimitVal.setText(String.format(NUM_FORMAT, flippingItem.getRemainingGeLimit()));
@@ -875,16 +887,16 @@ public class FlippingItemPanel extends JPanel
 
 		if (wikiItemInfo.getHigh() != 0 && wikiItemInfo.getLow() != 0) {
 			int profitEach = GeTax.getPostTaxPrice(wikiItemInfo.getHigh()) - wikiItemInfo.getLow();
-			profitEachVal.setText(QuantityFormatter.quantityToRSDecimalStack(profitEach) + " gp");
+			wikiProfitEachVal.setText(QuantityFormatter.quantityToRSDecimalStack(profitEach) + " gp");
 
 			float roi = ((float)profitEach/ wikiItemInfo.getLow()) * 100;
-			roiLabelVal.setText(String.format("%.2f", roi) + "%");
+			wikiRoiLabelVal.setText(String.format("%.2f", roi) + "%");
 			//Color gradient red-yellow-green depending on ROI.
-			roiLabelVal.setForeground(UIUtilities.gradiatePercentage(roi, plugin.getConfig().roiGradientMax()));
+			wikiRoiLabelVal.setForeground(UIUtilities.gradiatePercentage(roi, plugin.getConfig().roiGradientMax()));
 			int geLimit = plugin.getConfig().geLimitProfit()? flippingItem.getRemainingGeLimit() : flippingItem.getTotalGELimit();
 			if (flippingItem.getTotalGELimit() > 0) {
 				int potentialProfit = profitEach * geLimit;
-				potentialProfitVal.setText(QuantityFormatter.quantityToRSDecimalStack(potentialProfit) + " gp");
+				wikiPotentialProfitVal.setText(QuantityFormatter.quantityToRSDecimalStack(potentialProfit) + " gp");
 			}
 		}
 		updateWikiTimeLabels();
