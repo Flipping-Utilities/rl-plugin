@@ -38,18 +38,6 @@ public class Icons {
     public static final ImageIcon SMALL_STAR_HOVER_ICON;
     public static final ImageIcon SMALL_STAR_OFF_ICON;
 
-    public static final ImageIcon SORT_BY_RECENT_OFF_ICON;
-    public static final ImageIcon SORT_BY_RECENT_ON_ICON;
-    public static final ImageIcon SORT_BY_RECENT_HALF_ON_ICON;
-
-    public static final ImageIcon SORT_BY_ROI_OFF_ICON;
-    public static final ImageIcon SORT_BY_ROI_ON_ICON;
-    public static final ImageIcon SORT_BY_ROI_HALF_ON_ICON;
-
-    public static final ImageIcon SORT_BY_PROFIT_OFF_ICON;
-    public static final ImageIcon SORT_BY_PROFIT_ON_ICON;
-    public static final ImageIcon SORT_BY_PROFIT_HALF_ON_ICON;
-
     public static final ImageIcon ARROW_LEFT;
     public static final ImageIcon ARROW_RIGHT;
     public static final ImageIcon ARROW_LEFT_HOVER;
@@ -100,8 +88,6 @@ public class Icons {
 
     public static final ImageIcon TRASH_CAN_ON;
     public static final ImageIcon TRASH_CAN_OFF;
-
-    public static final ImageIcon DUMP_ALERT_PIC;
 
     public static final ImageIcon QUESTION_MARK;
 
@@ -155,29 +141,14 @@ public class Icons {
         HIGHLIGHT_DELETE_BUTTON = new ImageIcon(highlightDeleteButton);
 
 
-        final BufferedImage starOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/star-gold.png");
-        final BufferedImage sortByRecentOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/clock-gold.png");
-        final BufferedImage sortByRoiOn = ImageUtil.loadImageResource(FlippingPlugin.class, "/toolbar-icons/roi-gold.png");
-        final BufferedImage sortByProfitOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/profit-gold.png");
-        final BufferedImage starOff = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/star_off_white.png");
-        final BufferedImage sortByRecentOff = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/clock_white.png");
-        final BufferedImage sortByRoiOff = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/thick_roi_white.png");
-        final BufferedImage sortByProfitOff = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toolbar-icons/potential_profit_white.png");
+        final BufferedImage starOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/star-gold.png");
+        final BufferedImage starOff = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/star_off_white.png");
 
         STAR_ON_ICON = new ImageIcon(starOn.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
-        SORT_BY_RECENT_ON_ICON = new ImageIcon(sortByRecentOn.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
-        SORT_BY_ROI_ON_ICON = new ImageIcon(sortByRoiOn.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
-        SORT_BY_PROFIT_ON_ICON = new ImageIcon(sortByProfitOn.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
 
         STAR_HOVER_ICON = new ImageIcon(starOff.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
-        SORT_BY_PROFIT_HALF_ON_ICON = new ImageIcon(sortByProfitOff.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
-        SORT_BY_RECENT_HALF_ON_ICON = new ImageIcon(sortByRecentOff.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
-        SORT_BY_ROI_HALF_ON_ICON = new ImageIcon(sortByRoiOff.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
 
         STAR_OFF_ICON = new ImageIcon(ImageUtil.alphaOffset(starOff, 0.53f).getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
-        SORT_BY_RECENT_OFF_ICON = new ImageIcon(ImageUtil.alphaOffset(sortByRecentOff, 0.53f).getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
-        SORT_BY_ROI_OFF_ICON = new ImageIcon(ImageUtil.alphaOffset(sortByRoiOff, 0.53f).getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
-        SORT_BY_PROFIT_OFF_ICON = new ImageIcon(ImageUtil.alphaOffset(sortByProfitOff, 0.53f).getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
 
         SMALL_STAR_ON_ICON = new ImageIcon(starOn.getScaledInstance(13, 13, Image.SCALE_SMOOTH));
         SMALL_STAR_HOVER_ICON = new ImageIcon(starOff.getScaledInstance(13, 13, Image.SCALE_SMOOTH));
@@ -274,9 +245,6 @@ public class Icons {
         final BufferedImage trashCanIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/trashicon.png");
         TRASH_CAN_ON = new ImageIcon(trashCanIcon.getScaledInstance(10,10,Image.SCALE_SMOOTH));
         TRASH_CAN_OFF = new ImageIcon(ImageUtil.alphaOffset(trashCanIcon, 0.53f).getScaledInstance(10,10, Image.SCALE_SMOOTH));
-
-        final BufferedImage dumpPic = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/dumpwithprofit.png");
-        DUMP_ALERT_PIC = new ImageIcon(dumpPic.getScaledInstance(450, 300, Image.SCALE_SMOOTH));
 
         final BufferedImage questionMark = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/question-mark.png");
         QUESTION_MARK = new ImageIcon(questionMark);
