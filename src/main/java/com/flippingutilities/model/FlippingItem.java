@@ -38,6 +38,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Predicate;
 
 /**
  * This class is the representation of an item that a user is flipping. It contains information about the
@@ -84,6 +85,9 @@ public class FlippingItem implements Searchable
 	@Getter
 	@Setter
 	private Boolean validFlippingPanelItem;
+
+	@SerializedName("fList")
+	private ArrayList favoriteLists;
 
 	@Getter
 	@Setter
@@ -141,6 +145,7 @@ public class FlippingItem implements Searchable
 				history.clone(),
 				flippedBy,
 				validFlippingPanelItem,
+				favoriteLists,
 				favorite,
 				favoriteCode,
 				latestInstaBuy,
@@ -389,4 +394,17 @@ public class FlippingItem implements Searchable
 	public String getNameForSearch() {
 		return itemName;
 	}
+
+	public boolean isInFavoriteList(String listName) {
+		return favoriteLists.contains(listName);
+	}
+
+	public void addFavoriteList(String newList) {
+		favoriteLists.add(newList);
+	}
+
+	public void removeFavoriteList(String listName) {
+		this.favoriteLists.remove(listName);
+	}
+
 }
