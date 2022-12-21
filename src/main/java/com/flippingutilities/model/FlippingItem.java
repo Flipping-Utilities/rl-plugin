@@ -86,9 +86,6 @@ public class FlippingItem implements Searchable
 	@Setter
 	private Boolean validFlippingPanelItem;
 
-	@SerializedName("fList")
-	private ArrayList favoriteLists;
-
 	@Getter
 	@Setter
 	private boolean favorite;
@@ -145,7 +142,6 @@ public class FlippingItem implements Searchable
 				history.clone(),
 				flippedBy,
 				validFlippingPanelItem,
-				favoriteLists,
 				favorite,
 				favoriteCode,
 				latestInstaBuy,
@@ -394,17 +390,4 @@ public class FlippingItem implements Searchable
 	public String getNameForSearch() {
 		return itemName;
 	}
-
-	public boolean isInFavoriteList(String listName) {
-		return favoriteLists.contains(listName);
-	}
-
-	public void addFavoriteList(String newList) {
-		favoriteLists.add(newList);
-	}
-
-	public void removeFavoriteList(String listName) {
-		this.favoriteLists.remove(listName);
-	}
-
 }
