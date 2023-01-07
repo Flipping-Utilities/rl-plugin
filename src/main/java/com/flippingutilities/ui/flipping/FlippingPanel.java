@@ -27,9 +27,11 @@
 package com.flippingutilities.ui.flipping;
 
 import com.flippingutilities.controller.FlippingPlugin;
+import com.flippingutilities.model.AccountWideData;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.offereditor.OfferEditorContainerPanel;
+import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
@@ -51,8 +53,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 import java.time.Instant;
 import java.util.*;
 import java.util.List;
@@ -73,6 +74,8 @@ public class FlippingPanel extends JPanel
 	private final JPanel flippingItemsPanel = new JPanel();
 	public final JPanel flippingItemContainer = new JPanel(cardLayout);
 
+	private final JPopupMenu favouritesListPopup = this.createFavouritesListPopup();
+
 	//Keeps track of all items currently displayed on the panel.
 	private ArrayList<FlippingItemPanel> activePanels = new ArrayList<>();
 
@@ -89,6 +92,8 @@ public class FlippingPanel extends JPanel
 
 	private boolean currentlySearching;
 	private boolean favoriteSelected;
+
+	private String favoriteList = "ALL";
 
 	public FlippingPanel(final FlippingPlugin plugin)
 	{
@@ -156,7 +161,7 @@ public class FlippingPanel extends JPanel
 	 *
 	 * @param flippingItems List of flipping items that the rebuildItemsDisplay will render.
 	 */
-	public void rebuild(List<FlippingItem> flippingItems)
+	public void rebuild(List<FlippingItem> flippingItems )// pass list name here
 	{
 		SwingUtilities.invokeLater(() ->
 		{
@@ -216,12 +221,18 @@ public class FlippingPanel extends JPanel
 		}
 	}
 
-	private List<FlippingItem> getItemsToDisplay(List<FlippingItem> tradeList) {
+	private List<FlippingItem>  getItemsToDisplay(List<FlippingItem> tradeList) {
 		List<FlippingItem> result = new ArrayList<>(tradeList);
+		ArrayList<FlippingItem> listData = new ArrayList<>();
 
-		if (favoriteSelected && !isItemHighlighted()) {
+		if (favoriteSelected && !isItemHighlighted() && Objects.equals(favoriteList, "ALL")) {
 			result = result.stream().filter(FlippingItem::isFavorite).collect(Collectors.toList());
 		}
+		else if (favoriteSelected && !isItemHighlighted() && !Objects.equals(favoriteList, "ALL")){
+			result = AccountWideData.getFavoriteListData(favoriteList);
+			if (result == null) {log.error("Favorite List doesn't exist!");}
+		}
+
 		result = getResultsForCurrentSearchQuery(result);
 		sortByTime(result);
 		return result;
@@ -283,17 +294,29 @@ public class FlippingPanel extends JPanel
 		JLabel favoriteButton = new JLabel(Icons.SMALL_STAR_OFF_ICON);
 		favoriteButton.setBorder(new EmptyBorder(0,5,0,0));
 		favoriteButton.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mousePressed(MouseEvent e) {
-				if (favoriteSelected) {
-					favoriteButton.setIcon(Icons.SMALL_STAR_OFF_ICON);
-				}
-				else {
-					favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
-				}
+
+			private void rebuildView() {
 				favoriteSelected = !favoriteSelected;
 				rebuild(plugin.viewItemsForCurrentView());
 			}
+
+			@Override
+			public void mousePressed(MouseEvent e) {
+				if (favoriteSelected && e.getButton() == MouseEvent.BUTTON1) {
+					log.info(Integer.toString(e.getButton()));
+					favoriteButton.setIcon(Icons.SMALL_STAR_OFF_ICON);
+					rebuildView();
+				}
+				else if (!favoriteSelected && e.getButton() == MouseEvent.BUTTON1){
+					favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
+					rebuildView();
+				}
+				if (e.getButton() == MouseEvent.BUTTON3){
+					favouritesListPopup.show(favoriteButton,e.getX(),e.getY());
+				}
+			}
+
+
 
 			@Override
 			public void mouseEntered(MouseEvent e) {
@@ -304,11 +327,14 @@ public class FlippingPanel extends JPanel
 
 			@Override
 			public void mouseExited(MouseEvent e) {
-				if (favoriteSelected) {
+				if (favoriteSelected && e.getButton() == MouseEvent.BUTTON1) {
 					favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
 				}
-				else {
+				else if(!favoriteSelected && e.getButton() == MouseEvent.BUTTON1){
 					favoriteButton.setIcon(Icons.SMALL_STAR_OFF_ICON);
+				}
+				if (e.getButton() == MouseEvent.BUTTON3){
+					favouritesListPopup.show(favoriteButton,e.getX(),e.getY());
 				}
 			}
 		});
@@ -377,5 +403,58 @@ public class FlippingPanel extends JPanel
 				panel.setValueLabels();
 			}
 		}
+	}
+
+	private JPopupMenu createFavouritesListPopup() {
+		List<JMenuItem> menuItems = new ArrayList<>();
+		JPopupMenu favouritesListPopup = new JPopupMenu();
+		JMenuItem addMenu= new JMenuItem("Add +");
+		JMenuItem allFavorites= new JMenuItem("ALL");
+
+
+		ActionListener menuListener = event -> {
+			JMenuItem last = menuItems.stream().filter(c -> c.getText() == favoriteList).findAny().get();
+			last.setBackground(CustomColors.DARK_GRAY_LIGHTER); // revert colour to unselected
+
+			favoriteList = event.getActionCommand();
+
+			Object clicked = event.getSource();
+			((JMenuItem) clicked).setBorder(BorderFactory.createMatteBorder(2,2,2,2,ColorScheme.BRAND_ORANGE));
+
+			System.out.println(event.getActionCommand()); // debug code
+		};
+
+		ActionListener addListener = event -> {
+			if (Objects.equals(event.getActionCommand(), "Add +")){
+				String menuName = JOptionPane.showInputDialog("Enter Favorite List Name");
+
+				if(!Objects.equals(menuName, "") && !AccountWideData.addNewFavoriteList(menuName)) {
+					JMenuItem item = new JMenuItem(menuName);
+					item.addActionListener(menuListener);
+					favouritesListPopup.add(item);
+					menuItems.add(item);
+				}
+				else {JOptionPane.showMessageDialog(favouritesListPopup, "List Already Exists!");}
+			}
+		};
+		menuItems.add(allFavorites);
+		for (String key : AccountWideData.getAllListNames()){
+			menuItems.add(new JMenuItem(key));
+		}
+		for (JMenuItem i : menuItems){
+			i.addActionListener(menuListener);
+		}
+
+		addMenu.addActionListener(addListener);
+
+		favouritesListPopup.add(addMenu);
+		favouritesListPopup.add(allFavorites);
+
+		favouritesListPopup.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		favouritesListPopup.setBackground(CustomColors.DARK_GRAY_LIGHTER);
+		addMenu.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+
+		return favouritesListPopup;
 	}
 }
