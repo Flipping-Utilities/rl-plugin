@@ -38,6 +38,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Predicate;
 
 /**
  * This class is the representation of an item that a user is flipping. It contains information about the

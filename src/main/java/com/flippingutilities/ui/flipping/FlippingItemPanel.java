@@ -28,6 +28,7 @@ package com.flippingutilities.ui.flipping;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.jobs.WikiDataFetcherJob;
+import com.flippingutilities.model.AccountWideData;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.Section;
@@ -50,9 +51,7 @@ import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
+import java.awt.event.*;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -747,32 +746,38 @@ public class FlippingItemPanel extends JPanel
 			public void mousePressed(MouseEvent e)
 			{
 				boolean wasDummy = false;
-				if (Constants.DUMMY_ITEM.equals(flippingItem.getFlippedBy())) {
-					wasDummy = true;
-					plugin.addFavoritedItem(flippingItem);
-				}
+				if (e.getButton() == MouseEvent.BUTTON1){
+					if (Constants.DUMMY_ITEM.equals(flippingItem.getFlippedBy())) {
+						wasDummy = true;
+						plugin.addFavoritedItem(flippingItem);
+					}
 
-				if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE))
-				{
-					plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
-				}
-				else {
-					plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
-				}
+					if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE))
+					{
+						plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
+					}
+					else {
+						plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
+					}
 
-				//if it was a dummy item and in the accountwide view, it has already had its favorite set by setFavoriteOnAllAccounts
-				boolean wasDummyAndAccountwide = wasDummy && plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE);
-				if (!wasDummyAndAccountwide) {
-					flippingItem.setFavorite(!flippingItem.isFavorite());
-				}
+					//if it was a dummy item and in the accountwide view, it has already had its favorite set by setFavoriteOnAllAccounts
+					boolean wasDummyAndAccountwide = wasDummy && plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE);
+					if (!wasDummyAndAccountwide) {
+						flippingItem.setFavorite(!flippingItem.isFavorite());
+					}
 
-				favoriteIcon.setIcon(flippingItem.isFavorite()? Icons.STAR_ON_ICON:Icons.STAR_OFF_ICON);
+					favoriteIcon.setIcon(flippingItem.isFavorite()? Icons.STAR_ON_ICON:Icons.STAR_OFF_ICON);
 
-				if (flippingItem.isFavorite()) {
-					searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_PRICE) + "</html>");
+					if (flippingItem.isFavorite()) {
+						searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_PRICE) + "</html>");
+					}
+					else {
+						searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
+					}
 				}
-				else {
-					searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
+				if (e.getButton() == MouseEvent.BUTTON3){
+					createFavouritesListPopup().show(favoriteIcon,e.getX(),e.getY());
+
 				}
 			}
 
@@ -969,6 +974,27 @@ public class FlippingItemPanel extends JPanel
 		wikiTimePanel.add(sellTimePanel);
 
 		return wikiTimePanel;
+	}
+	private JPopupMenu createFavouritesListPopup() {
+		List<JMenuItem> menuItems = new ArrayList<>();
+		JPopupMenu favouritesListPopup = new JPopupMenu();
+		ActionListener menuListener = event -> {
+			plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
+			AccountWideData.addNewFavoriteToList(event.getActionCommand(),flippingItem);
+
+		};
+
+		for (String key : AccountWideData.getAllListNames()){
+			menuItems.add(new JMenuItem(key));
+		}
+		for (JMenuItem i : menuItems){
+			i.addActionListener(menuListener);
+		}
+
+		favouritesListPopup.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		favouritesListPopup.setBackground(CustomColors.DARK_GRAY_LIGHTER);
+
+		return favouritesListPopup;
 	}
 
 }

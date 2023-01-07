@@ -3,14 +3,14 @@ package com.flippingutilities.model;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 @Data
 @Slf4j
 public class AccountWideData {
     List<Option> options = new ArrayList<>();
     List<Section> sections = new ArrayList<>();
+    static Map<String, ArrayList<FlippingItem>> favoriteListsItems = new HashMap<>();
     boolean shouldMakeNewAdditions = true;
     boolean enhancedSlots = true;
     String jwt;
@@ -92,4 +92,25 @@ public class AccountWideData {
         sections.add(otherSection);
     }
 
+    public static ArrayList<FlippingItem> getFavoriteListData(String listName) {
+        return favoriteListsItems.get(listName);
+    }
+
+    public static Set<String> getAllListNames () {
+        return favoriteListsItems.keySet();
+    }
+
+    public static boolean addNewFavoriteList (String listName){
+        if (!favoriteListsItems.containsKey(listName)){
+            favoriteListsItems.put(listName,null);
+            return false;
+        }
+        else{
+            return true;
+        }
+    }
+
+    public static void addNewFavoriteToList(String listName, FlippingItem item){
+        ArrayList<FlippingItem> list = favoriteListsItems.get(listName);
+    }
 }
