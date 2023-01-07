@@ -122,8 +122,8 @@ public class FlippingItemPanel extends JPanel
 		setBackground(CustomColors.DARK_GRAY);
 		setLayout(new BorderLayout());
 		setBorder(new CompoundBorder(
-				new MatteBorder(2, 2, 2, 2, ColorScheme.DARKER_GRAY_COLOR.darker()),
-				new EmptyBorder(10,5,0,0)));
+			new MatteBorder(2, 2, 2, 2, ColorScheme.DARKER_GRAY_COLOR.darker()),
+			new EmptyBorder(10,5,0,0)));
 
 		setToolTipText("Flipped by " + flippingItem.getFlippedBy());
 
@@ -363,7 +363,7 @@ public class FlippingItemPanel extends JPanel
 			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
 		}
 		searchCodeLabel.setToolTipText("<html>If you have favorited this item, you can type the search code when you are <br>" +
-				"searching for items in the ge to populate your ge results with any item with this code</html>");
+			"searching for items in the ge to populate your ge results with any item with this code</html>");
 		searchCodeLabel.setFont(FontManager.getRunescapeSmallFont());
 
 		searchCodePanel.add(searchCodeLabel);
@@ -530,10 +530,10 @@ public class FlippingItemPanel extends JPanel
 	private void styleValueLabels() {
 		Arrays.asList(latestBuyPriceVal, latestSellPriceVal, instaSellVal, instaBuyVal, wikiProfitEachVal, marginCheckProfitEachVal, wikiPotentialProfitVal,
 			wikiRoiLabelVal, geLimitVal).
-				forEach(label -> {
-					label.setHorizontalAlignment(JLabel.RIGHT);
-					label.setFont(plugin.getFont());
-				});
+			forEach(label -> {
+				label.setHorizontalAlignment(JLabel.RIGHT);
+				label.setFont(plugin.getFont());
+			});
 
 		instaSellVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 		instaBuyVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
@@ -572,10 +572,10 @@ public class FlippingItemPanel extends JPanel
 
 	private void styleDescriptionLabels() {
 		Arrays.asList(wikiBuyText, wikiSellText, latestBuyPriceText, latestSellPriceText, instaSellText, instaBuyText, wikiProfitEachText, marginCheckProfitEachText, wikiPotentialProfitText, geLimitText, wikiRoiText).
-				forEach(label -> {
-					label.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-					label.setFont(plugin.getFont());
-				});
+			forEach(label -> {
+				label.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+				label.setFont(plugin.getFont());
+			});
 
 		/* Tooltips */
 		instaSellText.setToolTipText("This is the price you insta sold the item for (pre tax)");
@@ -746,7 +746,7 @@ public class FlippingItemPanel extends JPanel
 			public void mousePressed(MouseEvent e)
 			{
 				boolean wasDummy = false;
-				if (e.getButton() == MouseEvent.BUTTON1){
+				if (SwingUtilities.isLeftMouseButton(e)){
 					if (Constants.DUMMY_ITEM.equals(flippingItem.getFlippedBy())) {
 						wasDummy = true;
 						plugin.addFavoritedItem(flippingItem);
@@ -775,9 +775,9 @@ public class FlippingItemPanel extends JPanel
 						searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
 					}
 				}
-				if (e.getButton() == MouseEvent.BUTTON3){
+				if (SwingUtilities.isRightMouseButton(e)){
+					log.info("triggering favorite list popup");
 					createFavouritesListPopup().show(favoriteIcon,e.getX(),e.getY());
-
 				}
 			}
 
@@ -860,8 +860,8 @@ public class FlippingItemPanel extends JPanel
 		flippingItem.validateGeProperties();
 
 		geRefreshCountdownLabel.setText(flippingItem.getGeLimitResetTime() == null?
-				TimeFormatters.formatDuration(Duration.ZERO):
-				TimeFormatters.formatDuration(Instant.now(), flippingItem.getGeLimitResetTime()));
+			TimeFormatters.formatDuration(Duration.ZERO):
+			TimeFormatters.formatDuration(Instant.now(), flippingItem.getGeLimitResetTime()));
 
 		//need to update this so it can be reset when the timer runs down.
 		if (flippingItem.getTotalGELimit() > 0) {
@@ -981,14 +981,12 @@ public class FlippingItemPanel extends JPanel
 		ActionListener menuListener = event -> {
 			plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
 			AccountWideData.addNewFavoriteToList(event.getActionCommand(),flippingItem);
-
 		};
 
 		for (String key : AccountWideData.getAllListNames()){
-			menuItems.add(new JMenuItem(key));
-		}
-		for (JMenuItem i : menuItems){
-			i.addActionListener(menuListener);
+			JMenuItem menuItem = new JMenuItem(key);
+			favouritesListPopup.add(menuItem);
+			menuItem.addActionListener(menuListener);
 		}
 
 		favouritesListPopup.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
