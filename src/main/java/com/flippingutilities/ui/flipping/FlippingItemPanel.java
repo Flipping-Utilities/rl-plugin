@@ -70,6 +70,8 @@ public class FlippingItemPanel extends JPanel
 	private final FlippingItem flippingItem;
 	private FlippingPlugin plugin;
 
+	private JLabel favoriteIcon;
+
 	//All the labels that hold the actual values for these properties.
 	JLabel wikiBuyVal = new JLabel();
 	JLabel wikiSellVal = new JLabel();
@@ -131,8 +133,9 @@ public class FlippingItemPanel extends JPanel
 		styleValueLabels();
 		setValueLabels();
 		updateTimerDisplays();
+		favoriteIcon = createFavoriteIcon();
 
-		JPanel titlePanel = createTitlePanel(createItemIcon(itemImage), createItemNameLabel(), createFavoriteIcon());
+		JPanel titlePanel = createTitlePanel(createItemIcon(itemImage), createItemNameLabel(), favoriteIcon);
 		itemInfo = createItemInfoPanel();
 		add(titlePanel, BorderLayout.NORTH);
 		add(itemInfo, BorderLayout.CENTER);
@@ -976,11 +979,12 @@ public class FlippingItemPanel extends JPanel
 		return wikiTimePanel;
 	}
 	private JPopupMenu createFavouritesListPopup() {
-		List<JMenuItem> menuItems = new ArrayList<>();
 		JPopupMenu favouritesListPopup = new JPopupMenu();
 		ActionListener menuListener = event -> {
 			plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
 			AccountWideData.addNewFavoriteToList(event.getActionCommand(),flippingItem);
+			log.info("changing favorite");
+			favoriteIcon.setIcon(flippingItem.isFavorite()? Icons.STAR_ON_ICON:Icons.STAR_OFF_ICON);
 		};
 
 		for (String key : AccountWideData.getAllListNames()){
