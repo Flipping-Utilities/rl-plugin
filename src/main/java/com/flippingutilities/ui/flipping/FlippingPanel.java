@@ -411,15 +411,14 @@ public class FlippingPanel extends JPanel
 		JMenuItem addMenu= new JMenuItem("Add +");
 		JMenuItem allFavorites= new JMenuItem("ALL");
 
-
 		ActionListener menuListener = event -> {
-			JMenuItem last = menuItems.stream().filter(c -> c.getText() == favoriteList).findAny().get();
-			last.setBackground(CustomColors.DARK_GRAY_LIGHTER); // revert colour to unselected
+			JMenuItem last = menuItems.stream().filter(c -> Objects.equals(c.getText(), favoriteList)).findAny().get();
+			last.setForeground(Color.white); // revert colour to unselected
 
 			favoriteList = event.getActionCommand();
 
 			Object clicked = event.getSource();
-			((JMenuItem) clicked).setBorder(BorderFactory.createMatteBorder(2,2,2,2,ColorScheme.BRAND_ORANGE));
+			((JMenuItem) clicked).setForeground(ColorScheme.BRAND_ORANGE);
 
 			System.out.println(event.getActionCommand()); // debug code
 		};
@@ -463,8 +462,10 @@ public class FlippingPanel extends JPanel
 
 		addMenu.addActionListener(addListener);
 
+		allFavorites.setForeground(ColorScheme.BRAND_ORANGE);
 		favouritesListPopup.add(addMenu);
 		favouritesListPopup.add(allFavorites);
+
 
 		favouritesListPopup.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 		favouritesListPopup.setBackground(CustomColors.DARK_GRAY_LIGHTER);

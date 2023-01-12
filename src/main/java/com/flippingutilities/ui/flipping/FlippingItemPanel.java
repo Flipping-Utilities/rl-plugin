@@ -997,7 +997,12 @@ public class FlippingItemPanel extends JPanel
 			JMenuItem menuItem = new JMenuItem(key);
 			favouritesListPopup.add(menuItem);
 			menuItem.addActionListener(menuListener);
+
+			if (flippingItem.getFavoriteLists().contains(key)){
+				menuItem.setForeground(ColorScheme.BRAND_ORANGE);
+			}
 		}
+
 
 		favouritesListPopup.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 		favouritesListPopup.setBackground(CustomColors.DARK_GRAY_LIGHTER);
