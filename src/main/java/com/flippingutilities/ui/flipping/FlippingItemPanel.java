@@ -779,7 +779,7 @@ public class FlippingItemPanel extends JPanel
 					}
 				}
 				if (SwingUtilities.isRightMouseButton(e)){
-					createFavouritesListPopup(favoriteIcon).show(favoriteIcon,e.getX(),e.getY());
+					createFavouritesListPopup().show(favoriteIcon,e.getX(),e.getY());
 				}
 			}
 
@@ -977,7 +977,7 @@ public class FlippingItemPanel extends JPanel
 
 		return wikiTimePanel;
 	}
-	private JPopupMenu createFavouritesListPopup(JLabel icon) {
+	private JPopupMenu createFavouritesListPopup() {
 
 		JPopupMenu favouritesListPopup = new JPopupMenu();
 		ActionListener menuListener = event -> {
@@ -986,6 +986,7 @@ public class FlippingItemPanel extends JPanel
 			if (flippingItem.itemBelongsToList(list)){
 				AccountWideData.removeItemFromList(list,flippingItem);
 				flippingItem.removeItemFromList(list);
+				plugin.getFlippingPanel().rebuild(plugin.viewItemsForCurrentView());
 			}
 			else {
 				AccountWideData.addItemToFavoriteList(list,flippingItem);

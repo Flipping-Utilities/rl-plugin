@@ -36,7 +36,6 @@ import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.Constants;
-import com.flippingutilities.utilities.Searchable;
 import com.flippingutilities.utilities.WikiRequest;
 import com.google.common.base.Strings;
 import lombok.Getter;
@@ -47,16 +46,17 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.components.IconTextField;
 import net.runelite.client.ui.components.PluginErrorPanel;
 import net.runelite.http.api.item.ItemPrice;
-import net.runelite.http.api.item.ItemStats;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
 import java.awt.*;
-import java.awt.event.*;
+import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.Instant;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -223,7 +223,6 @@ public class FlippingPanel extends JPanel
 
 	private List<FlippingItem>  getItemsToDisplay(List<FlippingItem> tradeList) {
 		List<FlippingItem> result = new ArrayList<>(tradeList);
-		ArrayList<FlippingItem> listData = new ArrayList<>();
 
 		if (favoriteSelected && !isItemHighlighted() && Objects.equals(favoriteList, "ALL")) {
 			result = result.stream().filter(FlippingItem::isFavorite).collect(Collectors.toList());
@@ -420,7 +419,7 @@ public class FlippingPanel extends JPanel
 			Object clicked = event.getSource();
 			((JMenuItem) clicked).setForeground(ColorScheme.BRAND_ORANGE);
 
-			System.out.println(event.getActionCommand()); // debug code
+			rebuild(plugin.viewItemsForCurrentView());
 		};
 
 		ActionListener addListener = event -> {
