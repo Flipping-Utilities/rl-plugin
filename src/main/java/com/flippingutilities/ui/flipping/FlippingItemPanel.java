@@ -779,8 +779,7 @@ public class FlippingItemPanel extends JPanel
 					}
 				}
 				if (SwingUtilities.isRightMouseButton(e)){
-					log.info("triggering favorite list popup");
-					createFavouritesListPopup().show(favoriteIcon,e.getX(),e.getY());
+					createFavouritesListPopup(favoriteIcon).show(favoriteIcon,e.getX(),e.getY());
 				}
 			}
 
@@ -978,13 +977,20 @@ public class FlippingItemPanel extends JPanel
 
 		return wikiTimePanel;
 	}
-	private JPopupMenu createFavouritesListPopup() {
+	private JPopupMenu createFavouritesListPopup(JLabel icon) {
+
 		JPopupMenu favouritesListPopup = new JPopupMenu();
 		ActionListener menuListener = event -> {
-			plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
-			AccountWideData.addNewFavoriteToList(event.getActionCommand(),flippingItem);
-			log.info("changing favorite");
-			favoriteIcon.setIcon(flippingItem.isFavorite()? Icons.STAR_ON_ICON:Icons.STAR_OFF_ICON);
+			String list = event.getActionCommand();
+			//removes item from list if it exists in the selected list
+			if (flippingItem.itemBelongsToList(list)){
+				AccountWideData.removeItemFromList(list,flippingItem);
+				flippingItem.removeItemFromList(list);
+			}
+			else {
+				AccountWideData.addItemToFavoriteList(list,flippingItem);
+				flippingItem.addItemToList(list);
+			}
 		};
 
 		for (String key : AccountWideData.getAllListNames()){

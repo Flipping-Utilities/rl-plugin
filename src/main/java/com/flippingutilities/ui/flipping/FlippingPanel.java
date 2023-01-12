@@ -431,8 +431,24 @@ public class FlippingPanel extends JPanel
 				if(!Objects.equals(menuName, "") && !AccountWideData.addNewFavoriteList(menuName)) {
 					JMenuItem item = new JMenuItem(menuName);
 					item.addActionListener(menuListener);
+					item.addMouseListener(new MouseAdapter() {
+						@Override
+						public void mousePressed(MouseEvent e) {
+							if (SwingUtilities.isRightMouseButton(e)) {
+								favouritesListPopup.setVisible(false);
+								int delete = JOptionPane.showConfirmDialog(item, "Are you sure you want to delete this list?","Delete Item List?",JOptionPane.YES_NO_OPTION);
+								if (delete == 0) {
+									AccountWideData.deleteItemList(item.getActionCommand());
+									favouritesListPopup.remove(item);
+									favoriteList = "ALL";
+									rebuild(plugin.viewItemsForCurrentView());
+								}
+							}
+						}
+					});
 					favouritesListPopup.add(item);
 					menuItems.add(item);
+
 				}
 				else {JOptionPane.showMessageDialog(favouritesListPopup, "List Already Exists!");}
 			}
