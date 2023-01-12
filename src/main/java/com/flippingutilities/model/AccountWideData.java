@@ -102,7 +102,7 @@ public class AccountWideData {
 
     public static boolean addNewFavoriteList (String listName){
         if (!favoriteListsItems.containsKey(listName)){
-            favoriteListsItems.put(listName,null);
+            favoriteListsItems.put(listName,new ArrayList<>());
             return false;
         }
         else{
@@ -110,7 +110,22 @@ public class AccountWideData {
         }
     }
 
-    public static void addNewFavoriteToList(String listName, FlippingItem item){
-        ArrayList<FlippingItem> list = favoriteListsItems.get(listName);
+    public static void addItemToFavoriteList(String listName, FlippingItem item){
+        List<FlippingItem> list = favoriteListsItems.get(listName);
+        list.add(item);
+    }
+
+    public static void removeItemFromList(String listName, FlippingItem item) {
+        List<FlippingItem> list = favoriteListsItems.get(listName);
+        list.remove(item);
+    }
+
+    public static void deleteItemList(String listName){
+        for (Map.Entry<String, ArrayList<FlippingItem>> itemList: favoriteListsItems.entrySet()) {
+            for (FlippingItem item: itemList.getValue()) {
+                item.removeItemFromList(listName);
+            }
+        }
+        favoriteListsItems.remove(listName);
     }
 }
