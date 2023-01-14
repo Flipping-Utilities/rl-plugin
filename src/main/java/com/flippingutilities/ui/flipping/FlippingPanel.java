@@ -68,13 +68,14 @@ public class FlippingPanel extends JPanel
 
 	private final FlippingPlugin plugin;
 	private final ItemManager itemManager;
+	private AccountWideData accountWideData;
 
 	public final CardLayout cardLayout = new CardLayout();
 
 	private final JPanel flippingItemsPanel = new JPanel();
 	public final JPanel flippingItemContainer = new JPanel(cardLayout);
 
-	private final JPopupMenu favouritesListPopup = this.createFavouritesListPopup();
+	private final JPopupMenu favouritesListPopup = createFavouritesListPopup();
 
 	//Keeps track of all items currently displayed on the panel.
 	private ArrayList<FlippingItemPanel> activePanels = new ArrayList<>();
@@ -101,6 +102,7 @@ public class FlippingPanel extends JPanel
 
 		this.plugin = plugin;
 		this.itemManager = plugin.getItemManager();
+		this.accountWideData = plugin.getDataHandler().getAccountWideData();
 
 
 		setLayout(new BorderLayout());
@@ -228,7 +230,7 @@ public class FlippingPanel extends JPanel
 			result = result.stream().filter(FlippingItem::isFavorite).collect(Collectors.toList());
 		}
 		else if (favoriteSelected && !isItemHighlighted() && !Objects.equals(favoriteList, "ALL")){
-			result = AccountWideData.getFavoriteListData(favoriteList);
+			result = accountWideData.getFavoriteListData(favoriteList);
 			if (result == null) {log.error("Favorite List doesn't exist!");}
 		}
 
@@ -426,7 +428,7 @@ public class FlippingPanel extends JPanel
 			if (Objects.equals(event.getActionCommand(), "Add +")){
 				String menuName = JOptionPane.showInputDialog("Enter Favorite List Name");
 
-				if(!Objects.equals(menuName, "") && !AccountWideData.addNewFavoriteList(menuName)) {
+				if(!Objects.equals(menuName, "") && !accountWideData.addNewFavoriteList(menuName)) {
 					JMenuItem item = new JMenuItem(menuName);
 					item.addActionListener(menuListener);
 					item.addMouseListener(new MouseAdapter() {
@@ -436,9 +438,10 @@ public class FlippingPanel extends JPanel
 								favouritesListPopup.setVisible(false);
 								int delete = JOptionPane.showConfirmDialog(item, "Are you sure you want to delete this list?","Delete Item List?",JOptionPane.YES_NO_OPTION);
 								if (delete == 0) {
-									AccountWideData.deleteItemList(item.getActionCommand());
+									accountWideData.deleteItemList(item.getActionCommand());
 									favouritesListPopup.remove(item);
 									favoriteList = "ALL";
+									allFavorites.setForeground(ColorScheme.BRAND_ORANGE);
 									rebuild(plugin.viewItemsForCurrentView());
 								}
 							}
@@ -452,7 +455,7 @@ public class FlippingPanel extends JPanel
 			}
 		};
 		menuItems.add(allFavorites);
-		for (String key : AccountWideData.getAllListNames()){
+		for (String key : accountWideData.getAllListNames()){
 			menuItems.add(new JMenuItem(key));
 		}
 		for (JMenuItem i : menuItems){
