@@ -10,7 +10,7 @@ import java.util.*;
 public class AccountWideData {
     List<Option> options = new ArrayList<>();
     List<Section> sections = new ArrayList<>();
-    Map<String, ArrayList<FlippingItem>> favoriteListsItems = new HashMap<>();
+    Map<String, Set<Integer>> favoriteItemLists = new HashMap<>();
     boolean shouldMakeNewAdditions = true;
     boolean enhancedSlots = true;
     String jwt;
@@ -37,6 +37,12 @@ public class AccountWideData {
             didChangeData = true;
             setDefaultFlippingItemPanelSections();
         }
+
+        if (favoriteItemLists.isEmpty()) {
+            didChangeData = true;
+            favoriteItemLists.put("DEFAULT", new HashSet<>());
+        }
+
         return didChangeData;
     }
 
@@ -92,40 +98,35 @@ public class AccountWideData {
         sections.add(otherSection);
     }
 
-    public ArrayList<FlippingItem> getFavoriteListData(String listName) {
-        return favoriteListsItems.get(listName);
+    public Set<Integer> getFavoriteListData(String listName) {
+        return favoriteItemLists.get(listName);
     }
 
     public Set<String> getAllListNames () {
-        return favoriteListsItems.keySet();
+        return favoriteItemLists.keySet();
     }
 
     public boolean addNewFavoriteList (String listName){
-        if (!favoriteListsItems.containsKey(listName)){
-            favoriteListsItems.put(listName,new ArrayList<>());
-            return false;
-        }
-        else{
+        if (!favoriteItemLists.containsKey(listName)){
+            favoriteItemLists.put(listName,new HashSet<>());
             return true;
         }
+        else{
+            return false;
+        }
     }
 
-    public void addItemToFavoriteList(String listName, FlippingItem item){
-        List<FlippingItem> list = favoriteListsItems.get(listName);
-        list.add(item);
+    public void addItemToFavoriteList(String listName, int itemId){
+        Set<Integer> list = favoriteItemLists.get(listName);
+        list.add(itemId);
     }
 
-    public void removeItemFromList(String listName, FlippingItem item) {
-        List<FlippingItem> list = favoriteListsItems.get(listName);
-        list.remove(item);
+    public void removeItemFromList(String listName, int itemId) {
+        Set<Integer> set = favoriteItemLists.get(listName);
+        set.remove(itemId);
     }
 
     public void deleteItemList(String listName){
-        for (Map.Entry<String, ArrayList<FlippingItem>> itemList: favoriteListsItems.entrySet()) {
-            for (FlippingItem item: itemList.getValue()) {
-                item.removeItemFromList(listName);
-            }
-        }
-        favoriteListsItems.remove(listName);
+        favoriteItemLists.remove(listName);
     }
 }
