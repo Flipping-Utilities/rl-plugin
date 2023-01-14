@@ -10,7 +10,7 @@ import java.util.*;
 public class AccountWideData {
     List<Option> options = new ArrayList<>();
     List<Section> sections = new ArrayList<>();
-    static Map<String, ArrayList<FlippingItem>> favoriteListsItems = new HashMap<>();
+    Map<String, ArrayList<FlippingItem>> favoriteListsItems = new HashMap<>();
     boolean shouldMakeNewAdditions = true;
     boolean enhancedSlots = true;
     String jwt;
@@ -92,15 +92,15 @@ public class AccountWideData {
         sections.add(otherSection);
     }
 
-    public static ArrayList<FlippingItem> getFavoriteListData(String listName) {
+    public ArrayList<FlippingItem> getFavoriteListData(String listName) {
         return favoriteListsItems.get(listName);
     }
 
-    public static Set<String> getAllListNames () {
+    public Set<String> getAllListNames () {
         return favoriteListsItems.keySet();
     }
 
-    public static boolean addNewFavoriteList (String listName){
+    public boolean addNewFavoriteList (String listName){
         if (!favoriteListsItems.containsKey(listName)){
             favoriteListsItems.put(listName,new ArrayList<>());
             return false;
@@ -110,17 +110,17 @@ public class AccountWideData {
         }
     }
 
-    public static void addItemToFavoriteList(String listName, FlippingItem item){
+    public void addItemToFavoriteList(String listName, FlippingItem item){
         List<FlippingItem> list = favoriteListsItems.get(listName);
         list.add(item);
     }
 
-    public static void removeItemFromList(String listName, FlippingItem item) {
+    public void removeItemFromList(String listName, FlippingItem item) {
         List<FlippingItem> list = favoriteListsItems.get(listName);
         list.remove(item);
     }
 
-    public static void deleteItemList(String listName){
+    public void deleteItemList(String listName){
         for (Map.Entry<String, ArrayList<FlippingItem>> itemList: favoriteListsItems.entrySet()) {
             for (FlippingItem item: itemList.getValue()) {
                 item.removeItemFromList(listName);

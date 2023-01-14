@@ -69,6 +69,7 @@ public class FlippingItemPanel extends JPanel
 	@Getter
 	private final FlippingItem flippingItem;
 	private FlippingPlugin plugin;
+	private AccountWideData accountWideData;
 
 	private JLabel favoriteIcon;
 
@@ -120,6 +121,7 @@ public class FlippingItemPanel extends JPanel
 	{
 		this.flippingItem = flippingItem;
 		this.plugin = plugin;
+		this.accountWideData = plugin.getDataHandler().getAccountWideData();
 		flippingItem.validateGeProperties();
 		setBackground(CustomColors.DARK_GRAY);
 		setLayout(new BorderLayout());
@@ -984,17 +986,17 @@ public class FlippingItemPanel extends JPanel
 			String list = event.getActionCommand();
 			//removes item from list if it exists in the selected list
 			if (flippingItem.itemBelongsToList(list)){
-				AccountWideData.removeItemFromList(list,flippingItem);
+				accountWideData.removeItemFromList(list,flippingItem);
 				flippingItem.removeItemFromList(list);
 				plugin.getFlippingPanel().rebuild(plugin.viewItemsForCurrentView());
 			}
 			else {
-				AccountWideData.addItemToFavoriteList(list,flippingItem);
+				accountWideData.addItemToFavoriteList(list,flippingItem);
 				flippingItem.addItemToList(list);
 			}
 		};
 
-		for (String key : AccountWideData.getAllListNames()){
+		for (String key : accountWideData.getAllListNames()){
 			JMenuItem menuItem = new JMenuItem(key);
 			favouritesListPopup.add(menuItem);
 			menuItem.addActionListener(menuListener);
