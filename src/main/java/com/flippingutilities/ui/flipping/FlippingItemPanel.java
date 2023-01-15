@@ -28,6 +28,7 @@ package com.flippingutilities.ui.flipping;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.jobs.WikiDataFetcherJob;
+import com.flippingutilities.model.AccountWideData;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.Section;
@@ -50,9 +51,7 @@ import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
+import java.awt.event.*;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -70,6 +69,9 @@ public class FlippingItemPanel extends JPanel
 	@Getter
 	private final FlippingItem flippingItem;
 	private FlippingPlugin plugin;
+	private AccountWideData accountWideData;
+
+	private JLabel favoriteIcon;
 
 	//All the labels that hold the actual values for these properties.
 	JLabel wikiBuyVal = new JLabel();
@@ -119,12 +121,13 @@ public class FlippingItemPanel extends JPanel
 	{
 		this.flippingItem = flippingItem;
 		this.plugin = plugin;
+		this.accountWideData = plugin.getDataHandler().getAccountWideData();
 		flippingItem.validateGeProperties();
 		setBackground(CustomColors.DARK_GRAY);
 		setLayout(new BorderLayout());
 		setBorder(new CompoundBorder(
-				new MatteBorder(2, 2, 2, 2, ColorScheme.DARKER_GRAY_COLOR.darker()),
-				new EmptyBorder(10,5,0,0)));
+			new MatteBorder(2, 2, 2, 2, ColorScheme.DARKER_GRAY_COLOR.darker()),
+			new EmptyBorder(10,5,0,0)));
 
 		setToolTipText("Flipped by " + flippingItem.getFlippedBy());
 
@@ -132,8 +135,9 @@ public class FlippingItemPanel extends JPanel
 		styleValueLabels();
 		setValueLabels();
 		updateTimerDisplays();
+		favoriteIcon = createFavoriteIcon();
 
-		JPanel titlePanel = createTitlePanel(createItemIcon(itemImage), createItemNameLabel(), createFavoriteIcon());
+		JPanel titlePanel = createTitlePanel(createItemIcon(itemImage), createItemNameLabel(), favoriteIcon);
 		itemInfo = createItemInfoPanel();
 		add(titlePanel, BorderLayout.NORTH);
 		add(itemInfo, BorderLayout.CENTER);
@@ -364,7 +368,7 @@ public class FlippingItemPanel extends JPanel
 			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
 		}
 		searchCodeLabel.setToolTipText("<html>If you have favorited this item, you can type the search code when you are <br>" +
-				"searching for items in the ge to populate your ge results with any item with this code</html>");
+			"searching for items in the ge to populate your ge results with any item with this code</html>");
 		searchCodeLabel.setFont(FontManager.getRunescapeSmallFont());
 
 		searchCodePanel.add(searchCodeLabel);
@@ -531,10 +535,10 @@ public class FlippingItemPanel extends JPanel
 	private void styleValueLabels() {
 		Arrays.asList(latestBuyPriceVal, latestSellPriceVal, instaSellVal, instaBuyVal, wikiProfitEachVal, marginCheckProfitEachVal, wikiPotentialProfitVal,
 			wikiRoiLabelVal, geLimitVal).
-				forEach(label -> {
-					label.setHorizontalAlignment(JLabel.RIGHT);
-					label.setFont(plugin.getFont());
-				});
+			forEach(label -> {
+				label.setHorizontalAlignment(JLabel.RIGHT);
+				label.setFont(plugin.getFont());
+			});
 
 		instaSellVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 		instaBuyVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
@@ -573,10 +577,10 @@ public class FlippingItemPanel extends JPanel
 
 	private void styleDescriptionLabels() {
 		Arrays.asList(wikiBuyText, wikiSellText, latestBuyPriceText, latestSellPriceText, instaSellText, instaBuyText, wikiProfitEachText, marginCheckProfitEachText, wikiPotentialProfitText, geLimitText, wikiRoiText).
-				forEach(label -> {
-					label.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-					label.setFont(plugin.getFont());
-				});
+			forEach(label -> {
+				label.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+				label.setFont(plugin.getFont());
+			});
 
 		/* Tooltips */
 		instaSellText.setToolTipText("This is the price you insta sold the item for (pre tax)");
@@ -747,32 +751,37 @@ public class FlippingItemPanel extends JPanel
 			public void mousePressed(MouseEvent e)
 			{
 				boolean wasDummy = false;
-				if (Constants.DUMMY_ITEM.equals(flippingItem.getFlippedBy())) {
-					wasDummy = true;
-					plugin.addFavoritedItem(flippingItem);
-				}
+				if (SwingUtilities.isLeftMouseButton(e)){
+					if (Constants.DUMMY_ITEM.equals(flippingItem.getFlippedBy())) {
+						wasDummy = true;
+						plugin.addFavoritedItem(flippingItem);
+					}
 
-				if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE))
-				{
-					plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
-				}
-				else {
-					plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
-				}
+					if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE))
+					{
+						plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
+					}
+					else {
+						plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
+					}
 
-				//if it was a dummy item and in the accountwide view, it has already had its favorite set by setFavoriteOnAllAccounts
-				boolean wasDummyAndAccountwide = wasDummy && plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE);
-				if (!wasDummyAndAccountwide) {
-					flippingItem.setFavorite(!flippingItem.isFavorite());
-				}
+					//if it was a dummy item and in the accountwide view, it has already had its favorite set by setFavoriteOnAllAccounts
+					boolean wasDummyAndAccountwide = wasDummy && plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE);
+					if (!wasDummyAndAccountwide) {
+						flippingItem.setFavorite(!flippingItem.isFavorite());
+					}
 
-				favoriteIcon.setIcon(flippingItem.isFavorite()? Icons.STAR_ON_ICON:Icons.STAR_OFF_ICON);
+					favoriteIcon.setIcon(flippingItem.isFavorite()? Icons.STAR_ON_ICON:Icons.STAR_OFF_ICON);
 
-				if (flippingItem.isFavorite()) {
-					searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_PRICE) + "</html>");
+					if (flippingItem.isFavorite()) {
+						searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_PRICE) + "</html>");
+					}
+					else {
+						searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
+					}
 				}
-				else {
-					searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText("N/A", ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
+				if (SwingUtilities.isRightMouseButton(e)){
+					createFavouritesListPopup().show(favoriteIcon,e.getX(),e.getY());
 				}
 			}
 
@@ -855,8 +864,8 @@ public class FlippingItemPanel extends JPanel
 		flippingItem.validateGeProperties();
 
 		geRefreshCountdownLabel.setText(flippingItem.getGeLimitResetTime() == null?
-				TimeFormatters.formatDuration(Duration.ZERO):
-				TimeFormatters.formatDuration(Instant.now(), flippingItem.getGeLimitResetTime()));
+			TimeFormatters.formatDuration(Duration.ZERO):
+			TimeFormatters.formatDuration(Instant.now(), flippingItem.getGeLimitResetTime()));
 
 		//need to update this so it can be reset when the timer runs down.
 		if (flippingItem.getTotalGELimit() > 0) {
@@ -969,6 +978,44 @@ public class FlippingItemPanel extends JPanel
 		wikiTimePanel.add(sellTimePanel);
 
 		return wikiTimePanel;
+	}
+
+	/**
+	 * This creates the popup that allows users to add an item to a favorite list. It shows when you right click
+	 * the favorite icon on a flipping card (FlippingItemPanel).
+	 * @return
+	 */
+	private JPopupMenu createFavouritesListPopup() {
+		JPopupMenu favouritesListPopup = new JPopupMenu();
+		ActionListener menuListener = event -> {
+			String list = event.getActionCommand();
+			//removes item from list if it exists in the selected list
+			if (flippingItem.itemBelongsToList(list)){
+				accountWideData.removeItemFromList(list,flippingItem.getItemId());
+				flippingItem.removeItemFromList(list);
+				plugin.getFlippingPanel().rebuild(plugin.viewItemsForCurrentView());
+			}
+			else {
+				accountWideData.addItemToFavoriteList(list,flippingItem.getItemId());
+				flippingItem.addItemToList(list);
+			}
+		};
+
+		for (String key : accountWideData.getAllListNames()){
+			JMenuItem menuItem = new JMenuItem(key);
+			favouritesListPopup.add(menuItem);
+			menuItem.addActionListener(menuListener);
+
+			if (flippingItem.getFavoriteLists().contains(key)){
+				menuItem.setForeground(ColorScheme.BRAND_ORANGE);
+			}
+		}
+
+
+		favouritesListPopup.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		favouritesListPopup.setBackground(CustomColors.DARK_GRAY_LIGHTER);
+
+		return favouritesListPopup;
 	}
 
 }

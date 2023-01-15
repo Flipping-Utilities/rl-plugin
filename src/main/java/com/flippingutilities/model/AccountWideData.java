@@ -3,14 +3,14 @@ package com.flippingutilities.model;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 @Data
 @Slf4j
 public class AccountWideData {
     List<Option> options = new ArrayList<>();
     List<Section> sections = new ArrayList<>();
+    Map<String, Set<Integer>> favoriteItemLists = new HashMap<>();
     boolean shouldMakeNewAdditions = true;
     boolean enhancedSlots = true;
     String jwt;
@@ -37,6 +37,12 @@ public class AccountWideData {
             didChangeData = true;
             setDefaultFlippingItemPanelSections();
         }
+
+        if (favoriteItemLists.isEmpty()) {
+            didChangeData = true;
+            favoriteItemLists.put("DEFAULT", new HashSet<>());
+        }
+
         return didChangeData;
     }
 
@@ -92,4 +98,35 @@ public class AccountWideData {
         sections.add(otherSection);
     }
 
+    public Set<Integer> getFavoriteListData(String listName) {
+        return favoriteItemLists.get(listName);
+    }
+
+    public Set<String> getAllListNames () {
+        return favoriteItemLists.keySet();
+    }
+
+    public boolean addNewFavoriteList (String listName){
+        if (!favoriteItemLists.containsKey(listName)){
+            favoriteItemLists.put(listName,new HashSet<>());
+            return true;
+        }
+        else{
+            return false;
+        }
+    }
+
+    public void addItemToFavoriteList(String listName, int itemId){
+        Set<Integer> list = favoriteItemLists.get(listName);
+        list.add(itemId);
+    }
+
+    public void removeItemFromList(String listName, int itemId) {
+        Set<Integer> set = favoriteItemLists.get(listName);
+        set.remove(itemId);
+    }
+
+    public void deleteItemList(String listName){
+        favoriteItemLists.remove(listName);
+    }
 }

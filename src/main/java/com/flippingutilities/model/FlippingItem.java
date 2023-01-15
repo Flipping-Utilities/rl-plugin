@@ -38,6 +38,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Predicate;
 
 /**
  * This class is the representation of an item that a user is flipping. It contains information about the
@@ -119,6 +120,10 @@ public class FlippingItem implements Searchable
 	@Setter
 	private transient Boolean expand;
 
+	@Getter
+	private List<String> favoriteLists = new ArrayList<>();
+
+
 	public FlippingItem(int itemId, String itemName, int totalGeLimit, String flippedBy)
 	{
 		this.latestInstaBuy = Optional.empty();
@@ -148,7 +153,8 @@ public class FlippingItem implements Searchable
 				latestBuy,
 				latestSell,
 				latestActivityTime,
-				expand);
+				expand,
+				favoriteLists);
 	}
 
 	/**
@@ -388,5 +394,17 @@ public class FlippingItem implements Searchable
 	@Override
 	public String getNameForSearch() {
 		return itemName;
+	}
+
+	public boolean itemBelongsToList(String listName){
+		return favoriteLists.contains(listName);
+	}
+
+	public void addItemToList(String listName){
+		favoriteLists.add(listName);
+	}
+
+	public void removeItemFromList(String listName){
+		favoriteLists.remove(listName);
 	}
 }
