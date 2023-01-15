@@ -979,8 +979,13 @@ public class FlippingItemPanel extends JPanel
 
 		return wikiTimePanel;
 	}
-	private JPopupMenu createFavouritesListPopup() {
 
+	/**
+	 * This creates the popup that allows users to add an item to a favorite list. It shows when you right click
+	 * the favorite icon on a flipping card (FlippingItemPanel).
+	 * @return
+	 */
+	private JPopupMenu createFavouritesListPopup() {
 		JPopupMenu favouritesListPopup = new JPopupMenu();
 		ActionListener menuListener = event -> {
 			String list = event.getActionCommand();
