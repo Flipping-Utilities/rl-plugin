@@ -986,12 +986,12 @@ public class FlippingItemPanel extends JPanel
 			String list = event.getActionCommand();
 			//removes item from list if it exists in the selected list
 			if (flippingItem.itemBelongsToList(list)){
-				accountWideData.removeItemFromList(list,flippingItem);
+				accountWideData.removeItemFromList(list,flippingItem.getItemId());
 				flippingItem.removeItemFromList(list);
 				plugin.getFlippingPanel().rebuild(plugin.viewItemsForCurrentView());
 			}
 			else {
-				accountWideData.addItemToFavoriteList(list,flippingItem);
+				accountWideData.addItemToFavoriteList(list,flippingItem.getItemId());
 				flippingItem.addItemToList(list);
 			}
 		};

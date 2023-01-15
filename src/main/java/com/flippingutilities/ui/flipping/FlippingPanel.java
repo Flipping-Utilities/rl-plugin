@@ -51,10 +51,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
 import java.awt.*;
-import java.awt.event.ActionListener;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
+import java.awt.event.*;
 import java.time.Instant;
 import java.util.List;
 import java.util.*;
@@ -93,9 +90,13 @@ public class FlippingPanel extends JPanel {
     private IconTextField searchBar;
 
     private boolean currentlySearching;
-    private boolean favoriteSelected;
 
-    private String selectedFavoriteList = "ACC";
+    private String selectedFavoriteList;
+
+    private JLabel favoriteButton;
+
+    private List<JMenuItem> favoriteListPopopMenuItems = new ArrayList<>();
+    ButtonGroup buttonGroup = new ButtonGroup();
 
     public FlippingPanel(final FlippingPlugin plugin) {
         super(false);
@@ -137,10 +138,12 @@ public class FlippingPanel extends JPanel {
             (sBar) -> plugin.getClientThread().invoke(() -> this.updateSearch(sBar)));
         searchBar.setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 
+        favoriteButton = this.createFavoriteButton();
+
         final JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.setBorder(new EmptyBorder(0, 8, 2, 10));
         topPanel.add(searchBar, BorderLayout.CENTER);
-        topPanel.add(this.createFavoriteButton(), BorderLayout.EAST);
+        topPanel.add(favoriteButton, BorderLayout.EAST);
 
         paginator = new Paginator(() -> rebuild(plugin.viewItemsForCurrentView()));
         paginator.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -228,18 +231,19 @@ public class FlippingPanel extends JPanel {
     private List<FlippingItem> getItemsToDisplay(List<FlippingItem> items) {
         List<FlippingItem> result = new ArrayList<>(items);
 
-        //The "ACC" favorite list is just the account specific favorite list. It is also the default
-        //favorite list shown when you switch to an specific account view using the account dropdown.
-        if (favoriteSelected && !isItemHighlighted() && selectedFavoriteList.equals("ACC")) {
-            result = result.stream().filter(FlippingItem::isFavorite).collect(Collectors.toList());
-        }
-
-        //otherwise, if the selected favorite list is not the account specific one, get the it from the global
-        //favorite lists, available in AccountWideData.
-        else if (favoriteSelected && !isItemHighlighted() && !selectedFavoriteList.equals("ACC")) {
-            Set<Integer> itemsInSelectedFavoriteList = plugin.getDataHandler().viewAccountWideData().getFavoriteListData(selectedFavoriteList);
-            if (itemsInSelectedFavoriteList != null) {
-                result = items.stream().filter(i -> itemsInSelectedFavoriteList.contains(i.getItemId())).collect(Collectors.toList());
+        if (selectedFavoriteList != null && !isItemHighlighted()) {
+            //The "acc specific" favorite list is just the account specific favorite list. It is the default
+            //favorite list shown when click on the favorite icon.
+            if (selectedFavoriteList.equals("acc specific")) {
+                result = result.stream().filter(FlippingItem::isFavorite).collect(Collectors.toList());
+            }
+            //otherwise, if the selected favorite list is not the account specific one, get the it from the global
+            //favorite lists, available in AccountWideData.
+            else {
+                Set<Integer> itemsInSelectedFavoriteList = plugin.getDataHandler().viewAccountWideData().getFavoriteListData(selectedFavoriteList);
+                if (itemsInSelectedFavoriteList != null) {
+                    result = items.stream().filter(i -> itemsInSelectedFavoriteList.contains(i.getItemId())).collect(Collectors.toList());
+                }
             }
         }
 
@@ -305,13 +309,24 @@ public class FlippingPanel extends JPanel {
             @Override
             public void mousePressed(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
+                    boolean favoriteSelected = selectedFavoriteList != null;
                     favoriteButton.setIcon(favoriteSelected? Icons.SMALL_STAR_OFF_ICON: Icons.SMALL_STAR_ON_ICON);
-                    favoriteSelected = !favoriteSelected;
+                    selectedFavoriteList = favoriteSelected? null: "acc specific";
                     rebuild(plugin.viewItemsForCurrentView());
                 }
                 else {
                     if (favouritesListPopup == null) {
                         favouritesListPopup = createFavouritesListPopup();
+                    }
+                    if (selectedFavoriteList == null) {
+                        buttonGroup.clearSelection();
+                    }
+                    else {
+                        favoriteListPopopMenuItems.forEach(menuItem -> {
+                            if (menuItem.getText().equals(selectedFavoriteList)) {
+                                menuItem.setSelected(true);
+                            }
+                        });
                     }
                     favouritesListPopup.show(favoriteButton, e.getX(), e.getY());
                 }
@@ -319,14 +334,14 @@ public class FlippingPanel extends JPanel {
 
             @Override
             public void mouseEntered(MouseEvent e) {
-                if (!favoriteSelected) {
+                if (selectedFavoriteList == null) {
                     favoriteButton.setIcon(Icons.SMALL_STAR_HOVER_ICON);
                 }
             }
 
             @Override
             public void mouseExited(MouseEvent e) {
-                favoriteButton.setIcon(favoriteSelected? Icons.SMALL_STAR_ON_ICON: Icons.SMALL_STAR_OFF_ICON);
+                favoriteButton.setIcon(selectedFavoriteList != null? Icons.SMALL_STAR_ON_ICON: Icons.SMALL_STAR_OFF_ICON);
             }
         });
         return favoriteButton;
@@ -399,20 +414,17 @@ public class FlippingPanel extends JPanel {
         List<JMenuItem> menuItems = new ArrayList<>();
         JPopupMenu favouritesListPopup = new JPopupMenu();
         JMenuItem createFavoriteList = new JMenuItem("Add +");
-        JMenuItem accSpecific = new JMenuItem("acc specific");
+        JMenuItem accSpecific = new JRadioButtonMenuItem("acc specific");
 
         //triggers when you select a favorite list from the popup, this is attached to every menu item except the
         //one menu item responsible for creating new menu items when you click on it.
-        ActionListener regularMenuItemListener = event -> {
-            JMenuItem last = menuItems.stream().filter(c -> selectedFavoriteList.equals(c.getText())).findAny().get();
-            last.setForeground(Color.white); // revert colour to unselected
-
-            selectedFavoriteList = event.getActionCommand();
-
-            Object clicked = event.getSource();
-            ((JMenuItem) clicked).setForeground(ColorScheme.BRAND_ORANGE);
-
-            rebuild(plugin.viewItemsForCurrentView());
+        ItemListener regularMenuItemListener = itemEvent -> {
+            if (itemEvent.getStateChange() == ItemEvent.SELECTED) {
+                Object clicked = itemEvent.getSource();
+                selectedFavoriteList = ((JMenuItem) clicked).getText();
+                favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
+                rebuild(plugin.viewItemsForCurrentView());
+            }
         };
 
          //adds the delete listener to a menu item. The delete listener triggers on a rightclick on a menu item
@@ -423,13 +435,19 @@ public class FlippingPanel extends JPanel {
                      @Override
                      public void mousePressed(MouseEvent e) {
                          if (SwingUtilities.isRightMouseButton(e)) {
-                             favouritesListPopup.setVisible(false);
-                             int delete = JOptionPane.showConfirmDialog(newMenuItem, "Are you sure you want to delete this list?", "Delete Item List?", JOptionPane.YES_NO_OPTION);
-                             if (delete == 0) {
+                             int result = JOptionPane.showConfirmDialog(newMenuItem, "Are you sure you want to delete this list?", "Delete Item List?", JOptionPane.YES_NO_OPTION);
+                             if (result == JOptionPane.YES_OPTION) {
                                  accountWideData.deleteItemList(newMenuItem.getActionCommand());
                                  favouritesListPopup.remove(newMenuItem);
-                                 selectedFavoriteList = "ACC";
-                                 rebuild(plugin.viewItemsForCurrentView());
+                                 buttonGroup.remove(newMenuItem);
+                                 favoriteListPopopMenuItems.remove(newMenuItem);
+                                 //if they just deleted the currently selected favorite list
+                                 if (Objects.equals(selectedFavoriteList, newMenuItem.getActionCommand())) {
+                                     selectedFavoriteList = null;
+                                     favoriteButton.setIcon(Icons.SMALL_STAR_OFF_ICON);
+                                     buttonGroup.clearSelection();
+                                     rebuild(plugin.viewItemsForCurrentView());
+                                 }
                              }
                          }
                      }
@@ -442,12 +460,11 @@ public class FlippingPanel extends JPanel {
                 String newFavoriteListName = JOptionPane.showInputDialog("Enter Favorite List Name");
 
                 if (!Objects.equals(newFavoriteListName, "") && accountWideData.addNewFavoriteList(newFavoriteListName)) {
-                    JMenuItem newMenuItem = new JMenuItem(newFavoriteListName);
-                    newMenuItem.addActionListener(regularMenuItemListener);
+                    JMenuItem newMenuItem = new JRadioButtonMenuItem(newFavoriteListName);
+                    newMenuItem.addItemListener(regularMenuItemListener);
                     addDeleteListener.accept(newMenuItem);
                     favouritesListPopup.add(newMenuItem);
-                    menuItems.add(newMenuItem);
-
+                    buttonGroup.add(newMenuItem);
                 } else {
                     JOptionPane.showMessageDialog(favouritesListPopup, "List Already Exists!");
                 }
@@ -457,15 +474,17 @@ public class FlippingPanel extends JPanel {
 
         menuItems.add(accSpecific);
         for (String key : accountWideData.getAllListNames()) {
-            menuItems.add(new JMenuItem(key));
+            menuItems.add(new JRadioButtonMenuItem(key));
         }
 
-        for (JMenuItem i : menuItems) {
-            i.addActionListener(regularMenuItemListener);
-            if (i != accSpecific) {
-                addDeleteListener.accept(i);
+        for (JMenuItem menuItem : menuItems) {
+            menuItem.addItemListener(regularMenuItemListener);
+            if (menuItem != accSpecific) {
+                addDeleteListener.accept(menuItem);
             }
-            favouritesListPopup.add(i);
+            buttonGroup.add(menuItem);
+            favoriteListPopopMenuItems.add(menuItem);
+            favouritesListPopup.add(menuItem);
         }
 
         createFavoriteList.addActionListener(createNewListListener);
