@@ -23,16 +23,15 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 public class RecipeFlip {
     Instant timeOfCreation;
-
     Map<Integer, Map<String, PartialOffer>> outputs;
     //item id to a map of offer id to offer
     Map<Integer, Map<String, PartialOffer>> inputs;
-    int coinCost;
+    long coinCost;
 
-    public RecipeFlip(Recipe recipe, Map<Integer, Map<String, PartialOffer>> allPartialOffers) {
+    public RecipeFlip(Recipe recipe, Map<Integer, Map<String, PartialOffer>> allPartialOffers, long coinsCost) {
         Set<Integer> recipeInputIds = recipe.getInputIds();
         Set<Integer> recipeOutputIds = recipe.getOutputIds();
-
+        this.coinCost = coinsCost;
         this.timeOfCreation = Instant.now();
         this.inputs = allPartialOffers.entrySet().stream().filter(e -> recipeInputIds.contains(e.getKey()))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -67,9 +66,9 @@ public class RecipeFlip {
             .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
             .sum();
     }
-add a coins cost field or something
+
     public long getExpense() {
-        return getIngredientsValue(true);
+        return getIngredientsValue(true) + coinCost;
     }
 
     public long getRevenue() {
@@ -83,6 +82,12 @@ add a coins cost field or something
             .sum();
     }
 
+    /**
+     * This is a utility function used to calculate profit for a given set of partial offers. This doesn't calculate
+     * the profit for an instance of a RecipeFlip. Just writing this here as it confused me why we had this and getProfit()
+     * @param allPartialOffers
+     * @return
+     */
     public static long calculateProfit(Map<Integer, Map<String, PartialOffer>> allPartialOffers) {
         List<PartialOffer> offers = allPartialOffers.values().stream()
             .flatMap(offerIdToPartialOfferMap -> offerIdToPartialOfferMap.values().stream())

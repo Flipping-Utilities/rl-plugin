@@ -458,7 +458,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
         finishButton.setFont(new Font("Whitney", Font.PLAIN, 16));
         finishButton.setFocusPainted(false);
         finishButton.addActionListener(e -> {
-            RecipeFlip recipeFlip = new RecipeFlip(recipe, selectedOffers);
+            RecipeFlip recipeFlip = new RecipeFlip(recipe, selectedOffers, getCoinsCost());
             plugin.addRecipeFlip(recipeFlip, recipe);
             plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
             plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
@@ -521,16 +521,17 @@ public class RecipeOfferSelectionPanel extends JPanel {
     }
 
     private long calculateProfit() {
-        //if coins are an input, get the coin cost needed based on the currently selected offers
-        if (recipe.isInput(995)) {
-            Map<Integer, List<PartialOffer>> idToPartialOffersSelected = selectedOffers.entrySet().stream().
-                map(e -> new AbstractMap.SimpleEntry<>(e.getKey(), new ArrayList<>(e.getValue().values()))).
-                collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        return RecipeFlip.calculateProfit(selectedOffers) - getCoinsCost();
+    }
 
-            Map<Integer, Integer> idToTargetValues = plugin.getTargetValuesForMaxRecipeCount(recipe, idToPartialOffersSelected, false);
-            int coinCost = idToTargetValues.get(995);
-            return RecipeFlip.calculateProfit(selectedOffers) - coinCost;
+    private long getCoinsCost() {
+        Map<Integer, List<PartialOffer>> idToPartialOffersSelected = selectedOffers.entrySet().stream().
+            map(e -> new AbstractMap.SimpleEntry<>(e.getKey(), new ArrayList<>(e.getValue().values()))).
+            collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        Map<Integer, Integer> idToTargetValues = plugin.getTargetValuesForMaxRecipeCount(recipe, idToPartialOffersSelected, false);
+        if (idToTargetValues.containsKey(995)) {
+            return idToTargetValues.get(995);
         }
-        return RecipeFlip.calculateProfit(selectedOffers);
+        return 0;
     }
 }
