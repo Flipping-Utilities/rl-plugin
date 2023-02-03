@@ -191,7 +191,7 @@ public class RecipeHandler {
             return Optional.empty();
         }
         Map<Integer, List<Recipe>> idToRecipes= new HashMap<>();
-        List<Recipe> recipes = optionalRecipes.get().stream().filter(r -> !r.getIds().contains(995)).collect(Collectors.toList());
+        List<Recipe> recipes = optionalRecipes.get();
         recipes.forEach(r -> {
             r.getIds().forEach(id -> {
                 if (idToRecipes.containsKey(id)) {
@@ -278,6 +278,9 @@ public class RecipeHandler {
         Map<Integer, Integer> itemIdToQuantity = recipe.getItemIdToQuantity();
         return itemIdToPartialOffers.entrySet().stream().map(e -> {
             int itemId = e.getKey();
+            if (itemId == 995) {
+                return new AbstractMap.SimpleEntry<>(itemId, Integer.MAX_VALUE);
+            }
             long totalQuantity = e.getValue().stream().
                 mapToLong(
                     po -> useRemainingOffer? po.getOffer().getCurrentQuantityInTrade() - po.amountConsumed: po.amountConsumed)
