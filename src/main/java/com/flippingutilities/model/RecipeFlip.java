@@ -23,9 +23,11 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 public class RecipeFlip {
     Instant timeOfCreation;
+
     Map<Integer, Map<String, PartialOffer>> outputs;
     //item id to a map of offer id to offer
     Map<Integer, Map<String, PartialOffer>> inputs;
+    int coinCost;
 
     public RecipeFlip(Recipe recipe, Map<Integer, Map<String, PartialOffer>> allPartialOffers) {
         Set<Integer> recipeInputIds = recipe.getInputIds();
@@ -42,7 +44,7 @@ public class RecipeFlip {
         Instant clonedInstant = Instant.ofEpochSecond(timeOfCreation.getEpochSecond());
         Map<Integer, Map<String, PartialOffer>> clonedOutputs = cloneComponents(outputs);
         Map<Integer, Map<String, PartialOffer>> clonedInputs = cloneComponents(inputs);
-        return new RecipeFlip(clonedInstant, clonedOutputs, clonedInputs);
+        return new RecipeFlip(clonedInstant, clonedOutputs, clonedInputs, coinCost);
     }
 
     private Map<Integer, Map<String, PartialOffer>> cloneComponents(Map<Integer, Map<String, PartialOffer>> component) {
@@ -65,7 +67,7 @@ public class RecipeFlip {
             .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
             .sum();
     }
-
+add a coins cost field or something
     public long getExpense() {
         return getIngredientsValue(true);
     }

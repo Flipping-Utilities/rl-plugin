@@ -102,6 +102,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
      * Creates the offer panels with the number picker for all the offers passed in
      */
     private JComponent createOffersPanel(
+            int itemId,
             List<PartialOffer> partialOffers,
             RecipeItemHeaderPanel headerPanel,
             int targetSelectionValue) {
@@ -112,10 +113,18 @@ public class RecipeOfferSelectionPanel extends JPanel {
             return createOffersScrollPane(partialOffers, headerPanel, targetSelectionValue, offersPanel);
         }
 
-        String type = sourceOffer.isBuy() ? "sell" : "buy";
-        JLabel noTradesLabel = new JLabel(String.format("No recorded %s for this item", type));
-        noTradesLabel.setForeground(Color.RED);
-        offersPanel.add(noTradesLabel);
+        if (itemId == 995) {
+            JLabel coinsLabel = new JLabel("coins automatically accounted for");
+            coinsLabel.setForeground(Color.GREEN);
+            offersPanel.add(coinsLabel);
+        }
+        else {
+            String type = sourceOffer.isBuy() ? "sell" : "buy";
+            JLabel noTradesLabel = new JLabel(String.format("No recorded %s for this item", type));
+            noTradesLabel.setForeground(Color.RED);
+            offersPanel.add(noTradesLabel);
+        }
+
         headerPanel.setForeground(CustomColors.TOMATO);
         return offersPanel;
     }
@@ -320,15 +329,18 @@ public class RecipeOfferSelectionPanel extends JPanel {
 
     private void addOfferPanel(
         JPanel bodyPanel,
-        int id,
+        int itemId,
         Map<Integer, List<PartialOffer>> itemIdToPartialOffers,
         Map<Integer, Integer> targetValues
     ) {
-            int targetValue = targetValues.get(id);
-            List<PartialOffer> partialOffers = itemIdToPartialOffers.get(id);
-            RecipeItemHeaderPanel recipeItemHeaderPanel = idToHeader.get(id);
+            int targetValue = targetValues.get(itemId);
+            List<PartialOffer> partialOffers = itemIdToPartialOffers.get(itemId);
+            RecipeItemHeaderPanel recipeItemHeaderPanel = idToHeader.get(itemId);
             recipeItemHeaderPanel.setTargetValueDisplay(targetValue);
-            bodyPanel.add(createOffersPanel(partialOffers, recipeItemHeaderPanel, targetValue));
+            if (itemId == 995) {
+                recipeItemHeaderPanel.setConsumedAmountDisplay(targetValue);
+            }
+            bodyPanel.add(createOffersPanel(itemId, partialOffers, recipeItemHeaderPanel, targetValue));
     }
 
     /**
@@ -368,7 +380,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
 
     /**
      * Enables/disables the finish button based on all items have hit their targets along with adjusting the
-     * target value display.
+     * target value display for all the items.
      */
     private void handleItemsHittingTargetConsumptionValues() {
         //if the parent quantity in the recipe is not 1, gonna have to do the modding and stuff
@@ -385,8 +397,11 @@ public class RecipeOfferSelectionPanel extends JPanel {
             int targetConsumedAmount = idToTargetValues.get(itemId);
 
             itemHeaderPanel.setTargetValueDisplay(targetConsumedAmount);
+            if (itemId == 995) {
+                itemHeaderPanel.setConsumedAmountDisplay(targetConsumedAmount);
+            }
 
-            if (amountConsumed == targetConsumedAmount && targetConsumedAmount != 0) {
+            if ((amountConsumed == targetConsumedAmount && targetConsumedAmount != 0) || itemId == 995) {
                 itemHeaderPanel.setConsumedAmountDisplayColor(ColorScheme.GRAND_EXCHANGE_PRICE);
             } else {
                 allMatchTargetValues.set(false);
@@ -506,6 +521,16 @@ public class RecipeOfferSelectionPanel extends JPanel {
     }
 
     private long calculateProfit() {
+        //if coins are an input, get the coin cost needed based on the currently selected offers
+        if (recipe.isInput(995)) {
+            Map<Integer, List<PartialOffer>> idToPartialOffersSelected = selectedOffers.entrySet().stream().
+                map(e -> new AbstractMap.SimpleEntry<>(e.getKey(), new ArrayList<>(e.getValue().values()))).
+                collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            Map<Integer, Integer> idToTargetValues = plugin.getTargetValuesForMaxRecipeCount(recipe, idToPartialOffersSelected, false);
+            int coinCost = idToTargetValues.get(995);
+            return RecipeFlip.calculateProfit(selectedOffers) - coinCost;
+        }
         return RecipeFlip.calculateProfit(selectedOffers);
     }
 }
