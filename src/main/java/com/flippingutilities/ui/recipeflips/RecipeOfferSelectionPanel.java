@@ -57,6 +57,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
         setBackground(Color.BLACK);
         setLayout(new BorderLayout());
 
+        //All the partial offers for every item in the recipe in this time range
         Map<Integer, List<PartialOffer>> itemIdToPartialOffers = createItemIdToPartialOffers(
                 itemsInRecipe,
                 plugin.getStatPanel().getStartOfInterval());

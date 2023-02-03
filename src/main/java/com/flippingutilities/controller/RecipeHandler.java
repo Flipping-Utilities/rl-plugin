@@ -278,6 +278,8 @@ public class RecipeHandler {
         Map<Integer, Integer> itemIdToQuantity = recipe.getItemIdToQuantity();
         return itemIdToPartialOffers.entrySet().stream().map(e -> {
             int itemId = e.getKey();
+            //make sure that coins is never a limiting factor in how many recipes can be made, as it is automatically
+            //accounted for
             if (itemId == 995) {
                 return new AbstractMap.SimpleEntry<>(itemId, Integer.MAX_VALUE);
             }
