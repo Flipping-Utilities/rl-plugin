@@ -9,6 +9,9 @@ import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Contains all the recipe flips for a recipe
+ */
 @Data
 @AllArgsConstructor
 public class RecipeFlipGroup implements Searchable {
