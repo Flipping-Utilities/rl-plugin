@@ -190,8 +190,10 @@ public class RecipeHandler {
         if (!optionalRecipes.isPresent()) {
             return Optional.empty();
         }
+
         Map<Integer, List<Recipe>> idToRecipes= new HashMap<>();
         List<Recipe> recipes = optionalRecipes.get();
+        stripElementalRunesFromRecipes(recipes);
         recipes.forEach(r -> {
             r.getIds().forEach(id -> {
                 if (idToRecipes.containsKey(id)) {
@@ -204,6 +206,25 @@ public class RecipeHandler {
         });
 
         return Optional.of(idToRecipes);
+    }
+
+    /**
+     * Elemental runes need to be stripped bc people don't buy elemental runes for recipes, they just use
+     * staffs
+     */
+    private void stripElementalRunesFromRecipes(List<Recipe> recipes) {
+        //water, earth, fire, air
+        Set<Integer> elementalRunes = new HashSet<>(Arrays.asList(555, 557, 554, 556));
+
+        for (Recipe recipe: recipes) {
+            List<RecipeItem> inputs = recipe.getInputs();
+            recipe.setInputs(
+                inputs
+                    .stream()
+                    .filter(input -> !elementalRunes.contains(input.getId()))
+                    .collect(Collectors.toList()));
+
+        }
     }
 
     private Optional<Map<Integer, PotionGroup>> getItemIdToPotionGroup(Optional<List<PotionGroup>> optionalPotionGroups) {
