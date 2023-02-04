@@ -100,17 +100,29 @@ public class RecipeFlipPanel extends JPanel {
         componentGroupPanel.add(titleLabel);
 
         partialOffers.forEach((itemId, partialOfferMap) -> {
-            componentGroupPanel.add(createComponentPanel(partialOfferMap));
+            String itemName;
+            long quantity;
+            long avgPrice;
+
+            if (itemId == 995) {
+                itemName = "Coins";
+                quantity = recipeFlip.getCoinCost();
+                avgPrice = 1;
+            }
+            else {
+                List<PartialOffer> partialOfferList = new ArrayList<>(partialOfferMap.values());
+                itemName = partialOfferList.get(0).offer.getItemName();
+                quantity = partialOfferList.stream().mapToInt(po -> po.amountConsumed).sum();
+                avgPrice =  partialOfferList.stream().mapToLong(po -> po.getOffer().getPrice() * po.amountConsumed).sum()/quantity;
+            }
+
+            componentGroupPanel.add(createComponentPanel(itemName, quantity, avgPrice));
         });
 
         return componentGroupPanel;
     }
 
-    private JPanel createComponentPanel(Map<String, PartialOffer> partialOfferMap){
-        List<PartialOffer> partialOfferList = new ArrayList<>(partialOfferMap.values());
-
-        String itemName = partialOfferList.get(0).offer.getItemName();
-        int quantity = partialOfferList.stream().mapToInt(po -> po.amountConsumed).sum();
+    private JPanel createComponentPanel(String itemName, long quantity, long avgPrice){
         if (quantity == 0) {
             JPanel panel = new JPanel(new BorderLayout());
             panel.setBackground(CustomColors.DARK_GRAY);
@@ -120,7 +132,6 @@ public class RecipeFlipPanel extends JPanel {
             panel.add(label, BorderLayout.CENTER);
             return panel;
         }
-        long avgPrice = partialOfferList.stream().mapToLong(po -> po.getOffer().getPrice() * po.amountConsumed).sum()/quantity;
 
         JLabel itemNameLabel = new JLabel(itemName, SwingConstants.CENTER);
         itemNameLabel.setFont(FontManager.getRunescapeSmallFont());
@@ -138,7 +149,7 @@ public class RecipeFlipPanel extends JPanel {
         pricePanel.setBackground(CustomColors.DARK_GRAY);
         JLabel priceLabel = new JLabel("Avg Price", SwingConstants.CENTER);
         priceLabel.setFont(FontManager.getRunescapeSmallFont());
-        JLabel priceValueLabel = new JLabel(QuantityFormatter.formatNumber(avgPrice) + " gp");
+        JLabel priceValueLabel = new JLabel(itemName.equals("Coins")? "N/A": QuantityFormatter.formatNumber(avgPrice) + " gp");
         priceValueLabel.setFont(FontManager.getRunescapeSmallFont());
         pricePanel.add(priceLabel, BorderLayout.WEST);
         pricePanel.add(priceValueLabel, BorderLayout.EAST);

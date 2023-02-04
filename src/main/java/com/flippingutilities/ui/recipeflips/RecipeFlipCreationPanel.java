@@ -24,6 +24,9 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+/**
+ * This is the panel that shows the available recipes when you click to create a recipe flip from an offer.
+ */
 public class RecipeFlipCreationPanel extends JPanel {
     static boolean offerSelectionPanelOpen = false;
     FlippingPlugin plugin;
