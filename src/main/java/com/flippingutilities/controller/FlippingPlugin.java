@@ -668,8 +668,10 @@ public class FlippingPlugin extends Plugin {
      * slot widgets to appear/get rebuilt.
      */
     public void setWidgetsOnSlotStateDrawer() {
-        Widget[] slotWidgets = client.getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, WidgetConstants.SLOT_CONTAINER).getStaticChildren();
-        slotStateDrawer.setSlotWidgets(slotWidgets);
+        Widget slotWidgets = client.getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, WidgetConstants.SLOT_CONTAINER);
+        if (slotWidgets != null) {
+            slotStateDrawer.setSlotWidgets(slotWidgets.getStaticChildren());
+        }
     }
 
     public void setWidgetsOnSlotTimers() {
