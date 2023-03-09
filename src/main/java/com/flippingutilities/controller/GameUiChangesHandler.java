@@ -83,7 +83,7 @@ public class GameUiChangesHandler {
         plugin.getClientThread().invokeLater(() ->
         {
             OfferEditor flippingWidget = new OfferEditor(client.getWidget(WidgetInfo.CHATBOX_CONTAINER), client);
-            Optional<FlippingItem> selectedItem = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == client.getVarpValue(CURRENT_GE_ITEM.getId())).findFirst();
+            Optional<FlippingItem> selectedItem = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == client.getVarpValue(CURRENT_GE_ITEM)).findFirst();
 
             String chatInputText = client.getWidget(WidgetInfo.CHATBOX_TITLE).getText();
             String offerText = client.getWidget(WidgetInfo.GRAND_EXCHANGE_OFFER_CONTAINER).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
@@ -92,7 +92,7 @@ public class GameUiChangesHandler {
                 plugin.getFlippingPanel().getOfferEditorContainerPanel().selectQuantityEditor();
                 //No recorded data; default to total GE limit
                 if (!selectedItem.isPresent()) {
-                    ItemStats itemStats = plugin.getItemManager().getItemStats(client.getVarpValue(CURRENT_GE_ITEM.getId()), false);
+                    ItemStats itemStats = plugin.getItemManager().getItemStats(client.getVarpValue(CURRENT_GE_ITEM), false);
                     int itemGELimit = itemStats != null ? itemStats.getGeLimit() : 0;
                     flippingWidget.showQuantityWidgets(itemGELimit);
                 } else {
@@ -133,7 +133,7 @@ public class GameUiChangesHandler {
         Client client = plugin.getClient();
 
         //when a user clicks on a slot or leaves one, this event triggers
-        if (event.getIndex() == 375) {
+        if (event.getVarpId() == 375) {
             plugin.getSlotStateDrawer().hideQuickLookPanel();
             handleClickOrLeaveOffer();
             return;
@@ -142,19 +142,21 @@ public class GameUiChangesHandler {
         FlippingPanel flippingPanel = plugin.getFlippingPanel();
         OfferEditorContainerPanel offerEditorContainerPanel = flippingPanel.getOfferEditorContainerPanel();
         //this is the varbit with id 4398
-        if (event.getIndex() == 1043 && offerEditorContainerPanel != null) {
+
+        if (event.getVarpId() == 1043 && offerEditorContainerPanel != null) {
             AbstractOfferEditorPanel quantityEditorPanel = offerEditorContainerPanel.quantityEditorPanel;
             quantityEditorPanel.rebuild(quantityEditorPanel.getOptions());
         }
 
-        if (event.getIndex() == CURRENT_GE_ITEM.getId() && client.getVarpValue(CURRENT_GE_ITEM.getId()) != -1 && client.getVarpValue(CURRENT_GE_ITEM.getId()) != 0) {
-            highlightOffer(plugin.getClient().getVarpValue(CURRENT_GE_ITEM.getId()));
+        //CURRENT_GE_ITEM == 1151
+        if (event.getVarpId() == 1151 && client.getVarpValue(CURRENT_GE_ITEM) != -1 && client.getVarpValue(CURRENT_GE_ITEM) != 0) {
+            highlightOffer(plugin.getClient().getVarpValue(CURRENT_GE_ITEM));
         }
 
         //need to check if panel is highlighted in this case because curr ge item is changed if you come back to ge interface after exiting out
         //and curr ge item would be -1 or 0 in that case and would trigger a dehighlight erroneously.
-        if (event.getIndex() == CURRENT_GE_ITEM.getId() &&
-                (client.getVarpValue(CURRENT_GE_ITEM.getId()) == -1 || client.getVarpValue(CURRENT_GE_ITEM.getId()) == 0) && highlightedItem.isPresent()) {
+        if (event.getVarpId() == 1151 &&
+                (client.getVarpValue(CURRENT_GE_ITEM) == -1 || client.getVarpValue(CURRENT_GE_ITEM) == 0) && highlightedItem.isPresent()) {
             deHighlightOffer();
         }
     }
