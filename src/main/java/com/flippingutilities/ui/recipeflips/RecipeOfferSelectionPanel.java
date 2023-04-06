@@ -40,6 +40,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
     Map<Integer, Map<String, PartialOffer>> selectedOffers;
     JButton finishButton = new JButton("Combine!");
     JLabel profitNumberLabel = new JLabel("+0");
+    JSpinner coinOffset = new JSpinner();
     Recipe recipe;
     Map<Integer, RecipeItemHeaderPanel> idToHeader;
     List<JSpinner> numberPickers = new ArrayList<>();
@@ -413,7 +414,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
         if (allMatchTargetValues.get()) {
             finishButton.setEnabled(true);
             finishButton.setForeground(Color.GREEN);
-            long profit = Math.round(calculateProfit());
+            long profit = Math.round(calculateProfit()) - (Integer)coinOffset.getValue();
             String prefix = profit < 0 ? "" : "+";
             profitNumberLabel.setText(prefix + QuantityFormatter.formatNumber(profit) + " gp");
             profitNumberLabel.setForeground(profit < 0 ? Color.RED : Color.GREEN);
@@ -437,6 +438,22 @@ public class RecipeOfferSelectionPanel extends JPanel {
         bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS));
         bottomPanel.setBackground(Color.BLACK);
 
+        // Add the option of GP modifier for special expenses
+        JLabel coinOffsetLabel = new JLabel("GP Used in recipe: ");
+        coinOffsetLabel.setFont(new Font("Whitney", Font.PLAIN, 14));
+        coinOffsetLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        coinOffsetLabel.setBorder(new EmptyBorder(10,30,5,60));
+        coinOffset.setFont(new Font("Whitney", Font.PLAIN, 14));
+        coinOffset.setAlignmentX(Component.CENTER_ALIGNMENT);
+        coinOffset.setBorder(new EmptyBorder(10,30,5,60));
+        coinOffset.addChangeListener(e -> {
+            handleItemsHittingTargetConsumptionValues();
+        });
+        JPanel coinOffsetPanel = new JPanel();
+        coinOffsetPanel.add(coinOffsetLabel);
+        coinOffsetPanel.add(coinOffset);
+        bottomPanel.add(coinOffsetPanel);
+
         int itemsThatCanMakeZeroRecipes = (int) plugin.getItemIdToMaxRecipesThatCanBeMade(recipe, itemIdToPartialOffers, true).entrySet().stream().
                 filter(e -> e.getValue() == 0).count();
 
@@ -459,7 +476,11 @@ public class RecipeOfferSelectionPanel extends JPanel {
         finishButton.setFont(new Font("Whitney", Font.PLAIN, 16));
         finishButton.setFocusPainted(false);
         finishButton.addActionListener(e -> {
-            RecipeFlip recipeFlip = new RecipeFlip(recipe, selectedOffers, getCoinsCost());
+            try {
+                coinOffset.commitEdit();
+            } catch ( java.text.ParseException ex ) { log.info("Failed to parse coin offset", ex); }
+            int coinOffsetValue = (Integer) coinOffset.getValue();
+            RecipeFlip recipeFlip = new RecipeFlip(recipe, selectedOffers, getCoinsCost() + coinOffsetValue);
             plugin.addRecipeFlip(recipeFlip, recipe);
             plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
             plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
