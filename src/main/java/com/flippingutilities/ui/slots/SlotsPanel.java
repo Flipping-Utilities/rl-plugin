@@ -13,11 +13,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SlotsPanel extends JPanel {
+    private FlippingPlugin plugin;
     private List<SlotPanel> slotPanels;
     private ItemManager itemManager;
     JLabel statusText = new JLabel();
 
-    public SlotsPanel(ItemManager im) {
+    public SlotsPanel(FlippingPlugin plugin, ItemManager im) {
+        this.plugin = plugin;
         itemManager = im;
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         slotPanels = new ArrayList<>();
@@ -26,7 +28,7 @@ public class SlotsPanel extends JPanel {
 
         for (int i = 0; i < 8; i++) {
             Component verticalGap = Box.createVerticalStrut(10);
-            SlotPanel slotPanel = new SlotPanel(verticalGap);
+            SlotPanel slotPanel = new SlotPanel(plugin, verticalGap);
             slotPanels.add(slotPanel);
             slotPanelsContainer.add(slotPanel);
             slotPanelsContainer.add(verticalGap);
