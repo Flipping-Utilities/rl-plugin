@@ -439,7 +439,8 @@ public class RecipeOfferSelectionPanel extends JPanel {
         bottomPanel.setBackground(Color.BLACK);
 
         // Add the option of GP modifier for special expenses
-        JLabel coinOffsetLabel = new JLabel("GP Used in recipe: ");
+        JLabel coinOffsetLabel = new JLabel("Unaccounted for GP used in recipe: ");
+        coinOffsetLabel.setBackground(Color.BLACK);
         coinOffsetLabel.setFont(new Font("Whitney", Font.PLAIN, 14));
         coinOffsetLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         coinOffsetLabel.setBorder(new EmptyBorder(10,30,5,60));
@@ -450,6 +451,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
             handleItemsHittingTargetConsumptionValues();
         });
         JPanel coinOffsetPanel = new JPanel();
+        coinOffsetPanel.setBackground(Color.BLACK);
         coinOffsetPanel.add(coinOffsetLabel);
         coinOffsetPanel.add(coinOffset);
         bottomPanel.add(coinOffsetPanel);
