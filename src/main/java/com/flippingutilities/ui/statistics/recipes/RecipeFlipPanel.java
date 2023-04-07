@@ -95,9 +95,16 @@ public class RecipeFlipPanel extends JPanel {
         titleLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
         titleLabel.setBorder(new EmptyBorder(0,0,5,0));
 
-        JPanel componentGroupPanel = new JPanel(new DynamicGridLayout(1 + partialOffers.size(), 1));
+        boolean userAddedCoinsThatWereNotInRecipe = recipeFlip.getCoinCost() > 0 && !partialOffers.containsKey(995);
+        int rowSizeForUserAddedCoins = userAddedCoinsThatWereNotInRecipe? 1:0;
+        JPanel componentGroupPanel = new JPanel(new DynamicGridLayout(1 + partialOffers.size() + rowSizeForUserAddedCoins, 1));
         componentGroupPanel.setBackground(CustomColors.DARK_GRAY);
         componentGroupPanel.add(titleLabel);
+
+        //if the recipe does not contain coins but the user added coins to the input by using the coin selector
+        if (userAddedCoinsThatWereNotInRecipe) {
+            componentGroupPanel.add(createComponentPanel("Coins", recipeFlip.getCoinCost(), 1));
+        }
 
         partialOffers.forEach((itemId, partialOfferMap) -> {
             String itemName;
