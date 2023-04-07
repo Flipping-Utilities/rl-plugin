@@ -229,7 +229,7 @@ public class FlippingPlugin extends Plugin {
         flippingPanel = new FlippingPanel(this);
         statPanel = new StatsPanel(this);
         geHistoryTabPanel = new GeHistoryTabPanel(this);
-        slotsPanel = new SlotsPanel(itemManager);
+        slotsPanel = new SlotsPanel(this, itemManager);
         loginPanel = new LoginPanel(this);
 
         masterPanel = new MasterPanel(this, flippingPanel, statPanel, slotsPanel, loginPanel);
