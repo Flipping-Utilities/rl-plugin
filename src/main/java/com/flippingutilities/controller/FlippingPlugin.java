@@ -50,6 +50,7 @@ import com.google.inject.Provides;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import lombok.val;
 import net.runelite.api.*;
 import net.runelite.api.events.*;
 import net.runelite.api.widgets.*;
@@ -70,10 +71,10 @@ import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.http.api.item.ItemStats;
 import okhttp3.*;
+import org.apache.commons.lang3.math.NumberUtils;
 
 import javax.inject.Inject;
 import java.awt.*;
-import java.awt.Point;
 import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.IOException;
@@ -1015,12 +1016,27 @@ public class FlippingPlugin extends Plugin {
     @Subscribe
     public void onGrandExchangeSearched(GrandExchangeSearched event) {
         final String input = client.getVarcStrValue(VarClientStr.INPUT_TEXT);
-        Set<Integer> ids = dataHandler.viewAccountData(currentlyLoggedInAccount).
-                getTrades()
-                .stream()
-                .filter(item -> item.isFavorite() && input.equals(item.getFavoriteCode()))
-                .map(FlippingItem::getItemId)
-                .collect(Collectors.toSet());
+        AccountData data = dataHandler.viewAccountData(currentlyLoggedInAccount);
+        Set<Integer> ids = new HashSet<>() ;
+        HashMap<String,List<Integer>> acronyms = getAcronymMap();
+
+
+
+        if (NumberUtils.isParsable(input)){
+                    ids = data.getTrades()
+                    .stream()
+                    .filter(item -> item.isFavorite() && input.equals(item.getFavoriteCode()))
+                    .map(FlippingItem::getItemId)
+                    .collect(Collectors.toSet());
+        } else {
+
+            if (acronyms.containsKey(input)){
+                List<Integer> list = acronyms.get(input);
+                for (int i = 0; i < list.size(); i++) {
+                    ids.add(list.get(i));
+                }
+            }
+        }
 
         if (ids.isEmpty()) {
             return;
@@ -1030,6 +1046,23 @@ public class FlippingPlugin extends Plugin {
         client.setGeSearchResultCount(ids.size());
         client.setGeSearchResultIds(Shorts.toArray(ids));
         event.consume();
+    }
+
+    private HashMap getAcronymMap(){
+        HashMap<String,List<Integer>> acronyms = new HashMap<>();
+        acronyms.put("acb",Arrays.asList(11785));
+        acronyms.put("bowfa",Arrays.asList(25862));
+        acronyms.put("bcp",Arrays.asList(11832));
+        acronyms.put("bp",Arrays.asList(12924));
+        //Armadyl GS, Ancient GS
+        acronyms.put("ags",Arrays.asList(11802,26233));
+        acronyms.put("zgs",Arrays.asList(11808));
+        acronyms.put("bgs",Arrays.asList(11804));
+        //Zenyte Jewlery
+        acronyms.put("zj",Arrays.asList(19547,19553,19544,19550));
+
+        return acronyms;
+
     }
 
     @Subscribe
@@ -1071,3 +1104,4 @@ public class FlippingPlugin extends Plugin {
         }
     }
 }
+
