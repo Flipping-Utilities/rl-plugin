@@ -1016,25 +1016,17 @@ public class FlippingPlugin extends Plugin {
     public void onGrandExchangeSearched(GrandExchangeSearched event) {
         final String input = client.getVarcStrValue(VarClientStr.INPUT_TEXT);
         AccountData data = dataHandler.viewAccountData(currentlyLoggedInAccount);
-        Set<Integer> ids = new HashSet<>() ;
         HashMap<String,List<Integer>> acronyms = getAcronymMap();
 
-
-
-        if (NumberUtils.isParsable(input)){
-                    ids = data.getTrades()
+        Set<Integer> ids = data.getTrades()
                     .stream()
                     .filter(item -> item.isFavorite() && input.equals(item.getFavoriteCode()))
                     .map(FlippingItem::getItemId)
                     .collect(Collectors.toSet());
-        } else {
 
-            if (acronyms.containsKey(input)){
-                List<Integer> list = acronyms.get(input);
-                for (int i = 0; i < list.size(); i++) {
-                    ids.add(list.get(i));
-                }
-            }
+        if (acronyms.containsKey(input)){
+            List<Integer> list = acronyms.get(input);
+            ids.addAll(list);
         }
 
         if (ids.isEmpty()) {
