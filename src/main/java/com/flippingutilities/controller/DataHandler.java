@@ -31,6 +31,7 @@ import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.util.*;
 
 /**
@@ -254,6 +255,7 @@ public class DataHandler {
                         "an empty AccountData object instead.", displayName);
                 data = new AccountData();
             }
+            data.setLastUpdatedAt(Instant.now());
             thisClientLastStored = displayName;
             plugin.tradePersister.writeToFile(displayName, data);
         }
