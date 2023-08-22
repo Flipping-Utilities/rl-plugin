@@ -50,6 +50,7 @@ public class AccountData {
     private Instant lastSessionTimeUpdate;
     private List<SlotActivityTimer> slotTimers;
     private List<RecipeFlipGroup> recipeFlipGroups = new ArrayList<>();
+    private Instant lastUpdatedAt = Instant.now();
 
     /**
      * Resets all session related data associated with an account. This is called when the plugin first starts
