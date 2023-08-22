@@ -124,7 +124,7 @@ public class DataHandler {
     }
 
     public void loadData() {
-        log.info("Initiating load on startup");
+        log.info("Loading data on startup");
         try {
             TradePersister.setupFlippingFolder();
         }
@@ -139,6 +139,29 @@ public class DataHandler {
 
         accountWideData = fetchAccountWideData();
         accountSpecificData = fetchAndPrepareAllAccountData();
+        backupAllAccountData();
+    }
+    
+    private void backupAllAccountData() {
+        log.info("backing up account data");
+        for (String displayName : accountSpecificData.keySet()) {
+            AccountData accountData = accountSpecificData.get(displayName);
+            //the data could be empty because there was an exception when loading it (such as in fetchAccountData)
+            //or perhaps there are legitimately no trades because it is a new file or the user reset their history. In
+            //any of these cases, we shouldn't back it up as its useless to backup an empty AccountData and, even worse, 
+            //we may overwrite a previous backup with nothing.
+            if (!accountData.getTrades().isEmpty()) {
+                try { 
+                    plugin.tradePersister.writeToFile(displayName + ".backup", accountData);
+                }
+                catch (Exception e) {
+                    log.warn("Couldn't backup account data for {} due to {}", displayName, e);
+                }
+            }
+            else {
+                log.info("Not backing up data for {} as it's empty", displayName);
+            }
+        }
     }
 
     private AccountWideData fetchAccountWideData() {
@@ -147,7 +170,6 @@ public class DataHandler {
             AccountWideData accountWideData = plugin.tradePersister.loadAccountWideData();
             boolean didActuallySetDefaults = accountWideData.setDefaults();
             accountWideDataChanged = didActuallySetDefaults;
-            log.info("successfully loaded account wide data");
             return accountWideData;
         }
         catch (Exception e) {
@@ -163,7 +185,6 @@ public class DataHandler {
     {
         Map<String, AccountData> accounts = fetchAllAccountData();
         prepareAllAccountData(accounts);
-        log.info("Finished loading and preparing all accounts");
         return accounts;
     }
 
@@ -196,11 +217,13 @@ public class DataHandler {
         }
     }
 
+    // Used by other components to set accountWideData on DataHandler
     public void loadAccountWideData() {
         log.info("Loading account wide data");
         accountWideData = fetchAccountWideData();
     }
-
+    
+    // Used by other components to set account data on DataHandler
     public void loadAccountData(String displayName) {
         log.info("loading data for {}", displayName);
         accountSpecificData.put(displayName, fetchAccountData(displayName));
@@ -208,8 +231,7 @@ public class DataHandler {
 
     private AccountData fetchAccountData(String displayName)
     {
-        try
-        {
+        try {
             AccountData accountData = plugin.tradePersister.loadAccount(displayName);
             accountData.prepareForUse(plugin);
             return accountData;
@@ -233,8 +255,7 @@ public class DataHandler {
                 data = new AccountData();
             }
             thisClientLastStored = displayName;
-            plugin.tradePersister.storeTrades(displayName, data);
-            log.info("successfully stored trades for {}", displayName);
+            plugin.tradePersister.writeToFile(displayName, data);
         }
         catch (Exception e)
         {
@@ -244,11 +265,10 @@ public class DataHandler {
 
     private void storeAccountWideData() {
         try {
-            plugin.tradePersister.storeTrades("accountwide", accountWideData);
-            log.info("successfully stored account wide data");
+            plugin.tradePersister.writeToFile("accountwide", accountWideData);
         }
         catch (Exception e) {
-            log.info("couldn't store trades", e);
+            log.info("couldn't store account wide data", e);
         }
     }
 }

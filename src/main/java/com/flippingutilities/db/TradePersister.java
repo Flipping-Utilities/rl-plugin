@@ -96,6 +96,10 @@ public class TradePersister
 	 * loads each account's data from the parent directory located at {user's home directory}/.runelite/flipping/
 	 * Each account's data is stored in separate file in that directory and is named {displayName}.json
 	 *
+	 * Why not use loadAccount(displayName) in this method? Here we have access to the files first so we can call
+	 * loadFromFile directly. rather than getting the display name from the file and then calling
+	 * loadAccount
+	 *
 	 * @return a map of display name to that account's data
 	 * @throws IOException handled in FlippingPlugin
 	 */
@@ -104,52 +108,62 @@ public class TradePersister
 		Map<String, AccountData> accountsData = new HashMap<>();
 		for (File f : PARENT_DIRECTORY.listFiles())
 		{
-			if (f.getName().equals("accountwide.json") || !f.getName().contains(".json")) {
-				log.info("not loading data from file: {}", f.getName());
+			if (f.getName().equals("accountwide.json") || !f.getName().contains(".json") || f.getName().contains(".backup.json")) {
 				continue;
 			}
 			String displayName = f.getName().split("\\.")[0];
-			log.info("loading data for {}", displayName);
-			try {
-				AccountData accountData = loadFromFile(f);
-				if (accountData == null)
-				{
-					log.warn("data for {} is null for some reason, setting it to a empty AccountData object", displayName);
-					accountData = new AccountData();
-				}
-
-				accountsData.put(displayName, accountData);
-			}
-			catch (Exception e) {
-				log.warn("Couldn't load data for {}, setting it to empty AccountData object", displayName, e);
-				accountsData.put(displayName, new AccountData());
-			}
+			AccountData accountData  = loadAccount(displayName);
+			accountsData.put(displayName, accountData);
 		}
 
 		return accountsData;
 	}
 
-
-
-	public AccountData loadAccount(String displayName) throws IOException
+	//anything that wants to load an account's data MUST go through this method as it handles various cases such as
+	//loading from backups
+	public AccountData loadAccount(String displayName)
 	{
 		log.info("loading data for {}", displayName);
-		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
-		AccountData accountData = loadFromFile(accountFile);
-		if (accountData == null)
-		{
-			log.info("data for {} is null for some reason, setting it to a empty AccountData object", displayName);
-			accountData = new AccountData();
+		try {
+			File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
+			AccountData accountData = loadFromFile(accountFile);
+			if (accountData == null)
+			{
+				log.warn("data for {} is null for some reason. Will try loading from backup", displayName);
+				accountData = loadAccountFromBackup(displayName);
+			}
+			return accountData;
 		}
-		return accountData;
+		catch (Exception e) {
+			log.warn("Got exception {} while loading data for {}. Will try loading from backup", e, displayName);
+			return loadAccountFromBackup(displayName);
+		}
+	}
+
+	private AccountData loadAccountFromBackup(String displayName) {
+		log.info("loading data for {} from backup", displayName);
+		try {
+			File accountFile = new File(PARENT_DIRECTORY, displayName + ".backup.json");
+			if (!accountFile.exists()) {
+				log.info("backup for {} does not exist, returning empty AccountData", displayName);
+				return new AccountData();
+			}
+			AccountData accountData = loadFromFile(accountFile);
+			if (accountData == null) {
+				log.info("data loaded from backup for {} is null for some reason, returning an empty AccountData object", displayName);
+				accountData = new AccountData();
+			}
+			return accountData;
+		}
+		catch (Exception e) {
+			log.info("Couldn't load data for {} from backup due to {}", displayName, e);
+			return new AccountData();
+		}
 	}
 
 	private AccountData loadFromFile(File f) throws IOException
 	{
 		String accountDataJson = new String(Files.readAllBytes(f.toPath()));
-		Type type = new TypeToken<AccountData>()
-		{
-		}.getType();
 		return gson.fromJson(accountDataJson, AccountData.class);
 	}
 
@@ -172,9 +186,9 @@ public class TradePersister
 	 * @param data        the trades and last offers of that account
 	 * @throws IOException
 	 */
-	public void storeTrades(String displayName, Object data) throws IOException
+	public void writeToFile(String displayName, Object data) throws IOException
 	{
-		log.info("storing trades for {}", displayName);
+		log.info("Writing to file for {}", displayName);
 		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
 		final String json = gson.toJson(data);
 		Files.write(accountFile.toPath(), json.getBytes());
