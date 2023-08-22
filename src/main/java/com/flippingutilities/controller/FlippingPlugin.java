@@ -539,7 +539,7 @@ public class FlippingPlugin extends Plugin {
      * @param fileName name of the file which was modified.
      */
     public void onDirectoryUpdate(String fileName) {
-        if (!fileName.contains(".json")) {
+        if (!fileName.contains(".json") || fileName.contains(".backup.json")) {
             return;
         }
         String displayNameOfChangedAcc = fileName.split("\\.")[0];
