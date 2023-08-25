@@ -197,7 +197,7 @@ public class FlippingPlugin extends Plugin {
     private ApiRequestHandler apiRequestHandler;
 
     @Getter
-    private WikiRequest lastWikiRequest;
+    private WikiRequestWrapper lastWikiRequestWrapper;
     @Getter
     private Instant timeOfLastWikiRequest;
 
@@ -352,6 +352,7 @@ public class FlippingPlugin extends Plugin {
     }
 
     public void handleLogin(String displayName) {
+        wikiDataFetcherJob.onWorldSwitch(client.getWorldType());
         if (client.getAccountType().isIronman()) {
             log.info("account is an ironman, not adding it to the cache");
             return;
@@ -523,11 +524,11 @@ public class FlippingPlugin extends Plugin {
         slotStateSenderJob.start();
     }
 
-    private void onWikiFetch(WikiRequest wikiRequest, Instant timeOfRequestCompletion) {
-        lastWikiRequest = wikiRequest;
+    private void onWikiFetch(WikiRequestWrapper wikiRequestWrapper, Instant timeOfRequestCompletion) {
+        lastWikiRequestWrapper = wikiRequestWrapper;
         timeOfLastWikiRequest = timeOfRequestCompletion;
-        flippingPanel.updateWikiDisplays(wikiRequest, timeOfRequestCompletion);
-        slotStateDrawer.setWikiRequest(wikiRequest);
+        flippingPanel.updateWikiDisplays(wikiRequestWrapper, timeOfRequestCompletion);
+        slotStateDrawer.setWikiRequest(wikiRequestWrapper.getWikiRequest());
     }
 
     /**

@@ -104,7 +104,7 @@ public class NewOfferEventPipelineHandler {
      * @param newOfferEvent event that just occurred
      * @return an optional containing an OfferEvent.
      */
-    public Optional<OfferEvent>  screenOfferEvent(OfferEvent newOfferEvent) {
+    public Optional<OfferEvent> screenOfferEvent(OfferEvent newOfferEvent) {
         //TODO this method can probably handle the different states in a more elegant manner...
         plugin.getSlotsPanel().update(newOfferEvent);
         Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();

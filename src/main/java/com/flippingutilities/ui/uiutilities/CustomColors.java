@@ -12,4 +12,5 @@ public class CustomColors {
     public static final Color CHEESE = new Color(255, 197, 0);
     public static final Color SOFT_ALCH = new Color(202, 186, 153);
     public static final Color IN_RANGE = new Color(53, 109, 169);
+    public static final Color DMM = new Color(172, 55, 55);
 }

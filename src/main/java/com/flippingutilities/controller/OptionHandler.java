@@ -60,8 +60,8 @@ public class OptionHandler {
     }
 
     private int wikiPriceCalculation(int itemId, boolean getBuyPrice) throws InvalidOptionException {
-        if (plugin.getLastWikiRequest() != null) {
-            WikiRequest wr = plugin.getLastWikiRequest();
+        if (plugin.getLastWikiRequestWrapper() != null) {
+            WikiRequest wr = plugin.getLastWikiRequestWrapper().getWikiRequest();
             WikiItemMargins wikiItemMargins = wr.getData().get(itemId);
             int wikiPrice = getBuyPrice ? wikiItemMargins.getHigh() : wikiItemMargins.getLow();
             if (wikiPrice == 0) {
