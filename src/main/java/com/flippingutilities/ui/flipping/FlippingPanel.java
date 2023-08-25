@@ -36,6 +36,7 @@ import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.Searchable;
 import com.flippingutilities.utilities.WikiRequest;
+import com.flippingutilities.utilities.WikiRequestWrapper;
 import com.google.common.base.Strings;
 import lombok.Getter;
 import lombok.Setter;
@@ -340,8 +341,8 @@ public class FlippingPanel extends JPanel
 		}
 	}
 
-	public void updateWikiDisplays(WikiRequest wikiRequest, Instant timeOfRequestCompletion) {
-		activePanels.forEach(panel -> panel.updateWikiLabels(wikiRequest, timeOfRequestCompletion));
+	public void updateWikiDisplays(WikiRequestWrapper wikiRequestWrapper, Instant timeOfRequestCompletion) {
+		activePanels.forEach(panel -> panel.updateWikiLabels(wikiRequestWrapper, timeOfRequestCompletion));
 	}
 
 

@@ -169,6 +169,8 @@ public class OfferPanel extends JPanel {
         JPanel iconPanel = new JPanel(new BorderLayout());
         iconPanel.setBackground(CustomColors.DARK_GRAY);
         boolean hasRecipe = !plugin.getApplicableRecipes(offer.getItemId(), offer.isBuy()).isEmpty();
+        //need it to be complete because in HistoryManager.updateHistory we delete the previous offer events to only
+        //keep the complete one.
         if (hasRecipe && offer.isComplete()) {
             JLabel deleteIcon = createDeleteIcon();
             deleteIcon.setBorder(new EmptyBorder(0,5,0,0));

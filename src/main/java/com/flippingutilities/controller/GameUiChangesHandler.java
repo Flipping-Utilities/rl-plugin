@@ -100,7 +100,7 @@ public class GameUiChangesHandler {
                 }
             } else if (chatInputText.equals("Set a price for each item:")) {
                 plugin.getFlippingPanel().getOfferEditorContainerPanel().selectPriceEditor();
-                WikiRequest wikiRequest = plugin.getLastWikiRequest();
+                WikiRequest wikiRequest = plugin.getLastWikiRequestWrapper().getWikiRequest();
 
                 if (offerText.equals("Buy offer")) {
                     int instaSellPrice = 0;

@@ -32,10 +32,7 @@ import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.Section;
 import com.flippingutilities.ui.uiutilities.*;
-import com.flippingutilities.utilities.Constants;
-import com.flippingutilities.utilities.GeTax;
-import com.flippingutilities.utilities.WikiItemMargins;
-import com.flippingutilities.utilities.WikiRequest;
+import com.flippingutilities.utilities.*;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
@@ -110,7 +107,7 @@ public class FlippingItemPanel extends JPanel
 	JLabel searchCodeLabel;
 	JLabel refreshIconLabel = new JLabel();
 
-	WikiRequest wikiRequest;
+	WikiRequestWrapper wikiRequestWrapper;
 	Instant timeOfRequestCompletion;
 
 	JPopupMenu popup;
@@ -848,7 +845,7 @@ public class FlippingItemPanel extends JPanel
 		} else {
 			geLimitVal.setText(String.format(NUM_FORMAT, flippingItem.getItemsBoughtThisLimitWindow()));
 		}
-		updateWikiLabels(plugin.getLastWikiRequest(), plugin.getTimeOfLastWikiRequest());
+		updateWikiLabels(plugin.getLastWikiRequestWrapper(), plugin.getTimeOfLastWikiRequest());
 	}
 
 	public void updateTimerDisplays() {
@@ -868,18 +865,29 @@ public class FlippingItemPanel extends JPanel
 		geRefreshAtLabel.setText(flippingItem.getGeLimitResetTime() == null? "Now": TimeFormatters.formatTime(flippingItem.getGeLimitResetTime(), true, false));
 	}
 
-	public void updateWikiLabels(WikiRequest wr, Instant requestCompletionTime) {
+	public void updateWikiLabels(WikiRequestWrapper wr, Instant requestCompletionTime) {
 		timeOfRequestCompletion = requestCompletionTime;
-		wikiRequest = wr;
+		wikiRequestWrapper = wr;
 
-		if (wikiRequest == null) {
+		if (wikiRequestWrapper == null) {
 			wikiBuyVal.setText("N/A");
 			wikiSellVal.setText("N/A");
 			return;
 		}
 
-		WikiItemMargins wikiItemInfo = wikiRequest.getData().get(flippingItem.getItemId());
+		if (wikiRequestWrapper.getWikiDataSource() == WikiDataSource.DMM) {
+			wikiBuyText.setForeground(CustomColors.DMM);
+			wikiSellText.setForeground(CustomColors.DMM);
+		}
+		else {
+			wikiBuyText.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+			wikiSellText.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
+		}
+
+		WikiItemMargins wikiItemInfo = wikiRequestWrapper.getWikiRequest().getData().get(flippingItem.getItemId());
 		if (wikiItemInfo == null) {
+			wikiBuyVal.setText("N/A");
+			wikiSellVal.setText("N/A");
 			return;
 		}
 		wikiBuyVal.setText(wikiItemInfo.getHigh()==0? "No data":QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
@@ -905,7 +913,7 @@ public class FlippingItemPanel extends JPanel
 	public void updateWikiTimeLabels() {
 		//can be called before wikiRequest is set cause is is called in the repeating task which can start before the
 		//request is completed
-		if (wikiRequest == null) {
+		if (wikiRequestWrapper == null) {
 			wikiBuyTimeVal.setText("Request not made yet");
 			wikiSellTimeVal.setText("Request not made yet");
 			wikiRequestCountDownTimer.setText("N/A");
@@ -924,7 +932,7 @@ public class FlippingItemPanel extends JPanel
 			}
 		}
 
-		WikiItemMargins wikiItemInfo = wikiRequest.getData().get(flippingItem.getItemId());
+		WikiItemMargins wikiItemInfo = wikiRequestWrapper.getWikiRequest().getData().get(flippingItem.getItemId());
 		if (wikiItemInfo == null) {
 			return;
 		}
