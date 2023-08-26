@@ -50,7 +50,7 @@ public class AccountData {
     private Instant lastSessionTimeUpdate;
     private List<SlotActivityTimer> slotTimers;
     private List<RecipeFlipGroup> recipeFlipGroups = new ArrayList<>();
-    private Instant lastPersistedAtTime = Instant.EPOCH;
+    private Instant lastStoredAt = Instant.EPOCH;
     private Instant lastModifiedAt = Instant.now();
 
     /**
