@@ -29,6 +29,7 @@ package com.flippingutilities.controller;
 import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
+import com.flippingutilities.model.BackupCheckpoints;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
@@ -42,6 +43,7 @@ import java.util.*;
 public class DataHandler {
     FlippingPlugin plugin;
     private AccountWideData accountWideData;
+    private BackupCheckpoints backupCheckpoints;
     private Map<String, AccountData> accountSpecificData = new HashMap<>();
     private boolean accountWideDataChanged = false;
     private Set<String> accountsWithUnsavedChanges = new HashSet<>();
@@ -118,8 +120,8 @@ public class DataHandler {
         }
 
         if (accountWideDataChanged) {
-            log.info("account wide data changed, saving it.");
-            storeAccountWideData();
+            log.info("accountwide data changed, saving it.");
+            storeData("accountwide", accountWideData);
             accountWideDataChanged = false;
         }
     }
@@ -138,6 +140,7 @@ public class DataHandler {
             return;
         }
 
+        backupCheckpoints = plugin.tradePersister.fetchBackupCheckpoints();
         accountWideData = fetchAccountWideData();
         accountSpecificData = fetchAndPrepareAllAccountData();
         backupAllAccountData();
@@ -145,29 +148,36 @@ public class DataHandler {
     
     private void backupAllAccountData() {
         log.info("backing up account data");
+        boolean backupCheckpointsChanged = false;
         for (String displayName : accountSpecificData.keySet()) {
             AccountData accountData = accountSpecificData.get(displayName);
             //the data could be empty because there was an exception when loading it (such as in fetchAccountData)
             //or perhaps there are legitimately no trades because it is a new file or the user reset their history. In
             //any of these cases, we shouldn't back it up as its useless to backup an empty AccountData and, even worse, 
             //we may overwrite a previous backup with nothing.
-            if (!accountData.getTrades().isEmpty()) {
+
+            if (!accountData.getTrades().isEmpty() && backupCheckpoints.shouldBackup(displayName, accountData.getLastPersistedAtTime())) {
                 try { 
                     plugin.tradePersister.writeToFile(displayName + ".backup", accountData);
+                    backupCheckpoints.getAccountToBackupTime().put(displayName, accountData.getLastPersistedAtTime());
+                    backupCheckpointsChanged = true;
                 }
                 catch (Exception e) {
                     log.warn("Couldn't backup account data for {} due to {}", displayName, e);
                 }
             }
             else {
-                log.info("Not backing up data for {} as it's empty", displayName);
+                log.info("Not backing up data for {} as it's empty or it hasn't changed since last backup", displayName);
             }
+        }
+        if (backupCheckpointsChanged) {
+            storeData("backupCheckpoints.special", backupCheckpoints);
         }
     }
 
     private AccountWideData fetchAccountWideData() {
         try {
-            log.info("Fetching account wide data");
+            log.info("Fetching accountwide data");
             AccountWideData accountWideData = plugin.tradePersister.loadAccountWideData();
             boolean didActuallySetDefaults = accountWideData.setDefaults();
             accountWideDataChanged = didActuallySetDefaults;
@@ -196,6 +206,7 @@ public class DataHandler {
             try {
                 accountData.startNewSession();
                 accountData.prepareForUse(plugin);
+
             }
 
             catch (Exception e) {
@@ -220,7 +231,6 @@ public class DataHandler {
 
     // Used by other components to set accountWideData on DataHandler
     public void loadAccountWideData() {
-        log.info("Loading account wide data");
         accountWideData = fetchAccountWideData();
     }
     
@@ -255,8 +265,8 @@ public class DataHandler {
                         "an empty AccountData object instead.", displayName);
                 data = new AccountData();
             }
-            data.setLastUpdatedAt(Instant.now());
             thisClientLastStored = displayName;
+            data.setLastPersistedAtTime(Instant.now());
             plugin.tradePersister.writeToFile(displayName, data);
         }
         catch (Exception e)
@@ -265,12 +275,12 @@ public class DataHandler {
         }
     }
 
-    private void storeAccountWideData() {
+    private void storeData(String fileName, Object data) {
         try {
-            plugin.tradePersister.writeToFile("accountwide", accountWideData);
+            plugin.tradePersister.writeToFile(fileName, data);
         }
         catch (Exception e) {
-            log.info("couldn't store account wide data", e);
+            log.info("couldn't store data to {} bc of {}",fileName, e);
         }
     }
 }
