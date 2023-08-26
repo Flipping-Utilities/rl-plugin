@@ -26,10 +26,7 @@
 
 package com.flippingutilities.db;
 
-import com.flippingutilities.model.AccountData;
-import com.flippingutilities.model.AccountWideData;
-import com.flippingutilities.model.FlippingItem;
-import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.model.*;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -108,7 +105,7 @@ public class TradePersister
 		Map<String, AccountData> accountsData = new HashMap<>();
 		for (File f : PARENT_DIRECTORY.listFiles())
 		{
-			if (f.getName().equals("accountwide.json") || !f.getName().contains(".json") || f.getName().contains(".backup.json")) {
+			if (f.getName().equals("accountwide.json") || !f.getName().contains(".json") || f.getName().contains(".backup.json") || f.getName().contains(".special.json")) {
 				continue;
 			}
 			String displayName = f.getName().split("\\.")[0];
@@ -176,6 +173,24 @@ public class TradePersister
 		}
 		else {
 			return new AccountWideData();
+		}
+	}
+
+	public BackupCheckpoints fetchBackupCheckpoints() {
+		try {
+			log.info("Fetching backup checkpoints");
+			File backupCheckpointsFile = new File(PARENT_DIRECTORY, "backupcheckpoints.special.json");
+			if (backupCheckpointsFile.exists()){
+				String backupCheckpointsJson = new String(Files.readAllBytes(backupCheckpointsFile.toPath()));
+				Type type = new TypeToken<BackupCheckpoints>(){}.getType();
+				return gson.fromJson(backupCheckpointsJson, type);
+			}
+			else {
+				return new BackupCheckpoints();
+			}
+		}
+		catch (Exception e) {
+			return new BackupCheckpoints();
 		}
 	}
 
