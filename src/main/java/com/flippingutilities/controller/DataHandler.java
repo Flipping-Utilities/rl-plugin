@@ -156,10 +156,10 @@ public class DataHandler {
             //any of these cases, we shouldn't back it up as its useless to backup an empty AccountData and, even worse, 
             //we may overwrite a previous backup with nothing.
 
-            if (!accountData.getTrades().isEmpty() && backupCheckpoints.shouldBackup(displayName, accountData.getLastPersistedAtTime())) {
+            if (!accountData.getTrades().isEmpty() && backupCheckpoints.shouldBackup(displayName, accountData.getLastStoredAt())) {
                 try { 
                     plugin.tradePersister.writeToFile(displayName + ".backup", accountData);
-                    backupCheckpoints.getAccountToBackupTime().put(displayName, accountData.getLastPersistedAtTime());
+                    backupCheckpoints.getAccountToBackupTime().put(displayName, accountData.getLastStoredAt());
                     backupCheckpointsChanged = true;
                 }
                 catch (Exception e) {
@@ -266,7 +266,7 @@ public class DataHandler {
                 data = new AccountData();
             }
             thisClientLastStored = displayName;
-            data.setLastPersistedAtTime(Instant.now());
+            data.setLastStoredAt(Instant.now());
             plugin.tradePersister.writeToFile(displayName, data);
         }
         catch (Exception e)
