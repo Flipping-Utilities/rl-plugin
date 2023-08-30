@@ -31,7 +31,7 @@ public class NewOfferEventPipelineHandler {
     @Subscribe
     public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged offerChangedEvent) {
         EnumSet<WorldType> currentWorldType = this.plugin.getClient().getWorldType();
-        EnumSet<WorldType> excludedWorldTypes = EnumSet.of(WorldType.SEASONAL, WorldType.DEADMAN);
+        EnumSet<WorldType> excludedWorldTypes = EnumSet.of(WorldType.SEASONAL);
         if (!Collections.disjoint(currentWorldType, excludedWorldTypes)) {
             return;
         }
