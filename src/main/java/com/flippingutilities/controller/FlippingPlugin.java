@@ -73,7 +73,6 @@ import okhttp3.*;
 
 import javax.inject.Inject;
 import java.awt.*;
-import java.awt.Point;
 import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.IOException;
@@ -229,7 +228,7 @@ public class FlippingPlugin extends Plugin {
         flippingPanel = new FlippingPanel(this);
         statPanel = new StatsPanel(this);
         geHistoryTabPanel = new GeHistoryTabPanel(this);
-        slotsPanel = new SlotsPanel(itemManager);
+        slotsPanel = new SlotsPanel(this, itemManager);
         loginPanel = new LoginPanel(this);
 
         masterPanel = new MasterPanel(this, flippingPanel, statPanel, slotsPanel, loginPanel);
@@ -527,8 +526,9 @@ public class FlippingPlugin extends Plugin {
     private void onWikiFetch(WikiRequestWrapper wikiRequestWrapper, Instant timeOfRequestCompletion) {
         lastWikiRequestWrapper = wikiRequestWrapper;
         timeOfLastWikiRequest = timeOfRequestCompletion;
-        flippingPanel.updateWikiDisplays(wikiRequestWrapper, timeOfRequestCompletion);
-        slotStateDrawer.setWikiRequest(wikiRequestWrapper.getWikiRequest());
+        flippingPanel.onWikiRequest(wikiRequestWrapper, timeOfRequestCompletion);
+        slotStateDrawer.onWikiRequest(wikiRequestWrapper.getWikiRequest());
+        slotsPanel.onWikiRequest(wikiRequestWrapper.getWikiRequest());
     }
 
     /**
@@ -934,7 +934,6 @@ public class FlippingPlugin extends Plugin {
                 dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().forEach(slotWidgetTimer ->
                         clientThread.invokeLater(() -> {
                             try {
-
                                 slotsPanel.updateTimerDisplays(slotWidgetTimer.getSlotIndex(), slotWidgetTimer.createFormattedTimeString());
                                 slotWidgetTimer.updateTimerDisplay();
                             } catch (Exception e) {

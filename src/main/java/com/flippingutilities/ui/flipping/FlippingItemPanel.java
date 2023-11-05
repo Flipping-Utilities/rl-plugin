@@ -845,7 +845,7 @@ public class FlippingItemPanel extends JPanel
 		} else {
 			geLimitVal.setText(String.format(NUM_FORMAT, flippingItem.getItemsBoughtThisLimitWindow()));
 		}
-		updateWikiLabels(plugin.getLastWikiRequestWrapper(), plugin.getTimeOfLastWikiRequest());
+		onWikiRequest(plugin.getLastWikiRequestWrapper(), plugin.getTimeOfLastWikiRequest());
 	}
 
 	public void updateTimerDisplays() {
@@ -865,7 +865,7 @@ public class FlippingItemPanel extends JPanel
 		geRefreshAtLabel.setText(flippingItem.getGeLimitResetTime() == null? "Now": TimeFormatters.formatTime(flippingItem.getGeLimitResetTime(), true, false));
 	}
 
-	public void updateWikiLabels(WikiRequestWrapper wr, Instant requestCompletionTime) {
+	public void onWikiRequest(WikiRequestWrapper wr, Instant requestCompletionTime) {
 		timeOfRequestCompletion = requestCompletionTime;
 		wikiRequestWrapper = wr;
 
