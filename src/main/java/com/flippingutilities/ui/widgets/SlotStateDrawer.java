@@ -1,7 +1,6 @@
 package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.uiutilities.*;
 import com.flippingutilities.utilities.*;
 import lombok.extern.slf4j.Slf4j;
@@ -248,10 +247,6 @@ public class SlotStateDrawer {
         if (margins == null) {
             return Optional.empty();
         }
-
-//        if (OfferEvent.isComplete(offer.getState())) {
-//            return Optional.empty();
-//        }
 
         int listedPrice = offer.getPrice();
         boolean isBuy = offer.getState() == GrandExchangeOfferState.BUYING;

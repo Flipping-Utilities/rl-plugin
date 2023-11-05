@@ -58,7 +58,6 @@ public class NewOfferEventPipelineHandler {
         if (currentlyLoggedInAccount != null) {
             newOfferEvent.setMadeBy(currentlyLoggedInAccount);
         }
-        plugin.getSlotsPanel().update(newOfferEvent);
 
         Optional<OfferEvent> screenedOfferEvent = screenOfferEvent(newOfferEvent);
 
@@ -97,17 +96,25 @@ public class NewOfferEventPipelineHandler {
     }
 
     /**
-     * Runelite has some wonky events. For example, every empty/buy/sell/cancelled buy/cancelled sell
+     * Every single OfferEvent passes through this method for screening before being sent to the wider system because
+     * offer updates have strange quirks such as duplicates, empty updates, etc.
+     *
+     * For example, every empty/buy/sell/cancelled buy/cancelled sell
      * spawns two identical events. And when you fully buy/sell item, it spawns two events (a
      * buying/selling event and a bought/sold event). This method screens out the unwanted events/duplicate
-     * events and sets the ticksSinceFirstOffer field correctly on new OfferEvents. This method is also responsible
-     * for broadcasting the event to any components that need it, such as the slot panel, the slot timer widgets, etc.
+     * events and sets the ticksSinceFirstOffer field correctly on new OfferEvents. For detailed documentation see
+     * the "Documenting RL events" section in the README.
+     *
+     * If some component needs access to OfferEvents prior to screening or at some point in the screening prior to
+     * completion or in some way needs to benefit from the internal logic of this method, then we can pass the OfferEvent
+     * to that component in this method itself. We currently do this with the slotsPanel and slotActivityTimer.
      *
      * @param newOfferEvent event that just occurred
      * @return an optional containing an OfferEvent.
      */
     public Optional<OfferEvent> screenOfferEvent(OfferEvent newOfferEvent) {
-        //TODO this method can probably handle the different states in a more elegant manner...
+        plugin.getSlotsPanel().update(newOfferEvent);
+
         Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
         List<SlotActivityTimer> slotActivityTimers = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getSlotTimers();
         OfferEvent lastOfferEvent = lastOfferEventForEachSlot.get(newOfferEvent.getSlot());
