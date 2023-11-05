@@ -669,7 +669,7 @@ public class FlippingPlugin extends Plugin {
      * slot widgets to appear/get rebuilt.
      */
     public void setWidgetsOnSlotStateDrawer() {
-        Widget slotWidgets = client.getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, WidgetConstants.SLOT_CONTAINER);
+        Widget slotWidgets = client.getWidget(InterfaceID.GRAND_EXCHANGE, WidgetConstants.SLOT_CONTAINER);
         if (slotWidgets != null) {
             slotStateDrawer.setSlotWidgets(slotWidgets.getStaticChildren());
         }
@@ -681,7 +681,7 @@ public class FlippingPlugin extends Plugin {
 
             //Get the offer slots from the window container
             //We add one to the index, as the first widget is the text above the offer slots
-            Widget offerSlot = client.getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, WidgetConstants.SLOT_CONTAINER).getStaticChildren()[slotIndex + 1];
+            Widget offerSlot = client.getWidget(InterfaceID.GRAND_EXCHANGE, WidgetConstants.SLOT_CONTAINER).getStaticChildren()[slotIndex + 1];
 
             if (offerSlot == null) {
                 return;
@@ -898,7 +898,7 @@ public class FlippingPlugin extends Plugin {
                     optionExercised.ifPresent(option -> clientThread.invoke(() -> {
                         try {
                             int optionValue = calculateOptionValue(option);
-                            client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(optionValue + "*");
+                            client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(optionValue + "*");
                             client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(optionValue));
                             flippingPanel.getOfferEditorContainerPanel().highlightPressedOption(keyPressed);
                             e.consume();

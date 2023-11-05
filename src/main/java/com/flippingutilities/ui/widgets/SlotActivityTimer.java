@@ -37,8 +37,8 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
+import net.runelite.api.widgets.InterfaceID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetID;
 import net.runelite.client.util.ColorUtil;
 
 import java.awt.*;
@@ -134,9 +134,10 @@ public class SlotActivityTimer
 			return;
 		}
 
+
 		//Reload offerSlot widget in case it got unloaded previously. We need to do this bc the old object we have
 		//doesn't respond to changes (like setText) after a ge slot redraw or some other script that fires.
-		Widget offerSlot = client.getWidget(WidgetID.GRAND_EXCHANGE_GROUP_ID, WidgetConstants.SLOT_CONTAINER).getStaticChildren()[slotIndex + 1];
+		Widget offerSlot = client.getWidget(InterfaceID.GRAND_EXCHANGE, WidgetConstants.SLOT_CONTAINER).getStaticChildren()[slotIndex + 1];
 
 		//Ideally this shouldn't be triggered, but just in case.
 		if (offerSlot == null)

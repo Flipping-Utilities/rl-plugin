@@ -43,9 +43,9 @@ public class GameUiChangesHandler {
 
         if (event.getIndex() == VarClientInt.INPUT_TYPE
                 && client.getVarcIntValue(VarClientInt.INPUT_TYPE) == 14
-                && client.getWidget(WidgetInfo.CHATBOX_GE_SEARCH_RESULTS) != null) {
+                && client.getWidget(ComponentID.CHATBOX_GE_SEARCH_RESULTS) != null) {
             plugin.getClientThread().invokeLater(() -> {
-                Widget geSearchResultBox = client.getWidget(WidgetInfo.CHATBOX_GE_SEARCH_RESULTS);
+                Widget geSearchResultBox = client.getWidget(ComponentID.CHATBOX_GE_SEARCH_RESULTS);
                 Widget child = geSearchResultBox.createChild(-1, WidgetType.TEXT);
                 child.setTextColor(0x800000);
                 child.setFontId(FontID.VERDANA_13_BOLD);
@@ -73,20 +73,20 @@ public class GameUiChangesHandler {
 
         //Check that it was the chat input that got enabled.
         if (event.getIndex() != VarClientInt.INPUT_TYPE
-                || client.getWidget(WidgetInfo.CHATBOX_TITLE) == null
+                || client.getWidget(ComponentID.CHATBOX_TITLE) == null
                 || client.getVarcIntValue(VarClientInt.INPUT_TYPE) != 7
-                || client.getWidget(WidgetInfo.GRAND_EXCHANGE_OFFER_CONTAINER) == null) {
+                || client.getWidget(ComponentID.GRAND_EXCHANGE_OFFER_CONTAINER) == null) {
             return;
         }
         quantityOrPriceChatboxOpen = true;
 
         plugin.getClientThread().invokeLater(() ->
         {
-            OfferEditor flippingWidget = new OfferEditor(client.getWidget(WidgetInfo.CHATBOX_CONTAINER), client);
+            OfferEditor flippingWidget = new OfferEditor(client.getWidget(ComponentID.CHATBOX_CONTAINER), client);
             Optional<FlippingItem> selectedItem = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == client.getVarpValue(CURRENT_GE_ITEM)).findFirst();
 
-            String chatInputText = client.getWidget(WidgetInfo.CHATBOX_TITLE).getText();
-            String offerText = client.getWidget(WidgetInfo.GRAND_EXCHANGE_OFFER_CONTAINER).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
+            String chatInputText = client.getWidget(ComponentID.CHATBOX_TITLE).getText();
+            String offerText = client.getWidget(ComponentID.GRAND_EXCHANGE_OFFER_CONTAINER).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
 
             if (chatInputText.equals("How many do you wish to buy?")) {
                 plugin.getFlippingPanel().getOfferEditorContainerPanel().selectQuantityEditor();
@@ -193,7 +193,7 @@ public class GameUiChangesHandler {
         }
 
         //if either ge interface or bank pin interface is loaded, hide the ge history tab panel again
-        if (event.getGroupId() == WidgetID.GRAND_EXCHANGE_GROUP_ID || event.getGroupId() == 213) {
+        if (event.getGroupId() == InterfaceID.GRAND_EXCHANGE || event.getGroupId() == 213) {
             plugin.getMasterPanel().selectPreviouslySelectedTab();
         }
 
