@@ -86,7 +86,7 @@ public class OfferEditor {
         nonWikiText.setAction(1, "Set quantity");
         nonWikiText.setOnOpListener((JavaScriptCallback) ev ->
         {
-            client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(quantity + "*");
+            client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(quantity + "*");
             client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(quantity));
         });
     }
@@ -105,7 +105,7 @@ public class OfferEditor {
             nonWikiText.setAction(0, "Set price");
             nonWikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
-                client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(instaSellPrice + "*");
+                client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(instaSellPrice + "*");
                 client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(instaSellPrice));
             });
         } else {
@@ -117,7 +117,7 @@ public class OfferEditor {
             wikiText.setAction(1, "Set wiki price");
             wikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
-                client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(wikiInstaSellPrice + "*");
+                client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(wikiInstaSellPrice + "*");
                 client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(wikiInstaSellPrice));
             });
         } else {
@@ -139,7 +139,7 @@ public class OfferEditor {
             nonWikiText.setAction(0, "Set price");
             nonWikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
-                client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(instaBuyPrice + "*");
+                client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(instaBuyPrice + "*");
                 client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(instaBuyPrice));
             });
         } else {
@@ -151,7 +151,7 @@ public class OfferEditor {
             wikiText.setAction(1, "Set wiki price");
             wikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
-                client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(wikiInstaBuyPrice + "*");
+                client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(wikiInstaBuyPrice + "*");
                 client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(wikiInstaBuyPrice));
             });
         } else {
