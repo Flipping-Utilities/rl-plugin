@@ -43,7 +43,6 @@ public class NewOfferEventPipelineHandler {
             //sometime when the account was logged out, at an undetermined time. We need to mark the offer as such to
             //avoid adjusting ge limits and slot timers incorrectly (cause we don't know exactly when the offer came in)
             newOfferEvent.setBeforeLogin(true);
-            log.info("slot {}, before login {}, full {}", newOfferEvent.getSlot(), newOfferEvent.isBeforeLogin(), newOfferEvent.toString());
             plugin.getEventsReceivedBeforeFullLogin().add(newOfferEvent);
             return;
         }
@@ -51,7 +50,6 @@ public class NewOfferEventPipelineHandler {
         if (newOfferEvent.getTickArrivedAt() == plugin.getLoginTickCount()) {
             newOfferEvent.setBeforeLogin(true);
         }
-        log.info("slot {}, before login {}, full {}", newOfferEvent.getSlot(), newOfferEvent.isBeforeLogin(), newOfferEvent.toString());
         onNewOfferEvent(newOfferEvent);
     }
 
@@ -126,7 +124,6 @@ public class NewOfferEventPipelineHandler {
             //here in case i'm overlooking something that past self caught...
             if (!newOfferEvent.isCausedByEmptySlot()) {
                 lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
-                log.info("setting current offer through this route");
                 slotActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
             }
             if (newOfferEvent.isStartOfOffer()) {

@@ -166,19 +166,6 @@ public class MasterPanel extends PluginPanel
 		profileButton.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
-				Map<Integer, OfferEvent> lastOffers = plugin.getDataHandler().viewAccountData("ligm_a").getLastOffers();
-				log.info("printing current state of last offers below");
-				for (OfferEvent offerEvent: lastOffers.values()) {
-					log.info("last offer {}",offerEvent.prettyRepr());
-				}
-
-				List<SlotActivityTimer> slotActivityTimers = plugin.getDataHandler().viewAccountData("ligm_a").getSlotTimers();
-				log.info("printing current state of slot timers below");
-				for (SlotActivityTimer timer: slotActivityTimers) {
-					log.info("timer slot {}, offer at unknown time {}, curr offer {}", timer.getSlotIndex(), timer.offerOccurredAtUnknownTime, timer.currentOffer.prettyRepr());
-				}
-
-
 				loginModal.pack();
 				loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, Math.max(m.getLocationOnScreen().y - loginModal.getHeight()/2,0) + 100);
 				loginModal.setVisible(true);
