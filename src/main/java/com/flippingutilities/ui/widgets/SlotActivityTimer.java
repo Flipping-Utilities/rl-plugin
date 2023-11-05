@@ -101,7 +101,6 @@ public class SlotActivityTimer
 		//is only given these types of offer events if they weren't empty updates
 		//and there was no last offer or there was a last offer but this offer is not a dup
 		if (offer.isBeforeLogin()) {
-			log.info("in set current offer, offer is before login. slot: {}, {}", offer.getSlot(), offer.toString());
 			offerOccurredAtUnknownTime = true;
 			return;
 		}
@@ -130,6 +129,8 @@ public class SlotActivityTimer
 
 		if (slotWidget.isHidden() || plugin.getCurrentlyLoggedInAccount() == null || currentOffer == null || offerOccurredAtUnknownTime || tradeStartTime == null)
 		{
+			slotStateWidget.setFontId(496);
+			slotStateWidget.setXTextAlignment(1);
 			return;
 		}
 
