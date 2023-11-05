@@ -13,4 +13,7 @@ public class CustomColors {
     public static final Color SOFT_ALCH = new Color(202, 186, 153);
     public static final Color IN_RANGE = new Color(53, 109, 169);
     public static final Color DMM = new Color(172, 55, 55);
+    public static final Color IN_RANGE_SLOTS_TAB = new Color(55, 70, 70);
+    public static final Color BETTER_THAN_WIKI_SLOTS_TAB = new Color(55, 70, 50);
+    public static final Color OUT_OF_RANGE_SLOTS_TAB = new Color(67, 50, 50);
 }

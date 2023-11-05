@@ -174,7 +174,7 @@ public class OfferEvent
 	}
 
 	/**
-	 * We get an event for every empty slot on logic
+	 * We get an event for every empty slot on login and when a slot is cleared
 	 *
 	 * @return whether this OfferEvent was caused by an empty slot
 	 */
@@ -297,6 +297,10 @@ public class OfferEvent
 	{
 		int tickDiffFromLastOffer = Math.abs(tickArrivedAt - lastOfferForSlot.getTickArrivedAt());
 		ticksSinceFirstOffer = tickDiffFromLastOffer + lastOfferForSlot.getTicksSinceFirstOffer();
+	}
+
+	public String prettyRepr() {
+		return String.format("slot=%d, buy=%b, itemId=%d, state=%s, tq=%d",slot, buy, itemId, state, totalQuantityInTrade);
 	}
 
 	public static OfferEvent dummyOffer(boolean buyState, boolean marginCheck, int price, int id, String itemName) {

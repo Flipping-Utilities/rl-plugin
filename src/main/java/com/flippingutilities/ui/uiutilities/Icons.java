@@ -111,6 +111,9 @@ public class Icons {
 
     public static final ImageIcon RECIPE_HELP;
 
+    public static final ImageIcon MAGNIFYING_GLASS;
+    public static final ImageIcon MAGNIFYING_GLASS_HOVER;
+
     static
     {
         final BufferedImage openIcon = ImageUtil
@@ -282,5 +285,9 @@ public class Icons {
 
         final BufferedImage recipeHelp = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/recipehelp.png");
         RECIPE_HELP = new ImageIcon(recipeHelp);
+
+        final BufferedImage magnifyingGlass = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/magnifying-glass.png");
+        MAGNIFYING_GLASS = new ImageIcon(magnifyingGlass);
+        MAGNIFYING_GLASS_HOVER = new ImageIcon(ImageUtil.alphaOffset(magnifyingGlass,.53f));
     }
 }
