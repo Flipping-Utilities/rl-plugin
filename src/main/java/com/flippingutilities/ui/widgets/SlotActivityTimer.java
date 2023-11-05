@@ -71,7 +71,7 @@ public class SlotActivityTimer
 	private int slotIndex;
 	private Instant lastUpdate;
 	public Instant tradeStartTime;
-	private OfferEvent currentOffer;
+	public OfferEvent currentOffer;
 	//is true when we get an offer from when the account was logged out which means we don't know when it occurred.
 	public boolean offerOccurredAtUnknownTime;
 
@@ -89,14 +89,25 @@ public class SlotActivityTimer
 		slotStateString = slotStateWidget.getText();
 	}
 
+	public void reset() {
+		currentOffer = null;
+		lastUpdate = null;
+		tradeStartTime = null;
+		offerOccurredAtUnknownTime = true;
+	}
+
 	public void setCurrentOffer(OfferEvent offer)
 	{
+		//is only given these types of offer events if they weren't empty updates
+		//and there was no last offer or there was a last offer but this offer is not a dup
 		if (offer.isBeforeLogin()) {
+			log.info("in set current offer, offer is before login. slot: {}, {}", offer.getSlot(), offer.toString());
 			offerOccurredAtUnknownTime = true;
 			return;
 		}
 
 		offerOccurredAtUnknownTime = false;
+
 		currentOffer = offer;
 		lastUpdate = Instant.now();
 
@@ -244,7 +255,7 @@ public class SlotActivityTimer
 
 	public String createFormattedTimeString()
 	{
-		if (currentOffer == null || tradeStartTime == null || lastUpdate == null) {
+		if (currentOffer == null || tradeStartTime == null || lastUpdate == null || offerOccurredAtUnknownTime) {
 			return null;
 		}
 

@@ -27,6 +27,7 @@
 package com.flippingutilities.ui;
 
 import com.flippingutilities.controller.FlippingPlugin;
+import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.login.LoginPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
@@ -35,6 +36,7 @@ import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.FastTabGroup;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
+import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
@@ -50,6 +52,8 @@ import java.awt.event.ItemEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -162,6 +166,19 @@ public class MasterPanel extends PluginPanel
 		profileButton.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
+				Map<Integer, OfferEvent> lastOffers = plugin.getDataHandler().viewAccountData("ligm_a").getLastOffers();
+				log.info("printing current state of last offers below");
+				for (OfferEvent offerEvent: lastOffers.values()) {
+					log.info("last offer {}",offerEvent.prettyRepr());
+				}
+
+				List<SlotActivityTimer> slotActivityTimers = plugin.getDataHandler().viewAccountData("ligm_a").getSlotTimers();
+				log.info("printing current state of slot timers below");
+				for (SlotActivityTimer timer: slotActivityTimers) {
+					log.info("timer slot {}, offer at unknown time {}, curr offer {}", timer.getSlotIndex(), timer.offerOccurredAtUnknownTime, timer.currentOffer.prettyRepr());
+				}
+
+
 				loginModal.pack();
 				loginModal.setLocation(m.getLocationOnScreen().x - loginModal.getWidth() - 10, Math.max(m.getLocationOnScreen().y - loginModal.getHeight()/2,0) + 100);
 				loginModal.setVisible(true);

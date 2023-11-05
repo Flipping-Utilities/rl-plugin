@@ -61,8 +61,8 @@ public class SlotsPanel extends JPanel {
         add(jScrollPane, BorderLayout.CENTER);
     }
 
-    public void updateTimerDisplays(int slotIndex, String time) {
-        slotPanels.get(slotIndex).updateTimer(time);
+    public void updateTimerDisplays(int slotIndex, String timeString) {
+        slotPanels.get(slotIndex).updateTimer(timeString);
     }
 
     public void onWikiRequest(WikiRequest wikiRequest) {

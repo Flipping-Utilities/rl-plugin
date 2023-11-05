@@ -38,10 +38,12 @@ public class NewOfferEventPipelineHandler {
 
         if (plugin.getCurrentlyLoggedInAccount() == null) {
             OfferEvent newOfferEvent = createOfferEvent(offerChangedEvent);
+
             //event came in before account was fully logged in. This means that the offer actually came through
             //sometime when the account was logged out, at an undetermined time. We need to mark the offer as such to
             //avoid adjusting ge limits and slot timers incorrectly (cause we don't know exactly when the offer came in)
             newOfferEvent.setBeforeLogin(true);
+            log.info("slot {}, before login {}, full {}", newOfferEvent.getSlot(), newOfferEvent.isBeforeLogin(), newOfferEvent.toString());
             plugin.getEventsReceivedBeforeFullLogin().add(newOfferEvent);
             return;
         }
@@ -49,6 +51,7 @@ public class NewOfferEventPipelineHandler {
         if (newOfferEvent.getTickArrivedAt() == plugin.getLoginTickCount()) {
             newOfferEvent.setBeforeLogin(true);
         }
+        log.info("slot {}, before login {}, full {}", newOfferEvent.getSlot(), newOfferEvent.isBeforeLogin(), newOfferEvent.toString());
         onNewOfferEvent(newOfferEvent);
     }
 
@@ -111,15 +114,19 @@ public class NewOfferEventPipelineHandler {
         List<SlotActivityTimer> slotActivityTimers = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getSlotTimers();
         OfferEvent lastOfferEvent = lastOfferEventForEachSlot.get(newOfferEvent.getSlot());
 
+        //completely useless updates
         if (newOfferEvent.isCausedByEmptySlot() && newOfferEvent.isBeforeLogin()) {
             return Optional.empty();
         }
 
-        //is null when an offer was removed or perhaps the slot has an offer but that offer was made
+        //is null when an offer was cleared or perhaps the slot in game has an offer but that offer was made
         //outside the plugin, so the lastOfferEvent for that slot is still null.
         if (lastOfferEvent == null) {
+            //don't think newOfferEvent can be caused by an empty slot at this point but i'm leaving this old code
+            //here in case i'm overlooking something that past self caught...
             if (!newOfferEvent.isCausedByEmptySlot()) {
                 lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
+                log.info("setting current offer through this route");
                 slotActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
             }
             if (newOfferEvent.isStartOfOffer()) {
@@ -134,19 +141,11 @@ public class NewOfferEventPipelineHandler {
             return Optional.empty();
         }
 
-        //get empty slot offer events on login, reject them. Just make sure the last offer isn't complete as we don't
-        //want to re-add a non complete offer that comes in the second batch of login events as that will mess up its
-        //"ticksSinceFirstOffer" (making it 0).
-        if (newOfferEvent.isCausedByEmptySlot() && !lastOfferEvent.isComplete()) {
-            return Optional.empty();
-        }
-
-        //empty offer event after collecting an offer. Mark the slot as being empty by removing the offer event for it.
-        //this will technically also trigger on login when we get those empty slot events if the last event
-        //had a complete state, but in that case we will just re-add that offer event on the next tick when we get an
-        //event for it and since it's a complete offer already, its ticksSinceLastOffer
-        if (newOfferEvent.isCausedByEmptySlot() && lastOfferEvent.isComplete()) {
+        //because we took care of the empty slot updates on login in a previous clause, this
+        //will only trigger on empty slot updates when an offer is collected
+        if (newOfferEvent.isCausedByEmptySlot()) {
             lastOfferEventForEachSlot.remove(newOfferEvent.getSlot());
+            slotActivityTimers.get(newOfferEvent.getSlot()).reset();
             return Optional.empty();
         }
 
@@ -159,20 +158,6 @@ public class NewOfferEventPipelineHandler {
         lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
         slotActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
         return newOfferEvent.getCurrentQuantityInTrade() ==0? Optional.empty() : Optional.of(newOfferEvent);
-    }
-
-    /**
-     * We get offer events that mark the start of an offer on login, even though we already received them prior to logging
-     * out. This method is used to identify them.
-     *
-     * @param offerEvent
-     * @return whether or not this trade event is a duplicate "start of trade" event
-     */
-    private boolean isDuplicateStartOfOfferEvent(OfferEvent offerEvent) {
-        Map<Integer, OfferEvent> loggedInAccsLastOffers = plugin.getDataHandler().viewAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
-        return loggedInAccsLastOffers.containsKey(offerEvent.getSlot()) &&
-                loggedInAccsLastOffers.get(offerEvent.getSlot()).getCurrentQuantityInTrade() == 0 &&
-                loggedInAccsLastOffers.get(offerEvent.getSlot()).getState() == offerEvent.getState();
     }
 
     /**
