@@ -229,6 +229,16 @@ is just a list of OfferEvent. An OfferEvent represents a buy and sell offer in w
 item bought or sold. It has various fields like price, quantity, etc.
 
 
+### Documenting RL events
+I mentioned above that handling RL events that reflect a state of change in the game is one of the main 
+responsibilities of the code. The most important event is the GrandExchangeOfferChanged event which we
+convert into an OfferEvent and send to various components to consume (such as the HistoryManager which
+adds it to an account's trade history) and eventually persist to disk. 
+
+GrandExchangeOfferChanged are sent to the plugin in strange ways that need elaboration, which i've done
+here https://docs.google.com/document/d/1o-nHpUV8Gp3nRQSt2LiRlYVqRcPSiycFfWlM0IFgytI/edit?usp=sharing.
+
+
 ## Icon Attributions
 All icons were either made by Belieal or downloaded from the creators on www.flaticon.com below.
 <div>Icons made by <a href="https://www.flaticon.com/authors/those-icons" title="Those Icons">Those Icons</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a></div>

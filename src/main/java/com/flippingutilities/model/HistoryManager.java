@@ -153,6 +153,15 @@ public class HistoryManager
 	 *
 	 * @param newOfferEvent offer event just received
 	 */
+	//TODO pretty sure this has an edge cases where we think an offer is part of the same trade but it isn't...so we delete too much.
+	//Ex:
+	//IN RL: set offer to buy 100 lobsters in slot X. Offer event comes in and Five lobsters buy. log off.
+	//log onto mobile, cancel the previous lobster offer and set another for 100 lobsters again in slot X.
+	//Log back into RL with 10 lobsters being bought. This method will think those offers are for the same trade and delete
+	//the first offer event for 5 lobsters...There are ways to make this more unlikely, such as checking if all the relevant
+	//properties of the offers match (except currentQuantityInTrade). But, there is no way to be 100% sure because all
+	//those properties could match but it could still be from a different trade if they cancel and make a trade outside of
+	//RL
 	public void deletePreviousOffersForTrade(OfferEvent newOfferEvent)
 	{
 		for (int i = compressedOfferEvents.size() - 1; i > -1; i--)
