@@ -103,7 +103,6 @@ public class SlotSenderJob {
             //the offer event constructed from the true offer retrieved from client.getGrandExchangeOffers()
             OfferEvent trueOfferInSlot = this.getOfferEventConstructedFromClient(i);
 
-
             if (lastOfferEventForEachSlot.containsKey(i)) {
                 OfferEvent lastOfferEventForSlotTrackedByPlugin = lastOfferEventForEachSlot.get(i);
                 lastOfferEventForSlotTrackedByPlugin.setListedPrice(grandExchangeOffer.getPrice());

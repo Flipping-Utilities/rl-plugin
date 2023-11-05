@@ -38,6 +38,7 @@ public class NewOfferEventPipelineHandler {
 
         if (plugin.getCurrentlyLoggedInAccount() == null) {
             OfferEvent newOfferEvent = createOfferEvent(offerChangedEvent);
+
             //event came in before account was fully logged in. This means that the offer actually came through
             //sometime when the account was logged out, at an undetermined time. We need to mark the offer as such to
             //avoid adjusting ge limits and slot timers incorrectly (cause we don't know exactly when the offer came in)
@@ -95,29 +96,39 @@ public class NewOfferEventPipelineHandler {
     }
 
     /**
-     * Runelite has some wonky events. For example, every empty/buy/sell/cancelled buy/cancelled sell
+     * Every single OfferEvent passes through this method for screening before being sent to the wider system because
+     * offer updates have strange quirks such as duplicates, empty updates, etc.
+     *
+     * For example, every empty/buy/sell/cancelled buy/cancelled sell
      * spawns two identical events. And when you fully buy/sell item, it spawns two events (a
      * buying/selling event and a bought/sold event). This method screens out the unwanted events/duplicate
-     * events and sets the ticksSinceFirstOffer field correctly on new OfferEvents. This method is also responsible
-     * for broadcasting the event to any components that need it, such as the slot panel, the slot timer widgets, etc.
+     * events and sets the ticksSinceFirstOffer field correctly on new OfferEvents. For detailed documentation see
+     * the "Documenting RL events" section in the README.
+     *
+     * If some component needs access to OfferEvents prior to screening or at some point in the screening prior to
+     * completion or in some way needs to benefit from the internal logic of this method, then we can pass the OfferEvent
+     * to that component in this method itself. We currently do this with the slotsPanel and slotActivityTimer.
      *
      * @param newOfferEvent event that just occurred
      * @return an optional containing an OfferEvent.
      */
     public Optional<OfferEvent> screenOfferEvent(OfferEvent newOfferEvent) {
-        //TODO this method can probably handle the different states in a more elegant manner...
         plugin.getSlotsPanel().update(newOfferEvent);
+
         Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
         List<SlotActivityTimer> slotActivityTimers = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getSlotTimers();
         OfferEvent lastOfferEvent = lastOfferEventForEachSlot.get(newOfferEvent.getSlot());
 
+        //completely useless updates
         if (newOfferEvent.isCausedByEmptySlot() && newOfferEvent.isBeforeLogin()) {
             return Optional.empty();
         }
 
-        //is null when an offer was removed or perhaps the slot has an offer but that offer was made
+        //is null when an offer was cleared or perhaps the slot in game has an offer but that offer was made
         //outside the plugin, so the lastOfferEvent for that slot is still null.
         if (lastOfferEvent == null) {
+            //don't think newOfferEvent can be caused by an empty slot at this point but i'm leaving this old code
+            //here in case i'm overlooking something that past self caught...
             if (!newOfferEvent.isCausedByEmptySlot()) {
                 lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
                 slotActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
@@ -134,19 +145,11 @@ public class NewOfferEventPipelineHandler {
             return Optional.empty();
         }
 
-        //get empty slot offer events on login, reject them. Just make sure the last offer isn't complete as we don't
-        //want to re-add a non complete offer that comes in the second batch of login events as that will mess up its
-        //"ticksSinceFirstOffer" (making it 0).
-        if (newOfferEvent.isCausedByEmptySlot() && !lastOfferEvent.isComplete()) {
-            return Optional.empty();
-        }
-
-        //empty offer event after collecting an offer. Mark the slot as being empty by removing the offer event for it.
-        //this will technically also trigger on login when we get those empty slot events if the last event
-        //had a complete state, but in that case we will just re-add that offer event on the next tick when we get an
-        //event for it and since it's a complete offer already, its ticksSinceLastOffer
-        if (newOfferEvent.isCausedByEmptySlot() && lastOfferEvent.isComplete()) {
+        //because we took care of the empty slot updates on login in a previous clause, this
+        //will only trigger on empty slot updates when an offer is collected
+        if (newOfferEvent.isCausedByEmptySlot()) {
             lastOfferEventForEachSlot.remove(newOfferEvent.getSlot());
+            slotActivityTimers.get(newOfferEvent.getSlot()).reset();
             return Optional.empty();
         }
 
@@ -159,20 +162,6 @@ public class NewOfferEventPipelineHandler {
         lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
         slotActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
         return newOfferEvent.getCurrentQuantityInTrade() ==0? Optional.empty() : Optional.of(newOfferEvent);
-    }
-
-    /**
-     * We get offer events that mark the start of an offer on login, even though we already received them prior to logging
-     * out. This method is used to identify them.
-     *
-     * @param offerEvent
-     * @return whether or not this trade event is a duplicate "start of trade" event
-     */
-    private boolean isDuplicateStartOfOfferEvent(OfferEvent offerEvent) {
-        Map<Integer, OfferEvent> loggedInAccsLastOffers = plugin.getDataHandler().viewAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
-        return loggedInAccsLastOffers.containsKey(offerEvent.getSlot()) &&
-                loggedInAccsLastOffers.get(offerEvent.getSlot()).getCurrentQuantityInTrade() == 0 &&
-                loggedInAccsLastOffers.get(offerEvent.getSlot()).getState() == offerEvent.getState();
     }
 
     /**
