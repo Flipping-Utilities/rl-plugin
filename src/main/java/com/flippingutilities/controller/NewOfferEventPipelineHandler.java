@@ -57,6 +57,7 @@ public class NewOfferEventPipelineHandler {
         if (currentlyLoggedInAccount != null) {
             newOfferEvent.setMadeBy(currentlyLoggedInAccount);
         }
+        plugin.getSlotsPanel().update(newOfferEvent);
 
         Optional<OfferEvent> screenedOfferEvent = screenOfferEvent(newOfferEvent);
 
@@ -106,7 +107,6 @@ public class NewOfferEventPipelineHandler {
      */
     public Optional<OfferEvent> screenOfferEvent(OfferEvent newOfferEvent) {
         //TODO this method can probably handle the different states in a more elegant manner...
-        plugin.getSlotsPanel().update(newOfferEvent);
         Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
         List<SlotActivityTimer> slotActivityTimers = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getSlotTimers();
         OfferEvent lastOfferEvent = lastOfferEventForEachSlot.get(newOfferEvent.getSlot());

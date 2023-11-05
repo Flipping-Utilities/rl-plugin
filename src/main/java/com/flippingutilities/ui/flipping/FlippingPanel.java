@@ -34,8 +34,6 @@ import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.Constants;
-import com.flippingutilities.utilities.Searchable;
-import com.flippingutilities.utilities.WikiRequest;
 import com.flippingutilities.utilities.WikiRequestWrapper;
 import com.google.common.base.Strings;
 import lombok.Getter;
@@ -46,7 +44,6 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.components.IconTextField;
 import net.runelite.client.ui.components.PluginErrorPanel;
 import net.runelite.http.api.item.ItemPrice;
-import net.runelite.http.api.item.ItemStats;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -341,8 +338,8 @@ public class FlippingPanel extends JPanel
 		}
 	}
 
-	public void updateWikiDisplays(WikiRequestWrapper wikiRequestWrapper, Instant timeOfRequestCompletion) {
-		activePanels.forEach(panel -> panel.updateWikiLabels(wikiRequestWrapper, timeOfRequestCompletion));
+	public void onWikiRequest(WikiRequestWrapper wikiRequestWrapper, Instant timeOfRequestCompletion) {
+		activePanels.forEach(panel -> panel.onWikiRequest(wikiRequestWrapper, timeOfRequestCompletion));
 	}
 
 
