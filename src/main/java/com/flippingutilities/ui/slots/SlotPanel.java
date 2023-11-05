@@ -137,6 +137,7 @@ public class SlotPanel extends JPanel {
 
     public void updateTimer(String timeString) {
         if (offerEvent == null || offerEvent.isCausedByEmptySlot() || timeString == null) {
+            timer.setText("");
             return;
         }
         timer.setText(timeString);
