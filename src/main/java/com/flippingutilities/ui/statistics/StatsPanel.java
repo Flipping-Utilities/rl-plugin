@@ -36,12 +36,12 @@ import com.flippingutilities.ui.uiutilities.*;
 import com.flippingutilities.utilities.SORT;
 import com.flippingutilities.utilities.Searchable;
 import com.google.common.base.Strings;
+import net.runelite.client.ui.components.TitleCaseListCellRenderer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
-import net.runelite.client.ui.components.ComboBoxListRenderer;
 import net.runelite.client.ui.components.IconTextField;
 import net.runelite.client.ui.components.materialtabs.MaterialTab;
 import net.runelite.client.util.QuantityFormatter;
@@ -326,7 +326,7 @@ public class StatsPanel extends JPanel
 
 	private JComboBox createTimeIntervalDropdown() {
 		JComboBox<String> timeIntervalDropdown = new JComboBox<>(TIME_INTERVAL_STRINGS);
-		timeIntervalDropdown.setRenderer(new ComboBoxListRenderer());
+		timeIntervalDropdown.setRenderer(new TitleCaseListCellRenderer());
 		timeIntervalDropdown.setEditable(true);
 		timeIntervalDropdown.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 		timeIntervalDropdown.setBackground(CustomColors.DARK_GRAY_LIGHTER);
