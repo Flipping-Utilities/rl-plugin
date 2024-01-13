@@ -27,7 +27,6 @@
 package com.flippingutilities.ui;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.login.LoginPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
@@ -36,12 +35,11 @@ import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.FastTabGroup;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
-import com.flippingutilities.ui.widgets.SlotActivityTimer;
+import net.runelite.client.ui.components.TitleCaseListCellRenderer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
-import net.runelite.client.ui.components.ComboBoxListRenderer;
 import net.runelite.client.ui.components.materialtabs.MaterialTab;
 import net.runelite.client.ui.components.materialtabs.MaterialTabGroup;
 
@@ -52,8 +50,6 @@ import java.awt.event.ItemEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -202,10 +198,10 @@ public class MasterPanel extends PluginPanel
 	private JComboBox accountSelector()
 	{
 		JComboBox viewSelectorDropdown = new JComboBox();
-		viewSelectorDropdown.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
+		viewSelectorDropdown.setBackground(CustomColors.DARK_GRAY_LIGHTER);
 		viewSelectorDropdown.setFocusable(false);
 		viewSelectorDropdown.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-		viewSelectorDropdown.setRenderer(new ComboBoxListRenderer());
+		viewSelectorDropdown.setRenderer(new TitleCaseListCellRenderer());
 		viewSelectorDropdown.setToolTipText("Select which of your account's trades list you want to view");
 		viewSelectorDropdown.addItemListener(event ->
 		{
