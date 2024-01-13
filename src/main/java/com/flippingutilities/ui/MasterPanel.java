@@ -202,6 +202,10 @@ public class MasterPanel extends PluginPanel
 		viewSelectorDropdown.setFocusable(false);
 		viewSelectorDropdown.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
 		viewSelectorDropdown.setRenderer(new TitleCaseListCellRenderer());
+
+		viewSelectorDropdown.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()),
+			BorderFactory.createEmptyBorder(4,2,4,2)));
 		viewSelectorDropdown.setToolTipText("Select which of your account's trades list you want to view");
 		viewSelectorDropdown.addItemListener(event ->
 		{
