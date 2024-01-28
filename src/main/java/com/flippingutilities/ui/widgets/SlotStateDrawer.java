@@ -112,7 +112,9 @@ public class SlotStateDrawer {
         GeSpriteLoader.DYNAMIC_CHILDREN_IDXS.forEach(idx -> {
             Widget child = slotWidget.getChild(idx);
             int spriteId = spriteIdMap.get(idx);
-            child.setSpriteId(spriteId);
+            if (child != null) {
+                child.setSpriteId(spriteId);
+            }
         });
 
         Widget quickLookWidget = slotIdxToQuickLookWidget.get(slotIdx);
