@@ -621,7 +621,11 @@ public class StatsPanel extends JPanel
 	}
 
 	private <T extends Searchable> List<T> getObjsInInterval(List<T> objs) {
-		return objs.stream().filter(obj -> obj.isInInterval(startOfInterval)).collect(Collectors.toList());
+		if (objs == null) {
+			return new ArrayList<>();
+			}
+
+		return objs.stream().filter(obj -> obj != null && obj.isInInterval(startOfInterval)).collect(Collectors.toList());
 	}
 
 	private JLabel createResetButton() {
