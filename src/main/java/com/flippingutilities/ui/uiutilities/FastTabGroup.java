@@ -62,7 +62,7 @@ public class FastTabGroup extends MaterialTabGroup
 	public void addTab(MaterialTab tab)
 	{
 		tabs.add(tab);
-		display.add(tab.getContent(), tab.getText());
+		display.add(tab.getContent(), tab.getName());
 		add(tab, BorderLayout.NORTH);
 	}
 
@@ -85,10 +85,10 @@ public class FastTabGroup extends MaterialTabGroup
 			return false;
 		}
 		currentlyShowingView = false;
-		lastSelectedTab = selectedTab.getText();
+		lastSelectedTab = selectedTab.getName();
 		currentlySelectedTab = selectedTab.getContent();
 		CardLayout cardLayout = (CardLayout) display.getLayout();
-		cardLayout.show(display, selectedTab.getText());
+		cardLayout.show(display, selectedTab.getName());
 
 		//Unselect all other tabs
 		for (MaterialTab tab : tabs)
@@ -121,7 +121,7 @@ public class FastTabGroup extends MaterialTabGroup
 
 	public void selectPreviouslySelectedTab() {
 		for (MaterialTab tab: tabs) {
-			if (tab.getText().equals(lastSelectedTab)) {
+			if (tab.getName().equals(lastSelectedTab)) {
 				select(tab);
 				break;
 			}

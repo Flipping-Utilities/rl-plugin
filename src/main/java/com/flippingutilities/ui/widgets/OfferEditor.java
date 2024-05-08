@@ -26,6 +26,7 @@
 
 package com.flippingutilities.ui.widgets;
 
+import com.flippingutilities.model.Suggestion;
 import com.flippingutilities.ui.uiutilities.Icons;
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
@@ -35,11 +36,15 @@ import net.runelite.client.ui.ColorScheme;
 
 import javax.swing.*;
 
+import static net.runelite.api.VarPlayer.CURRENT_GE_ITEM;
+
 public class OfferEditor {
     private final Client client;
     private Widget bottomText;
     private Widget nonWikiText;
     private Widget wikiText;
+    private Widget assistantText;
+    private static final int GE_OFFER_INIT_STATE_CHILD_ID = 18;
 
     public OfferEditor(Widget parent, Client client) {
         this.client = client;
@@ -51,7 +56,9 @@ public class OfferEditor {
         bottomText = parent.createChild(-1, WidgetType.TEXT);
         nonWikiText = parent.createChild(-1, WidgetType.TEXT);
         wikiText = parent.createChild(-1, WidgetType.TEXT);
+        assistantText = parent.createChild(-1, WidgetType.TEXT);
 
+        prepareTextWidget(assistantText, WidgetTextAlignment.LEFT, WidgetPositionMode.ABSOLUTE_TOP, 40, 10);
         prepareTextWidget(nonWikiText, WidgetTextAlignment.LEFT, WidgetPositionMode.ABSOLUTE_TOP, 5, 10);
         prepareTextWidget(wikiText, WidgetTextAlignment.LEFT, WidgetPositionMode.ABSOLUTE_TOP, 20, 10);
         prepareTextWidget(bottomText, WidgetTextAlignment.CENTER, WidgetPositionMode.ABSOLUTE_BOTTOM, 5, 0);
@@ -159,4 +166,51 @@ public class OfferEditor {
         }
     }
 
+    public void showSuggestion(Suggestion suggestion) {
+        if (client.getVarpValue(CURRENT_GE_ITEM) != suggestion.getItemId()) {
+            return;
+        }
+
+        String chatInputText = client.getWidget(ComponentID.CHATBOX_TITLE).getText();
+        String offerText = client.getWidget(ComponentID.GRAND_EXCHANGE_OFFER_CONTAINER).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
+
+        if ((chatInputText.equals("How many do you wish to buy?") && suggestion.getType().equals("buy"))
+            || (chatInputText.equals("How many do you wish to sell?") && suggestion.getType().equals("sell"))) {
+            shiftChatboxWidgetsDown();
+            showQuantity(suggestion.getQuantity());
+        } else if (chatInputText.equals("Set a price for each item:")
+            && ((offerText.equals("Buy offer") && suggestion.getType().equals("buy"))
+            || (offerText.equals("Sell offer") && suggestion.getType().equals("sell")))) {
+            shiftChatboxWidgetsDown();
+            showPrice(suggestion.getPrice());
+        }
+    }
+
+    private void showQuantity(int quantity) {
+        assistantText.setText("set to Copilot quantity: " + quantity);
+        assistantText.setAction(1, "Set quantity");
+        assistantText.setOnOpListener((JavaScriptCallback) ev ->
+        {
+            client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(quantity + "*");
+            client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(quantity));
+        });
+    }
+
+    private void showPrice(int price) {
+        assistantText.setText("set to Copilot price: " + String.format("%,d", price) + " gp");
+        assistantText.setAction(0, "Set price");
+        assistantText.setOnOpListener((JavaScriptCallback) ev ->
+        {
+            client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(price + "*");
+            client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(price));
+        });
+    }
+
+    private void shiftChatboxWidgetsDown() {
+        Widget chatboxTitle = client.getWidget(ComponentID.CHATBOX_TITLE);
+        if (chatboxTitle != null) {
+            chatboxTitle.setOriginalY(chatboxTitle.getOriginalY() + 7);
+            chatboxTitle.revalidate();
+        }
+    }
 }

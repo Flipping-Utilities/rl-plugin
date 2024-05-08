@@ -114,6 +114,11 @@ public class Icons {
     public static final ImageIcon MAGNIFYING_GLASS;
     public static final ImageIcon MAGNIFYING_GLASS_HOVER;
 
+    public static final ImageIcon ROBOT_ICON;
+    public static final ImageIcon FLIPPING_TAB_ICON;
+    public static final ImageIcon STATS_TAB_ICON;
+    public static final ImageIcon SLOTS_TAB_ICON;
+
     static
     {
         final BufferedImage openIcon = ImageUtil
@@ -289,5 +294,17 @@ public class Icons {
         final BufferedImage magnifyingGlass = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/magnifying-glass.png");
         MAGNIFYING_GLASS = new ImageIcon(magnifyingGlass);
         MAGNIFYING_GLASS_HOVER = new ImageIcon(ImageUtil.alphaOffset(magnifyingGlass,.53f));
+
+        final BufferedImage slotsTab = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/slots-tab.png");
+        SLOTS_TAB_ICON = new ImageIcon(slotsTab);
+
+        final BufferedImage flippingTab = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/flipping-tab.png");
+        FLIPPING_TAB_ICON = new ImageIcon(flippingTab);
+
+        final BufferedImage robot = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/robot.png");
+        ROBOT_ICON = new ImageIcon(robot);
+
+        final BufferedImage statsTab = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/stats-tab.png");
+        STATS_TAB_ICON = new ImageIcon(statsTab);
     }
 }

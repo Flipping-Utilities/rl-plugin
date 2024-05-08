@@ -1,6 +1,7 @@
 package com.flippingutilities.controller;
 
 import com.flippingutilities.model.FlippingItem;
+import com.flippingutilities.model.Suggestion;
 import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.offereditor.AbstractOfferEditorPanel;
 import com.flippingutilities.ui.offereditor.OfferEditorContainerPanel;
@@ -23,7 +24,7 @@ import static net.runelite.api.VarPlayer.CURRENT_GE_ITEM;
 /**
  * This class is responsible for handling all the logic that should trigger when the main game ui changes. For example,
  * this class should detect when the chatbox gets opened, when the ge history box opens, when the user is in the
- * ge offer setupFlippingFolder screen, etc and trigger appropriate logic in those cases.
+ * ge offer setup screen, etc and trigger appropriate logic in those cases.
  */
 @Slf4j
 public class GameUiChangesHandler {
@@ -45,20 +46,21 @@ public class GameUiChangesHandler {
                 && client.getVarcIntValue(VarClientInt.INPUT_TYPE) == 14
                 && client.getWidget(ComponentID.CHATBOX_GE_SEARCH_RESULTS) != null) {
             plugin.getClientThread().invokeLater(() -> {
-                Widget geSearchResultBox = client.getWidget(ComponentID.CHATBOX_GE_SEARCH_RESULTS);
-                Widget child = geSearchResultBox.createChild(-1, WidgetType.TEXT);
-                child.setTextColor(0x800000);
-                child.setFontId(FontID.VERDANA_13_BOLD);
-                child.setXPositionMode(WidgetPositionMode.ABSOLUTE_CENTER);
-                child.setOriginalX(0);
-                child.setYPositionMode(WidgetPositionMode.ABSOLUTE_CENTER);
-                child.setOriginalY(-15);
-                child.setOriginalHeight(20);
-                child.setXTextAlignment(WidgetTextAlignment.CENTER);
-                child.setYTextAlignment(WidgetTextAlignment.CENTER);
-                child.setWidthMode(WidgetSizeMode.MINUS);
-                child.setText("Type a quick search code to see all favorited items with that code!");
-                child.revalidate();
+                plugin.getClientThread().invokeLater(this::showSuggestedItemInSearch);
+//                Widget geSearchResultBox = client.getWidget(ComponentID.CHATBOX_GE_SEARCH_RESULTS);
+//                Widget child = geSearchResultBox.createChild(-1, WidgetType.TEXT);
+//                child.setTextColor(0x800000);
+//                child.setFontId(FontID.VERDANA_13_BOLD);
+//                child.setXPositionMode(WidgetPositionMode.ABSOLUTE_CENTER);
+//                child.setOriginalX(0);
+//                child.setYPositionMode(WidgetPositionMode.ABSOLUTE_CENTER);
+//                child.setOriginalY(-15);
+//                child.setOriginalHeight(20);
+//                child.setXTextAlignment(WidgetTextAlignment.CENTER);
+//                child.setYTextAlignment(WidgetTextAlignment.CENTER);
+//                child.setWidthMode(WidgetSizeMode.MINUS);
+//                child.setText("Type a quick search code to see all favorited items with that code!");
+//                child.revalidate();
             });
         }
 
@@ -67,7 +69,6 @@ public class GameUiChangesHandler {
                 && client.getVarcIntValue(VarClientInt.INPUT_TYPE) == 0
         ) {
             quantityOrPriceChatboxOpen = false;
-
             return;
         }
 
@@ -126,6 +127,8 @@ public class GameUiChangesHandler {
                     flippingWidget.showInstaBuyPrices(instaBuyPrice, wikiInstaBuyPrice);
                 }
             }
+            Suggestion suggestion = plugin.suggestionHandler.getCurrentSuggestion();
+            flippingWidget.showSuggestion(suggestion);
         });
     }
 
@@ -257,4 +260,30 @@ public class GameUiChangesHandler {
         highlightedItem = Optional.empty();
         plugin.getFlippingPanel().dehighlightItem();
     }
+
+    private void showSuggestedItemInSearch() {
+        Suggestion suggestion = plugin.suggestionHandler.getCurrentSuggestion();
+        Client client = plugin.getClient();
+        Widget searchResults = client.getWidget(ComponentID.CHATBOX_GE_SEARCH_RESULTS);
+        Widget previousSearch = searchResults.getChild(0);
+
+        if (suggestion.getType().equals("buy") && previousSearch != null) {
+            previousSearch.setOnOpListener(754, suggestion.getItemId(), 84);
+            previousSearch.setOnKeyListener(754, suggestion.getItemId(), -2147483640);
+            previousSearch.setName("<col=ff9040>" + suggestion.getName() + "</col>");
+
+            Widget previousSearchText = searchResults.getChild(1);
+            if(previousSearchText == null) {
+                return;
+            }
+            previousSearchText.setText("Assistant item:");
+
+            Widget itemName = searchResults.getChild(2);
+            itemName.setText(suggestion.getName());
+
+            Widget item = searchResults.getChild(3);
+            item.setItemId(suggestion.getItemId());
+        }
+    }
+
 }
