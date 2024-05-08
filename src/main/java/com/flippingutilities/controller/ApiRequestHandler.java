@@ -1,6 +1,11 @@
 package com.flippingutilities.controller;
 
+import com.flippingutilities.model.AccountStatus;
+import com.flippingutilities.model.HttpResponseException;
+import com.flippingutilities.model.Suggestion;
 import com.flippingutilities.utilities.*;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
@@ -26,6 +31,7 @@ public class ApiRequestHandler {
     public static String ACCOUNT_URL = BASE_API_URL + "account/self";
     public static String ACCOUNT_REGISTRATION_URL = BASE_API_URL + "account/register";
     public static String TOKEN_URL = BASE_API_URL + "auth/token";
+    public static final String ASSISTANT_API = "https://api.flippingcopilot.com/";
 
     public ApiRequestHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
@@ -100,6 +106,7 @@ public class ApiRequestHandler {
                 post(body).
                 url(SLOT_UPDATE_URL).
                 build();
+
         return getResponseFuture(request, new TypeToken<ApiResponse<Integer>>(){}).thenApply(r -> r.data);
     }
 
@@ -185,6 +192,40 @@ public class ApiRequestHandler {
             return "Could not fetch response body";
         }
     }
+
+    public Suggestion getSuggestion(AccountStatus accountStatus) throws IOException {
+        JsonObject status = accountStatus.toJson(plugin.gson);
+        JsonObject suggestionJson = postJson(status, "/suggestion");
+        return Suggestion.fromJson(suggestionJson, plugin.gson);
+    }
+
+    private JsonObject postJson(JsonObject json, String route) throws HttpResponseException {
+        String jwtToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiYW50b255QG9zcnMuY2xvdWQiLCJleHAiOjE3MTY1OTM0NDR9.4PBQx0iln0DYqjdb6AeOy1Mv8WMlo7QkkZxOYE3mZ9A";
+        if (jwtToken == null) {
+            throw new IllegalStateException("Not authenticated");
+        }
+
+        RequestBody body = RequestBody.create(MediaType.get("application/json; charset=utf-8"), json.toString());
+        Request request = new Request.Builder()
+            .url(ASSISTANT_API + route)
+            .addHeader("Authorization", "Bearer " + jwtToken)
+            .post(body)
+            .build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            JsonObject responseJson = plugin.gson.fromJson(response.body().string(), JsonObject.class);
+            if (!response.isSuccessful()) {
+                throw new HttpResponseException(response.code(), responseJson.get("message").getAsString());
+            }
+            return responseJson;
+        } catch (HttpResponseException e) {
+            throw e;
+        } catch (JsonParseException | IOException e) {
+            throw new HttpResponseException(-1, e.getMessage());
+        }
+    }
+
+
 }
 
 

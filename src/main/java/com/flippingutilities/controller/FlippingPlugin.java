@@ -31,6 +31,7 @@ import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.jobs.SlotSenderJob;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.MasterPanel;
+import com.flippingutilities.ui.assistant.AssistantPanel;
 import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.gehistorytab.GeHistoryTabPanel;
 import com.flippingutilities.ui.login.LoginPanel;
@@ -53,6 +54,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.*;
 import net.runelite.api.widgets.*;
+import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -138,10 +140,11 @@ public class FlippingPlugin extends Plugin {
     @Getter
     private SlotsPanel slotsPanel;
     @Getter
+    private AssistantPanel assistantPanel;
+    @Getter
     private MasterPanel masterPanel;
     @Getter
     private GeHistoryTabPanel geHistoryTabPanel;
-    private SettingsPanel settingsPanel;
     private LoginPanel loginPanel;
 
     //this flag is to know that when we see the login screen an account has actually logged out and its not just that the
@@ -209,6 +212,16 @@ public class FlippingPlugin extends Plugin {
     @Getter
     private SlotStateDrawer slotStateDrawer;
 
+    public AccountStatus accountStatus = new AccountStatus();
+
+    @Inject
+    public Notifier notifier;
+
+    GrandExchange grandExchange;
+    SuggestionHandler suggestionHandler;
+    GrandExchangeCollectHandler grandExchangeCollectHandler;
+    OsrsLoginHandler osrsLoginHandler;
+
     @Override
     protected void startUp() {
         accountCurrentlyViewed = ACCOUNT_WIDE;
@@ -222,17 +235,26 @@ public class FlippingPlugin extends Plugin {
         gameUiChangesHandler = new GameUiChangesHandler(this);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
         apiAuthHandler = new ApiAuthHandler(this);
+
         apiRequestHandler = new ApiRequestHandler(this);
         slotStateDrawer = new SlotStateDrawer(this);
+        grandExchange = new GrandExchange(client);
 
         flippingPanel = new FlippingPanel(this);
         statPanel = new StatsPanel(this);
+        assistantPanel = new AssistantPanel(this);
         geHistoryTabPanel = new GeHistoryTabPanel(this);
         slotsPanel = new SlotsPanel(this, itemManager);
         loginPanel = new LoginPanel(this);
 
-        masterPanel = new MasterPanel(this, flippingPanel, statPanel, slotsPanel, loginPanel);
-        masterPanel.addView(geHistoryTabPanel, "ge history");
+        suggestionHandler = new SuggestionHandler(this);
+        grandExchangeCollectHandler = new GrandExchangeCollectHandler(accountStatus, suggestionHandler);
+        osrsLoginHandler = new OsrsLoginHandler(this);
+        osrsLoginHandler.init();
+
+
+        masterPanel = new MasterPanel(this, flippingPanel, statPanel, slotsPanel, assistantPanel, loginPanel);
+        masterPanel.addView(geHistoryTabPanel, geHistoryTabPanel.getName());
         navButton = NavigationButton.builder()
                 .tooltip("Flipping Utilities")
                 .icon(ImageUtil.getResourceStreamFromClass(getClass(), "/graph_icon_green.png"))
@@ -283,34 +305,6 @@ public class FlippingPlugin extends Plugin {
         masterPanel.dispose();
 
         clientToolbar.removeNavigation(navButton);
-    }
-
-    //called when the X button on the client is pressed
-    @Subscribe(priority = 101)
-    public void onClientShutdown(ClientShutdown clientShutdownEvent) {
-        if (generalRepeatingTasks != null) {
-            generalRepeatingTasks.cancel(true);
-        }
-        if (slotTimersTask != null) {
-            slotTimersTask.cancel(true);
-            slotTimersTask = null;
-        }
-        dataHandler.storeData();
-        cacheUpdaterJob.stop();
-        wikiDataFetcherJob.stop();
-        slotStateSenderJob.stop();
-    }
-
-    @Subscribe
-    public void onGameStateChanged(GameStateChanged event) {
-        if (event.getGameState() == GameState.LOGGED_IN) {
-            onLoggedInGameState();
-        } else if (event.getGameState() == GameState.LOGIN_SCREEN && previouslyLoggedIn) {
-            //this randomly fired at night hours after i had logged off...so i'm adding this guard here.
-            if (currentlyLoggedInAccount != null && client.getGameState() != GameState.LOGGED_IN) {
-                handleLogout();
-            }
-        }
     }
 
     private void onLoggedInGameState() {
@@ -432,19 +426,6 @@ public class FlippingPlugin extends Plugin {
             }
 
         }, msStartDelay, 1000, TimeUnit.MILLISECONDS);
-    }
-
-    /**
-     * This method is invoked every time the plugin receives a GrandExchangeOfferChanged event which is
-     * when the user set an offer, cancelled an offer, or when an offer was updated (items bought/sold partially
-     * or completely).
-     *
-     * @param offerChangedEvent the offer event that represents when an offer is updated
-     *                          (buying, selling, bought, sold, cancelled sell, or cancelled buy)
-     */
-    @Subscribe
-    public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged offerChangedEvent) {
-        newOfferEventPipelineHandler.onGrandExchangeOfferChanged(offerChangedEvent);
     }
 
     public List<FlippingItem> getItemsForCurrentView() {
@@ -1070,4 +1051,66 @@ public class FlippingPlugin extends Plugin {
             flippingPanel.rebuild(viewItemsForCurrentView());
         }
     }
+
+    //called when the X button on the client is pressed
+    @Subscribe(priority = 101)
+    public void onClientShutdown(ClientShutdown clientShutdownEvent) {
+        if (generalRepeatingTasks != null) {
+            generalRepeatingTasks.cancel(true);
+        }
+        if (slotTimersTask != null) {
+            slotTimersTask.cancel(true);
+            slotTimersTask = null;
+        }
+        dataHandler.storeData();
+        cacheUpdaterJob.stop();
+        wikiDataFetcherJob.stop();
+        slotStateSenderJob.stop();
+    }
+
+    @Subscribe
+    public void onGameStateChanged(GameStateChanged event) {
+        if (event.getGameState() == GameState.LOGGED_IN) {
+            onLoggedInGameState();
+        } else if (event.getGameState() == GameState.LOGIN_SCREEN && previouslyLoggedIn) {
+            //this randomly fired at night hours after i had logged off...so i'm adding this guard here.
+            if (currentlyLoggedInAccount != null && client.getGameState() != GameState.LOGGED_IN) {
+                handleLogout();
+            }
+        }
+        osrsLoginHandler.handleGameStateChanged(event);
+    }
+
+    /**
+     * This method is invoked every time the plugin receives a GrandExchangeOfferChanged event which is
+     * when the user set an offer, cancelled an offer, or when an offer was updated (items bought/sold partially
+     * or completely).
+     *
+     * @param offerChangedEvent the offer event that represents when an offer is updated
+     *                          (buying, selling, bought, sold, cancelled sell, or cancelled buy)
+     */
+    @Subscribe
+    public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged offerChangedEvent) {
+        newOfferEventPipelineHandler.onGrandExchangeOfferChanged(offerChangedEvent);
+    }
+
+    @Subscribe
+    public void onItemContainerChanged(ItemContainerChanged event) {
+        if (event.getContainerId() == InventoryID.INVENTORY.getId()) {
+            accountStatus.handleInventoryChanged(event, client);
+            suggestionHandler.setSuggestionNeeded(true);
+        }
+    }
+
+    @Subscribe
+    public void onMenuOptionClicked(MenuOptionClicked event) {
+        int slot = grandExchange.getOpenSlot();
+        grandExchangeCollectHandler.handleCollect(event, slot);
+    }
+
+    @Subscribe
+    public void onGameTick(GameTick event) {
+        suggestionHandler.onGameTick();
+    }
+
 }

@@ -9,5 +9,6 @@ public class Constants {
     public static double GE_TAX = 0.01; // 1%
     public static int BOND_ID = 13190;
     public static String DUMMY_ITEM = "dummy";
-
+    public final static int MIN_GP_NEEDED_TO_FLIP = 1000;
+    public final static int PLATINUM_TOKEN_VALUE = 1000;
 }

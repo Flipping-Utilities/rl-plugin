@@ -65,6 +65,8 @@ public class NewOfferEventPipelineHandler {
             return;
         }
 
+        plugin.suggestionHandler.setSuggestionNeeded(true);
+
         OfferEvent finalizedOfferEvent = screenedOfferEvent.get();
         
         List<FlippingItem> currentlyLoggedInAccountsTrades = plugin.getDataHandler().getAccountData(currentlyLoggedInAccount).getTrades();

@@ -27,6 +27,7 @@
 package com.flippingutilities.ui;
 
 import com.flippingutilities.controller.FlippingPlugin;
+import com.flippingutilities.ui.assistant.AssistantPanel;
 import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.login.LoginPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
@@ -74,6 +75,7 @@ public class MasterPanel extends PluginPanel
 					   FlippingPanel flippingPanel,
 					   StatsPanel statPanel,
 					   SlotsPanel slotsPanel,
+					   AssistantPanel assistantPanel,
 					   LoginPanel loginPanel)
 	{
 		super(false);
@@ -94,7 +96,7 @@ public class MasterPanel extends PluginPanel
 		loginModal.pack();
 
 		accountSelector = accountSelector();
-		tabGroup = tabSelector(mainDisplay, flippingPanel, statPanel, slotsPanel);
+		tabGroup = tabSelector(mainDisplay, flippingPanel, statPanel, slotsPanel, assistantPanel);
 
 		JPanel header = createHeader(accountSelector, tabGroup, loginModal);
 		header.setBorder(BorderFactory.createCompoundBorder(
@@ -227,16 +229,30 @@ public class MasterPanel extends PluginPanel
 	 *                      rendered
 	 * @return
 	 */
-	private FastTabGroup tabSelector(JPanel mainDisplay, JPanel flippingPanel, JPanel statPanel, JPanel slotsPanel)
+	private FastTabGroup tabSelector(JPanel mainDisplay, JPanel flippingPanel, JPanel statPanel, JPanel slotsPanel, JPanel assistantPanel)
 	{
 		FastTabGroup tabGroup = new FastTabGroup(mainDisplay);
-		MaterialTab flippingTab = new MaterialTab("flipping", tabGroup, flippingPanel);
-		MaterialTab statisticsTab = new MaterialTab("stats", tabGroup, statPanel);
-		MaterialTab slotsTab = new MaterialTab("slots", tabGroup, slotsPanel);
+		MaterialTab flippingTab = new MaterialTab("", tabGroup, flippingPanel);
+		flippingTab.setName("flipping");
+		flippingTab.setIcon(Icons.FLIPPING_TAB_ICON);
 
+		MaterialTab statisticsTab = new MaterialTab("", tabGroup, statPanel);
+		statisticsTab.setName("stats");
+		statisticsTab.setIcon(Icons.STATS_TAB_ICON);
+
+		MaterialTab slotsTab = new MaterialTab("", tabGroup, slotsPanel);
+		slotsTab.setName("slots");
+		slotsTab.setIcon(Icons.SLOTS_TAB_ICON);
+
+		MaterialTab copilotTab = new MaterialTab("", tabGroup, assistantPanel);
+		copilotTab.setName("assistant");
+		copilotTab.setIcon(Icons.ROBOT_ICON);
+
+		tabGroup.addTab(copilotTab);
 		tabGroup.addTab(slotsTab);
 		tabGroup.addTab(flippingTab);
 		tabGroup.addTab(statisticsTab);
+
 
 		tabGroup.select(flippingTab);
 		return tabGroup;

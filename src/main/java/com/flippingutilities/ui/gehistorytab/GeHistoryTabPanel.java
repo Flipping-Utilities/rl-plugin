@@ -49,6 +49,7 @@ public class GeHistoryTabPanel extends JPanel
 		this.highlightedPanels = new HashSet<>();
 		geHistoryTabOffersPanel.setBorder((new EmptyBorder(5, 6, 0, 6)));
 		geHistoryTabOffersPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		setName("ge history");
 		setLayout(new BorderLayout());
 		add(createTitlePanel(), BorderLayout.NORTH);
 		add(createOfferContainer(), BorderLayout.CENTER);
