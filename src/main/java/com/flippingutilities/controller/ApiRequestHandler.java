@@ -204,6 +204,7 @@ public class ApiRequestHandler {
         if (jwtToken == null) {
             throw new IllegalStateException("Not authenticated");
         }
+        String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
 
         RequestBody body = RequestBody.create(MediaType.get("application/json; charset=utf-8"), json.toString());
         Request request = new Request.Builder()

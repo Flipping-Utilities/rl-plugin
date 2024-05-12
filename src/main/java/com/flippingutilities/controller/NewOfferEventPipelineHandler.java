@@ -4,6 +4,7 @@ import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.WorldType;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.client.eventbus.Subscribe;
@@ -66,6 +67,8 @@ public class NewOfferEventPipelineHandler {
         }
 
         plugin.suggestionHandler.setSuggestionNeeded(true);
+        plugin.accountStatus.updateOffers(newOfferEvent.getGrandExchangeOfferChanged());
+        plugin.getAssistantPanel().statePanel.showState(plugin.accountStatus);
 
         OfferEvent finalizedOfferEvent = screenedOfferEvent.get();
         

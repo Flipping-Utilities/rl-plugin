@@ -8,6 +8,7 @@ import net.runelite.api.widgets.Widget;
 
 @AllArgsConstructor
 public class GrandExchangeCollectHandler {
+    FlippingPlugin plugin;
     AccountStatus accountStatus;
     SuggestionHandler suggestionHandler;
 
@@ -33,6 +34,7 @@ public class GrandExchangeCollectHandler {
             else {
                 return;
             }
+            plugin.getAssistantPanel().statePanel.showState(plugin.accountStatus);
             suggestionHandler.displaySuggestion();
         }
     }
@@ -46,6 +48,7 @@ public class GrandExchangeCollectHandler {
             } else {
                 return;
             }
+            plugin.getAssistantPanel().statePanel.showState(plugin.accountStatus);
             suggestionHandler.displaySuggestion();
         }
     }
@@ -58,6 +61,7 @@ public class GrandExchangeCollectHandler {
         } else {
             return;
         }
+        plugin.getAssistantPanel().statePanel.showState(plugin.accountStatus);
         suggestionHandler.displaySuggestion();
     }
 
@@ -71,6 +75,7 @@ public class GrandExchangeCollectHandler {
             } else {
                 return;
             }
+            plugin.getAssistantPanel().statePanel.showState(plugin.accountStatus);
             suggestionHandler.displaySuggestion();
         }
     }

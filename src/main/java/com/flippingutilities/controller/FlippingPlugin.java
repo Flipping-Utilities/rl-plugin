@@ -218,7 +218,7 @@ public class FlippingPlugin extends Plugin {
     public Notifier notifier;
 
     GrandExchange grandExchange;
-    SuggestionHandler suggestionHandler;
+    public SuggestionHandler suggestionHandler;
     GrandExchangeCollectHandler grandExchangeCollectHandler;
     OsrsLoginHandler osrsLoginHandler;
 
@@ -248,7 +248,7 @@ public class FlippingPlugin extends Plugin {
         loginPanel = new LoginPanel(this);
 
         suggestionHandler = new SuggestionHandler(this);
-        grandExchangeCollectHandler = new GrandExchangeCollectHandler(accountStatus, suggestionHandler);
+        grandExchangeCollectHandler = new GrandExchangeCollectHandler(this, accountStatus, suggestionHandler);
         osrsLoginHandler = new OsrsLoginHandler(this);
         osrsLoginHandler.init();
 
@@ -1099,6 +1099,7 @@ public class FlippingPlugin extends Plugin {
         if (event.getContainerId() == InventoryID.INVENTORY.getId()) {
             accountStatus.handleInventoryChanged(event, client);
             suggestionHandler.setSuggestionNeeded(true);
+            getAssistantPanel().statePanel.showState(accountStatus);
         }
     }
 
