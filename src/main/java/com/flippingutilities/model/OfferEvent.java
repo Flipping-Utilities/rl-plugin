@@ -97,6 +97,8 @@ public class OfferEvent
 	private transient int listedPrice;
 	private transient int spent;
 
+	private transient GrandExchangeOfferChanged grandExchangeOfferChanged;
+
 	/**
 	 * @return post tax values
 	 */
@@ -215,7 +217,8 @@ public class OfferEvent
 				madeBy,
 				itemName,
 				listedPrice,
-				spent
+				spent,
+			grandExchangeOfferChanged
 		);
 	}
 
@@ -284,7 +287,8 @@ public class OfferEvent
 			null,
 			null,
 			offer.getPrice(),
-			offer.getSpent());
+			offer.getSpent(),
+			event);
 	}
 
 	/**
@@ -321,7 +325,8 @@ public class OfferEvent
 				"",
 				itemName,
 				0,
-				0);
+				0,
+			new GrandExchangeOfferChanged());
 	}
 }
 

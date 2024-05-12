@@ -148,4 +148,19 @@ public class Offer {
             && amountTraded <= newOffer.amountTraded
             && boxId == newOffer.boxId;
     }
+
+    public String toString() {
+        return "Offer{" +
+            "status=" + status +
+            ", itemId=" + itemId +
+            ", price=" + price +
+            ", amountTotal=" + amountTotal +
+            ", amountSpent=" + amountSpent +
+            ", amountTraded=" + amountTraded +
+            ", itemsToCollect=" + itemsToCollect +
+            ", gpToCollect=" + gpToCollect +
+            ", boxId=" + boxId +
+            ", active=" + active +
+            '}';
+    }
 }

@@ -54,7 +54,7 @@ public class OfferList extends ArrayList<Offer> {
         forEach(Offer::removeCollectables);
     }
 
-    Map<Integer, Long> getUncollectedItemAmounts() {
+    public Map<Integer, Long> getUncollectedItemAmounts() {
         Map<Integer, Long> itemsAmount = getUncollectedTradeablesAmounts();
         long totalGpToCollect = getTotalGpToCollect();
         itemsAmount.merge(COINS_995, totalGpToCollect, Long::sum);
@@ -66,7 +66,9 @@ public class OfferList extends ArrayList<Offer> {
         return stream().mapToLong(Offer::getGpToCollect).sum();
     }
 
-    private Map<Integer, Long> getUncollectedTradeablesAmounts() {
+    // will return a map with an entry for each item id in the slot even if there
+    // is nothing to collect as the value will be set to 0
+    public Map<Integer, Long> getUncollectedTradeablesAmounts() {
         return stream().collect(Collectors.groupingBy(Offer::getItemId,
             Collectors.summingLong(Offer::getItemsToCollect)));
     }
@@ -78,5 +80,18 @@ public class OfferList extends ArrayList<Offer> {
         JsonArray jsonArray = new JsonArray();
         list.forEach(jsonArray::add);
         return jsonArray;
+    }
+
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("OfferList{\n");
+        for (Offer offer : this) {
+            sb.append("  ").append(offer.toString()).append(",\n");
+        }
+        if (!this.isEmpty()) {
+            sb.setLength(sb.length() - 2); // Remove the last comma and newline
+        }
+        sb.append("\n}");
+        return sb.toString();
     }
 }

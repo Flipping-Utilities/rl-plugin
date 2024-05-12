@@ -19,4 +19,11 @@ public class RSItem {
         }
         return new RSItem(itemId, item.getQuantity());
     }
+
+    public String toString() {
+        return "RSItem{" +
+            "id=" + id +
+            ", amount=" + amount +
+            '}';
+    }
 }

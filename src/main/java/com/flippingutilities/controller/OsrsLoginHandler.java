@@ -42,6 +42,7 @@ public class OsrsLoginHandler {
             onLoggedInGameState();
 //            plugin.offerEventFilter.setToLoggedIn();
             plugin.accountStatus.setOffers(plugin.getClient().getGrandExchangeOffers());
+            plugin.getAssistantPanel().statePanel.showState(plugin.accountStatus);
         }
     }
 

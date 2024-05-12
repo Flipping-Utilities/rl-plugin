@@ -63,7 +63,7 @@ public class SuggestionPanel extends JPanel {
             @Override
             public void mouseClicked(MouseEvent e) {
                 showLoading();
-//                plugin.suggestionHandler.skipCurrentSuggestion();
+                plugin.suggestionHandler.skipCurrentSuggestion();
             }
         });
 

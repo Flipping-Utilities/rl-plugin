@@ -4,6 +4,7 @@ import com.flippingutilities.model.OfferEvent;
 import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GrandExchangeOfferState;
+import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.api.widgets.Widget;
 
 import java.time.Instant;
@@ -44,7 +45,7 @@ public class GeHistoryTabExtractor {
         //just making ticksSinceFirst offer something > 2 so it doesn't count as a margin check
         int ticksSinceFirstOffer = 10;
 
-        OfferEvent offerEvent = new OfferEvent(UUID.randomUUID().toString(), isBuy, itemId, quantity, price, time, slot, offerState, tickArrivedAt, ticksSinceFirstOffer, totalQuantity, null, false, null, null,0,0);
+        OfferEvent offerEvent = new OfferEvent(UUID.randomUUID().toString(), isBuy, itemId, quantity, price, time, slot, offerState, tickArrivedAt, ticksSinceFirstOffer, totalQuantity, null, false, null, null,0,0, new GrandExchangeOfferChanged());
         return offerEvent;
     }
 
