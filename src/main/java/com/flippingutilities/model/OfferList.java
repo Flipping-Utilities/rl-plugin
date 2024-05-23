@@ -22,19 +22,10 @@ public class OfferList extends ArrayList<Offer> {
         }
     }
 
-    public Transaction update(GrandExchangeOfferChanged event) {
+    public void update(GrandExchangeOfferChanged event) {
         Offer oldOffer = get(event.getSlot());
         Offer newOffer = oldOffer.getUpdatedOffer(event);
         set(event.getSlot(), newOffer);
-        return newOffer.getTransaction(oldOffer);
-    }
-
-    public static OfferList fromRunelite(GrandExchangeOffer[] runeliteOffers) {
-        OfferList offers = new OfferList();
-        for (int i = 0; i < runeliteOffers.length; i++) {
-            offers.set(i, Offer.fromRunelite(runeliteOffers[i], i));
-        }
-        return offers;
     }
 
     public boolean missingUncollectedItems() {

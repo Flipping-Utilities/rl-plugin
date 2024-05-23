@@ -20,8 +20,8 @@ import java.util.Map;
 @Slf4j
 @Getter
 public class AccountStatus {
-    private OfferList offers = new OfferList();
-    private Inventory inventory = new Inventory();
+    private OfferList offers;
+    private Inventory inventory;
     @Setter private boolean sellOnlyMode = false;
     @Setter private boolean isMember = false;
     @Setter private int skipSuggestion = -1;
@@ -32,16 +32,9 @@ public class AccountStatus {
         inventory = new Inventory();
     }
 
-    public Transaction updateOffers(GrandExchangeOfferChanged event) {
-        Transaction t = offers.update(event);
+    public void updateOffers(GrandExchangeOfferChanged event) {
+        offers.update(event);
         log.info("updateOffers. new AccountStatus below");
-        log.info(toString());
-        return t;
-    }
-
-    public void setOffers(GrandExchangeOffer[] runeliteOffers) {
-        offers = OfferList.fromRunelite(runeliteOffers);
-        log.info("setOffers. new AccountStatus below");
         log.info(toString());
     }
 

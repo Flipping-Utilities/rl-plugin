@@ -45,7 +45,7 @@ public class Suggestion {
 
     public String toMessage() {
         NumberFormat formatter = NumberFormat.getNumberInstance();
-        String string = "Flipping Copilot: ";
+        String string = "Assistant: ";
         switch (type) {
             case "buy":
                 string += String.format("Buy %s %s for %s gp",

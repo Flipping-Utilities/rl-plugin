@@ -195,7 +195,7 @@ public class ApiRequestHandler {
 
     public Suggestion getSuggestion(AccountStatus accountStatus) throws IOException {
         JsonObject status = accountStatus.toJson(plugin.gson);
-        JsonObject suggestionJson = postJson(status, "/suggestion");
+        JsonObject suggestionJson = postJson(status, "suggestion");
         return Suggestion.fromJson(suggestionJson, plugin.gson);
     }
 
@@ -205,11 +205,10 @@ public class ApiRequestHandler {
             throw new IllegalStateException("Not authenticated");
         }
         String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
-
         RequestBody body = RequestBody.create(MediaType.get("application/json; charset=utf-8"), json.toString());
         Request request = new Request.Builder()
-            .url(ASSISTANT_API + route)
-            .addHeader("Authorization", "Bearer " + jwtToken)
+            .url("https://devyeet.me/v1/" + route)
+            .addHeader("Authorization", "Bearer " + jwt)
             .post(body)
             .build();
 

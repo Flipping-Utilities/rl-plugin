@@ -3,6 +3,7 @@ package com.flippingutilities.ui.assistant;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.AccountStatus;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ItemID;
 import net.runelite.client.ui.DynamicGridLayout;
 
 import javax.swing.*;
@@ -52,10 +53,10 @@ public class StatePanel extends JPanel {
 
         Map<Integer, Long> uncollectedItems =state.getOffers().getUncollectedTradeablesAmounts();
         uncollectedItems.entrySet().removeIf(entry -> entry.getValue() == 0);
-
         uncollectedItemsVal.setText(getItemMapStr(uncollectedItems));
-        itemsInventoryVal.setText(getItemMapStr(state.getInventory().getItemAmounts()));
 
+        Map<Integer, Long> itemsInInventory = state.getInventory().getTradeableItemAmounts();
+        itemsInventoryVal.setText(getItemMapStr(itemsInInventory));
     }
 
     String getItemMapStr(Map<Integer, Long> itemAmounts) {

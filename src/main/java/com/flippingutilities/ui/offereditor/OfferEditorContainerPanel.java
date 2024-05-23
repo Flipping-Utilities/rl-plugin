@@ -47,7 +47,9 @@ public class OfferEditorContainerPanel extends JPanel {
 
         tabGroup = new FastTabGroup(mainDisplay);
         quantityEditorTab = new MaterialTab(QUANTITY_EDITOR, tabGroup, quantityEditorPanel);
+        quantityEditorTab.setName(QUANTITY_EDITOR);
         priceEditorTab = new MaterialTab(PRICE_EDITOR, tabGroup, priceEditorPanel);
+        priceEditorTab.setName(PRICE_EDITOR);
         tabGroup.addTab(quantityEditorTab);
         tabGroup.addTab(priceEditorTab);
 

@@ -66,10 +66,6 @@ public class NewOfferEventPipelineHandler {
             return;
         }
 
-        plugin.suggestionHandler.setSuggestionNeeded(true);
-        plugin.accountStatus.updateOffers(newOfferEvent.getGrandExchangeOfferChanged());
-        plugin.getAssistantPanel().statePanel.showState(plugin.accountStatus);
-
         OfferEvent finalizedOfferEvent = screenedOfferEvent.get();
         
         List<FlippingItem> currentlyLoggedInAccountsTrades = plugin.getDataHandler().getAccountData(currentlyLoggedInAccount).getTrades();

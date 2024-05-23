@@ -244,11 +244,11 @@ public class MasterPanel extends PluginPanel
 		slotsTab.setName("slots");
 		slotsTab.setIcon(Icons.SLOTS_TAB_ICON);
 
-		MaterialTab copilotTab = new MaterialTab("", tabGroup, assistantPanel);
-		copilotTab.setName("assistant");
-		copilotTab.setIcon(Icons.ROBOT_ICON);
+		MaterialTab assistantTab = new MaterialTab("", tabGroup, assistantPanel);
+		assistantTab.setName("assistant");
+		assistantTab.setIcon(Icons.ROBOT_ICON);
 
-		tabGroup.addTab(copilotTab);
+		tabGroup.addTab(assistantTab);
 		tabGroup.addTab(slotsTab);
 		tabGroup.addTab(flippingTab);
 		tabGroup.addTab(statisticsTab);

@@ -214,10 +214,12 @@ public class StatsPanel extends JPanel
 		tabGroup.setBorder(new EmptyBorder(0,16 + 15,0,0));
 
 		MaterialTab statItemTab = new MaterialTab("Items", tabGroup, statItemTabPanel);
-		MaterialTab RecipeTab = new MaterialTab("Recipes", tabGroup, recipeTabPanel);
+		statItemTab.setName("Items");
+		MaterialTab recipeTab = new MaterialTab("Recipes", tabGroup, recipeTabPanel);
+		recipeTab.setName("Recipes");
 
 		tabGroup.addTab(statItemTab);
-		tabGroup.addTab(RecipeTab);
+		tabGroup.addTab(recipeTab);
 		tabGroup.select(statItemTab);
 
 		return tabGroup;
