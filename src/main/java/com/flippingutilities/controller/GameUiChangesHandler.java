@@ -28,7 +28,7 @@ import static net.runelite.api.VarPlayer.CURRENT_GE_ITEM;
  */
 @Slf4j
 public class GameUiChangesHandler {
-    private static final int GE_OFFER_INIT_STATE_CHILD_ID = 18;
+    private static final int GE_OFFER_INIT_STATE_CHILD_ID = 20;
     private static final int GE_HISTORY_TAB_WIDGET_ID = 149;
     FlippingPlugin plugin;
     boolean quantityOrPriceChatboxOpen;
@@ -100,10 +100,13 @@ public class GameUiChangesHandler {
                     flippingWidget.showQuantityWidgets(selectedItem.get().getRemainingGeLimit());
                 }
             } else if (chatInputText.equals("Set a price for each item:")) {
+                log.info("chat input text is triggering!!!!!!!!");
                 plugin.getFlippingPanel().getOfferEditorContainerPanel().selectPriceEditor();
                 WikiRequest wikiRequest = plugin.getLastWikiRequestWrapper().getWikiRequest();
 
+                log.info("offer text is {}", offerText);
                 if (offerText.equals("Buy offer")) {
+                    log.info("offer text = buy offer");
                     int instaSellPrice = 0;
                     int wikiInstaSellPrice = 0;
                     if (selectedItem.isPresent() && selectedItem.get().getLatestInstaSell().isPresent()) {
@@ -115,6 +118,7 @@ public class GameUiChangesHandler {
                     flippingWidget.showInstaSellPrices(instaSellPrice, wikiInstaSellPrice);
                 }
                 else if (offerText.equals("Sell offer")) {
+                    log.info("offer text = sell offer");
                     int instaBuyPrice = 0;
                     int wikiInstaBuyPrice = 0;
                     if (selectedItem.isPresent() && selectedItem.get().getLatestInstaBuy().isPresent()) {

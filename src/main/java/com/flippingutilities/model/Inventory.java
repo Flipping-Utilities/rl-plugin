@@ -51,6 +51,12 @@ public class Inventory extends ArrayList<RSItem> {
         return stream().collect(Collectors.groupingBy(RSItem::getId,
             Collectors.summingLong(RSItem::getAmount)));
     }
+    
+    public Map<Integer, Long> getTradeableItemAmounts() {
+        Map<Integer, Long> itemAmounts = getItemAmounts();
+        itemAmounts.entrySet().removeIf(entry -> entry.getKey() == ItemID.COINS_995 || entry.getKey() == ItemID.PLATINUM_TOKEN);
+        return itemAmounts;
+    }
 
     static Inventory fromItemAmounts(Map<Integer, Long> itemAmounts) {
         Inventory inventory = new Inventory();

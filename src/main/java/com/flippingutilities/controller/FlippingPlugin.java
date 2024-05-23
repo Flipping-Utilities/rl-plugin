@@ -221,6 +221,7 @@ public class FlippingPlugin extends Plugin {
     public SuggestionHandler suggestionHandler;
     GrandExchangeCollectHandler grandExchangeCollectHandler;
     OsrsLoginHandler osrsLoginHandler;
+    OfferEventFilter offerEventFilter;
 
     @Override
     protected void startUp() {
@@ -249,6 +250,7 @@ public class FlippingPlugin extends Plugin {
 
         suggestionHandler = new SuggestionHandler(this);
         grandExchangeCollectHandler = new GrandExchangeCollectHandler(this, accountStatus, suggestionHandler);
+        offerEventFilter = new OfferEventFilter();
         osrsLoginHandler = new OsrsLoginHandler(this);
         osrsLoginHandler.init();
 
@@ -1091,6 +1093,11 @@ public class FlippingPlugin extends Plugin {
      */
     @Subscribe
     public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged offerChangedEvent) {
+        if (offerEventFilter.shouldProcess(offerChangedEvent)) {
+            accountStatus.updateOffers(offerChangedEvent);
+            suggestionHandler.setSuggestionNeeded(true);
+            assistantPanel.statePanel.showState(accountStatus);
+        }
         newOfferEventPipelineHandler.onGrandExchangeOfferChanged(offerChangedEvent);
     }
 

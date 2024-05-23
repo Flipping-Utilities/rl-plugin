@@ -28,6 +28,7 @@ package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.model.Suggestion;
 import com.flippingutilities.ui.uiutilities.Icons;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
 import net.runelite.api.VarClientStr;
@@ -38,13 +39,14 @@ import javax.swing.*;
 
 import static net.runelite.api.VarPlayer.CURRENT_GE_ITEM;
 
+@Slf4j
 public class OfferEditor {
     private final Client client;
     private Widget bottomText;
     private Widget nonWikiText;
     private Widget wikiText;
     private Widget assistantText;
-    private static final int GE_OFFER_INIT_STATE_CHILD_ID = 18;
+    private static final int GE_OFFER_INIT_STATE_CHILD_ID = 20;
 
     public OfferEditor(Widget parent, Client client) {
         this.client = client;
@@ -187,7 +189,7 @@ public class OfferEditor {
     }
 
     private void showQuantity(int quantity) {
-        assistantText.setText("set to Copilot quantity: " + quantity);
+        assistantText.setText("set to assistant quantity: " + quantity);
         assistantText.setAction(1, "Set quantity");
         assistantText.setOnOpListener((JavaScriptCallback) ev ->
         {
@@ -197,7 +199,7 @@ public class OfferEditor {
     }
 
     private void showPrice(int price) {
-        assistantText.setText("set to Copilot price: " + String.format("%,d", price) + " gp");
+        assistantText.setText("set to assistant price: " + String.format("%,d", price) + " gp");
         assistantText.setAction(0, "Set price");
         assistantText.setOnOpListener((JavaScriptCallback) ev ->
         {

@@ -45,8 +45,11 @@ public class Offer {
 
     private boolean active;
 
+    @SerializedName("updated_at")
+    private Instant updatedAt;
+
     public static Offer getEmptyOffer(int slotId) {
-        return new Offer(OfferStatus.EMPTY, 0, 0, 0, 0, 0, 0, 0, slotId, false);
+        return new Offer(OfferStatus.EMPTY, 0, 0, 0, 0, 0, 0, 0, slotId, false, Instant.now());
     }
 
     void removeCollectables() {
@@ -113,21 +116,8 @@ public class Offer {
             0,
             0,
             slotId,
-            active);
-    }
-
-    public Transaction getTransaction(Offer oldOffer) {
-        boolean isNewOffer = status != oldOffer.status
-            || itemId != oldOffer.itemId
-            || price != oldOffer.price
-            || amountTotal != oldOffer.amountTotal
-            || boxId != oldOffer.boxId;
-        int quantityDiff = isNewOffer ? amountTraded : amountTraded - oldOffer.amountTraded;
-        int amountSpentDiff = isNewOffer ? amountSpent : amountSpent - oldOffer.amountSpent;
-        if (quantityDiff > 0 && amountSpentDiff > 0) {
-            return new Transaction(status, itemId, price, quantityDiff, boxId, amountSpentDiff, Instant.now());
-        }
-        return null;
+            active,
+            Instant.now());
     }
 
     public boolean missingUncollectedItems() {
@@ -161,6 +151,7 @@ public class Offer {
             ", gpToCollect=" + gpToCollect +
             ", boxId=" + boxId +
             ", active=" + active +
+            ", updatedAt=" + updatedAt.toEpochMilli() +
             '}';
     }
 }

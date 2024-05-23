@@ -40,8 +40,8 @@ public class OsrsLoginHandler {
     void init() {
         if (plugin.getClient().getGameState() == GameState.LOGGED_IN) {
             onLoggedInGameState();
-//            plugin.offerEventFilter.setToLoggedIn();
-            plugin.accountStatus.setOffers(plugin.getClient().getGrandExchangeOffers());
+            plugin.offerEventFilter.setToLoggedIn();
+            //plugin.accountStatus.setOffers(plugin.getClient().getGrandExchangeOffers());
             plugin.getAssistantPanel().statePanel.showState(plugin.accountStatus);
         }
     }
@@ -117,7 +117,7 @@ public class OsrsLoginHandler {
     public void handleLogout() {
         log.info("{} is logging out", currentDisplayName);
         currentDisplayName = null;
-//        plugin.offerEventFilter.onLogout();
+        plugin.offerEventFilter.onLogout();
         plugin.getAssistantPanel().suggestionPanel.suggestLogin();
     }
 

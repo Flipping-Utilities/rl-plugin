@@ -118,7 +118,7 @@ public class SuggestionHandler {
 
     private void showChatNotifications() {
         if (plugin.accountStatus.isCollectNeeded(currentSuggestion)) {
-            plugin.getClientThread().invokeLater(() -> showChatNotification("Flipping Copilot: Collect items"));
+            plugin.getClientThread().invokeLater(() -> showChatNotification("Assistant: Collect items"));
         }
         plugin.getClientThread().invokeLater(() -> showChatNotification(currentSuggestion.toMessage()));
     }
