@@ -27,7 +27,7 @@ import static net.runelite.api.VarPlayer.CURRENT_GE_ITEM;
  */
 @Slf4j
 public class GameUiChangesHandler {
-    private static final int GE_OFFER_INIT_STATE_CHILD_ID = 18;
+    private static final int GE_OFFER_INIT_STATE_CHILD_ID = 20;
     private static final int GE_HISTORY_TAB_WIDGET_ID = 149;
     FlippingPlugin plugin;
     boolean quantityOrPriceChatboxOpen;
