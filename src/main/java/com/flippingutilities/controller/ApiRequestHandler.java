@@ -31,6 +31,7 @@ public class ApiRequestHandler {
     public static String ACCOUNT_URL = BASE_API_URL + "account/self";
     public static String ACCOUNT_REGISTRATION_URL = BASE_API_URL + "account/register";
     public static String TOKEN_URL = BASE_API_URL + "auth/token";
+    public static String DEVSERVER = "https://devyeet.me/v1/";
 
     public ApiRequestHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
@@ -202,7 +203,7 @@ public class ApiRequestHandler {
         String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
         RequestBody body = RequestBody.create(MediaType.get("application/json; charset=utf-8"), json.toString());
         Request request = new Request.Builder()
-            .url("https://devyeet.me/v1/" + route)
+            .url(DEVSERVER + route)
             .addHeader("Authorization", "Bearer " + jwt)
             .post(body)
             .build();
