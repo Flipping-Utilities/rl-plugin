@@ -31,7 +31,6 @@ public class ApiRequestHandler {
     public static String ACCOUNT_URL = BASE_API_URL + "account/self";
     public static String ACCOUNT_REGISTRATION_URL = BASE_API_URL + "account/register";
     public static String TOKEN_URL = BASE_API_URL + "auth/token";
-    public static final String ASSISTANT_API = "https://api.flippingcopilot.com/";
 
     public ApiRequestHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
@@ -200,10 +199,6 @@ public class ApiRequestHandler {
     }
 
     private JsonObject postJson(JsonObject json, String route) throws HttpResponseException {
-        String jwtToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiYW50b255QG9zcnMuY2xvdWQiLCJleHAiOjE3MTY1OTM0NDR9.4PBQx0iln0DYqjdb6AeOy1Mv8WMlo7QkkZxOYE3mZ9A";
-        if (jwtToken == null) {
-            throw new IllegalStateException("Not authenticated");
-        }
         String jwt = plugin.getDataHandler().viewAccountWideData().getJwt();
         RequestBody body = RequestBody.create(MediaType.get("application/json; charset=utf-8"), json.toString());
         Request request = new Request.Builder()
