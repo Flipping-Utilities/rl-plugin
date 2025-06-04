@@ -21,6 +21,23 @@ public class Constants {
     public static String DUMMY_ITEM = "dummy";
 
 	public static final Set<Integer> TAX_EXEMPT_ITEMS = ImmutableSet.of(
+		ItemID.CHISEL,
+		ItemID.GARDENING_TROWEL,
+		ItemID.HAMMER,
+		ItemID.NEEDLE,
+		ItemID.OSRS_BOND,
+		ItemID.PESTLE_AND_MORTAR,
+		ItemID.RAKE,
+		ItemID.POH_SAW,
+		ItemID.SECATEURS,
+		ItemID.DIBBER,
+		ItemID.SHEARS,
+		ItemID.SPADE,
+		ItemID.WATERING_CAN_0
+	);
+
+	// Items made tax-exempt on 29 May 2025
+	public static final Set<Integer> NEW_TAX_EXEMPT_ITEMS = ImmutableSet.of(
 		ItemID.POH_TABLET_ARDOUGNETELEPORT,
 		ItemID.BASS,
 		ItemID.BREAD,
@@ -28,7 +45,6 @@ public class Constants {
 		ItemID.BRONZE_DART,
 		ItemID.CAKE,
 		ItemID.POH_TABLET_CAMELOTTELEPORT,
-		ItemID.CHISEL,
 		ItemID.POH_TABLET_FORTISTELEPORT,
 		ItemID.COOKED_CHICKEN,
 		ItemID.COOKED_MEAT,
@@ -38,8 +54,6 @@ public class Constants {
 		ItemID._1DOSE1ENERGY,
 		ItemID.POH_TABLET_FALADORTELEPORT,
 		ItemID.NECKLACE_OF_MINIGAMES_8,
-		ItemID.GARDENING_TROWEL,
-		ItemID.HAMMER,
 		ItemID.HERRING,
 		ItemID.IRON_ARROW,
 		ItemID.IRON_DART,
@@ -49,25 +63,15 @@ public class Constants {
 		ItemID.MACKEREL,
 		ItemID.MEAT_PIE,
 		ItemID.MINDRUNE,
-		ItemID.NEEDLE,
-		ItemID.OSRS_BOND,
-		ItemID.PESTLE_AND_MORTAR,
 		ItemID.PIKE,
-		ItemID.RAKE,
 		ItemID.RING_OF_DUELING_8,
 		ItemID.SALMON,
-		ItemID.POH_SAW,
-		ItemID.SECATEURS,
-		ItemID.DIBBER,
-		ItemID.SHEARS,
 		ItemID.SHRIMP,
-		ItemID.SPADE,
 		ItemID.STEEL_ARROW,
 		ItemID.STEEL_DART,
 		ItemID.POH_TABLET_TELEPORTTOHOUSE,
 		ItemID.TUNA,
-		ItemID.POH_TABLET_VARROCKTELEPORT,
-		ItemID.WATERING_CAN_0
+		ItemID.POH_TABLET_VARROCKTELEPORT
 	);
 
 }
