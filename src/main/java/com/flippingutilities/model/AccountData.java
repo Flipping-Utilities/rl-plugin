@@ -31,7 +31,7 @@ import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.game.ItemManager;
-import net.runelite.http.api.item.ItemStats;
+import net.runelite.client.game.ItemStats;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -76,7 +76,7 @@ public class AccountData {
         for (FlippingItem item : trades) {
             //in case ge limits have been updated
             int tradeItemId = item.getItemId();
-            ItemStats itemStats = plugin.getItemManager().getItemStats(tradeItemId, false);
+            ItemStats itemStats = plugin.getItemManager().getItemStats(tradeItemId);
             int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
 
             item.hydrate(geLimit);
