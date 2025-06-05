@@ -101,10 +101,15 @@ public class OfferEvent
 	 * @return post tax values
 	 */
 	public int getPrice() {
-		if (buy || time.getEpochSecond() < Constants.GE_TAX_START || itemId == Constants.BOND_ID) {
+		final long t = time.getEpochSecond();
+		if (buy || t < Constants.GE_TAX_START || Constants.TAX_EXEMPT_ITEMS.contains(itemId) ||
+			(t >= Constants.GE_TAX_INCREASED && Constants.NEW_TAX_EXEMPT_ITEMS.contains(itemId))) {
 			return price;
 		}
-
+		// if this occurred prior to the tax rate increasing, use the old rate
+		if (t < Constants.GE_TAX_INCREASED) {
+			return GeTax.getOldPostTaxPrice(price);
+		}
 		return GeTax.getPostTaxPrice(price);
 	}
 
