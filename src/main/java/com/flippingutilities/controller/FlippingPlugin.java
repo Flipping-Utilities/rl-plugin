@@ -68,7 +68,7 @@ import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
-import net.runelite.http.api.item.ItemStats;
+import net.runelite.client.game.ItemStats;
 import okhttp3.*;
 
 import javax.inject.Inject;
@@ -762,7 +762,7 @@ public class FlippingPlugin extends Plugin {
             //of them.
             clientThread.invokeLater(() -> {
                 String itemName = itemManager.getItemComposition(tradeItemId).getName();
-                ItemStats itemStats = itemManager.getItemStats(tradeItemId, false);
+                ItemStats itemStats = itemManager.getItemStats(tradeItemId);
                 int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
                 item.setItemName(itemName);
                 item.setTotalGELimit(geLimit);

@@ -7,7 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.WorldType;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.client.eventbus.Subscribe;
-import net.runelite.http.api.item.ItemStats;
+import net.runelite.client.game.ItemStats;
 
 import java.time.Instant;
 import java.util.*;
@@ -213,7 +213,7 @@ public class NewOfferEventPipelineHandler {
         int tradeItemId = newOffer.getItemId();
         String itemName = plugin.getItemManager().getItemComposition(tradeItemId).getName();
 
-        ItemStats itemStats = plugin.getItemManager().getItemStats(tradeItemId, false);
+        ItemStats itemStats = plugin.getItemManager().getItemStats(tradeItemId);
         int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
 
         FlippingItem flippingItem = new FlippingItem(tradeItemId, itemName, geLimit, plugin.getCurrentlyLoggedInAccount());
