@@ -52,6 +52,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.*;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.*;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -677,7 +678,7 @@ public class FlippingPlugin extends Plugin {
      * slot widgets to appear/get rebuilt.
      */
     public void setWidgetsOnSlotStateDrawer() {
-        Widget slotWidgets = client.getWidget(InterfaceID.GRAND_EXCHANGE, WidgetConstants.SLOT_CONTAINER);
+        Widget slotWidgets = client.getWidget(InterfaceID.GE_OFFERS, WidgetConstants.SLOT_CONTAINER);
         if (slotWidgets != null) {
             slotStateDrawer.setSlotWidgets(slotWidgets.getStaticChildren());
         }
@@ -689,7 +690,7 @@ public class FlippingPlugin extends Plugin {
 
             //Get the offer slots from the window container
             //We add one to the index, as the first widget is the text above the offer slots
-            Widget offerSlot = client.getWidget(InterfaceID.GRAND_EXCHANGE, WidgetConstants.SLOT_CONTAINER).getStaticChildren()[slotIndex + 1];
+            Widget offerSlot = client.getWidget(InterfaceID.GE_OFFERS, WidgetConstants.SLOT_CONTAINER).getStaticChildren()[slotIndex + 1];
 
             if (offerSlot == null) {
                 return;
@@ -906,7 +907,7 @@ public class FlippingPlugin extends Plugin {
                     optionExercised.ifPresent(option -> clientThread.invoke(() -> {
                         try {
                             int optionValue = calculateOptionValue(option);
-                            client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(optionValue + "*");
+                            client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(optionValue + "*");
                             client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(optionValue));
                             flippingPanel.getOfferEditorContainerPanel().highlightPressedOption(keyPressed);
                             e.consume();
