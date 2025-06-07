@@ -91,7 +91,7 @@ public class CacheUpdaterJob
 	{
 		try
 		{
-			log.info("starting cache updator job!");
+			log.info("starting cache updater job!");
 			WatchService watchService = FileSystems.getDefault().newWatchService();
 
 			Path path = TradePersister.PARENT_DIRECTORY.toPath();
