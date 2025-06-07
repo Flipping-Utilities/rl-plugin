@@ -5,9 +5,9 @@ import com.flippingutilities.model.Option;
 import com.flippingutilities.utilities.InvalidOptionException;
 import com.flippingutilities.utilities.WikiItemMargins;
 import com.flippingutilities.utilities.WikiRequest;
-import net.runelite.api.InventoryID;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
+import net.runelite.api.gameval.InventoryID;
 import net.runelite.client.game.ItemStats;
 
 import java.util.Optional;
@@ -182,7 +182,7 @@ public class OptionHandler {
     }
 
     private int getCashStackInInv() {
-        ItemContainer inventory = plugin.getClient().getItemContainer(InventoryID.INVENTORY);
+        ItemContainer inventory = plugin.getClient().getItemContainer(InventoryID.INV);
         if (inventory == null) {
             return 0;
         }
