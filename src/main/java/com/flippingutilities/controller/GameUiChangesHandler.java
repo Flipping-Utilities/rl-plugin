@@ -13,12 +13,12 @@ import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.widgets.*;
 import net.runelite.client.game.ItemStats;
 
 import java.util.Optional;
-
-import static net.runelite.api.VarPlayer.CURRENT_GE_ITEM;
 
 /**
  * This class is responsible for handling all the logic that should trigger when the main game ui changes. For example,
@@ -43,9 +43,9 @@ public class GameUiChangesHandler {
 
         if (event.getIndex() == VarClientInt.INPUT_TYPE
                 && client.getVarcIntValue(VarClientInt.INPUT_TYPE) == 14
-                && client.getWidget(ComponentID.CHATBOX_GE_SEARCH_RESULTS) != null) {
+                && client.getWidget(InterfaceID.Chatbox.MES_LAYER_SCROLLCONTENTS) != null) {
             plugin.getClientThread().invokeLater(() -> {
-                Widget geSearchResultBox = client.getWidget(ComponentID.CHATBOX_GE_SEARCH_RESULTS);
+                Widget geSearchResultBox = client.getWidget(InterfaceID.Chatbox.MES_LAYER_SCROLLCONTENTS);
                 Widget child = geSearchResultBox.createChild(-1, WidgetType.TEXT);
                 child.setTextColor(0x800000);
                 child.setFontId(FontID.VERDANA_13_BOLD);
@@ -73,26 +73,26 @@ public class GameUiChangesHandler {
 
         //Check that it was the chat input that got enabled.
         if (event.getIndex() != VarClientInt.INPUT_TYPE
-                || client.getWidget(ComponentID.CHATBOX_TITLE) == null
+                || client.getWidget(InterfaceID.Chatbox.MES_TEXT) == null
                 || client.getVarcIntValue(VarClientInt.INPUT_TYPE) != 7
-                || client.getWidget(ComponentID.GRAND_EXCHANGE_OFFER_DESCRIPTION) == null) {
+                || client.getWidget(InterfaceID.GeOffers.SETUP_DESC) == null) {
             return;
         }
         quantityOrPriceChatboxOpen = true;
 
         plugin.getClientThread().invokeLater(() ->
         {
-            OfferEditor flippingWidget = new OfferEditor(client.getWidget(ComponentID.CHATBOX_CONTAINER), client);
-            Optional<FlippingItem> selectedItem = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == client.getVarpValue(CURRENT_GE_ITEM)).findFirst();
+            OfferEditor flippingWidget = new OfferEditor(client.getWidget(InterfaceID.Chatbox.MES_LAYER), client);
+            Optional<FlippingItem> selectedItem = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH)).findFirst();
 
-            String chatInputText = client.getWidget(ComponentID.CHATBOX_TITLE).getText();
-            String offerText = client.getWidget(net.runelite.api.gameval.InterfaceID.GeOffers.SETUP).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
+            String chatInputText = client.getWidget(InterfaceID.Chatbox.MES_TEXT).getText();
+            String offerText = client.getWidget(InterfaceID.GeOffers.SETUP_DESC).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
 
             if (chatInputText.equals("How many do you wish to buy?")) {
                 plugin.getFlippingPanel().getOfferEditorContainerPanel().selectQuantityEditor();
                 //No recorded data; default to total GE limit
                 if (!selectedItem.isPresent()) {
-                    ItemStats itemStats = plugin.getItemManager().getItemStats(client.getVarpValue(CURRENT_GE_ITEM));
+                    ItemStats itemStats = plugin.getItemManager().getItemStats(client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH));
                     int itemGELimit = itemStats != null ? itemStats.getGeLimit() : 0;
                     flippingWidget.showQuantityWidgets(itemGELimit);
                 } else {
@@ -148,14 +148,14 @@ public class GameUiChangesHandler {
         }
 
         //CURRENT_GE_ITEM == 1151
-        if (event.getVarpId() == 1151 && client.getVarpValue(CURRENT_GE_ITEM) != -1 && client.getVarpValue(CURRENT_GE_ITEM) != 0) {
-            highlightOffer(plugin.getClient().getVarpValue(CURRENT_GE_ITEM));
+        if (event.getVarpId() == 1151 && client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH) != -1 && client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH) != 0) {
+            highlightOffer(plugin.getClient().getVarpValue(VarPlayerID.TRADINGPOST_SEARCH));
         }
 
         //need to check if panel is highlighted in this case because curr ge item is changed if you come back to ge interface after exiting out
         //and curr ge item would be -1 or 0 in that case and would trigger a dehighlight erroneously.
         if (event.getVarpId() == 1151 &&
-                (client.getVarpValue(CURRENT_GE_ITEM) == -1 || client.getVarpValue(CURRENT_GE_ITEM) == 0) && highlightedItem.isPresent()) {
+                (client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH) == -1 || client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH) == 0) && highlightedItem.isPresent()) {
             deHighlightOffer();
         }
     }
@@ -192,7 +192,7 @@ public class GameUiChangesHandler {
         }
 
         //if either ge interface or bank pin interface is loaded, hide the ge history tab panel again
-        if (event.getGroupId() == InterfaceID.GRAND_EXCHANGE || event.getGroupId() == 213) {
+        if (event.getGroupId() == InterfaceID.GE_OFFERS || event.getGroupId() == 213) {
             plugin.getMasterPanel().selectPreviouslySelectedTab();
         }
 
