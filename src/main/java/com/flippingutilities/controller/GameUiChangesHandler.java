@@ -14,7 +14,7 @@ import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.widgets.*;
-import net.runelite.http.api.item.ItemStats;
+import net.runelite.client.game.ItemStats;
 
 import java.util.Optional;
 
@@ -92,7 +92,7 @@ public class GameUiChangesHandler {
                 plugin.getFlippingPanel().getOfferEditorContainerPanel().selectQuantityEditor();
                 //No recorded data; default to total GE limit
                 if (!selectedItem.isPresent()) {
-                    ItemStats itemStats = plugin.getItemManager().getItemStats(client.getVarpValue(CURRENT_GE_ITEM), false);
+                    ItemStats itemStats = plugin.getItemManager().getItemStats(client.getVarpValue(CURRENT_GE_ITEM));
                     int itemGELimit = itemStats != null ? itemStats.getGeLimit() : 0;
                     flippingWidget.showQuantityWidgets(itemGELimit);
                 } else {
@@ -243,7 +243,7 @@ public class GameUiChangesHandler {
         }
         else {
             String itemName = plugin.getItemManager().getItemComposition(highlightedItemId).getName();
-            ItemStats itemStats = plugin.getItemManager().getItemStats(highlightedItemId, false);
+            ItemStats itemStats = plugin.getItemManager().getItemStats(highlightedItemId);
             int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
             FlippingItem dummyFlippingItem = new FlippingItem(highlightedItemId, itemName, geLimit, Constants.DUMMY_ITEM);
             dummyFlippingItem.setValidFlippingPanelItem(true);

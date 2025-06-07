@@ -8,7 +8,7 @@ import com.flippingutilities.utilities.WikiRequest;
 import net.runelite.api.InventoryID;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
-import net.runelite.http.api.item.ItemStats;
+import net.runelite.client.game.ItemStats;
 
 import java.util.Optional;
 
@@ -74,7 +74,7 @@ public class OptionHandler {
     }
 
     private int remainingGeLimitCalculation(Optional<FlippingItem> item, int itemId) throws InvalidOptionException {
-        ItemStats itemStats = plugin.getItemManager().getItemStats(itemId, false);
+        ItemStats itemStats = plugin.getItemManager().getItemStats(itemId);
         int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
         int totalGeLimit = item.map(FlippingItem::getTotalGELimit).orElse(geLimit);
         if (totalGeLimit <= 0) {
@@ -84,7 +84,7 @@ public class OptionHandler {
     }
 
     private int geLimitCalculation(Optional<FlippingItem> item, int itemId) throws InvalidOptionException {
-        ItemStats itemStats = plugin.getItemManager().getItemStats(itemId, false);
+        ItemStats itemStats = plugin.getItemManager().getItemStats(itemId);
         int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
         int totalGeLimit = item.map(FlippingItem::getTotalGELimit).orElse(geLimit);
         if (totalGeLimit <= 0) {
