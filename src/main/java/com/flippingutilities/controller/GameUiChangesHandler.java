@@ -86,7 +86,7 @@ public class GameUiChangesHandler {
             Optional<FlippingItem> selectedItem = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == client.getVarpValue(CURRENT_GE_ITEM)).findFirst();
 
             String chatInputText = client.getWidget(ComponentID.CHATBOX_TITLE).getText();
-            String offerText = client.getWidget(ComponentID.GRAND_EXCHANGE_OFFER_DESCRIPTION).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
+            String offerText = client.getWidget(net.runelite.api.gameval.InterfaceID.GeOffers.SETUP).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
 
             if (chatInputText.equals("How many do you wish to buy?")) {
                 plugin.getFlippingPanel().getOfferEditorContainerPanel().selectQuantityEditor();
