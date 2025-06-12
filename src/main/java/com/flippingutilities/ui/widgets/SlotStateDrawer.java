@@ -1,76 +1,109 @@
 package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.ui.uiutilities.*;
-import com.flippingutilities.utilities.*;
+import com.flippingutilities.ui.uiutilities.GeSpriteLoader;
+import com.flippingutilities.ui.uiutilities.UIUtilities;
+import com.flippingutilities.utilities.SlotInfo;
+import com.flippingutilities.utilities.SlotPredictedState;
+import com.flippingutilities.utilities.WikiItemMargins;
+import com.flippingutilities.utilities.WikiRequest;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.FontID;
-import net.runelite.api.GrandExchangeOffer;
-import net.runelite.api.GrandExchangeOfferState;
-import net.runelite.api.SpriteID;
+import net.runelite.api.*;
+import net.runelite.api.events.BeforeRender;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.*;
-import javax.swing.*;
+import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.ui.overlay.tooltip.Tooltip;
+import net.runelite.client.ui.overlay.tooltip.TooltipManager;
+
 import java.awt.*;
 import java.util.*;
 import java.util.List;
 
 /**
- * This class is responsible for enhancing slots in the ge interface. It
- * 1. adds color to slots to mark the offers as competitive or not
- * 2. adds a widget that shows some preview info on the competitiveness of the offer
+ * This class is responsible for enhancing slots in the GE interface by adding
+ * color-coded borders and a "quick look" icon that displays a detailed tooltip on hover.
  * <p>
- * <p>
- * This class requires two pieces/types of data for drawing on/enhancing the slots which are change frequently:
- * 1. wiki margins
- * 2. actual slot widgets
- * <p>
- * It is fed this data everytime it changes by the plugin (see onWikiRequest and setSlotWidgets). Everytime
- * it is fed new data, it builds a representation of what it should draw (see createSlotRepresentation),
- * and then draws it on the slot (see drawWrapper)
- *
- * Also note that this doesn't make requests to our api for the predicted slot state, it just uses the local slots.
+ * It is fed data (wiki margins, slot widgets) by the plugin. Upon receiving new data,
+ * it builds a representation of what to draw and applies the visual enhancements.
  */
 @Slf4j
 public class SlotStateDrawer {
-    FlippingPlugin plugin;
-    WikiRequest wikiRequest;
-    Widget[] slotWidgets;
-    Map<Integer, Widget> slotIdxToQuickLookWidget = new HashMap<>();
-    JPopupMenu popup = new JPopupMenu();
-    QuickLookPanel quickLookPanel = new QuickLookPanel();
-    List<Optional<SlotInfo>> slotInfos = new ArrayList<>();
 
-    public SlotStateDrawer(FlippingPlugin plugin) {
+    private final FlippingPlugin plugin;
+    private final Client client;
+    private final TooltipManager tooltipManager;
+
+    private WikiRequest wikiRequest;
+    private Widget[] slotWidgets;
+    private List<Optional<SlotInfo>> slotInfos = new ArrayList<>();
+    private final Map<Integer, Widget> slotIdxToQuickLookWidget = new HashMap<>();
+
+    // State for hover and tooltip data
+    private Integer hoveredSlotIndex = null;
+
+    public SlotStateDrawer(
+            FlippingPlugin plugin,
+            TooltipManager toolTipManager,
+            Client client
+    ) {
         this.plugin = plugin;
-        popup.add(quickLookPanel);
+        this.client = client;
+        this.tooltipManager = toolTipManager;
     }
 
+    @Subscribe
+    public void onBeforeRender(BeforeRender event) {
+        if (hoveredSlotIndex == null || !plugin.shouldEnhanceSlots()) {
+            return;
+        }
+
+        final Widget geWindow = client.getWidget(InterfaceID.GeOffers.UNIVERSE);
+        if (geWindow == null || geWindow.isHidden()) {
+            hoveredSlotIndex = null;
+            return;
+        }
+
+        final Widget offerContainer = client.getWidget(
+                InterfaceID.GeOffers.SETUP
+        );
+        if (offerContainer != null && !offerContainer.isHidden()) {
+            // Offer window is open: Hide slots
+            hoveredSlotIndex = null;
+            return;
+        }
+
+        buildAndShowTooltip();
+    }
+
+    /**
+     * Receives updated wiki margins and triggers a refresh of the slot visuals.
+     */
     public void onWikiRequest(WikiRequest wikiRequest) {
         this.wikiRequest = wikiRequest;
-        drawWrapper();
+        refreshSlotVisuals();
     }
 
+    /**
+     * Receives the GE slot widgets from the client and triggers a refresh.
+     */
     public void setSlotWidgets(Widget[] slotWidgets) {
         if (slotWidgets == null) {
             return;
         }
         this.slotWidgets = slotWidgets;
-        drawWrapper();
-    }
-
-    public void hideQuickLookPanel() {
-        popup.setVisible(false);
+        refreshSlotVisuals();
     }
 
     /**
-     * Thin wrapper around draw to decide if drawing should take place.
+     * Gatekeeper method to ensure all necessary conditions are met before drawing.
      */
-    public void drawWrapper() {
+    public void refreshSlotVisuals() {
         if (
-            slotWidgets == null ||
-                plugin.getCurrentlyLoggedInAccount() == null ||
-                !plugin.getApiAuthHandler().isPremium() ||
-                !plugin.shouldEnhanceSlots()
+                slotWidgets == null ||
+                        plugin.getCurrentlyLoggedInAccount() == null ||
+                        !plugin.getApiAuthHandler().isPremium() ||
+                        !plugin.shouldEnhanceSlots()
         ) {
             return;
         }
@@ -79,35 +112,38 @@ public class SlotStateDrawer {
     }
 
     /**
-     * Draws the enhancements on the slot
+     * Draws the enhancements on all slots based on the generated SlotInfo.
      */
-    private void draw(List<Optional<SlotInfo>> slots) {
+    private void draw(final List<Optional<SlotInfo>> slots) {
         for (int i = 0; i < slots.size(); i++) {
-            Optional<SlotInfo> slot = slots.get(i);
-            Widget slotWidget = slotWidgets[i + 1];
-            if (!slot.isPresent()) {
-                resetSlot(i, slotWidget);
+            final Optional<SlotInfo> slotOpt = slots.get(i);
+            final Widget slotWidget = slotWidgets[i + 1];
+
+            if (slotOpt.isPresent()) {
+                drawOnSlot(slotOpt.get(), slotWidget);
             } else {
-                drawOnSlot(slot.get(), slotWidget);
+                resetSlot(i, slotWidget);
             }
         }
     }
 
+    /**
+     * Resets all visual enhancements on all slots.
+     */
     public void resetAllSlots() {
         if (slotWidgets == null) {
             return;
         }
         for (int i = 0; i < 8; i++) {
-            Widget slotWidget = slotWidgets[i + 1];
-            resetSlot(i, slotWidget);
+            resetSlot(i, slotWidgets[i + 1]);
         }
     }
 
     /**
-     * Hides all the slot enhancements that were previously drawn on the slot. This is
-     * done when the slot was once populated with an offer but is now empty.
+     * Reverts a single slot to its default appearance, hiding any enhancements.
      */
-    private void resetSlot(int slotIdx, Widget slotWidget) {
+    private void resetSlot(int slotIdx, final Widget slotWidget) {
+        // Revert borders to default color
         Map<Integer, Integer> spriteIdMap = GeSpriteLoader.CHILDREN_IDX_TO_DEFAULT_SPRITE_ID;
         GeSpriteLoader.DYNAMIC_CHILDREN_IDXS.forEach(idx -> {
             Widget child = slotWidget.getChild(idx);
@@ -117,54 +153,72 @@ public class SlotStateDrawer {
             }
         });
 
-        Widget quickLookWidget = slotIdxToQuickLookWidget.get(slotIdx);
+        // Hide and remove the quick look widget
+        Widget quickLookWidget = slotIdxToQuickLookWidget.remove(slotIdx);
         if (quickLookWidget != null) {
             quickLookWidget.setHidden(true);
-            slotIdxToQuickLookWidget.remove(slotIdx);
         }
-    }
-
-    private void drawOnSlot(SlotInfo slot, Widget slotWidget) {
-        if (slotWidget.isHidden()) {
-            return;
-        }
-        Map<Integer, Integer> spriteMap = GeSpriteLoader.CHILDREN_IDX_TO_RED_SPRITE_ID;
-        if (slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
-            spriteMap = GeSpriteLoader.CHILDREN_IDX_TO_BLUE_SPRITE_ID;
-        } else if (slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
-            spriteMap = GeSpriteLoader.CHILDREN_IDX_TO_RED_SPRITE_ID;
-        } else if (slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
-            spriteMap = GeSpriteLoader.CHILDREN_IDX_TO_GREEN_SPRITE_ID;
-        }
-
-        Map<Integer, Integer> finalSpriteMap = spriteMap;
-        GeSpriteLoader.DYNAMIC_CHILDREN_IDXS.forEach(idx -> {
-            Widget child = slotWidget.getChild(idx);
-            int spriteId = finalSpriteMap.get(idx);
-            child.setSpriteId(spriteId);
-        });
-
-        addQuicklookWidget(slotWidget, slot);
     }
 
     /**
-     * This is the image widget (the magnifying glass widget) that a user can hover over to
-     * see some quick details about the competitiveness of their offer.
+     * Applies visual enhancements (colored border, quick look icon) to a slot.
      */
-    private void addQuicklookWidget(Widget slotWidget, SlotInfo slot) {
-        Widget existingQuickLookWidget = slotIdxToQuickLookWidget.get(slot.getIndex());
-        if (existingQuickLookWidget == null || !isWidgetStillAttached(existingQuickLookWidget)) {
-            Widget quicklookWidget = createQuicklookWidget(slotWidget, slot);
-            slotIdxToQuickLookWidget.put(slot.getIndex(), quicklookWidget);
-        } else {
-            existingQuickLookWidget.setHidden(false);
+    private void drawOnSlot(final SlotInfo slot, final Widget slotWidget) {
+        if (slotWidget.isHidden()) {
+            return;
+        }
+
+        final Map<Integer, Integer> spriteMap = getSpriteMapForState(
+                slot.getPredictedState()
+        );
+
+        GeSpriteLoader.DYNAMIC_CHILDREN_IDXS.forEach(idx -> {
+            Widget child = slotWidget.getChild(idx);
+            if (child != null) {
+                child.setSpriteId(spriteMap.get(idx));
+            }
+        });
+
+        addQuickLookWidget(slotWidget, slot);
+    }
+
+    /**
+     * Gets the appropriate color-coded sprite map for the slot's predicted state.
+     */
+    private Map<Integer, Integer> getSpriteMapForState(
+            SlotPredictedState state
+    ) {
+        switch (state) {
+            case IN_RANGE:
+                return GeSpriteLoader.CHILDREN_IDX_TO_BLUE_SPRITE_ID;
+            case BETTER_THAN_WIKI:
+                return GeSpriteLoader.CHILDREN_IDX_TO_GREEN_SPRITE_ID;
+            case OUT_OF_RANGE:
+            default:
+                return GeSpriteLoader.CHILDREN_IDX_TO_RED_SPRITE_ID;
         }
     }
 
-    private Widget createQuicklookWidget(Widget slotWidget, SlotInfo slot) {
+    /**
+     * Adds or reveals the quick look (magnifying glass) icon on a slot.
+     */
+    private void addQuickLookWidget(Widget slotWidget, SlotInfo slot) {
+        Widget existingWidget = slotIdxToQuickLookWidget.get(slot.getIndex());
+
+        if (existingWidget == null || !isWidgetStillAttached(existingWidget)) {
+            Widget newWidget = createQuickLookWidget(slotWidget, slot);
+            slotIdxToQuickLookWidget.put(slot.getIndex(), newWidget);
+        } else {
+            existingWidget.setHidden(false);
+        }
+    }
+
+    /**
+     * Creates the quick look widget with its properties and mouse listeners.
+     */
+    private Widget createQuickLookWidget(Widget slotWidget, final SlotInfo slot) {
         Widget quickLookWidget = slotWidget.createChild(-1, WidgetType.GRAPHIC);
         quickLookWidget.setFontId(FontID.PLAIN_11);
-        quickLookWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
         quickLookWidget.setOriginalX(90);
         quickLookWidget.setOriginalY(52);
         quickLookWidget.setSpriteId(SpriteID.BANK_SEARCH);
@@ -172,75 +226,77 @@ public class SlotStateDrawer {
         quickLookWidget.setOriginalHeight(22);
         quickLookWidget.setOriginalWidth(22);
         quickLookWidget.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
+        quickLookWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
         quickLookWidget.setXTextAlignment(WidgetTextAlignment.LEFT);
         quickLookWidget.setTextShadowed(true);
         quickLookWidget.setHasListener(true);
 
-        quickLookWidget.setOnMouseOverListener((JavaScriptCallback) ev -> {
-            SwingUtilities.invokeLater(() -> {
-                if (this.wikiRequest == null) {
-                    quickLookPanel.updateDetails(null, null);
-                    return;
+        // Set mouse listeners to control hover state and trigger data fetching
+        quickLookWidget.setOnMouseOverListener(
+                (JavaScriptCallback) ev -> {
+                    this.hoveredSlotIndex = slot.getIndex();
                 }
-                Optional<SlotInfo> slotInfo = slotInfos.get(slot.getIndex());
-                if (!slotInfo.isPresent()) {
-                    quickLookPanel.updateDetails(null, null);
-                    return;
+        );
+
+        quickLookWidget.setOnMouseLeaveListener(
+                (JavaScriptCallback) ev -> {
+                    this.hoveredSlotIndex = null;
                 }
+        );
 
-                int itemId = slotInfo.get().getItemId();
-                WikiItemMargins margins = this.wikiRequest.getData().get(itemId);
-                PointerInfo a = MouseInfo.getPointerInfo();
-                Point p = a.getLocation();
-                quickLookPanel.updateDetails(slotInfo.get(), margins);
-                popup.pack();
-                popup.setLocation(p.x + 25, p.y);
-                popup.setVisible(true);
-            });
-        });
-
-        quickLookWidget.setOnMouseLeaveListener((JavaScriptCallback) ev -> {
-            SwingUtilities.invokeLater(() -> {
-                popup.setVisible(false);
-            });
-        });
+        quickLookWidget.setOnClickListener(
+                (JavaScriptCallback) ev -> this.hoveredSlotIndex = null
+        );
 
         quickLookWidget.revalidate();
         return quickLookWidget;
     }
 
     /**
-     * Determines if the widget is still actually on the screen. This is useful for deciding
-     * whether we should reuse the old widget, or create a new one.
+     * Checks if a widget is still valid and attached to its parent. This is crucial
+     * for deciding whether to reuse an old widget or create a new one, especially
+     * after client operations that might recreate widgets (like closing/opening the GE).
      */
     private boolean isWidgetStillAttached(Widget widget) {
         Widget parent = widget.getParent();
+        if (parent == null) {
+            return false;
+        }
         Widget[] siblings = parent.getDynamicChildren();
-        return widget.getIndex() < siblings.length && siblings[widget.getIndex()] != null;
+        return (
+                siblings != null &&
+                        widget.getIndex() < siblings.length &&
+                        siblings[widget.getIndex()] == widget
+        );
     }
 
     /**
-     * Builds a representation of the slots to draw
+     * Creates a list of SlotInfo objects, which represent the state of each GE slot.
+     * This abstracts the raw client and wiki data into a unified model for drawing.
      */
     private List<Optional<SlotInfo>> createSlotRepresentation() {
         List<Optional<SlotInfo>> slots = new ArrayList<>();
-        GrandExchangeOffer[] currentOffers = plugin.getClient().getGrandExchangeOffers();
+        GrandExchangeOffer[] currentOffers = client.getGrandExchangeOffers();
 
         for (int i = 0; i < currentOffers.length; i++) {
             GrandExchangeOffer localSlot = currentOffers[i];
-
             if (localSlot.getState() == GrandExchangeOfferState.EMPTY) {
                 slots.add(Optional.empty());
-                continue;
+            } else {
+                slots.add(clientGeOfferToSlotInfo(i, localSlot));
             }
-
-            slots.add(clientGeOfferToSlotInfo(i, localSlot));
         }
         return slots;
     }
 
-    private Optional<SlotInfo> clientGeOfferToSlotInfo(int index, GrandExchangeOffer offer) {
-        if (wikiRequest == null) {
+    /**
+     * Converts a GrandExchangeOffer into a SlotInfo object using wiki margin data.
+     */
+    private Optional<SlotInfo> clientGeOfferToSlotInfo(
+            int index,
+            GrandExchangeOffer offer
+    ) {
+        if (wikiRequest == null || wikiRequest.getData() == null) {
             return Optional.empty();
         }
 
@@ -252,8 +308,41 @@ public class SlotStateDrawer {
 
         int listedPrice = offer.getPrice();
         boolean isBuy = offer.getState() == GrandExchangeOfferState.BUYING;
-        SlotPredictedState predictedState = SlotPredictedState.getPredictedState(isBuy, listedPrice, margins.getLow(), margins.getHigh());
+        SlotPredictedState predictedState = SlotPredictedState.getPredictedState(
+                isBuy,
+                listedPrice,
+                margins.getLow(),
+                margins.getHigh()
+        );
 
-        return Optional.of(new SlotInfo(index, predictedState, itemId, listedPrice, isBuy));
+        return Optional.of(
+                new SlotInfo(index, predictedState, itemId, listedPrice, isBuy)
+        );
     }
+
+    /**
+     * Constructs the tooltip component with the latest data and adds it to the manager.
+     */
+    private void buildAndShowTooltip() {
+        if (
+                hoveredSlotIndex >= slotInfos.size() ||
+                        wikiRequest == null ||
+                        wikiRequest.getData() == null
+        ) {
+            return;
+        }
+
+        Optional<SlotInfo> slotInfoOpt = slotInfos.get(hoveredSlotIndex);
+        if (!slotInfoOpt.isPresent()) {
+            return;
+        }
+
+        SlotInfo slotInfo = slotInfoOpt.get();
+        WikiItemMargins margins = wikiRequest.getData().get(slotInfo.getItemId());
+
+        QuickLookTooltip tooltip = new QuickLookTooltip();
+        tooltip.update(slotInfo, margins);
+        tooltipManager.add(new Tooltip(tooltip));
+    }
+
 }
