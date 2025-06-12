@@ -134,7 +134,6 @@ public class GameUiChangesHandler {
 
         //when a user clicks on a slot or leaves one, this event triggers
         if (event.getVarpId() == 375) {
-            plugin.getSlotStateDrawer().hideQuickLookPanel();
             handleClickOrLeaveOffer();
             return;
         }
@@ -203,10 +202,6 @@ public class GameUiChangesHandler {
         //as then the highlight won't linger in that case.
         if (event.getGroupId() == GE_HISTORY_TAB_WIDGET_ID && highlightedItem.isPresent()) {
             deHighlightOffer();
-        }
-
-        if (event.getGroupId() == GE_HISTORY_TAB_WIDGET_ID) {
-            plugin.getSlotStateDrawer().hideQuickLookPanel();
         }
     }
 
