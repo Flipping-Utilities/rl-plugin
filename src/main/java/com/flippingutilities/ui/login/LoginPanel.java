@@ -20,7 +20,7 @@ import java.time.Instant;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-public class LoginPanel extends JPanel{
+public class LoginPanel extends JPanel {
     FlippingPlugin plugin;
     Runnable onViewChange;
     public boolean showingLoggedInView;
@@ -35,6 +35,11 @@ public class LoginPanel extends JPanel{
         plugin.getApiAuthHandler().subscribeToLogin(this::showLoggedInView);
         plugin.getApiAuthHandler().subscribeToPremiumChecking((isPremium) -> {
             loggedInPanel.showPremiumFeaturesHealth(isPremium);
+        });
+        plugin.getApiAuthHandler().subscribeToError((hasError) -> {
+            if (hasError) {
+                loggedInPanel.showLoginError();
+            }
         });
 
         add(createLoggedOutPanel());
@@ -53,20 +58,15 @@ public class LoginPanel extends JPanel{
             if (plugin.getCurrentlyLoggedInAccount() == null) {
                 timeOfLastSuccessfulRequest = null;
                 loggedInPanel.setSlotFeatureHealthText("Inactive (not logged in)");
-            }
-            else if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount())) {
+            } else if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount())) {
                 loggedInPanel.setSlotFeatureHealthText("Inactive (not registered yet)");
-            }
-            else if (timeOfLastSuccessfulRequest == null) {
+            } else if (timeOfLastSuccessfulRequest == null) {
                 loggedInPanel.setSlotFeatureHealthText("Active (starting up)");
-            }
-            else if (notSendingRequestDueToNoChange) {
+            } else if (notSendingRequestDueToNoChange) {
                 loggedInPanel.setSlotFeatureHealthText("Active (no slot change detected)");
-            }
-            else if (errorWhenSendingSlotRequest) {
+            } else if (errorWhenSendingSlotRequest) {
                 loggedInPanel.setSlotFeatureHealthText("Inactive (error on slot update)");
-            }
-            else {
+            } else {
                 long diff = Instant.now().getEpochSecond() - timeOfLastSuccessfulRequest.getEpochSecond();
                 loggedInPanel.setSlotFeatureHealthText(String.format("Active (%ds since last update)", diff));
             }
@@ -76,13 +76,11 @@ public class LoginPanel extends JPanel{
     public void onSlotRequest(int success) {
         if (success == 0) {
             notSendingRequestDueToNoChange = true;
-        }
-        else if (success == 1) {
+        } else if (success == 1) {
             timeOfLastSuccessfulRequest = Instant.now();
             errorWhenSendingSlotRequest = false;
             notSendingRequestDueToNoChange = false;
-        }
-        else {
+        } else {
             errorWhenSendingSlotRequest = true;
             notSendingRequestDueToNoChange = false;
         }
@@ -112,10 +110,11 @@ public class LoginPanel extends JPanel{
             }
         });
     }
+
     private JPanel createLoggedOutPanel() {
         JPanel loggedOutPanel = new JPanel(new BorderLayout());
         loggedOutPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        loggedOutPanel.setBorder(new EmptyBorder(20,40,20,25));
+        loggedOutPanel.setBorder(new EmptyBorder(20, 40, 20, 25));
 
         loggedOutPanel.add(createFeaturesPanel(), BorderLayout.WEST);
         loggedOutPanel.add(createTokenPanel(), BorderLayout.CENTER);
@@ -125,14 +124,14 @@ public class LoginPanel extends JPanel{
 
     private JPanel createFeaturesPanel() {
         JPanel featuresPanel = new JPanel(new BorderLayout());
-        featuresPanel.setBorder(new EmptyBorder(0,0,0,20));
+        featuresPanel.setBorder(new EmptyBorder(0, 0, 0, 20));
 
         JLabel flashIcon = new JLabel(Icons.FLASH, JLabel.CENTER);
 
         JLabel headingText = new JLabel("<html>LOGIN TO...</html>");
         headingText.setFont(new Font("Whitney", Font.BOLD, 14));
         headingText.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
-        headingText.setBorder(new EmptyBorder(0,0,4,0));
+        headingText.setBorder(new EmptyBorder(0, 0, 4, 0));
 
         JPanel featuresListPanel = new JPanel(new DynamicGridLayout(4, 0, 0, 0));
 
@@ -151,7 +150,7 @@ public class LoginPanel extends JPanel{
         JLabel bottomText = new JLabel("<html>More features are in development!</html>");
         bottomText.setFont(new Font("Whitney", Font.BOLD + Font.ITALIC, 10));
         bottomText.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
-        bottomText.setBorder(new EmptyBorder(25,0,0,0));
+        bottomText.setBorder(new EmptyBorder(25, 0, 0, 0));
 
         featuresListPanel.add(headingText);
         featuresListPanel.add(firstFeaturePanel);
@@ -166,14 +165,14 @@ public class LoginPanel extends JPanel{
 
     private JPanel createLoginInstructionsPanel() {
         JPanel instructionsPanel = new JPanel(new BorderLayout());
-        instructionsPanel.setBorder(new EmptyBorder(0,20,0,0));
+        instructionsPanel.setBorder(new EmptyBorder(0, 20, 0, 0));
 
         JLabel keyIcon = new JLabel(Icons.KEY, JLabel.CENTER);
 
         JLabel headingText = new JLabel("<html>GETTING A TOKEN</html>");
         headingText.setFont(new Font("Whitney", Font.BOLD, 14));
         headingText.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
-        headingText.setBorder(new EmptyBorder(0,0,7,0));
+        headingText.setBorder(new EmptyBorder(0, 0, 7, 0));
 
         JPanel firstStepPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JLabel firstStepNumber = new JLabel("<html>1. </html>");
@@ -184,7 +183,7 @@ public class LoginPanel extends JPanel{
         firstStepDesc.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
         firstStepPanel.add(firstStepNumber);
         firstStepPanel.add(firstStepDesc);
-        firstStepPanel.add(UIUtilities.createIcon(Icons.DISCORD_CHEESE, Icons.DISCORD_ICON_ON,"https://discord.gg/GDqVgMH26s","Click to go to Flipping Utilities discord!"));
+        firstStepPanel.add(UIUtilities.createIcon(Icons.DISCORD_CHEESE, Icons.DISCORD_ICON_ON, "https://discord.gg/GDqVgMH26s", "Click to go to Flipping Utilities discord!"));
 
         JPanel secondStepPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JLabel secondStepDesc = new JLabel("Type /login in the bot channel");
@@ -209,7 +208,7 @@ public class LoginPanel extends JPanel{
         JLabel bottomText = new JLabel("<html>You will only have to do this once</html>");
         bottomText.setFont(new Font("Whitney", Font.BOLD + Font.ITALIC, 10));
         bottomText.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
-        bottomText.setBorder(new EmptyBorder(33,0,0,0));
+        bottomText.setBorder(new EmptyBorder(33, 0, 0, 0));
 
         JPanel stepsPanel = new JPanel(new DynamicGridLayout(5, 0, 0, 0));
         stepsPanel.add(headingText);
@@ -228,8 +227,8 @@ public class LoginPanel extends JPanel{
         JPanel tokenPanel = new JPanel(new BorderLayout());
         tokenPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
         tokenPanel.setBorder(new CompoundBorder(
-                new MatteBorder(0,1,0,1, ColorScheme.MEDIUM_GRAY_COLOR),
-                new EmptyBorder(0,30,0,30)
+                new MatteBorder(0, 1, 0, 1, ColorScheme.MEDIUM_GRAY_COLOR),
+                new EmptyBorder(0, 30, 0, 30)
         ));
 
         JPanel header = new JPanel();
@@ -238,20 +237,20 @@ public class LoginPanel extends JPanel{
         header.add(fuIcon);
 
         JPanel middlePanel = new JPanel(new BorderLayout());
-        middlePanel.setBorder(new EmptyBorder(20,0,20,0));
+        middlePanel.setBorder(new EmptyBorder(20, 0, 20, 0));
         middlePanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
         IconTextField tokenField = new IconTextField();
         tokenField.setBackground(CustomColors.DARK_GRAY);
         tokenField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()),
-                BorderFactory.createEmptyBorder(10,0,10,0)));
+                BorderFactory.createMatteBorder(1, 1, 1, 1, ColorScheme.DARKER_GRAY_COLOR.darker()),
+                BorderFactory.createEmptyBorder(10, 0, 10, 0)));
         tokenField.setPreferredSize(new Dimension(170, 40));
 
         JLabel tokenFieldDescriptor = new JLabel("TOKEN", JLabel.LEFT);
         tokenFieldDescriptor.setFont(new Font("Whitney", Font.BOLD, 12));
         tokenFieldDescriptor.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
-        tokenFieldDescriptor.setBorder(new EmptyBorder(0,0,5,0));
+        tokenFieldDescriptor.setBorder(new EmptyBorder(0, 0, 5, 0));
 
         middlePanel.add(tokenFieldDescriptor, BorderLayout.NORTH);
         middlePanel.add(tokenField, BorderLayout.CENTER);
@@ -260,7 +259,7 @@ public class LoginPanel extends JPanel{
         loginButtonWrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
         JLabel loginButton = new JLabel("Login", JLabel.CENTER);
-        loginButton.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0,0,0,0, ColorScheme.GRAND_EXCHANGE_PRICE.darker()),new EmptyBorder(10,20,10,20))
+        loginButton.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 0, 0, ColorScheme.GRAND_EXCHANGE_PRICE.darker()), new EmptyBorder(10, 20, 10, 20))
         );
         loginButton.setFont(new Font("Whitney", Font.BOLD, 12));
         loginButton.setBackground(ColorScheme.GRAND_EXCHANGE_PRICE);
@@ -273,12 +272,11 @@ public class LoginPanel extends JPanel{
                         "Logging into flipping utilities will submit GE transactions and your IP address\n" +
                                 "to flipping utilities, a 3rd party not controlled or verified by the RuneLite developers",
                         "Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
-                        null, new String[] {"Yes", "No"}, "No");
+                        null, new String[]{"Yes", "No"}, "No");
 
-                if (result == JOptionPane.YES_OPTION)
-                {
+                if (result == JOptionPane.YES_OPTION) {
                     plugin.getApiAuthHandler().loginWithToken(tokenField.getText().trim()).exceptionally((exception) -> {
-                        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(loginButton, "Authentication error, contact us on discord for help!", "Authentication error 😔",  JOptionPane.ERROR_MESSAGE));
+                        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(loginButton, "Authentication error, contact us on discord for help!", "Authentication error 😔", JOptionPane.ERROR_MESSAGE));
                         return null;
                     });
                 }
