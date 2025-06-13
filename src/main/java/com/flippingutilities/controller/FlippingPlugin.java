@@ -55,6 +55,7 @@ import net.runelite.api.events.*;
 import net.runelite.api.widgets.*;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ClientShutdown;
 import net.runelite.client.events.ConfigChanged;
@@ -67,6 +68,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.ui.overlay.tooltip.TooltipManager;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.client.game.ItemStats;
 import okhttp3.*;
@@ -112,6 +114,9 @@ public class FlippingPlugin extends Plugin {
 
     @Inject
     private ConfigManager configManager;
+
+    @Inject
+    private TooltipManager tooltipManager;
 
     @Inject
     @Getter
@@ -202,6 +207,8 @@ public class FlippingPlugin extends Plugin {
 
     @Inject
     public Gson gson;
+    @Inject
+    private EventBus eventBus;
 
     public TradePersister tradePersister;
     private RecipeHandler recipeHandler;
@@ -223,7 +230,8 @@ public class FlippingPlugin extends Plugin {
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
         apiAuthHandler = new ApiAuthHandler(this);
         apiRequestHandler = new ApiRequestHandler(this);
-        slotStateDrawer = new SlotStateDrawer(this);
+        slotStateDrawer = new SlotStateDrawer(this, this.tooltipManager, client);
+        eventBus.register(slotStateDrawer);
 
         flippingPanel = new FlippingPanel(this);
         statPanel = new StatsPanel(this);
@@ -1001,7 +1009,7 @@ public class FlippingPlugin extends Plugin {
         dataHandler.getAccountWideData().setEnhancedSlots(shouldEnhance);
         dataHandler.markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
         if (shouldEnhance) {
-            slotStateDrawer.drawWrapper();
+            slotStateDrawer.refreshSlotVisuals();
         }
         else {
             getClientThread().invokeLater(() -> slotStateDrawer.resetAllSlots());
