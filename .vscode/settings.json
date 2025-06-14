@@ -1,0 +1,9 @@
+{
+  "java.compile.nullAnalysis.mode": "automatic",
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "java.debug.settings.vmArgs": "-ea",
+  "java.test.config": {
+    "name": "SkipTests",
+    "vmArgs": ["-ea"]
+  }
+}

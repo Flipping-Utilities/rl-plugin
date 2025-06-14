@@ -27,6 +27,7 @@ public class ApiAuthHandler {
     private Set<String> successfullyRegisteredRsns = new HashSet<>();
     List<Runnable> validJwtSubscriberActions = new ArrayList<>();
     List<Consumer<Boolean>> premiumCheckSubscribers = new ArrayList<>();
+    List<Consumer<Boolean>> errorsSubscribers = new ArrayList<>();
     @Getter
     @Setter
     private boolean isPremium;
@@ -38,9 +39,13 @@ public class ApiAuthHandler {
     public void subscribeToLogin(Runnable r) {
         this.validJwtSubscriberActions.add(r);
     }
-    
+
     public void subscribeToPremiumChecking(Consumer<Boolean> consumer) {
         this.premiumCheckSubscribers.add(consumer);
+    }
+
+    public void subscribeToError(Consumer<Boolean> consumer) {
+        this.errorsSubscribers.add(consumer);
     }
 
     /**
@@ -61,20 +66,20 @@ public class ApiAuthHandler {
         plugin.getApiRequestHandler().getUser().whenComplete((user, exception) -> {
             if (exception != null) {
                 log.info("failed to get user, error: ", exception);
+                errorsSubscribers.forEach(c -> c.accept(true));
                 isPremium = false;
-            }
-            else {
+            } else {
                 log.info("got user, premium status: {}", user.isPremium());
                 isPremium = user.isPremium();
+                premiumCheckSubscribers.forEach(c -> c.accept(isPremium));
             }
-            premiumCheckSubscribers.forEach(c -> c.accept(isPremium));
         });
     }
 
     /**
      * Checks if the existing JWT has expired, and if so, gets a refreshed JWT. The setting of validJwt is purely
      * to stop the plugin from making useless requests, the api will safely reject invalid jwts itself.
-     *
+     * <p>
      * This should be called on client start up
      */
     public CompletableFuture<String> checkExistingJwt() {
@@ -90,11 +95,9 @@ public class ApiAuthHandler {
                 log.info("jwt is expired, prompting user to re log");
                 hasValidJWT = false;
                 return CompletableFuture.completedFuture("expired");
-            }
-            else if (jwt.shouldRefresh()) {
+            } else if (jwt.shouldRefresh()) {
                 return refreshJwt(jwtString);
-            }
-            else {
+            } else {
                 log.info("jwt is valid");
                 hasValidJWT = true;
                 validJwtSubscriberActions.forEach(Runnable::run);
@@ -116,8 +119,7 @@ public class ApiAuthHandler {
             if (exception != null) {
                 log.info("failed to refresh jwt, error: ", exception);
                 hasValidJWT = false; //validJwt is false by default, just setting it here for clarity
-            }
-            else {
+            } else {
                 plugin.getDataHandler().getAccountWideData().setJwt(newJwt);
                 hasValidJWT = true;
                 log.info("successfully refreshed jwt");
@@ -138,8 +140,7 @@ public class ApiAuthHandler {
                 successfullyRegisteredRsns.add(displayName);
                 log.debug("rsn: {} is already registered, not registering again", displayName);
                 return CompletableFuture.completedFuture(successfullyRegisteredRsns);
-            }
-            else {
+            } else {
                 return plugin.getApiRequestHandler().registerNewAccount(displayName).
                         thenApply(acc -> {
                             successfullyRegisteredRsns.add(acc.getRsn());
@@ -149,7 +150,7 @@ public class ApiAuthHandler {
                         exceptionally(e -> {
                             log.debug("could not register display name: {}, error: {}", displayName, e);
                             return successfullyRegisteredRsns;
-                });
+                        });
             }
         }).exceptionally(e -> {
             log.debug("could not check rsn", e);
@@ -164,8 +165,7 @@ public class ApiAuthHandler {
         jwtFuture.whenComplete((jwt, exception) -> {
             if (exception != null) {
                 log.info("failed to login with token!", exception);
-            }
-            else {
+            } else {
                 plugin.getDataHandler().getAccountWideData().setJwt(jwt);
                 hasValidJWT = true;
                 validJwtSubscriberActions.forEach(Runnable::run);
