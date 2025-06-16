@@ -10,6 +10,7 @@ import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.Recipe;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
@@ -21,10 +22,8 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * The visual representation of a RecipeFlip. RecipeFlipPanels
@@ -95,7 +94,7 @@ public class RecipeFlipPanel extends JPanel {
         titleLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
         titleLabel.setBorder(new EmptyBorder(0,0,5,0));
 
-        boolean userAddedCoinsThatWereNotInRecipe = recipeFlip.getCoinCost() > 0 && !partialOffers.containsKey(995);
+		boolean userAddedCoinsThatWereNotInRecipe = recipeFlip.getCoinCost() > 0 && !partialOffers.containsKey(ItemID.COINS);
         int rowSizeForUserAddedCoins = userAddedCoinsThatWereNotInRecipe? 1:0;
         JPanel componentGroupPanel = new JPanel(new DynamicGridLayout(1 + partialOffers.size() + rowSizeForUserAddedCoins, 1));
         componentGroupPanel.setBackground(CustomColors.DARK_GRAY);
@@ -111,7 +110,7 @@ public class RecipeFlipPanel extends JPanel {
             long quantity;
             long avgPrice;
 
-            if (itemId == 995) {
+			if (itemId == ItemID.COINS) {
                 itemName = "Coins";
                 quantity = recipeFlip.getCoinCost();
                 avgPrice = 1;

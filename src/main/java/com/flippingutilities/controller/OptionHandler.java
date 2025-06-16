@@ -8,6 +8,8 @@ import com.flippingutilities.utilities.WikiRequest;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.gameval.InventoryID;
+import net.runelite.api.gameval.ItemID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.game.ItemStats;
 
 import java.util.Optional;
@@ -97,7 +99,7 @@ public class OptionHandler {
         if (getCashStackInInv() == 0) {
             throw new InvalidOptionException("Player has no cash in inventory");
         }
-        int offerPrice = plugin.getClient().getVarbitValue(4398);
+		int offerPrice = plugin.getClient().getVarbitValue(VarbitID.GE_NEWOFFER_PRICE);
         if (offerPrice <= 0) {
             throw new InvalidOptionException("Item offer price missing");
         }
@@ -182,13 +184,13 @@ public class OptionHandler {
     }
 
     private int getCashStackInInv() {
-        ItemContainer inventory = plugin.getClient().getItemContainer(InventoryID.INV);
+		ItemContainer inventory = plugin.getClient().getItemContainer(InventoryID.INV);
         if (inventory == null) {
             return 0;
         }
         Item[] inventoryItems = inventory.getItems();
         for (Item item : inventoryItems) {
-            if (item.getId() == 995) {
+			if (item.getId() == ItemID.COINS) {
                 return item.getQuantity();
             }
         }
