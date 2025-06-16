@@ -52,6 +52,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.*;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.*;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -352,10 +353,10 @@ public class FlippingPlugin extends Plugin {
 
     public void handleLogin(String displayName) {
         wikiDataFetcherJob.onWorldSwitch(client.getWorldType());
-        if (client.getAccountType().isIronman()) {
-            log.info("account is an ironman, not adding it to the cache");
-            return;
-        }
+		if (client.getVarbitValue(VarbitID.IRONMAN) != 0) {
+				log.info("account is an ironman, not adding it to the cache");
+				return;
+			}
 
         log.info("{} has just logged in!", displayName);
         if (!dataHandler.getCurrentAccounts().contains(displayName)) {
