@@ -17,7 +17,6 @@ public class Constants {
 	// Tax rate prior to 29 May 2025
 	public static double OLD_GE_TAX = 0.01; // 1%
     public static double GE_TAX = 0.02; // 2%
-    public static int BOND_ID = 13190;
     public static String DUMMY_ITEM = "dummy";
 
 	public static final Set<Integer> TAX_EXEMPT_ITEMS = ImmutableSet.of(
