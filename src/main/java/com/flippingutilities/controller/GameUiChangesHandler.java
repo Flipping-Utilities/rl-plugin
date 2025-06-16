@@ -85,8 +85,13 @@ public class GameUiChangesHandler {
 			OfferEditor flippingWidget = new OfferEditor(client.getWidget(InterfaceID.Chatbox.MES_LAYER), client);
 			Optional<FlippingItem> selectedItem = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH)).findFirst();
 
+<<<<<<< gameval
 			String chatInputText = client.getWidget(InterfaceID.Chatbox.MES_TEXT).getText();
 			String offerText = client.getWidget(InterfaceID.GeOffers.SETUP).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
+=======
+            String chatInputText = client.getWidget(ComponentID.CHATBOX_TITLE).getText();
+            String offerText = client.getWidget(net.runelite.api.gameval.InterfaceID.GeOffers.SETUP).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
+>>>>>>> master
 
             if (chatInputText.equals("How many do you wish to buy?")) {
                 plugin.getFlippingPanel().getOfferEditorContainerPanel().selectQuantityEditor();
@@ -134,8 +139,12 @@ public class GameUiChangesHandler {
 		int varpId = event.getVarpId();
 
         //when a user clicks on a slot or leaves one, this event triggers
+<<<<<<< gameval
 		if (varpId == VarPlayerID.ARMOURHITSOUND) {
             plugin.getSlotStateDrawer().hideQuickLookPanel();
+=======
+        if (event.getVarpId() == 375) {
+>>>>>>> master
             handleClickOrLeaveOffer();
             return;
         }
@@ -186,6 +195,7 @@ public class GameUiChangesHandler {
      * events are fired when the widgets are redrawn (?).
      */
     public void onWidgetLoaded(WidgetLoaded event) {
+<<<<<<< gameval
 		int groupId = event.getGroupId();
 		switch (groupId) {
 			case InterfaceID.GE_HISTORY:
@@ -208,6 +218,27 @@ public class GameUiChangesHandler {
 				}
 				plugin.getSlotStateDrawer().hideQuickLookPanel();
 		}
+=======
+        //ge history widget loaded
+        //GE_HISTORY_TAB_WIDGET_ID does not load when history tab is opened from the banker right click. It only loads when
+        //the "history" button is clicked for the ge interface. However, 383 loads in both situations.
+        if (event.getGroupId() == 383) {
+            plugin.showGeHistoryTabPanel();
+        }
+
+        //if either ge interface or bank pin interface is loaded, hide the ge history tab panel again
+        if (event.getGroupId() == InterfaceID.GRAND_EXCHANGE || event.getGroupId() == 213) {
+            plugin.getMasterPanel().selectPreviouslySelectedTab();
+        }
+
+        //remove highlighted item
+        //The player opens the trade history tab from the ge interface. Necessary since the back button isn't considered hidden here.
+        //this (id 149 and not id 383) will also trigger when the player just exits out of the ge interface offer window screen, which is good
+        //as then the highlight won't linger in that case.
+        if (event.getGroupId() == GE_HISTORY_TAB_WIDGET_ID && highlightedItem.isPresent()) {
+            deHighlightOffer();
+        }
+>>>>>>> master
     }
 
 
