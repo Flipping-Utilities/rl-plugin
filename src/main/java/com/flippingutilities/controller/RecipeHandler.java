@@ -5,6 +5,7 @@ import com.flippingutilities.utilities.*;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.gameval.ItemID;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -214,7 +215,8 @@ public class RecipeHandler {
      */
     private void stripElementalRunesFromRecipes(List<Recipe> recipes) {
         //water, earth, fire, air
-        Set<Integer> elementalRunes = new HashSet<>(Arrays.asList(555, 557, 554, 556));
+		Set<Integer> elementalRunes = new HashSet<>(Arrays.asList(ItemID.WATERRUNE, ItemID.EARTHRUNE, ItemID.FIRERUNE,
+			ItemID.AIRRUNE));
 
         for (Recipe recipe: recipes) {
             List<RecipeItem> inputs = recipe.getInputs();
@@ -301,7 +303,7 @@ public class RecipeHandler {
             int itemId = e.getKey();
             //make sure that coins is never a limiting factor in how many recipes can be made, as it is automatically
             //accounted for
-            if (itemId == 995) {
+			if (itemId == ItemID.COINS) {
                 return new AbstractMap.SimpleEntry<>(itemId, Integer.MAX_VALUE);
             }
             long totalQuantity = e.getValue().stream().

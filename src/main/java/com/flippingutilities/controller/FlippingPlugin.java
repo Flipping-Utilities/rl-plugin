@@ -38,7 +38,6 @@ import com.flippingutilities.ui.settings.SettingsPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.uiutilities.GeSpriteLoader;
-import com.flippingutilities.ui.uiutilities.WidgetConstants;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.jobs.CacheUpdaterJob;
 import com.flippingutilities.ui.widgets.SlotStateDrawer;
@@ -670,7 +669,7 @@ public class FlippingPlugin extends Plugin {
      * slot widgets to appear/get rebuilt.
      */
     public void setWidgetsOnSlotStateDrawer() {
-        Widget slotWidgets = client.getWidget(InterfaceID.GE_OFFERS, WidgetConstants.SLOT_CONTAINER);
+		Widget slotWidgets = client.getWidget(InterfaceID.GeOffers.INDEX);
         if (slotWidgets != null) {
             slotStateDrawer.setSlotWidgets(slotWidgets.getStaticChildren());
         }
@@ -682,7 +681,7 @@ public class FlippingPlugin extends Plugin {
 
             //Get the offer slots from the window container
             //We add one to the index, as the first widget is the text above the offer slots
-            Widget offerSlot = client.getWidget(InterfaceID.GE_OFFERS, WidgetConstants.SLOT_CONTAINER).getStaticChildren()[slotIndex + 1];
+			Widget offerSlot = client.getWidget(InterfaceID.GeOffers.INDEX).getStaticChildren()[slotIndex + 1];
 
             if (offerSlot == null) {
                 return;
@@ -773,7 +772,7 @@ public class FlippingPlugin extends Plugin {
 
     public void showGeHistoryTabPanel() {
         clientThread.invokeLater(() -> {
-            Widget[] geHistoryTabWidgets = client.getWidget(383, 3).getDynamicChildren();
+			Widget[] geHistoryTabWidgets = client.getWidget(InterfaceID.GeHistory.LIST).getDynamicChildren();
             List<OfferEvent> offerEvents = GeHistoryTabExtractor.convertWidgetsToOfferEvents(geHistoryTabWidgets);
             List<List<OfferEvent>> matchingOffers = new ArrayList<>();
             offerEvents.forEach(o -> {
@@ -899,7 +898,7 @@ public class FlippingPlugin extends Plugin {
                     optionExercised.ifPresent(option -> clientThread.invoke(() -> {
                         try {
                             int optionValue = calculateOptionValue(option);
-                            client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(optionValue + "*");
+							client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(optionValue + "*");
                             client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(optionValue));
                             flippingPanel.getOfferEditorContainerPanel().highlightPressedOption(keyPressed);
                             e.consume();

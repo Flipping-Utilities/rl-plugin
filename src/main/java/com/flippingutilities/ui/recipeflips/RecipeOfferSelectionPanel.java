@@ -11,6 +11,7 @@ import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.Recipe;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.util.AsyncBufferedImage;
@@ -115,7 +116,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
             return createOffersScrollPane(partialOffers, headerPanel, targetSelectionValue, offersPanel);
         }
 
-        if (itemId == 995) {
+		if (itemId == ItemID.COINS) {
             JLabel coinsLabel = new JLabel("coins automatically accounted for");
             coinsLabel.setForeground(Color.GREEN);
             offersPanel.add(coinsLabel);
@@ -339,7 +340,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
             List<PartialOffer> partialOffers = itemIdToPartialOffers.get(itemId);
             RecipeItemHeaderPanel recipeItemHeaderPanel = idToHeader.get(itemId);
             recipeItemHeaderPanel.setTargetValueDisplay(targetValue);
-            if (itemId == 995) {
+			if (itemId == ItemID.COINS) {
                 recipeItemHeaderPanel.setConsumedAmountDisplay(targetValue);
             }
             bodyPanel.add(createOffersPanel(itemId, partialOffers, recipeItemHeaderPanel, targetValue));
@@ -399,11 +400,11 @@ public class RecipeOfferSelectionPanel extends JPanel {
             int targetConsumedAmount = idToTargetValues.get(itemId);
 
             itemHeaderPanel.setTargetValueDisplay(targetConsumedAmount);
-            if (itemId == 995) {
+			if (itemId == ItemID.COINS) {
                 itemHeaderPanel.setConsumedAmountDisplay(targetConsumedAmount);
             }
 
-            if ((amountConsumed == targetConsumedAmount && targetConsumedAmount != 0) || itemId == 995) {
+			if ((amountConsumed == targetConsumedAmount && targetConsumedAmount != 0) || itemId == ItemID.COINS) {
                 itemHeaderPanel.setConsumedAmountDisplayColor(ColorScheme.GRAND_EXCHANGE_PRICE);
             } else {
                 allMatchTargetValues.set(false);
@@ -553,8 +554,8 @@ public class RecipeOfferSelectionPanel extends JPanel {
             map(e -> new AbstractMap.SimpleEntry<>(e.getKey(), new ArrayList<>(e.getValue().values()))).
             collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         Map<Integer, Integer> idToTargetValues = plugin.getTargetValuesForMaxRecipeCount(recipe, idToPartialOffersSelected, false);
-        if (idToTargetValues.containsKey(995)) {
-            return idToTargetValues.get(995);
+		if (idToTargetValues.containsKey(ItemID.COINS)) {
+			return idToTargetValues.get(ItemID.COINS);
         }
         return 0;
     }
