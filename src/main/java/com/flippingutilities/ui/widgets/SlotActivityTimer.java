@@ -30,14 +30,13 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
-import com.flippingutilities.ui.uiutilities.WidgetConstants;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
-import net.runelite.api.widgets.InterfaceID;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.util.ColorUtil;
 
@@ -137,7 +136,7 @@ public class SlotActivityTimer
 
 		//Reload offerSlot widget in case it got unloaded previously. We need to do this bc the old object we have
 		//doesn't respond to changes (like setText) after a ge slot redraw or some other script that fires.
-		Widget offerSlot = client.getWidget(InterfaceID.GRAND_EXCHANGE, WidgetConstants.SLOT_CONTAINER).getStaticChildren()[slotIndex + 1];
+		Widget offerSlot = client.getWidget(InterfaceID.GeOffers.INDEX).getStaticChildren()[slotIndex + 1];
 
 		//Ideally this shouldn't be triggered, but just in case.
 		if (offerSlot == null)

@@ -117,35 +117,35 @@ public class Icons {
     static
     {
         final BufferedImage openIcon = ImageUtil
-                .getResourceStreamFromClass(FlippingPlugin.class, "/small_open_arrow.png");
+                .loadImageResource(FlippingPlugin.class, "/small_open_arrow.png");
         CLOSE_ICON = new ImageIcon(openIcon);
         OPEN_ICON = new ImageIcon(ImageUtil.rotateImage(openIcon, Math.toRadians(90)));
 
         final BufferedImage resetIcon = ImageUtil
-                .getResourceStreamFromClass(FlippingPlugin.class, "/reset.png");
+                .loadImageResource(FlippingPlugin.class, "/reset.png");
         RESET_ICON = new ImageIcon(resetIcon);
         RESET_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(resetIcon, 0.53f));
 
         final BufferedImage deleteIcon = ImageUtil
-                .getResourceStreamFromClass(FlippingPlugin.class, "/delete_icon.png");
+                .loadImageResource(FlippingPlugin.class, "/delete_icon.png");
         DELETE_ICON = new ImageIcon(deleteIcon);
 
-        final BufferedImage settingsIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/settings_icon.png");
+        final BufferedImage settingsIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/settings_icon.png");
         SETTINGS_ICON = new ImageIcon(settingsIcon);
         SETTINGS_ICON_OFF = new ImageIcon(ImageUtil.alphaOffset(settingsIcon, 0.53f));
 
-        final BufferedImage accountIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/gnome.png");
+        final BufferedImage accountIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/gnome.png");
         GNOME_CHILD = new ImageIcon(accountIcon);
 
-        final BufferedImage deleteButton = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/deleteButton.png");
+        final BufferedImage deleteButton = ImageUtil.loadImageResource(FlippingPlugin.class, "/deleteButton.png");
         DELETE_BUTTON = new ImageIcon(deleteButton);
 
-        final BufferedImage highlightDeleteButton = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/highlightDeleteButton.png");
+        final BufferedImage highlightDeleteButton = ImageUtil.loadImageResource(FlippingPlugin.class, "/highlightDeleteButton.png");
         HIGHLIGHT_DELETE_BUTTON = new ImageIcon(highlightDeleteButton);
 
 
-        final BufferedImage starOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/star-gold.png");
-        final BufferedImage starOff = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/star_off_white.png");
+        final BufferedImage starOn = ImageUtil.loadImageResource(FlippingPlugin.class, "/star-gold.png");
+        final BufferedImage starOff = ImageUtil.loadImageResource(FlippingPlugin.class, "/star_off_white.png");
 
         STAR_ON_ICON = new ImageIcon(starOn.getScaledInstance(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE, Image.SCALE_SMOOTH));
 
@@ -157,83 +157,83 @@ public class Icons {
         SMALL_STAR_HOVER_ICON = new ImageIcon(starOff.getScaledInstance(13, 13, Image.SCALE_SMOOTH));
         SMALL_STAR_OFF_ICON = new ImageIcon(ImageUtil.alphaOffset(starOff, 0.53f).getScaledInstance(13, 13, Image.SCALE_SMOOTH));
 
-        final BufferedImage arrowLeft = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/left-arrow.png");
+        final BufferedImage arrowLeft = ImageUtil.loadImageResource(FlippingPlugin.class, "/left-arrow.png");
         ARROW_LEFT = new ImageIcon(ImageUtil.alphaOffset(arrowLeft,0.70f));
 
-        final BufferedImage arrowRight = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/right-arrow.png");
+        final BufferedImage arrowRight = ImageUtil.loadImageResource(FlippingPlugin.class, "/right-arrow.png");
         ARROW_RIGHT = new ImageIcon(ImageUtil.alphaOffset(arrowRight,0.70f));
 
         ARROW_LEFT_HOVER = new ImageIcon(arrowLeft);
         ARROW_RIGHT_HOVER = new ImageIcon(arrowRight);
 
-        final BufferedImage heart = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/heart.png");
+        final BufferedImage heart = ImageUtil.loadImageResource(FlippingPlugin.class, "/heart.png");
         HEART_ICON = new ImageIcon(heart);
 
-        final BufferedImage trashIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/trash.png");
+        final BufferedImage trashIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/trash.png");
         TRASH_ICON = new ImageIcon(trashIcon);
         TRASH_ICON_OFF = new ImageIcon(ImageUtil.alphaOffset(trashIcon, 0.53f));
 
-        final BufferedImage downloadIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/download.png");
+        final BufferedImage downloadIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/download.png");
         DOWNLOAD_ICON = new ImageIcon(downloadIcon);
         DONWLOAD_ICON_OFF = new ImageIcon(ImageUtil.alphaOffset(downloadIcon, 0.53f));
 
-        final BufferedImage githubIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/github-alch.png");
-        final BufferedImage githubIconOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/githubon.png");
+        final BufferedImage githubIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/github-alch.png");
+        final BufferedImage githubIconOn = ImageUtil.loadImageResource(FlippingPlugin.class, "/githubon.png");
         GITHUB_ICON = new ImageIcon(githubIcon);
         GITHUB_ICON_ON = new ImageIcon(githubIconOn);
 
-        final BufferedImage twitterIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/twitter-alch.png");
+        final BufferedImage twitterIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/twitter-alch.png");
         final BufferedImage twitterIconOn = ImageUtil.loadImageResource(FlippingPlugin.class, "/twitteron.png");
         TWITTER_ICON = new ImageIcon(twitterIcon);
         TWITTER_ICON_ON = new ImageIcon(twitterIconOn);
 
-        final BufferedImage discordIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discord-alch.png");
-        final BufferedImage discordIconOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discordon.png");
-        final BufferedImage discordCheese = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/discord-cheese.png");
+        final BufferedImage discordIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/discord-alch.png");
+        final BufferedImage discordIconOn = ImageUtil.loadImageResource(FlippingPlugin.class, "/discordon.png");
+        final BufferedImage discordCheese = ImageUtil.loadImageResource(FlippingPlugin.class, "/discord-cheese.png");
         DISCORD_ICON = new ImageIcon(discordIcon);
         DISCORD_ICON_ON = new ImageIcon(discordIconOn);
         DISCORD_CHEESE = new ImageIcon(discordCheese);
 
-        final BufferedImage plusIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/plus.png");
+        final BufferedImage plusIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/plus.png");
         PLUS_ICON = new ImageIcon(plusIcon.getScaledInstance(24,24,Image.SCALE_SMOOTH));
         PLUS_ICON_OFF = new ImageIcon(ImageUtil.alphaOffset(plusIcon, 0.53f).getScaledInstance(24,24,Image.SCALE_SMOOTH));
 
-        final BufferedImage greenDot = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/greendot.png");
+        final BufferedImage greenDot = ImageUtil.loadImageResource(FlippingPlugin.class, "/greendot.png");
         GREEN_DOT = new ImageIcon(greenDot.getScaledInstance(OPTION_DOT_WIDTH,OPTION_DOT_HEIGHT,Image.SCALE_SMOOTH));
 
-        final BufferedImage grayDot = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/graydot.png");
+        final BufferedImage grayDot = ImageUtil.loadImageResource(FlippingPlugin.class, "/graydot.png");
         GRAY_DOT = new ImageIcon(grayDot.getScaledInstance(OPTION_DOT_WIDTH,OPTION_DOT_HEIGHT,Image.SCALE_SMOOTH));
 
-        final BufferedImage redDot = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/reddot.png");
+        final BufferedImage redDot = ImageUtil.loadImageResource(FlippingPlugin.class, "/reddot.png");
         RED_DOT = new ImageIcon(redDot.getScaledInstance(OPTION_DOT_WIDTH,OPTION_DOT_HEIGHT,Image.SCALE_SMOOTH));
 
-        final BufferedImage help = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/help.png");
+        final BufferedImage help = ImageUtil.loadImageResource(FlippingPlugin.class, "/help.png");
         HELP = new ImageIcon(help);
         HELP_HOVER = new ImageIcon(ImageUtil.alphaOffset(help, 0.53f));
 
-        final BufferedImage template = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/template.png");
+        final BufferedImage template = ImageUtil.loadImageResource(FlippingPlugin.class, "/template.png");
         TEMPLATE = new ImageIcon(template);
         TEMPLATE_HOVER = new ImageIcon(ImageUtil.alphaOffset(template, 0.53f));
 
-        final BufferedImage quantityEditorPic = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/quantityeditorpic.png");
+        final BufferedImage quantityEditorPic = ImageUtil.loadImageResource(FlippingPlugin.class, "/quantityeditorpic.png");
         QUANTITY_EDITOR_PIC = new ImageIcon(quantityEditorPic);
 
-        final BufferedImage priceEditorPic = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/priceeditorpic.png");
+        final BufferedImage priceEditorPic = ImageUtil.loadImageResource(FlippingPlugin.class, "/priceeditorpic.png");
         PRICE_EDITOR_PIC = new ImageIcon(priceEditorPic);
 
-        final BufferedImage searchIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/search.png");
+        final BufferedImage searchIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/search.png");
         SEARCH = new ImageIcon(searchIcon.getScaledInstance(12,12,Image.SCALE_SMOOTH));
 
-        final BufferedImage searchIconHover = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/search.png");
+        final BufferedImage searchIconHover = ImageUtil.loadImageResource(FlippingPlugin.class, "/search.png");
         SEARCH_HOVER = new ImageIcon(ImageUtil.alphaOffset(searchIconHover,.53f).getScaledInstance(12,12,Image.SCALE_SMOOTH));
 
-        final BufferedImage refreshIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/refresh.png");
+        final BufferedImage refreshIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/refresh.png");
         REFRESH = new ImageIcon(refreshIcon.getScaledInstance(12,12,Image.SCALE_SMOOTH));
 
-        final BufferedImage refreshIconHover = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/refresh.png");
+        final BufferedImage refreshIconHover = ImageUtil.loadImageResource(FlippingPlugin.class, "/refresh.png");
         REFRESH_HOVER = new ImageIcon(ImageUtil.alphaOffset(refreshIconHover,.53f).getScaledInstance(12,12,Image.SCALE_SMOOTH));
 
-        final BufferedImage toggleOn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/toggle_on.png");
+        final BufferedImage toggleOn = ImageUtil.loadImageResource(FlippingPlugin.class, "/toggle_on.png");
         TOGGLE_ON = new ImageIcon(toggleOn);
 
         TOGGLE_OFF = new ImageIcon(ImageUtil.flipImage(
@@ -245,48 +245,48 @@ public class Icons {
                 false
         ));
 
-        final BufferedImage trashCanIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/trashicon.png");
+        final BufferedImage trashCanIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/trashicon.png");
         TRASH_CAN_ON = new ImageIcon(trashCanIcon.getScaledInstance(10,10,Image.SCALE_SMOOTH));
         TRASH_CAN_OFF = new ImageIcon(ImageUtil.alphaOffset(trashCanIcon, 0.53f).getScaledInstance(10,10, Image.SCALE_SMOOTH));
 
-        final BufferedImage questionMark = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/question-mark.png");
+        final BufferedImage questionMark = ImageUtil.loadImageResource(FlippingPlugin.class, "/question-mark.png");
         QUESTION_MARK = new ImageIcon(questionMark);
 
-        final BufferedImage userIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-alch.png");
-        final BufferedImage userIconCheese = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-cheese.png");
-        final BufferedImage userIconLoggedIn = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/user-loggedin.png");
+        final BufferedImage userIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/user-alch.png");
+        final BufferedImage userIconCheese = ImageUtil.loadImageResource(FlippingPlugin.class, "/user-cheese.png");
+        final BufferedImage userIconLoggedIn = ImageUtil.loadImageResource(FlippingPlugin.class, "/user-loggedin.png");
         USER_HOVER = new ImageIcon(userIconCheese);
         USER = new ImageIcon(userIcon);
         USER_LOGGED_IN = new ImageIcon(userIconLoggedIn);
 
-        final BufferedImage fuIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/graph_icon_green.png");
+        final BufferedImage fuIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/graph_icon_green.png");
         FU_ICON = new ImageIcon(fuIcon);
 
-        final BufferedImage keyIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/key.png");
+        final BufferedImage keyIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/key.png");
         KEY = new ImageIcon(keyIcon);
 
-        final BufferedImage flashIcon = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/flash-cheese.png");
+        final BufferedImage flashIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/flash-cheese.png");
         FLASH = new ImageIcon(flashIcon);
 
-        final BufferedImage rightArrowLarge = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/right-arrow-large.png");
+        final BufferedImage rightArrowLarge = ImageUtil.loadImageResource(FlippingPlugin.class, "/right-arrow-large.png");
         RIGHT_ARROW_LARGE = new ImageIcon(rightArrowLarge);
 
-        final BufferedImage leftArrowLarge = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/left-arrow-large.png");
+        final BufferedImage leftArrowLarge = ImageUtil.loadImageResource(FlippingPlugin.class, "/left-arrow-large.png");
         LEFT_ARROW_LARGE = new ImageIcon(leftArrowLarge);
 
-        final BufferedImage sort = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/sort.png");
+        final BufferedImage sort = ImageUtil.loadImageResource(FlippingPlugin.class, "/sort.png");
         SORT = new ImageIcon(ImageUtil.alphaOffset(sort, 0.53f));
 
-        final BufferedImage sortHover = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/sort.png");
+        final BufferedImage sortHover = ImageUtil.loadImageResource(FlippingPlugin.class, "/sort.png");
         SORT_HOVER = new ImageIcon(sort);
 
-        final BufferedImage construction = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/construction.png");
+        final BufferedImage construction = ImageUtil.loadImageResource(FlippingPlugin.class, "/construction.png");
         CONSTRUCTION = new ImageIcon(construction);
 
-        final BufferedImage recipeHelp = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/recipehelp.png");
+        final BufferedImage recipeHelp = ImageUtil.loadImageResource(FlippingPlugin.class, "/recipehelp.png");
         RECIPE_HELP = new ImageIcon(recipeHelp);
 
-        final BufferedImage magnifyingGlass = ImageUtil.getResourceStreamFromClass(FlippingPlugin.class, "/magnifying-glass.png");
+        final BufferedImage magnifyingGlass = ImageUtil.loadImageResource(FlippingPlugin.class, "/magnifying-glass.png");
         MAGNIFYING_GLASS = new ImageIcon(magnifyingGlass);
         MAGNIFYING_GLASS_HOVER = new ImageIcon(ImageUtil.alphaOffset(magnifyingGlass,.53f));
     }
