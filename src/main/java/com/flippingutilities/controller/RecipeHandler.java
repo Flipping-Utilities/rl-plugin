@@ -251,8 +251,8 @@ public class RecipeHandler {
      */
     private void stripElementalRunesFromRecipes(List<Recipe> recipes) {
         //water, earth, fire, air
-		Set<Integer> elementalRunes = new HashSet<>(Arrays.asList(ItemID.WATERRUNE, ItemID.EARTHRUNE, ItemID.FIRERUNE,
-			ItemID.AIRRUNE));
+        Set<Integer> elementalRunes = new HashSet<>(Arrays.asList(ItemID.WATERRUNE, ItemID.EARTHRUNE, ItemID.FIRERUNE,
+            ItemID.AIRRUNE));
 
         for (Recipe recipe : recipes) {
             List<RecipeItem> inputs = recipe.getInputs();
@@ -355,7 +355,7 @@ public class RecipeHandler {
             int itemId = e.getKey();
             //make sure that coins is never a limiting factor in how many recipes can be made, as it is automatically
             //accounted for
-			if (itemId == ItemID.COINS) {
+            if (itemId == ItemID.COINS) {
                 return new AbstractMap.SimpleEntry<>(itemId, Integer.MAX_VALUE);
             }
             long totalQuantity = e.getValue().stream().mapToLong(

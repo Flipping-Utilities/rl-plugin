@@ -94,7 +94,7 @@ public class RecipeFlipPanel extends JPanel {
         titleLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
         titleLabel.setBorder(new EmptyBorder(0,0,5,0));
 
-		boolean userAddedCoinsThatWereNotInRecipe = recipeFlip.getCoinCost() > 0 && !partialOffers.containsKey(ItemID.COINS);
+        boolean userAddedCoinsThatWereNotInRecipe = recipeFlip.getCoinCost() > 0 && !partialOffers.containsKey(ItemID.COINS);
         int rowSizeForUserAddedCoins = userAddedCoinsThatWereNotInRecipe? 1:0;
         JPanel componentGroupPanel = new JPanel(new DynamicGridLayout(1 + partialOffers.size() + rowSizeForUserAddedCoins, 1));
         componentGroupPanel.setBackground(CustomColors.DARK_GRAY);
@@ -110,7 +110,7 @@ public class RecipeFlipPanel extends JPanel {
             long quantity;
             long avgPrice;
 
-			if (itemId == ItemID.COINS) {
+            if (itemId == ItemID.COINS) {
                 itemName = "Coins";
                 quantity = recipeFlip.getCoinCost();
                 avgPrice = 1;
