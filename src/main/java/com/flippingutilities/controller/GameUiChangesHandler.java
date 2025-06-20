@@ -42,10 +42,10 @@ public class GameUiChangesHandler {
         Client client = plugin.getClient();
 
         if (event.getIndex() == VarClientInt.INPUT_TYPE
-				&& client.getVarcIntValue(VarClientInt.INPUT_TYPE) == 14
-				&& client.getWidget(InterfaceID.Chatbox.MES_LAYER_SCROLLCONTENTS) != null) {
+                && client.getVarcIntValue(VarClientInt.INPUT_TYPE) == 14
+                && client.getWidget(InterfaceID.Chatbox.MES_LAYER_SCROLLCONTENTS) != null) {
             plugin.getClientThread().invokeLater(() -> {
-				Widget geSearchResultBox = client.getWidget(InterfaceID.Chatbox.MES_LAYER_SCROLLCONTENTS);
+                Widget geSearchResultBox = client.getWidget(InterfaceID.Chatbox.MES_LAYER_SCROLLCONTENTS);
                 Widget child = geSearchResultBox.createChild(-1, WidgetType.TEXT);
                 child.setTextColor(0x800000);
                 child.setFontId(FontID.VERDANA_13_BOLD);
@@ -73,26 +73,26 @@ public class GameUiChangesHandler {
 
         //Check that it was the chat input that got enabled.
         if (event.getIndex() != VarClientInt.INPUT_TYPE
-				|| client.getWidget(InterfaceID.Chatbox.MES_TEXT) == null
-				|| client.getVarcIntValue(VarClientInt.INPUT_TYPE) != 7
-				|| client.getWidget(InterfaceID.GeOffers.SETUP_DESC) == null) {
+                || client.getWidget(InterfaceID.Chatbox.MES_TEXT) == null
+                || client.getVarcIntValue(VarClientInt.INPUT_TYPE) != 7
+                || client.getWidget(InterfaceID.GeOffers.SETUP_DESC) == null) {
             return;
         }
         quantityOrPriceChatboxOpen = true;
 
         plugin.getClientThread().invokeLater(() ->
         {
-			OfferEditor flippingWidget = new OfferEditor(client.getWidget(InterfaceID.Chatbox.MES_LAYER), client);
-			Optional<FlippingItem> selectedItem = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH)).findFirst();
+            OfferEditor flippingWidget = new OfferEditor(client.getWidget(InterfaceID.Chatbox.MES_LAYER), client);
+            Optional<FlippingItem> selectedItem = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH)).findFirst();
 
-			String chatInputText = client.getWidget(InterfaceID.Chatbox.MES_TEXT).getText();
-			String offerText = client.getWidget(InterfaceID.GeOffers.SETUP).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
+            String chatInputText = client.getWidget(InterfaceID.Chatbox.MES_TEXT).getText();
+            String offerText = client.getWidget(InterfaceID.GeOffers.SETUP).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
 
             if (chatInputText.equals("How many do you wish to buy?")) {
                 plugin.getFlippingPanel().getOfferEditorContainerPanel().selectQuantityEditor();
                 //No recorded data; default to total GE limit
                 if (!selectedItem.isPresent()) {
-					ItemStats itemStats = plugin.getItemManager().getItemStats(client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH));
+                    ItemStats itemStats = plugin.getItemManager().getItemStats(client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH));
                     int itemGELimit = itemStats != null ? itemStats.getGeLimit() : 0;
                     flippingWidget.showQuantityWidgets(itemGELimit);
                 } else {
@@ -131,7 +131,7 @@ public class GameUiChangesHandler {
 
     public void onVarbitChanged(VarbitChanged event) {
         Client client = plugin.getClient();
-		int varpId = event.getVarpId();
+        int varpId = event.getVarpId();
 
         //when a user clicks on a slot or leaves one, this event triggers
         if (event.getVarbitId() == VarbitID.GE_SELECTEDSLOT) {
@@ -143,22 +143,22 @@ public class GameUiChangesHandler {
         OfferEditorContainerPanel offerEditorContainerPanel = flippingPanel.getOfferEditorContainerPanel();
         //this is the varbit with id 4398
 
-		if (varpId == VarPlayerID.TRADEREMOVED_OTHER && offerEditorContainerPanel != null) {
+        if (varpId == VarPlayerID.TRADEREMOVED_OTHER && offerEditorContainerPanel != null) {
             AbstractOfferEditorPanel quantityEditorPanel = offerEditorContainerPanel.quantityEditorPanel;
             quantityEditorPanel.rebuild(quantityEditorPanel.getOptions());
         }
 
 
-		if (varpId == VarPlayerID.TRADINGPOST_SEARCH) {
-			int varpValue = client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH);
-			if (varpValue != -1 && varpValue != 0) {
-				highlightOffer(varpValue);
-			} else if (highlightedItem.isPresent()) {
-				//need to check if panel is highlighted in this case because curr ge item is changed if you come back to ge interface after exiting out
-				//and curr ge item would be -1 or 0 in that case and would trigger a dehighlight erroneously.
-				deHighlightOffer();
-			}
-		}
+        if (varpId == VarPlayerID.TRADINGPOST_SEARCH) {
+            int varpValue = client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH);
+            if (varpValue != -1 && varpValue != 0) {
+                highlightOffer(varpValue);
+            } else if (highlightedItem.isPresent()) {
+                //need to check if panel is highlighted in this case because curr ge item is changed if you come back to ge interface after exiting out
+                //and curr ge item would be -1 or 0 in that case and would trigger a dehighlight erroneously.
+                deHighlightOffer();
+            }
+        }
     }
 
     /**
@@ -166,7 +166,7 @@ public class GameUiChangesHandler {
      */
     private void handleClickOrLeaveOffer() {
         Client client = plugin.getClient();
-		int slot = client.getVarbitValue(VarbitID.GE_SELECTEDSLOT) - 1;
+        int slot = client.getVarbitValue(VarbitID.GE_SELECTEDSLOT) - 1;
         if (slot == -1 && highlightedItem.isPresent()) {
             deHighlightOffer();
             return;
@@ -185,27 +185,27 @@ public class GameUiChangesHandler {
      * events are fired when the widgets are redrawn (?).
      */
     public void onWidgetLoaded(WidgetLoaded event) {
-		int groupId = event.getGroupId();
-		switch (groupId) {
-			case InterfaceID.GE_HISTORY:
-				//ge history widget loaded
-				//GE_HISTORY_TAB_WIDGET_ID does not load when history tab is opened from the banker right click. It only
-				// loads when the "history" button is clicked for the ge interface. However, 383 loads in both situations.
-				plugin.showGeHistoryTabPanel();
-			case InterfaceID.GE_OFFERS:
-			case InterfaceID.BANKPIN_KEYPAD:
-				//if either ge interface or bank pin interface is loaded, hide the ge history tab panel again
-				plugin.getMasterPanel().selectPreviouslySelectedTab();
-			case InterfaceID.INVENTORY: //this is the same as what GE_HISTORY_TAB_WIDGET_ID was, probably a repurposed config name
-				//remove highlighted item
-				//The player opens the trade history tab from the ge interface. Necessary since the back button isn't
-				// considered hidden here.
-				//this (id 149 and not id 383) will also trigger when the player just exits out of the ge interface
-				// offer window screen, which is good as then the highlight won't linger in that case.
-				if (highlightedItem.isPresent()) {
-					deHighlightOffer();
-				}
-		}
+        int groupId = event.getGroupId();
+        switch (groupId) {
+            case InterfaceID.GE_HISTORY:
+                //ge history widget loaded
+                //GE_HISTORY_TAB_WIDGET_ID does not load when history tab is opened from the banker right click. It only
+                // loads when the "history" button is clicked for the ge interface. However, 383 loads in both situations.
+                plugin.showGeHistoryTabPanel();
+            case InterfaceID.GE_OFFERS:
+            case InterfaceID.BANKPIN_KEYPAD:
+                //if either ge interface or bank pin interface is loaded, hide the ge history tab panel again
+                plugin.getMasterPanel().selectPreviouslySelectedTab();
+            case InterfaceID.INVENTORY: //this is the same as what GE_HISTORY_TAB_WIDGET_ID was, probably a repurposed config name
+                //remove highlighted item
+                //The player opens the trade history tab from the ge interface. Necessary since the back button isn't
+                // considered hidden here.
+                //this (id 149 and not id 383) will also trigger when the player just exits out of the ge interface
+                // offer window screen, which is good as then the highlight won't linger in that case.
+                if (highlightedItem.isPresent()) {
+                    deHighlightOffer();
+                }
+        }
     }
 
 

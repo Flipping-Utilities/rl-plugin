@@ -99,7 +99,7 @@ public class OptionHandler {
         if (getCashStackInInv() == 0) {
             throw new InvalidOptionException("Player has no cash in inventory");
         }
-		int offerPrice = plugin.getClient().getVarbitValue(VarbitID.GE_NEWOFFER_PRICE);
+        int offerPrice = plugin.getClient().getVarbitValue(VarbitID.GE_NEWOFFER_PRICE);
         if (offerPrice <= 0) {
             throw new InvalidOptionException("Item offer price missing");
         }
@@ -184,13 +184,13 @@ public class OptionHandler {
     }
 
     private int getCashStackInInv() {
-		ItemContainer inventory = plugin.getClient().getItemContainer(InventoryID.INV);
+        ItemContainer inventory = plugin.getClient().getItemContainer(InventoryID.INV);
         if (inventory == null) {
             return 0;
         }
         Item[] inventoryItems = inventory.getItems();
         for (Item item : inventoryItems) {
-			if (item.getId() == ItemID.COINS) {
+            if (item.getId() == ItemID.COINS) {
                 return item.getQuantity();
             }
         }

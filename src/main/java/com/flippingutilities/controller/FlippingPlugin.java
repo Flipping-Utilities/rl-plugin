@@ -244,7 +244,7 @@ public class FlippingPlugin extends Plugin {
         masterPanel.addView(geHistoryTabPanel, "ge history");
         navButton = NavigationButton.builder()
                 .tooltip("Flipping Utilities")
-				.icon(ImageUtil.loadImageResource(getClass(), "/graph_icon_green.png"))
+                .icon(ImageUtil.loadImageResource(getClass(), "/graph_icon_green.png"))
                 .priority(3)
                 .panel(masterPanel)
                 .build();
@@ -361,10 +361,10 @@ public class FlippingPlugin extends Plugin {
 
     public void handleLogin(String displayName) {
         wikiDataFetcherJob.onWorldSwitch(client.getWorldType());
-		if (client.getVarbitValue(VarbitID.IRONMAN) != 0) {
-				log.info("account is an ironman, not adding it to the cache");
-				return;
-			}
+        if (client.getVarbitValue(VarbitID.IRONMAN) != 0) {
+                log.info("account is an ironman, not adding it to the cache");
+                return;
+            }
 
         log.info("{} has just logged in!", displayName);
         if (!dataHandler.getCurrentAccounts().contains(displayName)) {
@@ -678,7 +678,7 @@ public class FlippingPlugin extends Plugin {
      * slot widgets to appear/get rebuilt.
      */
     public void setWidgetsOnSlotStateDrawer() {
-		Widget slotWidgets = client.getWidget(InterfaceID.GeOffers.INDEX);
+        Widget slotWidgets = client.getWidget(InterfaceID.GeOffers.INDEX);
         if (slotWidgets != null) {
             slotStateDrawer.setSlotWidgets(slotWidgets.getStaticChildren());
         }
@@ -690,7 +690,7 @@ public class FlippingPlugin extends Plugin {
 
             //Get the offer slots from the window container
             //We add one to the index, as the first widget is the text above the offer slots
-			Widget offerSlot = client.getWidget(InterfaceID.GeOffers.INDEX).getStaticChildren()[slotIndex + 1];
+            Widget offerSlot = client.getWidget(InterfaceID.GeOffers.INDEX).getStaticChildren()[slotIndex + 1];
 
             if (offerSlot == null) {
                 return;
@@ -781,7 +781,7 @@ public class FlippingPlugin extends Plugin {
 
     public void showGeHistoryTabPanel() {
         clientThread.invokeLater(() -> {
-			Widget[] geHistoryTabWidgets = client.getWidget(InterfaceID.GeHistory.LIST).getDynamicChildren();
+            Widget[] geHistoryTabWidgets = client.getWidget(InterfaceID.GeHistory.LIST).getDynamicChildren();
             List<OfferEvent> offerEvents = GeHistoryTabExtractor.convertWidgetsToOfferEvents(geHistoryTabWidgets);
             List<List<OfferEvent>> matchingOffers = new ArrayList<>();
             offerEvents.forEach(o -> {
@@ -907,7 +907,7 @@ public class FlippingPlugin extends Plugin {
                     optionExercised.ifPresent(option -> clientThread.invoke(() -> {
                         try {
                             int optionValue = calculateOptionValue(option);
-							client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(optionValue + "*");
+                            client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(optionValue + "*");
                             client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(optionValue));
                             flippingPanel.getOfferEditorContainerPanel().highlightPressedOption(keyPressed);
                             e.consume();

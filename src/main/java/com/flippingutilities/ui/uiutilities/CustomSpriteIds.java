@@ -6,20 +6,20 @@ import java.util.Arrays;
 import java.util.List;
 
 public class CustomSpriteIds {
-	public static List<Integer> DEFAULT_SLOT_SPRITES = Arrays.asList(
-	    SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL_989,    // Default GE slot bottom
-		SpriteID.UNKNOWN_BORDER_CORNER_BOTTOM_LEFT,     // Default GE slot bottom left
-		SpriteID.UNKNOWN_BORDER_CORNER_BOTTOM_RIGHT,    // Default GE slot bottom right
-		SpriteID.UNKNOWN_BORDER_CORNER_TOP_LEFT,        // Default GE slot top left
-		SpriteID.UNKNOWN_BORDER_CORNER_TOP_RIGHT,       // Default GE slot top right
-		SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL_995,    // Default GE slot horizontal
-		SpriteID.UNKNOWN_BORDER_INTERSECTION_LEFT,      // Default GE slot intersection left
-		SpriteID.UNKNOWN_BORDER_INTERSECTION_RIGHT,     // Default GE slot intersection right
-		SpriteID.UNKNOWN_BORDER_EDGE_VERTICAL,          // Default GE slot left
-		SpriteID.UNKNOWN_BORDER_EDGE_VERTICAL_990,      // Default GE slot right
-		SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL,        // Default GE slot top
-		SpriteID.GE_SELECTED_ITEM_BOX                   // Default GE slot item box
-	);
+    public static List<Integer> DEFAULT_SLOT_SPRITES = Arrays.asList(
+        SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL_989,    // Default GE slot bottom
+        SpriteID.UNKNOWN_BORDER_CORNER_BOTTOM_LEFT,     // Default GE slot bottom left
+        SpriteID.UNKNOWN_BORDER_CORNER_BOTTOM_RIGHT,    // Default GE slot bottom right
+        SpriteID.UNKNOWN_BORDER_CORNER_TOP_LEFT,        // Default GE slot top left
+        SpriteID.UNKNOWN_BORDER_CORNER_TOP_RIGHT,       // Default GE slot top right
+        SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL_995,    // Default GE slot horizontal
+        SpriteID.UNKNOWN_BORDER_INTERSECTION_LEFT,      // Default GE slot intersection left
+        SpriteID.UNKNOWN_BORDER_INTERSECTION_RIGHT,     // Default GE slot intersection right
+        SpriteID.UNKNOWN_BORDER_EDGE_VERTICAL,          // Default GE slot left
+        SpriteID.UNKNOWN_BORDER_EDGE_VERTICAL_990,      // Default GE slot right
+        SpriteID.UNKNOWN_BORDER_EDGE_HORIZONTAL,        // Default GE slot top
+        SpriteID.GE_SELECTED_ITEM_BOX                   // Default GE slot item box
+    );
 
     public static final int RED_GE_SLOT_BOTTOM = 189546140;
     public static final int RED_GE_SLOT_BOTTOM_LEFT = 189546141;
