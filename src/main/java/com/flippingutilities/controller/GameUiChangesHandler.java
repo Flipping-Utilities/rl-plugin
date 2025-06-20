@@ -134,7 +134,7 @@ public class GameUiChangesHandler {
 		int varpId = event.getVarpId();
 
         //when a user clicks on a slot or leaves one, this event triggers
-        if (event.getVarpId() == VarPlayerID.ARMOURHITSOUND) {
+        if (event.getVarbitId() == VarbitID.GE_SELECTEDSLOT) {
             handleClickOrLeaveOffer();
             return;
         }
