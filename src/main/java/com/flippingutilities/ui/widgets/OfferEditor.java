@@ -30,8 +30,8 @@ import com.flippingutilities.ui.uiutilities.Icons;
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
 import net.runelite.api.VarClientStr;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.*;
-import net.runelite.client.ui.ColorScheme;
 
 import javax.swing.*;
 
@@ -86,7 +86,7 @@ public class OfferEditor {
         nonWikiText.setAction(1, "Set quantity");
         nonWikiText.setOnOpListener((JavaScriptCallback) ev ->
         {
-            client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(quantity + "*");
+            client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(quantity + "*");
             client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(quantity));
         });
     }
@@ -105,7 +105,7 @@ public class OfferEditor {
             nonWikiText.setAction(0, "Set price");
             nonWikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
-                client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(instaSellPrice + "*");
+                client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(instaSellPrice + "*");
                 client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(instaSellPrice));
             });
         } else {
@@ -117,7 +117,7 @@ public class OfferEditor {
             wikiText.setAction(1, "Set wiki price");
             wikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
-                client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(wikiInstaSellPrice + "*");
+                client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(wikiInstaSellPrice + "*");
                 client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(wikiInstaSellPrice));
             });
         } else {
@@ -139,7 +139,7 @@ public class OfferEditor {
             nonWikiText.setAction(0, "Set price");
             nonWikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
-                client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(instaBuyPrice + "*");
+                client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(instaBuyPrice + "*");
                 client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(instaBuyPrice));
             });
         } else {
@@ -151,7 +151,7 @@ public class OfferEditor {
             wikiText.setAction(1, "Set wiki price");
             wikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
-                client.getWidget(ComponentID.CHATBOX_FULL_INPUT).setText(wikiInstaBuyPrice + "*");
+                client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(wikiInstaBuyPrice + "*");
                 client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(wikiInstaBuyPrice));
             });
         } else {

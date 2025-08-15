@@ -1,28 +1,25 @@
 package com.flippingutilities.ui.uiutilities;
 
-import net.runelite.api.SpriteID;
+import net.runelite.api.gameval.SpriteID;
 
 import java.util.Arrays;
 import java.util.List;
 
 public class CustomSpriteIds {
-    public static final int DEFAULT_GE_SLOT_BOTTOM = 989;
-    public static final int DEFAULT_GE_SLOT_BOTTOM_LEFT = 993;
-    public static final int DEFAULT_GE_SLOT_BOTTOM_RIGHT = 994;
-    public static final int DEFAULT_GE_SLOT_TOP_LEFT = 991;
-    public static final int DEFAULT_GE_SLOT_TOP_RIGHT = 992;
-    public static final int DEFAULT_GE_SLOT_HORIZONTAL = 995;
-    public static final int DEFAULT_GE_SLOT_INTERSECTION_LEFT = 996;
-    public static final int DEFAULT_GE_SLOT_INTERSECTION_RIGHT = 997;
-    public static final int DEFAULT_GE_SLOT_LEFT = 988;
-    public static final int DEFAULT_GE_SLOT_RIGHT = 990;
-    public static final int DEFAULT_GE_SLOT_TOP = 987;
-    public static final int DEFAULT_GE_SLOT_ITEM_BOX = SpriteID.GE_SELECTED_ITEM_BOX;
     public static List<Integer> DEFAULT_SLOT_SPRITES = Arrays.asList(
-        DEFAULT_GE_SLOT_BOTTOM, DEFAULT_GE_SLOT_BOTTOM_LEFT, DEFAULT_GE_SLOT_BOTTOM_RIGHT,
-        DEFAULT_GE_SLOT_TOP_LEFT, DEFAULT_GE_SLOT_TOP_RIGHT, DEFAULT_GE_SLOT_HORIZONTAL,
-        DEFAULT_GE_SLOT_INTERSECTION_LEFT, DEFAULT_GE_SLOT_INTERSECTION_RIGHT, DEFAULT_GE_SLOT_LEFT,
-        DEFAULT_GE_SLOT_RIGHT, DEFAULT_GE_SLOT_TOP, DEFAULT_GE_SLOT_ITEM_BOX);
+        SpriteID.V2BordersSlim.HORIZONTAL_B,           // Default GE slot bottom
+        SpriteID.V2BordersSlim.BOTTOM_LEFT,            // Default GE slot bottom left
+        SpriteID.V2BordersSlim.BOTTOM_RIGHT,           // Default GE slot bottom right
+        SpriteID.V2BordersSlim.TOP_LEFT,               // Default GE slot top left
+        SpriteID.V2BordersSlim.TOP_RIGHT,              // Default GE slot top right
+        SpriteID.V2BordersSlim.HORIZONTAL_C,           // Default GE slot horizontal
+        SpriteID.V2BordersSlim.INTERSECTION_LEFT,      // Default GE slot intersection left
+        SpriteID.V2BordersSlim.INTERSECTION_RIGHT,     // Default GE slot intersection right
+        SpriteID.V2BordersSlim.VERTICAL_A,             // Default GE slot left
+        SpriteID.V2BordersSlim.VERTICAL_B,             // Default GE slot right
+        SpriteID.V2BordersSlim.HORIZONTAL_A,           // Default GE slot top
+        SpriteID.GeItembackdrop.BOX                    // Default GE slot item box
+    );
 
     public static final int RED_GE_SLOT_BOTTOM = 189546140;
     public static final int RED_GE_SLOT_BOTTOM_LEFT = 189546141;

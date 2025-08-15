@@ -36,6 +36,8 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.gameval.ItemID;
+
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.OkHttpClient;
@@ -248,8 +250,9 @@ public class RecipeHandler {
      * staffs
      */
     private void stripElementalRunesFromRecipes(List<Recipe> recipes) {
-        // water, earth, fire, air
-        Set<Integer> elementalRunes = new HashSet<>(Arrays.asList(555, 557, 554, 556));
+        //water, earth, fire, air
+        Set<Integer> elementalRunes = new HashSet<>(Arrays.asList(ItemID.WATERRUNE, ItemID.EARTHRUNE, ItemID.FIRERUNE,
+            ItemID.AIRRUNE));
 
         for (Recipe recipe : recipes) {
             List<RecipeItem> inputs = recipe.getInputs();
@@ -350,10 +353,9 @@ public class RecipeHandler {
         Map<Integer, Integer> itemIdToQuantity = recipe.getItemIdToQuantity();
         return itemIdToPartialOffers.entrySet().stream().map(e -> {
             int itemId = e.getKey();
-            // make sure that coins is never a limiting factor in how many recipes can be
-            // made, as it is automatically
-            // accounted for
-            if (itemId == 995) {
+            //make sure that coins is never a limiting factor in how many recipes can be made, as it is automatically
+            //accounted for
+            if (itemId == ItemID.COINS) {
                 return new AbstractMap.SimpleEntry<>(itemId, Integer.MAX_VALUE);
             }
             long totalQuantity = e.getValue().stream().mapToLong(
