@@ -277,35 +277,40 @@ public class RecipeHandler {
         
         while (iterator.hasNext()) {
             Recipe recipe = iterator.next();
-            String recipeKey = createRecipeKey(recipe);
+            String key = createRecipeKey(recipe);
             
-            if (uniqueRecipes.containsKey(recipeKey)) {
-                // This is a duplicate recipe, remove it
-                iterator.remove();
+            if (uniqueRecipes.containsKey(key)) {
+                iterator.remove(); // Remove duplicate
             } else {
-                uniqueRecipes.put(recipeKey, recipe);
+                uniqueRecipes.put(key, recipe); // Keep first occurrence
             }
         }
     }
 
     /**
      * Creates a unique key for a recipe based on its inputs and outputs.
-     * This is used to identify duplicate recipes.
+     * Used for identifying duplicate recipes.
      */
     private String createRecipeKey(Recipe recipe) {
-        StringBuilder key = new StringBuilder();
-        
-        // Add inputs to key
-        recipe.getInputs().stream()
-                .sorted((a, b) -> Integer.compare(a.getId(), b.getId()))
-                .forEach(input -> key.append("i").append(input.getId()).append("q").append(input.getQuantity()));
-        
-        // Add outputs to key
-        recipe.getOutputs().stream()
-                .sorted((a, b) -> Integer.compare(a.getId(), b.getId()))
-                .forEach(output -> key.append("o").append(output.getId()).append("q").append(output.getQuantity()));
-        
-        return key.toString();
+        // Sort inputs by id, quantity to ensure consistent key generation
+        String inputsKey = recipe.getInputs().stream()
+            .sorted((a, b) -> {
+                int idCompare = Integer.compare(a.getId(), b.getId());
+                return idCompare != 0 ? idCompare : Integer.compare(a.getQuantity(), b.getQuantity());
+            })
+            .map(item -> item.getId() + ":" + item.getQuantity())
+            .collect(Collectors.joining(","));
+            
+        // Sort outputs by id, quantity to ensure consistent key generation  
+        String outputsKey = recipe.getOutputs().stream()
+            .sorted((a, b) -> {
+                int idCompare = Integer.compare(a.getId(), b.getId());
+                return idCompare != 0 ? idCompare : Integer.compare(a.getQuantity(), b.getQuantity());
+            })
+            .map(item -> item.getId() + ":" + item.getQuantity())
+            .collect(Collectors.joining(","));
+            
+        return inputsKey + "|" + outputsKey;
     }
 
     private Optional<Map<Integer, PotionGroup>> getItemIdToPotionGroup(
