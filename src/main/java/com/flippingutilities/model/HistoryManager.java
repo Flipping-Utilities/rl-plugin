@@ -167,6 +167,12 @@ public class HistoryManager
 		for (int i = compressedOfferEvents.size() - 1; i > -1; i--)
 		{
 			OfferEvent aPreviousOffer = compressedOfferEvents.get(i);
+
+			// if the previous offer was cancelled while a partial offer came through, the old (now invalid quantity)
+			// cancelled offer must be deleted
+			if (newOfferEvent.isUpdateForCancelled(aPreviousOffer)) {
+				compressedOfferEvents.remove(i);
+			}
 			if (aPreviousOffer.getSlot() == newOfferEvent.getSlot() && aPreviousOffer.isBuy() == newOfferEvent.isBuy())
 			{
 				//if it belongs to the same slot and its complete, it must belong to a previous trade given that
