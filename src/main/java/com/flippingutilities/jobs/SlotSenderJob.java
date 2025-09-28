@@ -39,13 +39,13 @@ public class SlotSenderJob {
 
     public void start() {
         slotStateSenderTask = executor.scheduleAtFixedRate(this::sendSlots, 10, PERIOD, TimeUnit.SECONDS);
-        log.info("started slot sender job");
+        log.debug("started slot sender job");
     }
 
     public void stop() {
         if (!slotStateSenderTask.isCancelled()) {
             slotStateSenderTask.cancel(true);
-            log.info("shut down slot sender job");
+            log.debug("shut down slot sender job");
         }
     }
 

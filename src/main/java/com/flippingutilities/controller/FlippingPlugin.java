@@ -268,7 +268,7 @@ public class FlippingPlugin extends Plugin {
 
             //this is only relevant if the user downloads/enables the plugin after they login.
             if (client.getGameState() == GameState.LOGGED_IN) {
-                log.info("user is already logged in when they downloaded/enabled the plugin");
+                log.debug("user is already logged in when they downloaded/enabled the plugin");
                 onLoggedInGameState();
             }
 
@@ -279,7 +279,7 @@ public class FlippingPlugin extends Plugin {
 
     @Override
     protected void shutDown() {
-        log.info("shutdown running!");
+        log.debug("shutdown running!");
         if (generalRepeatingTasks != null) {
             generalRepeatingTasks.cancel(true);
             generalRepeatingTasks = null;
@@ -362,13 +362,13 @@ public class FlippingPlugin extends Plugin {
     public void handleLogin(String displayName) {
         wikiDataFetcherJob.onWorldSwitch(client.getWorldType());
         if (client.getVarbitValue(VarbitID.IRONMAN) != 0) {
-                log.info("account is an ironman, not adding it to the cache");
+                log.debug("account is an ironman, not adding it to the cache");
                 return;
             }
 
-        log.info("{} has just logged in!", displayName);
+        log.debug("{} has just logged in!", displayName);
         if (!dataHandler.getCurrentAccounts().contains(displayName)) {
-            log.info("data handler does not contain data for {}", displayName);
+            log.debug("data handler does not contain data for {}", displayName);
             dataHandler.addAccount(displayName);
             masterPanel.getAccountSelector().addItem(displayName);
         }
@@ -394,7 +394,7 @@ public class FlippingPlugin extends Plugin {
         masterPanel.getAccountSelector().setSelectedItem(displayName);
 
         if (slotTimersTask == null && config.slotTimersEnabled()) {
-            log.info("starting slot timers on login");
+            log.debug("starting slot timers on login");
             slotTimersTask = startSlotTimers();
         }
         apiAuthHandler.checkRsn(displayName);
@@ -402,13 +402,13 @@ public class FlippingPlugin extends Plugin {
     }
 
     public void handleLogout() {
-        log.info("{} is logging out", currentlyLoggedInAccount);
+        log.debug("{} is logging out", currentlyLoggedInAccount);
 
         dataHandler.getAccountData(currentlyLoggedInAccount).setLastSessionTimeUpdate(null);
         dataHandler.storeData();
 
         if (slotTimersTask != null && !slotTimersTask.isCancelled()) {
-            log.info("cancelling slot timers task on logout");
+            log.debug("cancelling slot timers task on logout");
             slotTimersTask.cancel(true);
         }
         slotTimersTask = null;
@@ -430,12 +430,12 @@ public class FlippingPlugin extends Plugin {
                 statPanel.updateTimeDisplay();
                 updateSessionTime();
             } catch (ConcurrentModificationException e) {
-                log.info("concurrent modification exception. This is fine, will just restart tasks after delay." +
+                log.warn("concurrent modification exception. This is fine, will just restart tasks after delay." +
                         " Cancelling general repeating tasks and starting it again after 5000 ms delay");
                 generalRepeatingTasks.cancel(true);
                 generalRepeatingTasks = setupRepeatingTasks(5000);
             } catch (Exception e) {
-                log.info("unknown exception in repeating tasks, error = {}, will cancel and restart them after 5 sec delay", e);
+                log.warn("unknown exception in repeating tasks, error = {}, will cancel and restart them after 5 sec delay", e);
                 generalRepeatingTasks.cancel(true);
                 generalRepeatingTasks = setupRepeatingTasks(5000);
             }
@@ -508,7 +508,7 @@ public class FlippingPlugin extends Plugin {
      * @param selectedName the username the user selected from the dropdown menu.
      */
     public void changeView(String selectedName) {
-        log.info("changing view to {}", selectedName);
+        log.debug("changing view to {}", selectedName);
         accountCurrentlyViewed = selectedName;
         List<FlippingItem> itemsForCurrentView = viewItemsForCurrentView();
         statPanel.resetPaginators();
@@ -555,7 +555,7 @@ public class FlippingPlugin extends Plugin {
         String displayNameOfChangedAcc = fileName.split("\\.")[0];
 
         if (displayNameOfChangedAcc.equals(dataHandler.thisClientLastStored)) {
-            log.info("not reloading data for {} into the cache as this client was the last one to store it", displayNameOfChangedAcc);
+            log.debug("not reloading data for {} into the cache as this client was the last one to store it", displayNameOfChangedAcc);
             dataHandler.thisClientLastStored = null;
             return;
         }
@@ -571,7 +571,7 @@ public class FlippingPlugin extends Plugin {
         {
             //have to run on client thread cause loadAccount calls accountData.prepareForUse which uses the itemmanager
             clientThread.invokeLater(() -> {
-                log.info("second has passed, updating cache for {}", displayNameOfChangedAcc);
+                log.debug("second has passed, updating cache for {}", displayNameOfChangedAcc);
                 dataHandler.loadAccountData(displayNameOfChangedAcc);
                 if (!masterPanel.getViewSelectorItems().contains(displayNameOfChangedAcc)) {
                     masterPanel.getAccountSelector().addItem(displayNameOfChangedAcc);
@@ -914,7 +914,7 @@ public class FlippingPlugin extends Plugin {
                         } catch (InvalidOptionException ex) {
                             //ignore
                         } catch (Exception ex) {
-                            log.info("exception during key press for offer editor", ex);
+                            log.warn("exception during key press for offer editor", ex);
                         }
                     }));
                 }

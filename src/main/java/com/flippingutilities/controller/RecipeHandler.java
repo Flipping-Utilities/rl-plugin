@@ -63,7 +63,7 @@ public class RecipeHandler {
         this.idToPotionGroup = getItemIdToPotionGroup(loadPotionGroups());
 
         if (idToRecipes.isPresent()) {
-            log.info("Successfully loaded recipes");
+            log.debug("Successfully loaded recipes");
         }
     }
 

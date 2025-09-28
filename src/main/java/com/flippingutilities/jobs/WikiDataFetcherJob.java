@@ -51,19 +51,19 @@ public class WikiDataFetcherJob {
 
     public void start() {
         wikiDataFetchTask = executor.scheduleAtFixedRate(() -> this.attemptToFetchWikiData(false), 5,1, TimeUnit.SECONDS);
-        log.info("started wiki fetching job");
+        log.debug("started wiki fetching job");
     }
 
     public void stop() {
         if (!wikiDataFetchTask.isCancelled() && !wikiDataFetchTask.isCancelled()) {
             wikiDataFetchTask.cancel(true);
-            log.info("shut down wiki fetching job");
+            log.debug("shut down wiki fetching job");
         }
     }
 
     public void onWorldSwitch(EnumSet<WorldType> worldType) {
         if (worldType.contains(WorldType.DEADMAN)) {
-            log.info("Switching to requesting deadman api");
+            log.debug("Switching to requesting deadman api");
             apiUrl = DEADMAN_API;
         }
         else {
