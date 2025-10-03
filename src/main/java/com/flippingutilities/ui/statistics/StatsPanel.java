@@ -899,19 +899,18 @@ public class StatsPanel extends JPanel
 	}
 
 	private String calculateAutoSaveDisplayText() {
-		Instant lastSaveTime = plugin.getLastAutoSaveTime();
-		if (lastSaveTime == null) {
+		Instant nextSave = plugin.getNextScheduledAutoSave();
+		if (nextSave == null) {
 			return "Pending";
 		}
 
-		long secondsUntilNextSave = calculateSecondsUntilNextSave(lastSaveTime);
+		long secondsUntilNextSave = calculateSecondsUntilNextSave(nextSave);
 		return formatCountdownTime(secondsUntilNextSave);
 	}
 
-	private long calculateSecondsUntilNextSave(Instant lastSaveTime) {
-		Duration timeSinceLastSave = Duration.between(lastSaveTime, Instant.now());
-		int intervalMinutes = plugin.getConfig().autoSaveInterval();
-		return (intervalMinutes * 60) - timeSinceLastSave.getSeconds();
+	private long calculateSecondsUntilNextSave(Instant nextScheduledSave) {
+		long seconds = Duration.between(Instant.now(), nextScheduledSave).getSeconds();
+		return Math.max(0, seconds);
 	}
 
 	private String formatCountdownTime(long secondsUntilNextSave) {

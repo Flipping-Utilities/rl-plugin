@@ -188,7 +188,7 @@ public class FlippingPlugin extends Plugin {
     private ScheduledFuture slotTimersTask;
     private ScheduledFuture autoSaveTask;
     @Getter
-    private Instant lastAutoSaveTime;
+    private Instant nextScheduledAutoSave;
     private Instant startUpTime = Instant.now();
 
     @Getter
@@ -987,12 +987,12 @@ public class FlippingPlugin extends Plugin {
     private ScheduledFuture startAutoSave() {
         int intervalMinutes = config.autoSaveInterval();
         log.info("Starting auto-save task with interval of {} minutes", intervalMinutes);
-        lastAutoSaveTime = Instant.now();
+        nextScheduledAutoSave = Instant.now().plus(intervalMinutes, ChronoUnit.MINUTES);
         return executor.scheduleAtFixedRate(() -> {
             try {
                 log.info("Auto-save executing");
                 dataHandler.storeData();
-                lastAutoSaveTime = Instant.now();
+                nextScheduledAutoSave = Instant.now().plus(config.autoSaveInterval(), ChronoUnit.MINUTES);
                 SwingUtilities.invokeLater(() -> statPanel.updateAutoSaveDisplay());
             } catch (Exception e) {
                 log.error("Exception during auto-save", e);
@@ -1159,5 +1159,6 @@ public class FlippingPlugin extends Plugin {
         }
         autoSaveTask.cancel(true);
         autoSaveTask = null;
+        nextScheduledAutoSave = null;
     }
 }
