@@ -890,26 +890,36 @@ public class StatsPanel extends JPanel
 			return;
 		}
 
-		Instant lastSaveTime = plugin.getLastAutoSaveTime();
-		if (lastSaveTime == null) {
-			autoSaveVal.setText("Pending");
-		} else {
-			Duration timeSinceLastSave = Duration.between(lastSaveTime, Instant.now());
-			long secondsSinceLastSave = timeSinceLastSave.getSeconds();
-			int intervalMinutes = plugin.getConfig().autoSaveInterval();
-			long secondsUntilNextSave = (intervalMinutes * 60) - secondsSinceLastSave;
-
-			if (secondsUntilNextSave <= 0) {
-				autoSaveVal.setText("00:00");
-			} else {
-				long minutes = secondsUntilNextSave / 60;
-				long seconds = secondsUntilNextSave % 60;
-				autoSaveVal.setText(String.format("%02d:%02d", minutes, seconds));
-			}
-		}
+		String displayText = calculateAutoSaveDisplayText();
+		autoSaveVal.setText(displayText);
 
 		subInfoPanel.add(autoSavePanel);
 		revalidate();
 		repaint();
+	}
+
+	private String calculateAutoSaveDisplayText() {
+		Instant lastSaveTime = plugin.getLastAutoSaveTime();
+		if (lastSaveTime == null) {
+			return "Pending";
+		}
+
+		long secondsUntilNextSave = calculateSecondsUntilNextSave(lastSaveTime);
+		return formatCountdownTime(secondsUntilNextSave);
+	}
+
+	private long calculateSecondsUntilNextSave(Instant lastSaveTime) {
+		Duration timeSinceLastSave = Duration.between(lastSaveTime, Instant.now());
+		int intervalMinutes = plugin.getConfig().autoSaveInterval();
+		return (intervalMinutes * 60) - timeSinceLastSave.getSeconds();
+	}
+
+	private String formatCountdownTime(long secondsUntilNextSave) {
+		if (secondsUntilNextSave <= 0) {
+			return "00:00";
+		}
+		long minutes = secondsUntilNextSave / 60;
+		long seconds = secondsUntilNextSave % 60;
+		return String.format("%02d:%02d", minutes, seconds);
 	}
 }
