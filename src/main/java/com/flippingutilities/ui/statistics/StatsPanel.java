@@ -86,6 +86,7 @@ public class StatsPanel extends JPanel
 	private final JLabel totalFlipsText = new JLabel("Total Flips Made: ");
 	private final JLabel taxPaidText = new JLabel("Tax paid: ");
 	private final JLabel sessionTimeText = new JLabel("Session Time: ");
+	private final JLabel autoSaveText = new JLabel("Next auto-save: ");
 	private final JLabel[] textLabelArray = {hourlyProfitText, roiText, totalFlipsText, taxPaidText, sessionTimeText};
 
 	/* Subinfo value labels */
@@ -94,6 +95,7 @@ public class StatsPanel extends JPanel
 	private final JLabel totalFlipsVal = new JLabel("", SwingConstants.RIGHT);
 	private final JLabel taxPaidVal = new JLabel("", SwingConstants.RIGHT);
 	private final JLabel sessionTimeVal = new JLabel("", SwingConstants.RIGHT);
+	private final JLabel autoSaveVal = new JLabel("", SwingConstants.RIGHT);
 	private final JLabel[] valLabelArray = {hourlyProfitVal, roiVal, totalFlipsVal, taxPaidVal, sessionTimeVal};
 
 	private final JPanel hourlyProfitPanel = new JPanel(new BorderLayout());
@@ -101,6 +103,7 @@ public class StatsPanel extends JPanel
 	private final JPanel totalFlipsPanel = new JPanel(new BorderLayout());
 	private final JPanel taxPaidPanel = new JPanel(new BorderLayout());
 	private final JPanel sessionTimePanel = new JPanel(new BorderLayout());
+	private final JPanel autoSavePanel = new JPanel(new BorderLayout());
 	private final JPanel[] subInfoPanelArray = {hourlyProfitPanel, roiPanel, totalFlipsPanel, taxPaidPanel, sessionTimePanel};
 
 	//Contains the unix time of the start of the interval.
@@ -360,6 +363,8 @@ public class StatsPanel extends JPanel
 
 	public void updateCumulativeDisplays(List<FlippingItem> tradesList, List<RecipeFlipGroup> recipeFlipGroups)
 	{
+		subInfoPanel.remove(autoSavePanel);
+
 		if (!Objects.equals(timeIntervalDropdown.getSelectedItem(), "Session"))
 		{
 			subInfoPanel.remove(sessionTimePanel);
@@ -410,6 +415,7 @@ public class StatsPanel extends JPanel
 		updateRoiDisplay(totalProfit, totalExpenses);
 		updateTotalFlipsDisplay(totalFlips);
 		updateTaxPaidDisplay(taxPaid);
+		updateAutoSaveDisplay();
 	}
 
 	/**
@@ -746,6 +752,9 @@ public class StatsPanel extends JPanel
 		sessionTimeVal.setPreferredSize(new Dimension(200, 0));
 		sessionTimeVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 
+		autoSaveText.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+		autoSaveVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
+
 		//Profit total over the selected time interval
 		totalProfitVal.setFont(StyleContext.getDefaultStyleContext()
 			.getFont(FontManager.getRunescapeBoldFont().getName(), Font.PLAIN, 28));
@@ -835,7 +844,7 @@ public class StatsPanel extends JPanel
 	private JPanel createSubInfoPanel() {
 		JPanel subInfoPanel = new JPanel();
 		/* Subinfo represents the less-used general historical stats */
-		subInfoPanel.setLayout(new DynamicGridLayout(subInfoPanelArray.length, 1));
+		subInfoPanel.setLayout(new DynamicGridLayout(0, 1));
 
 		for (JPanel panel : subInfoPanelArray)
 		{
@@ -854,6 +863,11 @@ public class StatsPanel extends JPanel
 			subInfoPanelArray[i].add(valLabelArray[i], BorderLayout.EAST);
 		}
 
+		autoSavePanel.setBorder(new EmptyBorder(4, 2, 4, 2));
+		autoSavePanel.setBackground(CustomColors.DARK_GRAY);
+		autoSavePanel.add(autoSaveText, BorderLayout.WEST);
+		autoSavePanel.add(autoSaveVal, BorderLayout.EAST);
+
 		subInfoPanel.setBackground(CustomColors.DARK_GRAY);
 		subInfoPanel.setBorder(new EmptyBorder(9, 5, 5, 5));
 		subInfoPanel.setBorder(BorderFactory.createCompoundBorder(
@@ -869,5 +883,33 @@ public class StatsPanel extends JPanel
 		profitAndSubInfoContainer.add(subInfoPanel, BorderLayout.SOUTH);
 		profitAndSubInfoContainer.setBorder(new EmptyBorder(5, 0, 5, 0));
 		return profitAndSubInfoContainer;
+	}
+
+	public void updateAutoSaveDisplay() {
+		if (!plugin.getConfig().autoSaveEnabled()) {
+			return;
+		}
+
+		Instant lastSaveTime = plugin.getLastAutoSaveTime();
+		if (lastSaveTime == null) {
+			autoSaveVal.setText("Pending");
+		} else {
+			Duration timeSinceLastSave = Duration.between(lastSaveTime, Instant.now());
+			long secondsSinceLastSave = timeSinceLastSave.getSeconds();
+			int intervalMinutes = plugin.getConfig().autoSaveInterval();
+			long secondsUntilNextSave = (intervalMinutes * 60) - secondsSinceLastSave;
+
+			if (secondsUntilNextSave <= 0) {
+				autoSaveVal.setText("00:00");
+			} else {
+				long minutes = secondsUntilNextSave / 60;
+				long seconds = secondsUntilNextSave % 60;
+				autoSaveVal.setText(String.format("%02d:%02d", minutes, seconds));
+			}
+		}
+
+		subInfoPanel.add(autoSavePanel);
+		revalidate();
+		repaint();
 	}
 }
