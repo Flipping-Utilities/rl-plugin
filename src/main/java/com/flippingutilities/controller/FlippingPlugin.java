@@ -75,6 +75,7 @@ import net.runelite.client.game.ItemStats;
 import okhttp3.*;
 
 import javax.inject.Inject;
+import javax.swing.SwingUtilities;
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.io.File;
@@ -185,6 +186,9 @@ public class FlippingPlugin extends Plugin {
     private SlotSenderJob slotStateSenderJob;
 
     private ScheduledFuture slotTimersTask;
+    private ScheduledFuture autoSaveTask;
+    @Getter
+    private Instant lastAutoSaveTime;
     private Instant startUpTime = Instant.now();
 
     @Getter
@@ -262,6 +266,9 @@ public class FlippingPlugin extends Plugin {
             dataHandler.loadData();
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
+            if (config.autoSaveEnabled()) {
+                autoSaveTask = startAutoSave();
+            }
             startJobs();
             apiAuthHandler.subscribeToPremiumChecking((isPremium) -> { if (isPremium) WikiDataFetcherJob.requestInterval = 30; });
             apiAuthHandler.checkExistingJwt().thenRun(() -> apiAuthHandler.setPremiumStatus());
@@ -287,6 +294,10 @@ public class FlippingPlugin extends Plugin {
         if (slotTimersTask != null) {
             slotTimersTask.cancel(true);
             slotTimersTask = null;
+        }
+        if (autoSaveTask != null) {
+            autoSaveTask.cancel(true);
+            autoSaveTask = null;
         }
 
         masterPanel.dispose();
@@ -429,6 +440,9 @@ public class FlippingPlugin extends Plugin {
                 flippingPanel.updateTimerDisplays();
                 statPanel.updateTimeDisplay();
                 updateSessionTime();
+                if (config.autoSaveEnabled()) {
+                    statPanel.updateAutoSaveDisplay();
+                }
             } catch (ConcurrentModificationException e) {
                 log.info("concurrent modification exception. This is fine, will just restart tasks after delay." +
                         " Cancelling general repeating tasks and starting it again after 5000 ms delay");
@@ -951,6 +965,22 @@ public class FlippingPlugin extends Plugin {
                         })), 1000, 1000, TimeUnit.MILLISECONDS);
     }
 
+    private ScheduledFuture startAutoSave() {
+        int intervalMinutes = config.autoSaveInterval();
+        log.info("Starting auto-save task with interval of {} minutes", intervalMinutes);
+        lastAutoSaveTime = Instant.now();
+        return executor.scheduleAtFixedRate(() -> {
+            try {
+                log.info("Auto-save executing");
+                dataHandler.storeData();
+                lastAutoSaveTime = Instant.now();
+                SwingUtilities.invokeLater(() -> statPanel.updateAutoSaveDisplay());
+            } catch (Exception e) {
+                log.error("Exception during auto-save", e);
+            }
+        }, intervalMinutes, intervalMinutes, TimeUnit.MINUTES);
+    }
+
     //see RecipeHandler.getItemsInRecipe
     public Map<Integer, Optional<FlippingItem>> getItemsInRecipe(Recipe recipe) {
         return recipeHandler.getItemsInRecipe(recipe, getItemsForCurrentView());
@@ -1073,6 +1103,17 @@ public class FlippingPlugin extends Plugin {
                     }
                     dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().forEach(SlotActivityTimer::resetToDefault);
                 }
+            }
+
+            if (event.getKey().equals("autoSaveEnabled") || event.getKey().equals("autoSaveInterval")) {
+                if (autoSaveTask != null) {
+                    autoSaveTask.cancel(true);
+                    autoSaveTask = null;
+                }
+                if (config.autoSaveEnabled()) {
+                    autoSaveTask = startAutoSave();
+                }
+                SwingUtilities.invokeLater(() -> statPanel.updateAutoSaveDisplay());
             }
 
             statPanel.rebuildItemsDisplay(viewItemsForCurrentView());
