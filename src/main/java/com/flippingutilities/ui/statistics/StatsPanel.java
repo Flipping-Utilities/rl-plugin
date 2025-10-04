@@ -886,7 +886,10 @@ public class StatsPanel extends JPanel
 	}
 
 	public void updateAutoSaveDisplay() {
-		if (!plugin.getConfig().autoSaveEnabled()) {
+		if (!plugin.getConfig().autoSaveEnabled() || !plugin.getConfig().showAutoSaveDisplay()) {
+			subInfoPanel.remove(autoSavePanel);
+			revalidate();
+			repaint();
 			return;
 		}
 

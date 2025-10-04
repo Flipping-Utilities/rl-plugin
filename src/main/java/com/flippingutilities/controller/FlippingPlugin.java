@@ -100,6 +100,16 @@ public class FlippingPlugin extends Plugin {
     public static final String CONFIG_GROUP = "flipping";
     public static final String ACCOUNT_WIDE = "Accountwide";
 
+    private static final Set<String> AUTO_SAVE_CONFIG_KEYS = Set.of(
+        "autoSaveEnabled",
+        "autoSaveInterval",
+        "showAutoSaveDisplay"
+    );
+    private static final Set<String> AUTO_SAVE_TASK_KEYS = Set.of(
+        "autoSaveEnabled",
+        "autoSaveInterval"
+    );
+
     @Inject
     @Getter
     private Client client;
@@ -1140,14 +1150,17 @@ public class FlippingPlugin extends Plugin {
     }
 
     private void handleAutoSaveConfigChange(ConfigChanged event) {
-        if (!event.getKey().equals("autoSaveEnabled") && !event.getKey().equals("autoSaveInterval")) {
+        String eventKey = event.getKey();
+        if (!AUTO_SAVE_CONFIG_KEYS.contains(eventKey)) {
             return;
         }
 
-        cancelAutoSaveTask();
+        if (AUTO_SAVE_TASK_KEYS.contains(eventKey)) {
+            cancelAutoSaveTask();
 
-        if (config.autoSaveEnabled()) {
-            autoSaveTask = startAutoSave();
+            if (config.autoSaveEnabled()) {
+                autoSaveTask = startAutoSave();
+            }
         }
 
         SwingUtilities.invokeLater(() -> statPanel.updateAutoSaveDisplay());
