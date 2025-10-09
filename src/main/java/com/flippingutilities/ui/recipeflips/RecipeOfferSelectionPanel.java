@@ -481,7 +481,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
         finishButton.addActionListener(e -> {
             try {
                 coinOffset.commitEdit();
-            } catch ( java.text.ParseException ex ) { log.info("Failed to parse coin offset", ex); }
+            } catch ( java.text.ParseException ex ) { log.debug("Failed to parse coin offset", ex); }
             int coinOffsetValue = (Integer) coinOffset.getValue();
             RecipeFlip recipeFlip = new RecipeFlip(recipe, selectedOffers, getCoinsCost() + coinOffsetValue);
             plugin.addRecipeFlip(recipeFlip, recipe);

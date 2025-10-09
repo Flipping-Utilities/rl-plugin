@@ -91,7 +91,7 @@ public class CacheUpdaterJob
 	{
 		try
 		{
-			log.info("starting cache updater job!");
+			log.debug("starting cache updater job!");
 			WatchService watchService = FileSystems.getDefault().newWatchService();
 
 			Path path = TradePersister.PARENT_DIRECTORY.toPath();
@@ -103,15 +103,15 @@ public class CacheUpdaterJob
 			{
 				for (WatchEvent<?> event : key.pollEvents())
 				{
-					log.info("change in directory for {} with event: {}", event.context(), event.kind());
+					log.debug("change in directory for {} with event: {}", event.context(), event.kind());
 					if (!isDuplicateEvent(event.context().toString()))
 					{
-						log.info("not duplicate event, firing callbacks");
+						log.debug("not duplicate event, firing callbacks");
 						subscribers.forEach(subscriber -> subscriber.accept(event.context().toString()));
 					}
 					else
 					{
-						log.info("duplicate event, not firing callbacks");
+						log.debug("duplicate event, not firing callbacks");
 					}
 
 				}
@@ -125,7 +125,7 @@ public class CacheUpdaterJob
 		{
 			if (!isBeingShutdownByClient)
 			{
-				log.info("exception in updateCacheRealTime, Error = {}", e);
+				log.warn("exception in updateCacheRealTime, Error = {}", e);
 				onUnexpectedError();
 			}
 
@@ -137,30 +137,30 @@ public class CacheUpdaterJob
 
 		catch (Exception e)
 		{
-			log.info("unknown exception in updateCacheRealTime, task is going to stop. Error = {}", e);
+			log.warn("unknown exception in updateCacheRealTime, task is going to stop. Error = {}", e);
 		}
 	}
 
 	private void onUnexpectedError()
 	{
-		log.info("Failure number: {} Error not caused by client shutdown", failureCount);
+		log.debug("Failure number: {} Error not caused by client shutdown", failureCount);
 		failureCount++;
 		if (failureCount > failureThreshold)
 		{
-			log.info("number of failures exceeds failure threshold, not scheduling task again");
+			log.warn("number of failures exceeds failure threshold, not scheduling task again");
 			return;
 		}
 
 		else
 		{
-			log.info("failure count below threshold, scheduling task again");
+			log.debug("failure count below threshold, scheduling task again");
 			realTimeUpdateTask = executor.schedule(this::updateCacheRealTime, 1000, TimeUnit.MILLISECONDS);
 		}
 	}
 
 	private void onClientShutdown()
 	{
-		log.info("shutting down cache updater due to the client shutdown");
+		log.debug("shutting down cache updater due to the client shutdown");
 	}
 
 	private boolean isDuplicateEvent(String fileName)
