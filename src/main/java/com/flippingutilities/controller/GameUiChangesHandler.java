@@ -112,8 +112,7 @@ public class GameUiChangesHandler {
                         wikiInstaSellPrice = wikiRequest.getData().get(highlightedItemId).getLow();
                     }
                     flippingWidget.showInstaSellPrices(instaSellPrice, wikiInstaSellPrice);
-                }
-                else if (offerText.equals("Sell offer")) {
+                } else if (offerText.equals("Sell offer")) {
                     int instaBuyPrice = 0;
                     int wikiInstaBuyPrice = 0;
                     if (selectedItem.isPresent() && selectedItem.get().getLatestInstaBuy().isPresent()) {
@@ -192,10 +191,15 @@ public class GameUiChangesHandler {
                 //GE_HISTORY_TAB_WIDGET_ID does not load when history tab is opened from the banker right click. It only
                 // loads when the "history" button is clicked for the ge interface. However, 383 loads in both situations.
                 plugin.showGeHistoryTabPanel();
+                break;
             case InterfaceID.GE_OFFERS:
             case InterfaceID.BANKPIN_KEYPAD:
                 //if either ge interface or bank pin interface is loaded, hide the ge history tab panel again
                 plugin.getMasterPanel().selectPreviouslySelectedTab();
+                break;
+            // This is the last widget loaded when opening an offer
+            // Needs to be called as when updating an offer, the inventory widget is loaded, calling dehighlight
+            // So we need to reset the highlighted item
             case InterfaceID.INVENTORY: //this is the same as what GE_HISTORY_TAB_WIDGET_ID was, probably a repurposed config name
                 //remove highlighted item
                 //The player opens the trade history tab from the ge interface. Necessary since the back button isn't
@@ -205,6 +209,10 @@ public class GameUiChangesHandler {
                 if (highlightedItem.isPresent()) {
                     deHighlightOffer();
                 }
+                break;
+            case InterfaceID.GE_OFFERS_SIDE:
+                handleClickOrLeaveOffer();
+                break;
         }
     }
 
@@ -214,7 +222,7 @@ public class GameUiChangesHandler {
      * This seems to happen after any offer updates or if buttons are pressed inside the interface
      * https://github.com/RuneStar/cs2-scripts/blob/a144f1dceb84c3efa2f9e90648419a11ee48e7a2/scripts/%5Bclientscript%2Cge_offers_switchpanel%5D.cs2
      * need to redraw stuff when this happens as all widgets get reset
-     *
+     * <p>
      * script 782 fires at most of the times 804 is fired but also when the collect button is pressed
      * which is important bc that resets the widgets too
      */
@@ -225,7 +233,7 @@ public class GameUiChangesHandler {
         }
 
         if (event.getScriptId() == 782 || event.getScriptId() == 804) {
-           plugin.setWidgetsOnSlotStateDrawer();
+            plugin.setWidgetsOnSlotStateDrawer();
         }
 
         if (event.getScriptId() == 804 && plugin.getConfig().slotTimersEnabled()) {
@@ -238,8 +246,7 @@ public class GameUiChangesHandler {
         Optional<FlippingItem> itemInHistory = plugin.viewItemsForCurrentView().stream().filter(item -> item.getItemId() == highlightedItemId).findFirst();
         if (itemInHistory.isPresent()) {
             highlightedItem = itemInHistory;
-        }
-        else {
+        } else {
             String itemName = plugin.getItemManager().getItemComposition(highlightedItemId).getName();
             ItemStats itemStats = plugin.getItemManager().getItemStats(highlightedItemId);
             int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
