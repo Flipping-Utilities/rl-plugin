@@ -229,7 +229,7 @@ public class SlotActivityTimer
 			slotStateWidget.setXTextAlignment(1);
 		}
 		catch (NullPointerException e) {
-			log.info("npe when resetting slot visuals. This is ok");
+			log.debug("npe when resetting slot visuals. This is ok");
 		}
 	}
 

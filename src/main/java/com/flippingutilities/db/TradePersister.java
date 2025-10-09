@@ -72,7 +72,7 @@ public class TradePersister
 	{
 		if (!PARENT_DIRECTORY.exists())
 		{
-			log.info("flipping directory doesn't exist yet so it's being created");
+			log.debug("flipping directory doesn't exist yet so it's being created");
 			if (!PARENT_DIRECTORY.mkdir())
 			{
 				throw new IOException("unable to create parent directory!");
@@ -80,7 +80,7 @@ public class TradePersister
 		}
 		else
 		{
-			log.info("flipping directory already exists so it's not being created");
+			log.debug("flipping directory already exists so it's not being created");
 			if (OLD_FILE.exists())
 			{
 				OLD_FILE.delete();
@@ -120,7 +120,7 @@ public class TradePersister
 	//loading from backups
 	public AccountData loadAccount(String displayName)
 	{
-		log.info("loading data for {}", displayName);
+		log.debug("loading data for {}", displayName);
 		try {
 			File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
 			AccountData accountData = loadFromFile(accountFile);
@@ -138,22 +138,22 @@ public class TradePersister
 	}
 
 	private AccountData loadAccountFromBackup(String displayName) {
-		log.info("loading data for {} from backup", displayName);
+		log.debug("loading data for {} from backup", displayName);
 		try {
 			File accountFile = new File(PARENT_DIRECTORY, displayName + ".backup.json");
 			if (!accountFile.exists()) {
-				log.info("backup for {} does not exist, returning empty AccountData", displayName);
+				log.debug("backup for {} does not exist, returning empty AccountData", displayName);
 				return new AccountData();
 			}
 			AccountData accountData = loadFromFile(accountFile);
 			if (accountData == null) {
-				log.info("data loaded from backup for {} is null for some reason, returning an empty AccountData object", displayName);
+				log.debug("data loaded from backup for {} is null for some reason, returning an empty AccountData object", displayName);
 				accountData = new AccountData();
 			}
 			return accountData;
 		}
 		catch (Exception e) {
-			log.info("Couldn't load data for {} from backup due to {}", displayName, e);
+			log.debug("Couldn't load data for {} from backup due to {}", displayName, e);
 			return new AccountData();
 		}
 	}
@@ -178,7 +178,7 @@ public class TradePersister
 
 	public BackupCheckpoints fetchBackupCheckpoints() {
 		try {
-			log.info("Fetching backup checkpoints");
+			log.debug("Fetching backup checkpoints");
 			File backupCheckpointsFile = new File(PARENT_DIRECTORY, "backupcheckpoints.special.json");
 			if (backupCheckpointsFile.exists()){
 				String backupCheckpointsJson = new String(Files.readAllBytes(backupCheckpointsFile.toPath()));
@@ -203,7 +203,7 @@ public class TradePersister
 	 */
 	public void writeToFile(String displayName, Object data) throws IOException
 	{
-		log.info("Writing to file for {}", displayName);
+		log.debug("Writing to file for {}", displayName);
 		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
 		final String json = gson.toJson(data);
 		Files.write(accountFile.toPath(), json.getBytes());
@@ -221,11 +221,11 @@ public class TradePersister
 		{
 			if (accountFile.delete())
 			{
-				log.info("{} deleted", fileName);
+				log.debug("{} deleted", fileName);
 			}
 			else
 			{
-				log.info("unable to delete {}", fileName);
+				log.debug("unable to delete {}", fileName);
 			}
 		}
 	}

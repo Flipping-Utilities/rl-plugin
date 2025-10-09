@@ -353,7 +353,7 @@ public class FlippingItem implements Searchable
 
 	private void setOfferMadeBy() {
 		if (flippedBy == null) {
-			log.info("flipped by is null");
+			log.debug("flipped by is null");
 		}
 		history.setOfferMadeBy(flippedBy);
 	}

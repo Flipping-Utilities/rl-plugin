@@ -79,7 +79,7 @@ public class Paginator extends JPanel
 						}
 						catch (Exception exc)
 						{
-							log.info("couldn't increase page number cause callback failed");
+							log.warn("couldn't increase page number cause callback failed");
 							pageNumber--;
 						}
 					}
@@ -95,7 +95,7 @@ public class Paginator extends JPanel
 						}
 						catch (Exception exc)
 						{
-							log.info("couldn't decrease page number cause callback failed");
+							log.warn("couldn't decrease page number cause callback failed");
 							pageNumber++;
 						}
 

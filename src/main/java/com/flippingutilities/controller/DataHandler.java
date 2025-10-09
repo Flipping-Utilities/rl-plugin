@@ -112,22 +112,22 @@ public class DataHandler {
     }
 
     public void storeData() {
-        log.info("storing data");
+        log.debug("storing data");
         if (accountsWithUnsavedChanges.size() > 0) {
-            log.info("accounts with unsaved changes are {}. Saving them.", accountsWithUnsavedChanges);
+            log.debug("accounts with unsaved changes are {}. Saving them.", accountsWithUnsavedChanges);
             accountsWithUnsavedChanges.forEach(accountName -> storeAccountData(accountName));
             accountsWithUnsavedChanges.clear();
         }
 
         if (accountWideDataChanged) {
-            log.info("accountwide data changed, saving it.");
+            log.debug("accountwide data changed, saving it.");
             storeData("accountwide", accountWideData);
             accountWideDataChanged = false;
         }
     }
 
     public void loadData() {
-        log.info("Loading data on startup");
+        log.debug("Loading data on startup");
         try {
             TradePersister.setupFlippingFolder();
         }
@@ -147,7 +147,7 @@ public class DataHandler {
     }
     
     private void backupAllAccountData() {
-        log.info("backing up account data");
+        log.debug("backing up account data");
         boolean backupCheckpointsChanged = false;
         for (String displayName : accountSpecificData.keySet()) {
             AccountData accountData = accountSpecificData.get(displayName);
@@ -167,7 +167,7 @@ public class DataHandler {
                 }
             }
             else {
-                log.info("Not backing up data for {} as it's empty or it hasn't changed since last backup", displayName);
+                log.debug("Not backing up data for {} as it's empty or it hasn't changed since last backup", displayName);
             }
         }
         if (backupCheckpointsChanged) {
@@ -177,7 +177,7 @@ public class DataHandler {
 
     private AccountWideData fetchAccountWideData() {
         try {
-            log.info("Fetching accountwide data");
+            log.debug("Fetching accountwide data");
             AccountWideData accountWideData = plugin.tradePersister.loadAccountWideData();
             boolean didActuallySetDefaults = accountWideData.setDefaults();
             accountWideDataChanged = didActuallySetDefaults;
@@ -261,7 +261,7 @@ public class DataHandler {
             AccountData data = accountSpecificData.get(displayName);
             if (data == null)
             {
-                log.info("for an unknown reason the data associated with {} has been set to null. Storing" +
+                log.debug("for an unknown reason the data associated with {} has been set to null. Storing" +
                         "an empty AccountData object instead.", displayName);
                 data = new AccountData();
             }
@@ -271,7 +271,7 @@ public class DataHandler {
         }
         catch (Exception e)
         {
-            log.info("couldn't store trades, error = " + e);
+            log.warn("couldn't store trades, error = " + e);
         }
     }
 
@@ -280,7 +280,7 @@ public class DataHandler {
             plugin.tradePersister.writeToFile(fileName, data);
         }
         catch (Exception e) {
-            log.info("couldn't store data to {} bc of {}",fileName, e);
+            log.warn("couldn't store data to {} bc of {}",fileName, e);
         }
     }
 }
