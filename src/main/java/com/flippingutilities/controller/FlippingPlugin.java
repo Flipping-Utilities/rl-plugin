@@ -75,6 +75,7 @@ import net.runelite.client.game.ItemStats;
 import okhttp3.*;
 
 import javax.inject.Inject;
+import javax.swing.SwingUtilities;
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.io.File;
@@ -98,6 +99,16 @@ import java.util.stream.Collectors;
 public class FlippingPlugin extends Plugin {
     public static final String CONFIG_GROUP = "flipping";
     public static final String ACCOUNT_WIDE = "Accountwide";
+
+    private static final Set<String> AUTO_SAVE_CONFIG_KEYS = Set.of(
+        "autoSaveEnabled",
+        "autoSaveInterval",
+        "showAutoSaveDisplay"
+    );
+    private static final Set<String> AUTO_SAVE_TASK_KEYS = Set.of(
+        "autoSaveEnabled",
+        "autoSaveInterval"
+    );
 
     @Inject
     @Getter
@@ -185,6 +196,9 @@ public class FlippingPlugin extends Plugin {
     private SlotSenderJob slotStateSenderJob;
 
     private ScheduledFuture slotTimersTask;
+    private ScheduledFuture autoSaveTask;
+    @Getter
+    private Instant nextScheduledAutoSave;
     private Instant startUpTime = Instant.now();
 
     @Getter
@@ -262,6 +276,9 @@ public class FlippingPlugin extends Plugin {
             dataHandler.loadData();
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
+            if (config.autoSaveEnabled()) {
+                autoSaveTask = startAutoSave();
+            }
             startJobs();
             apiAuthHandler.subscribeToPremiumChecking((isPremium) -> { if (isPremium) WikiDataFetcherJob.requestInterval = 30; });
             apiAuthHandler.checkExistingJwt().thenRun(() -> apiAuthHandler.setPremiumStatus());
@@ -287,6 +304,10 @@ public class FlippingPlugin extends Plugin {
         if (slotTimersTask != null) {
             slotTimersTask.cancel(true);
             slotTimersTask = null;
+        }
+        if (autoSaveTask != null) {
+            autoSaveTask.cancel(true);
+            autoSaveTask = null;
         }
 
         masterPanel.dispose();
@@ -429,6 +450,9 @@ public class FlippingPlugin extends Plugin {
                 flippingPanel.updateTimerDisplays();
                 statPanel.updateTimeDisplay();
                 updateSessionTime();
+                if (config.autoSaveEnabled()) {
+                    statPanel.updateAutoSaveDisplay();
+                }
             } catch (ConcurrentModificationException e) {
                 log.warn("concurrent modification exception. This is fine, will just restart tasks after delay." +
                         " Cancelling general repeating tasks and starting it again after 5000 ms delay");
@@ -652,24 +676,43 @@ public class FlippingPlugin extends Plugin {
      * the "Session" time interval.
      */
     private void updateSessionTime() {
-        if (currentlyFlipping()) {
-            Instant lastSessionTimeUpdate = dataHandler.viewAccountData(currentlyLoggedInAccount).getLastSessionTimeUpdate();
-            long accumulatedSessionTime = dataHandler.viewAccountData(currentlyLoggedInAccount).getAccumulatedSessionTimeMillis();
-            if (lastSessionTimeUpdate == null) {
-                lastSessionTimeUpdate = Instant.now();
-            }
-            long millisSinceLastSessionTimeUpdate = Instant.now().toEpochMilli() - lastSessionTimeUpdate.toEpochMilli();
-            accumulatedSessionTime = accumulatedSessionTime + millisSinceLastSessionTimeUpdate;
-            lastSessionTimeUpdate = Instant.now();
-            dataHandler.getAccountData(currentlyLoggedInAccount).setAccumulatedSessionTimeMillis(accumulatedSessionTime);
-            dataHandler.getAccountData(currentlyLoggedInAccount).setLastSessionTimeUpdate(lastSessionTimeUpdate);
-
-            if (accountCurrentlyViewed.equals(ACCOUNT_WIDE) || accountCurrentlyViewed.equals(currentlyLoggedInAccount)) {
-                statPanel.updateSessionTimeDisplay(viewAccumulatedTimeForCurrentView());
-            }
-        } else if (currentlyLoggedInAccount != null) {
-            dataHandler.getAccountData(currentlyLoggedInAccount).setLastSessionTimeUpdate(null);
+        if (!currentlyFlipping()) {
+            handleNotFlipping();
+            return;
         }
+
+        updateActiveFlippingSessionTime();
+    }
+
+    private void handleNotFlipping() {
+        if (currentlyLoggedInAccount == null) {
+            return;
+        }
+        dataHandler.getAccountData(currentlyLoggedInAccount).setLastSessionTimeUpdate(null);
+    }
+
+    private void updateActiveFlippingSessionTime() {
+        AccountData account = dataHandler.viewAccountData(currentlyLoggedInAccount);
+        Instant lastUpdate = account.getLastSessionTimeUpdate();
+
+        if (lastUpdate == null) {
+            lastUpdate = Instant.now();
+        }
+
+        long additionalTime = Duration.between(lastUpdate, Instant.now()).toMillis();
+        long newTotalTime = account.getAccumulatedSessionTimeMillis() + additionalTime;
+
+        dataHandler.getAccountData(currentlyLoggedInAccount).setAccumulatedSessionTimeMillis(newTotalTime);
+        dataHandler.getAccountData(currentlyLoggedInAccount).setLastSessionTimeUpdate(Instant.now());
+
+        if (shouldUpdateSessionTimeDisplay()) {
+            statPanel.updateSessionTimeDisplay(viewAccumulatedTimeForCurrentView());
+        }
+    }
+
+    private boolean shouldUpdateSessionTimeDisplay() {
+        return accountCurrentlyViewed.equals(ACCOUNT_WIDE)
+            || accountCurrentlyViewed.equals(currentlyLoggedInAccount);
     }
 
     /**
@@ -951,6 +994,22 @@ public class FlippingPlugin extends Plugin {
                         })), 1000, 1000, TimeUnit.MILLISECONDS);
     }
 
+    private ScheduledFuture startAutoSave() {
+        int intervalMinutes = config.autoSaveInterval();
+        log.info("Starting auto-save task with interval of {} minutes", intervalMinutes);
+        nextScheduledAutoSave = Instant.now().plus(intervalMinutes, ChronoUnit.MINUTES);
+        return executor.scheduleAtFixedRate(() -> {
+            try {
+                log.info("Auto-save executing");
+                dataHandler.storeData();
+                nextScheduledAutoSave = Instant.now().plus(config.autoSaveInterval(), ChronoUnit.MINUTES);
+                SwingUtilities.invokeLater(() -> statPanel.updateAutoSaveDisplay());
+            } catch (Exception e) {
+                log.error("Exception during auto-save", e);
+            }
+        }, intervalMinutes, intervalMinutes, TimeUnit.MINUTES);
+    }
+
     //see RecipeHandler.getItemsInRecipe
     public Map<Integer, Optional<FlippingItem>> getItemsInRecipe(Recipe recipe) {
         return recipeHandler.getItemsInRecipe(recipe, getItemsForCurrentView());
@@ -1063,20 +1122,56 @@ public class FlippingPlugin extends Plugin {
 
     @Subscribe
     public void onConfigChanged(ConfigChanged event) {
-        if (event.getGroup().equals(CONFIG_GROUP)) {
-            if (event.getKey().equals("slotTimersEnabled")) {
-                if (config.slotTimersEnabled()) {
-                    slotTimersTask = startSlotTimers();
-                } else {
-                    if (slotTimersTask != null) {
-                        slotTimersTask.cancel(true);
-                    }
-                    dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().forEach(SlotActivityTimer::resetToDefault);
-                }
-            }
-
-            statPanel.rebuildItemsDisplay(viewItemsForCurrentView());
-            flippingPanel.rebuild(viewItemsForCurrentView());
+        if (!event.getGroup().equals(CONFIG_GROUP)) {
+            return;
         }
+
+        handleSlotTimersConfigChange(event);
+        handleAutoSaveConfigChange(event);
+
+        statPanel.rebuildItemsDisplay(viewItemsForCurrentView());
+        flippingPanel.rebuild(viewItemsForCurrentView());
+    }
+
+    private void handleSlotTimersConfigChange(ConfigChanged event) {
+        if (!event.getKey().equals("slotTimersEnabled")) {
+            return;
+        }
+
+        if (config.slotTimersEnabled()) {
+            slotTimersTask = startSlotTimers();
+            return;
+        }
+
+        if (slotTimersTask != null) {
+            slotTimersTask.cancel(true);
+        }
+        dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().forEach(SlotActivityTimer::resetToDefault);
+    }
+
+    private void handleAutoSaveConfigChange(ConfigChanged event) {
+        String eventKey = event.getKey();
+        if (!AUTO_SAVE_CONFIG_KEYS.contains(eventKey)) {
+            return;
+        }
+
+        if (AUTO_SAVE_TASK_KEYS.contains(eventKey)) {
+            cancelAutoSaveTask();
+
+            if (config.autoSaveEnabled()) {
+                autoSaveTask = startAutoSave();
+            }
+        }
+
+        SwingUtilities.invokeLater(() -> statPanel.updateAutoSaveDisplay());
+    }
+
+    private void cancelAutoSaveTask() {
+        if (autoSaveTask == null) {
+            return;
+        }
+        autoSaveTask.cancel(true);
+        autoSaveTask = null;
+        nextScheduledAutoSave = null;
     }
 }
