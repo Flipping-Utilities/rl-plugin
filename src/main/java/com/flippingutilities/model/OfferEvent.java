@@ -264,6 +264,19 @@ public class OfferEvent
 			&& getPrice() == other.getPrice();
 	}
 
+	public boolean isUpdateForCancelled(OfferEvent other) {
+		return ((state == GrandExchangeOfferState.SELLING
+				&& other.getState() == GrandExchangeOfferState.CANCELLED_SELL)
+				|| (state == GrandExchangeOfferState.BUYING
+				&& other.getState() == GrandExchangeOfferState.CANCELLED_BUY))
+				&& slot == other.getSlot()
+				&& totalQuantityInTrade == other.getTotalQuantityInTrade()
+				&& itemId == other.getItemId()
+				&& getPrice() == other.getPrice()
+				&& currentQuantityInTrade != other.getCurrentQuantityInTrade()
+				&& tickArrivedAt == (other.tickArrivedAt + 1);
+	}
+
 	public static OfferEvent fromGrandExchangeEvent(GrandExchangeOfferChanged event)
 	{
 		GrandExchangeOffer offer = event.getOffer();
