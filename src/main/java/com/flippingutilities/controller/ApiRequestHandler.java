@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This class is responsible for wrapping the api. All api interactions must go through this class.
@@ -29,7 +30,11 @@ public class ApiRequestHandler {
 
     public ApiRequestHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
-        this.httpClient = plugin.getHttpClient();
+        this.httpClient = plugin.getHttpClient().newBuilder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build();
     }
 
     public CompletableFuture<User> getUser() {
