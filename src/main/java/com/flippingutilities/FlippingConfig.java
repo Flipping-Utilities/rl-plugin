@@ -31,6 +31,8 @@ import com.flippingutilities.ui.uiutilities.CustomColors;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.ConfigSection;
+import net.runelite.client.config.Range;
 import net.runelite.client.config.Units;
 import net.runelite.client.ui.ColorScheme;
 
@@ -126,5 +128,47 @@ public interface FlippingConfig extends Config
 	)
 	default Color slotTimerSellColor() {
 		return ColorScheme.GRAND_EXCHANGE_ALCH;
+	}
+
+	@ConfigSection(
+			name = "Auto-Save",
+			description = "Configure automatic saving of trade data",
+			position = 100
+	)
+	String autoSaveSection = "autoSaveSection";
+
+	@ConfigItem(
+			keyName = "autoSaveEnabled",
+			name = "Enable auto-save",
+			description = "Automatically save trade data at regular intervals to prevent data loss on crashes",
+			section = autoSaveSection,
+			position = 1
+	)
+	default boolean autoSaveEnabled() {
+		return false;
+	}
+
+	@ConfigItem(
+			keyName = "autoSaveInterval",
+			name = "Auto-save interval",
+			description = "How often to automatically save trade data (in minutes)",
+			section = autoSaveSection,
+			position = 2
+	)
+	@Units(Units.MINUTES)
+	@Range(min = 1)
+	default int autoSaveInterval() {
+		return 10;
+	}
+
+	@ConfigItem(
+			keyName = "showAutoSaveDisplay",
+			name = "Show countdown timer",
+			description = "Display the countdown timer in the stats panel",
+			section = autoSaveSection,
+			position = 3
+	)
+	default boolean showAutoSaveDisplay() {
+		return true;
 	}
 }
