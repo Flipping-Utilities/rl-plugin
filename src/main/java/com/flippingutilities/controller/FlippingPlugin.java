@@ -996,11 +996,11 @@ public class FlippingPlugin extends Plugin {
 
     private ScheduledFuture startAutoSave() {
         int intervalMinutes = config.autoSaveInterval();
-        log.info("Starting auto-save task with interval of {} minutes", intervalMinutes);
+        log.debug("Starting auto-save task with interval of {} minutes", intervalMinutes);
         nextScheduledAutoSave = Instant.now().plus(intervalMinutes, ChronoUnit.MINUTES);
         return executor.scheduleAtFixedRate(() -> {
             try {
-                log.info("Auto-save executing");
+                log.debug("Auto-save executing");
                 dataHandler.storeData();
                 nextScheduledAutoSave = Instant.now().plus(config.autoSaveInterval(), ChronoUnit.MINUTES);
                 SwingUtilities.invokeLater(() -> statPanel.updateAutoSaveDisplay());
