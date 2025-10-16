@@ -137,11 +137,13 @@ public class DataHandler {
             accountWideData.setDefaults();
             accountSpecificData = new HashMap<>();
             accountWideDataChanged = true;
+            plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
             return;
         }
 
         backupCheckpoints = plugin.tradePersister.fetchBackupCheckpoints();
         accountWideData = fetchAccountWideData();
+        plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
         accountSpecificData = fetchAndPrepareAllAccountData();
         backupAllAccountData();
     }
@@ -232,6 +234,7 @@ public class DataHandler {
     // Used by other components to set accountWideData on DataHandler
     public void loadAccountWideData() {
         accountWideData = fetchAccountWideData();
+        plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
     }
     
     // Used by other components to set account data on DataHandler

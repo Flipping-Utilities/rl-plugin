@@ -226,6 +226,7 @@ public class FlippingPlugin extends Plugin {
     private EventBus eventBus;
 
     public TradePersister tradePersister;
+    @Getter
     private RecipeHandler recipeHandler;
     private FlippingItemHandler flippingItemHandler;
     @Getter
@@ -236,7 +237,7 @@ public class FlippingPlugin extends Plugin {
         accountCurrentlyViewed = ACCOUNT_WIDE;
 
         tradePersister = new TradePersister(gson);
-        recipeHandler = new RecipeHandler(gson, httpClient);
+        recipeHandler = new RecipeHandler(gson, httpClient, null);
         flippingItemHandler = new FlippingItemHandler(this);
 
         optionHandler = new OptionHandler(this);
