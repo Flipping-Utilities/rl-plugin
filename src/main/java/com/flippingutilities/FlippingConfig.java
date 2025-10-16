@@ -41,6 +41,23 @@ import java.awt.*;
 @ConfigGroup(FlippingPlugin.CONFIG_GROUP)
 public interface FlippingConfig extends Config
 {
+	enum RecipeSortOption
+	{
+		INPUT_COUNT("Input Count"),
+		OUTPUT_COUNT("Output Count"),
+		NAME("Name");
+
+		private final String displayName;
+
+		RecipeSortOption(String displayName) {
+			this.displayName = displayName;
+		}
+
+		@Override
+		public String toString() {
+			return displayName;
+		}
+	}
 	@ConfigItem(
 		keyName = "roiGradientMax",
 		name = "Set ROI gradient range limit",
@@ -170,5 +187,45 @@ public interface FlippingConfig extends Config
 	)
 	default boolean showAutoSaveDisplay() {
 		return true;
+	}
+
+	@ConfigSection(
+			name = "Custom Recipes",
+			description = "Settings for custom recipe search",
+			position = 110
+	)
+	String customRecipesSection = "customRecipesSection";
+
+	@ConfigItem(
+			keyName = "includeNotedItems",
+			name = "Include noted items",
+			description = "Show noted versions of items when searching for recipe ingredients",
+			section = customRecipesSection,
+			position = 1
+	)
+	default boolean includeNotedItems() {
+		return false;
+	}
+
+	@ConfigItem(
+			keyName = "includeUntradeableItems",
+			name = "Include untradeable items",
+			description = "Show items that cannot be traded on the Grand Exchange",
+			section = customRecipesSection,
+			position = 2
+	)
+	default boolean includeUntradeableItems() {
+		return false;
+	}
+
+	@ConfigItem(
+			keyName = "defaultRecipeSort",
+			name = "Default sort option",
+			description = "How your custom recipes are sorted when you open the manager",
+			section = customRecipesSection,
+			position = 3
+	)
+	default RecipeSortOption defaultRecipeSort() {
+		return RecipeSortOption.INPUT_COUNT;
 	}
 }
