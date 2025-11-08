@@ -154,10 +154,15 @@ public class RecipeGroupContainerPanel extends JPanel {
         JDialog dialog = new JDialog();
         dialog.setTitle("Custom Recipe Manager");
         dialog.setModal(true);
+        dialog.setIconImage(((ImageIcon) Icons.FU_ICON).getImage());
         dialog.add(managerPanel);
         dialog.pack();
-        dialog.setMinimumSize(new Dimension(730, 400));
-        dialog.setLocationRelativeTo(this);
+
+        int minHeight = 160 + (2 * 145);
+        Dimension packedSize = dialog.getSize();
+        dialog.setSize(Math.max(packedSize.width, 735), Math.max(packedSize.height, minHeight));
+
+        dialog.setLocationRelativeTo(null);
         dialog.setVisible(true);
     }
 }
