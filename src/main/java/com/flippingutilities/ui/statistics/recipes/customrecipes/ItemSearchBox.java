@@ -6,6 +6,7 @@ import net.runelite.api.ItemComposition;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.util.AsyncBufferedImage;
+import net.runelite.http.api.item.ItemPrice;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -135,7 +136,7 @@ public class ItemSearchBox extends JPanel {
         List<ItemComposition> matches = new ArrayList<>();
         ItemManager itemManager = plugin.getItemManager();
 
-        for (net.runelite.http.api.item.ItemPrice itemInfo : itemManager.search(query)) {
+        for (ItemPrice itemInfo : itemManager.search(query)) {
             ItemComposition item = itemManager.getItemComposition(itemInfo.getId());
             if (isInvalidItem(item)) continue;
 
@@ -149,7 +150,8 @@ public class ItemSearchBox extends JPanel {
         List<ItemComposition> matches = new ArrayList<>();
         ItemManager itemManager = plugin.getItemManager();
 
-        for (int i = 0; i < 30_000; i++) {
+        int maximumAmountOfItems = plugin.getClient().getItemCount();
+        for (int i = 0; i < maximumAmountOfItems; i++) {
             ItemComposition item = itemManager.getItemComposition(i);
             if (isInvalidItem(item)) continue;
             if (!item.getName().toLowerCase().contains(query)) continue;
