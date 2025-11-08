@@ -1,5 +1,6 @@
 package com.flippingutilities.ui.statistics.recipes.customrecipes;
 
+import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.controller.FlippingPlugin;
 import net.runelite.api.ItemComposition;
 import net.runelite.client.game.ItemManager;
@@ -119,35 +120,55 @@ public class ItemSearchBox extends JPanel {
     }
 
     private List<ItemComposition> findMatchingItems(String query) {
-        List<ItemComposition> matches = new ArrayList<>();
+        FlippingConfig pluginConfig = plugin.getConfig();
+        boolean includeNoted = pluginConfig.includeNotedItems();
+        boolean includeUntradeable = pluginConfig.includeUntradeableItems();
 
+        // itemmanager.search() is 30-40x faster but only returns tradeable items
+        // if user wants untradeable/noted items, we fall back to the "slow" 30k loop
+        return (includeUntradeable || includeNoted)
+            ? findMatchingItemsFullScan(query, includeNoted, includeUntradeable)
+            : findMatchingItemsOptimized(query);
+    }
+
+    private List<ItemComposition> findMatchingItemsOptimized(String query) {
+        List<ItemComposition> matches = new ArrayList<>();
         ItemManager itemManager = plugin.getItemManager();
-        boolean includeNoted = plugin.getConfig().includeNotedItems();
-        boolean includeUntradeable = plugin.getConfig().includeUntradeableItems();
+
+        for (net.runelite.http.api.item.ItemPrice itemInfo : itemManager.search(query)) {
+            ItemComposition item = itemManager.getItemComposition(itemInfo.getId());
+            if (isInvalidItem(item)) continue;
+
+            matches.add(item);
+            if (matches.size() >= 10) break;
+        }
+        return matches;
+    }
+
+    private List<ItemComposition> findMatchingItemsFullScan(String query, boolean includeNoted, boolean includeUntradeable) {
+        List<ItemComposition> matches = new ArrayList<>();
+        ItemManager itemManager = plugin.getItemManager();
 
         for (int i = 0; i < 30_000; i++) {
             ItemComposition item = itemManager.getItemComposition(i);
-            String itemName = item.getName();
-            if (itemName == null) continue;
-            itemName = itemName.toLowerCase();
+            if (isInvalidItem(item)) continue;
+            if (!item.getName().toLowerCase().contains(query)) continue;
+            if (!passesFilters(item, includeNoted, includeUntradeable, itemManager)) continue;
 
-            if (itemName.equals("null")) continue;
-
-            if (itemName.contains(query)) {
-                if (matches.size() >= 10) break; // since we only need top 10 matches, stop early
-                
-                int price = itemManager.getItemPrice(item.getId());
-                if (!includeUntradeable && price == 0) {
-                    continue;
-                }
-
-                if (!includeNoted && item.getNote() != -1) {
-                    continue;
-                }
-                matches.add(item);
-            }
+            matches.add(item);
+            if (matches.size() >= 10) break;
         }
-
         return matches;
+    }
+
+    private boolean isInvalidItem(ItemComposition item) {
+        return item == null || item.getName() == null || item.getName().equals("null");
+    }
+
+    private boolean passesFilters(ItemComposition item, boolean includeNoted, boolean includeUntradeable, ItemManager itemManager) {
+        int price = itemManager.getItemPrice(item.getId());
+        if (!includeUntradeable && price == 0) return false;
+
+        return includeNoted || item.getNote() == -1;
     }
 }
