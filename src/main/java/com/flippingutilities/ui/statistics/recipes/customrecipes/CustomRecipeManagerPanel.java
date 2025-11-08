@@ -50,17 +50,52 @@ public class CustomRecipeManagerPanel extends JPanel {
         JLabel titleLabel = new JLabel("Custom Recipes");
         titleLabel.setFont(FontManager.getRunescapeBoldFont());
 
-        JPanel rightPanel = new JPanel();
-        rightPanel.setLayout(new BoxLayout(rightPanel, BoxLayout.Y_AXIS));
-        rightPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-
         JButton addButton = new JButton("Add Recipe");
-        addButton.setAlignmentX(Component.RIGHT_ALIGNMENT);
         addButton.addActionListener(e -> openRecipeEditorDialog(null));
 
-        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 3, 0));
-        searchPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        searchPanel.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        headerPanel.add(titleLabel, BorderLayout.WEST);
+        headerPanel.add(addButton, BorderLayout.EAST);
+
+        return headerPanel;
+    }
+
+    private JPanel createSortPanel() {
+        JPanel sortPanel = new JPanel(new BorderLayout());
+        sortPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        sortPanel.setBorder(new EmptyBorder(5, 10, 5, 10));
+
+        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        leftPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        JLabel sortLabel = new JLabel("Sort by:");
+        sortLabel.setFont(FontManager.getRunescapeFont());
+
+        String[] sortOptions = {"Input Count", "Output Count", "Name"};
+        JComboBox<String> sortDropdown = new JComboBox<>(sortOptions);
+        sortDropdown.setSelectedItem(currentSortOption);
+        sortDropdown.addActionListener(e -> {
+            currentSortOption = (String) sortDropdown.getSelectedItem();
+            refreshRecipeList();
+        });
+
+        JLabel directionLabel = new JLabel("Direction:");
+        directionLabel.setFont(FontManager.getRunescapeFont());
+
+        String[] directionOptions = {"Ascending", "Descending"};
+        JComboBox<String> directionDropdown = new JComboBox<>(directionOptions);
+        directionDropdown.setSelectedItem(currentSortDirection);
+        directionDropdown.addActionListener(e -> {
+            currentSortDirection = (String) directionDropdown.getSelectedItem();
+            refreshRecipeList();
+        });
+
+        leftPanel.add(sortLabel);
+        leftPanel.add(sortDropdown);
+        leftPanel.add(directionLabel);
+        leftPanel.add(directionDropdown);
+
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        rightPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
         JLabel searchLabel = new JLabel("Search:");
         searchLabel.setFont(FontManager.getRunescapeFont());
@@ -107,50 +142,12 @@ public class CustomRecipeManagerPanel extends JPanel {
             }
         });
 
-        searchPanel.add(searchLabel);
-        searchPanel.add(helpLabel);
-        searchPanel.add(searchField);
+        rightPanel.add(searchLabel);
+        rightPanel.add(helpLabel);
+        rightPanel.add(searchField);
 
-        rightPanel.add(addButton);
-        rightPanel.add(Box.createVerticalStrut(5));
-        rightPanel.add(searchPanel);
-
-        headerPanel.add(titleLabel, BorderLayout.WEST);
-        headerPanel.add(rightPanel, BorderLayout.EAST);
-
-        return headerPanel;
-    }
-
-    private JPanel createSortPanel() {
-        JPanel sortPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        sortPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-
-        JLabel sortLabel = new JLabel("Sort by:");
-        sortLabel.setFont(FontManager.getRunescapeFont());
-
-        String[] sortOptions = {"Input Count", "Output Count", "Name"};
-        JComboBox<String> sortDropdown = new JComboBox<>(sortOptions);
-        sortDropdown.setSelectedItem(currentSortOption);
-        sortDropdown.addActionListener(e -> {
-            currentSortOption = (String) sortDropdown.getSelectedItem();
-            refreshRecipeList();
-        });
-
-        JLabel directionLabel = new JLabel("Direction:");
-        directionLabel.setFont(FontManager.getRunescapeFont());
-
-        String[] directionOptions = {"Ascending", "Descending"};
-        JComboBox<String> directionDropdown = new JComboBox<>(directionOptions);
-        directionDropdown.setSelectedItem(currentSortDirection);
-        directionDropdown.addActionListener(e -> {
-            currentSortDirection = (String) directionDropdown.getSelectedItem();
-            refreshRecipeList();
-        });
-
-        sortPanel.add(sortLabel);
-        sortPanel.add(sortDropdown);
-        sortPanel.add(directionLabel);
-        sortPanel.add(directionDropdown);
+        sortPanel.add(leftPanel, BorderLayout.WEST);
+        sortPanel.add(rightPanel, BorderLayout.EAST);
 
         return sortPanel;
     }
@@ -184,6 +181,13 @@ public class CustomRecipeManagerPanel extends JPanel {
         recipeListPanel.removeAll();
 
         if (recipes.isEmpty()) {
+            JSeparator separator = new JSeparator(SwingConstants.HORIZONTAL);
+            separator.setMaximumSize(new Dimension(Integer.MAX_VALUE, 2));
+            separator.setBackground(Color.GRAY);
+            separator.setForeground(Color.GRAY);
+            recipeListPanel.add(separator);
+            recipeListPanel.add(Box.createVerticalStrut(10));
+
             String message = searchQuery.isEmpty()
                 ? "No custom recipes yet. Click 'Add Recipe' to create one."
                 : "No recipes found matching '" + searchQuery + "'";
