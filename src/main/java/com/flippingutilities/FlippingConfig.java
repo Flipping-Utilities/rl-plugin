@@ -211,4 +211,15 @@ public interface FlippingConfig extends Config
 	default RecipeSortOption defaultRecipeSort() {
 		return RecipeSortOption.INPUT_COUNT;
 	}
+
+	@ConfigItem(
+			keyName = "defaultRecipeSortDirection",
+			name = "Default sort direction",
+			description = "Sort order for custom recipes (ascending or descending)",
+			section = customRecipesSection,
+			position = 4
+	)
+	default SortDirection defaultRecipeSortDirection() {
+		return SortDirection.ASCENDING;
+	}
 }

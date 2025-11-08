@@ -22,11 +22,13 @@ public class CustomRecipeManagerPanel extends JPanel {
     private final FlippingPlugin plugin;
     private JPanel recipeListPanel;
     private String currentSortOption;
+    private String currentSortDirection;
     private String searchQuery = "";
 
     public CustomRecipeManagerPanel(FlippingPlugin plugin) {
         this.plugin = plugin;
         this.currentSortOption = plugin.getConfig().defaultRecipeSort().toString();
+        this.currentSortDirection = plugin.getConfig().defaultRecipeSortDirection().toString();
         setLayout(new BorderLayout());
         setBackground(ColorScheme.DARK_GRAY_COLOR);
 
@@ -134,8 +136,21 @@ public class CustomRecipeManagerPanel extends JPanel {
             refreshRecipeList();
         });
 
+        JLabel directionLabel = new JLabel("Direction:");
+        directionLabel.setFont(FontManager.getRunescapeFont());
+
+        String[] directionOptions = {"Ascending", "Descending"};
+        JComboBox<String> directionDropdown = new JComboBox<>(directionOptions);
+        directionDropdown.setSelectedItem(currentSortDirection);
+        directionDropdown.addActionListener(e -> {
+            currentSortDirection = (String) directionDropdown.getSelectedItem();
+            refreshRecipeList();
+        });
+
         sortPanel.add(sortLabel);
         sortPanel.add(sortDropdown);
+        sortPanel.add(directionLabel);
+        sortPanel.add(directionDropdown);
 
         return sortPanel;
     }
@@ -222,17 +237,28 @@ public class CustomRecipeManagerPanel extends JPanel {
     }
 
     private void sortRecipes(List<Recipe> recipes) {
+        Comparator<Recipe> comparator;
+
         switch (currentSortOption) {
             case "Input Count":
-                recipes.sort(Comparator.comparingInt(r -> r.getInputs().size()));
+                comparator = Comparator.comparingInt(r -> r.getInputs().size());
                 break;
             case "Output Count":
-                recipes.sort(Comparator.comparingInt(r -> r.getOutputs().size()));
+                comparator = Comparator.comparingInt(r -> r.getOutputs().size());
                 break;
             case "Name":
-                recipes.sort(Comparator.comparing(Recipe::getName, String.CASE_INSENSITIVE_ORDER));
+                comparator = Comparator.comparing(Recipe::getName, String.CASE_INSENSITIVE_ORDER);
+                break;
+            default:
+                comparator = Comparator.comparingInt(r -> r.getInputs().size());
                 break;
         }
+
+        if ("Descending".equals(currentSortDirection)) {
+            comparator = comparator.reversed();
+        }
+
+        recipes.sort(comparator);
     }
 
     private JPanel createRecipePanel(Recipe recipe) {
