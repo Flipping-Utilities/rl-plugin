@@ -41,23 +41,6 @@ import java.awt.*;
 @ConfigGroup(FlippingPlugin.CONFIG_GROUP)
 public interface FlippingConfig extends Config
 {
-	enum RecipeSortOption
-	{
-		INPUT_COUNT("Input Count"),
-		OUTPUT_COUNT("Output Count"),
-		NAME("Name");
-
-		private final String displayName;
-
-		RecipeSortOption(String displayName) {
-			this.displayName = displayName;
-		}
-
-		@Override
-		public String toString() {
-			return displayName;
-		}
-	}
 	@ConfigItem(
 		keyName = "roiGradientMax",
 		name = "Set ROI gradient range limit",
