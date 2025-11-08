@@ -34,7 +34,7 @@ public class ItemSearchBox extends JPanel {
         add(new JLabel("Search:"));
 
         searchField = new JTextField(15);
-        searchField.setToolTipText("Type item name");
+        searchField.setToolTipText("Item name...");
         add(searchField);
 
         add(new JLabel("Qty:"));
@@ -42,10 +42,6 @@ public class ItemSearchBox extends JPanel {
         quantitySpinner = new JSpinner(new SpinnerNumberModel(1, 1, 999999, 1));
         quantitySpinner.setPreferredSize(new Dimension(80, 25));
         add(quantitySpinner);
-
-        JButton addButton = new JButton("Add");
-        addButton.setEnabled(false);
-        add(addButton);
 
         suggestionPopup = new JPopupMenu();
         suggestionPopup.setFocusable(false);
