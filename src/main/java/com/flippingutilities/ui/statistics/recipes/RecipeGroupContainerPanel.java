@@ -154,7 +154,7 @@ public class RecipeGroupContainerPanel extends JPanel {
         JDialog dialog = new JDialog();
         dialog.setTitle("Custom Recipe Manager");
         dialog.setModal(true);
-        dialog.setIconImage(((ImageIcon) Icons.FU_ICON).getImage());
+        dialog.setIconImage(Icons.FU_ICON.getImage());
         dialog.add(managerPanel);
         dialog.pack();
 

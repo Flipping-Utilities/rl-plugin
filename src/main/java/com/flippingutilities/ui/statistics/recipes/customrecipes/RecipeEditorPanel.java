@@ -55,7 +55,13 @@ public class RecipeEditorPanel extends JPanel {
         section.setBorder(BorderFactory.createTitledBorder(title));
         section.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
+        JLabel placeholderLabel = new JLabel("Look for an item in the input field and click on it to add it here");
+        placeholderLabel.setForeground(Color.GRAY);
+        placeholderLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        itemsContainer.add(placeholderLabel);
+
         if (existingItems != null && !existingItems.isEmpty()) {
+            itemsContainer.remove(placeholderLabel);
             existingItems.forEach(item -> addItemRow(itemsContainer, rows, item.getId(), item.getQuantity()));
         }
 
@@ -65,6 +71,9 @@ public class RecipeEditorPanel extends JPanel {
         section.add(scrollPane);
 
         ItemSearchBox searchBox = new ItemSearchBox(plugin, (itemId, quantity) -> {
+            if (itemsContainer.getComponentCount() > 0 && itemsContainer.getComponent(0) == placeholderLabel) {
+                itemsContainer.remove(placeholderLabel);
+            }
             addItemRow(itemsContainer, rows, itemId, quantity);
         });
         section.add(searchBox);
@@ -83,6 +92,14 @@ public class RecipeEditorPanel extends JPanel {
     private void removeItemRow(JPanel container, List<SelectedItemRow> rows, SelectedItemRow row) {
         rows.remove(row);
         container.remove(row);
+
+        if (container.getComponentCount() == 0) {
+            JLabel placeholderLabel = new JLabel("Look for an item in the input field and click on it to add it here");
+            placeholderLabel.setForeground(Color.GRAY);
+            placeholderLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
+            container.add(placeholderLabel);
+        }
+
         container.revalidate();
         container.repaint();
     }

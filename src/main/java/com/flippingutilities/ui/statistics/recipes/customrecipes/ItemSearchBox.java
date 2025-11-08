@@ -125,23 +125,26 @@ public class ItemSearchBox extends JPanel {
         boolean includeNoted = plugin.getConfig().includeNotedItems();
         boolean includeUntradeable = plugin.getConfig().includeUntradeableItems();
 
-        for (int i = 0; i < 30000; i++) {
+        for (int i = 0; i < 30_000; i++) {
             ItemComposition item = itemManager.getItemComposition(i);
-            if (item != null && item.getName() != null && !item.getName().equals("null")) {
-                if (item.getName().toLowerCase().contains(query)) {
-                    int price = itemManager.getItemPrice(item.getId());
+            String itemName = item.getName();
+            if (itemName == null) continue;
+            itemName = itemName.toLowerCase();
 
-                    if (!includeUntradeable && price == 0) {
-                        continue;
-                    }
+            if (itemName.equals("null")) continue;
 
-                    if (!includeNoted && item.getNote() != -1) {
-                        continue;
-                    }
-
-                    matches.add(item);
-                    if (matches.size() >= 50) break;
+            if (itemName.contains(query)) {
+                if (matches.size() >= 10) break; // since we only need top 10 matches, stop early
+                
+                int price = itemManager.getItemPrice(item.getId());
+                if (!includeUntradeable && price == 0) {
+                    continue;
                 }
+
+                if (!includeNoted && item.getNote() != -1) {
+                    continue;
+                }
+                matches.add(item);
             }
         }
 
