@@ -3,6 +3,7 @@ package com.flippingutilities.ui.statistics.recipes.customrecipes;
 import com.flippingutilities.controller.DataHandler;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.controller.RecipeHandler;
+import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.utilities.Recipe;
 import com.flippingutilities.utilities.RecipeItem;
 import net.runelite.client.game.ItemManager;
@@ -361,6 +362,7 @@ public class CustomRecipeManagerPanel extends JPanel {
         JDialog dialog = new JDialog();
         dialog.setTitle(existingRecipe == null ? "Add Recipe" : "Edit Recipe");
         dialog.setModal(true);
+        dialog.setIconImage(((ImageIcon) Icons.FU_ICON).getImage());
 
         RecipeEditorPanel editorPanel = new RecipeEditorPanel(existingRecipe, plugin);
         dialog.add(editorPanel);
