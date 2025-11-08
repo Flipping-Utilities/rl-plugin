@@ -156,7 +156,7 @@ public class RecipeGroupContainerPanel extends JPanel {
         dialog.setModal(true);
         dialog.add(managerPanel);
         dialog.pack();
-        dialog.setMinimumSize(new Dimension(600, 400));
+        dialog.setMinimumSize(new Dimension(730, 400));
         dialog.setLocationRelativeTo(this);
         dialog.setVisible(true);
     }
