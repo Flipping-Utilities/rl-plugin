@@ -16,13 +16,6 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
     private static final long TWENTY_FOUR_HOURS_IN_SECONDS = 24 * 60 * 60;
 
-    private static final long HUNDRED_MILLION = 100_000_000L;
-    private static final long TEN_MILLION = 10_000_000L;
-    private static final long ONE_MILLION = 1_000_000L;
-    private static final long HUNDRED_THOUSAND = 100_000L;
-    private static final long TEN_THOUSAND = 10_000L;
-    private static final long ONE_THOUSAND = 1_000L;
-
     private static final int PRICE_RANGE_MIN_THRESHOLD = 10;
     private static final int PRICE_RANGE_SMALL_MARGIN = 20;
     private static final int PRICE_RANGE_MARGIN_DIVISOR = 10;
