@@ -29,6 +29,7 @@ package com.flippingutilities.controller;
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.jobs.SlotSenderJob;
+import com.flippingutilities.jobs.TimeseriesFetcher;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.MasterPanel;
 import com.flippingutilities.ui.flipping.FlippingPanel;
@@ -148,6 +149,10 @@ public class FlippingPlugin extends Plugin {
     @Getter
     private OkHttpClient httpClient;
 
+    @Inject
+    @Getter
+    private TimeseriesFetcher timeseriesFetcher;
+
     @Getter
     private FlippingPanel flippingPanel;
     @Getter
@@ -245,7 +250,7 @@ public class FlippingPlugin extends Plugin {
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
         apiAuthHandler = new ApiAuthHandler(this);
         apiRequestHandler = new ApiRequestHandler(this);
-        slotStateDrawer = new SlotStateDrawer(this, this.tooltipManager, client);
+        slotStateDrawer = new SlotStateDrawer(this, this.tooltipManager, client, timeseriesFetcher);
         eventBus.register(slotStateDrawer);
 
         flippingPanel = new FlippingPanel(this);

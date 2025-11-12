@@ -1,6 +1,7 @@
 package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.controller.FlippingPlugin;
+import com.flippingutilities.jobs.TimeseriesFetcher;
 import com.flippingutilities.ui.uiutilities.GeSpriteLoader;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.SlotInfo;
@@ -33,34 +34,39 @@ public class SlotStateDrawer {
     private final FlippingPlugin plugin;
     private final Client client;
     private final TooltipManager tooltipManager;
+    private final TimeseriesFetcher timeseriesFetcher;
 
     private WikiRequest wikiRequest;
     private Widget[] slotWidgets;
     private List<Optional<SlotInfo>> slotInfos = new ArrayList<>();
     private final Map<Integer, Widget> slotIdxToQuickLookWidget = new HashMap<>();
 
-    // State for hover and tooltip data
     private Integer hoveredSlotIndex = null;
+    private QuickLookTooltip currentTooltip = null;
 
     public SlotStateDrawer(
             FlippingPlugin plugin,
             TooltipManager toolTipManager,
-            Client client
+            Client client,
+            TimeseriesFetcher timeseriesFetcher
     ) {
         this.plugin = plugin;
         this.client = client;
         this.tooltipManager = toolTipManager;
+        this.timeseriesFetcher = timeseriesFetcher;
     }
 
     @Subscribe
     public void onBeforeRender(BeforeRender event) {
         if (hoveredSlotIndex == null || !plugin.shouldEnhanceSlots()) {
+            currentTooltip = null;
             return;
         }
 
         final Widget geWindow = client.getWidget(InterfaceID.GeOffers.UNIVERSE);
         if (geWindow == null || geWindow.isHidden()) {
             hoveredSlotIndex = null;
+            currentTooltip = null;
             return;
         }
 
@@ -68,8 +74,8 @@ public class SlotStateDrawer {
                 InterfaceID.GeOffers.SETUP
         );
         if (offerContainer != null && !offerContainer.isHidden()) {
-            // Offer window is open: Hide slots
             hoveredSlotIndex = null;
+            currentTooltip = null;
             return;
         }
 
@@ -241,6 +247,7 @@ public class SlotStateDrawer {
         quickLookWidget.setOnMouseLeaveListener(
                 (JavaScriptCallback) ev -> {
                     this.hoveredSlotIndex = null;
+                    this.currentTooltip = null;
                 }
         );
 
@@ -320,9 +327,6 @@ public class SlotStateDrawer {
         );
     }
 
-    /**
-     * Constructs the tooltip component with the latest data and adds it to the manager.
-     */
     private void buildAndShowTooltip() {
         if (
                 hoveredSlotIndex >= slotInfos.size() ||
@@ -340,9 +344,17 @@ public class SlotStateDrawer {
         SlotInfo slotInfo = slotInfoOpt.get();
         WikiItemMargins margins = wikiRequest.getData().get(slotInfo.getItemId());
 
-        QuickLookTooltip tooltip = new QuickLookTooltip();
-        tooltip.update(slotInfo, margins);
-        tooltipManager.add(new Tooltip(tooltip));
+        if (currentTooltip == null) {
+            currentTooltip = new QuickLookTooltip();
+            currentTooltip.update(slotInfo, margins);
+            timeseriesFetcher.fetch(slotInfo.getItemId(), tsResponse -> {
+                if (currentTooltip != null) {
+                    currentTooltip.setGraphData(tsResponse, slotInfo.getOfferPrice());
+                }
+            });
+        }
+
+        tooltipManager.add(new Tooltip(currentTooltip));
     }
 
 }
