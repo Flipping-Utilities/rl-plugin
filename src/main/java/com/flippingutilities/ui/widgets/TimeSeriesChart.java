@@ -320,7 +320,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
         g2d.setStroke(new BasicStroke(config.getReferenceStroke(), BasicStroke.CAP_BUTT,
                 BasicStroke.JOIN_MITER, STROKE_ROUND_MITER,
-                new float[]{OFFER_LINE_DASH_LENGTH, OFFER_LINE_DASH_LENGTH}, 0.0f));
+                new float[]{ OFFER_LINE_DASH_LENGTH, OFFER_LINE_DASH_LENGTH }, 0.0f));
         g2d.setColor(config.getReferenceLineColor());
 
         int rightEdge = bounds.getRightEdge();
