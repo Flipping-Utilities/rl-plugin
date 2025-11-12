@@ -2,6 +2,7 @@ package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.model.TimeseriesPoint;
 import com.flippingutilities.model.TimeseriesResponse;
+import com.flippingutilities.ui.uiutilities.UIUtilities;
 import net.runelite.client.ui.overlay.components.LayoutableRenderableEntity;
 
 import java.awt.BasicStroke;
@@ -27,7 +28,6 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
     private static final long ONE_THOUSAND = 1_000L;
 
     private final ChartConfig config;
-    private final PriceFormatter priceFormatter;
     private final TickIntervalCalculator tickCalculator;
 
     private final Point position = new Point();
@@ -38,7 +38,6 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
     public TimeSeriesChart(ChartConfig config) {
         this.config = config;
-        this.priceFormatter = new PriceFormatter();
         this.tickCalculator = new TickIntervalCalculator();
     }
 
@@ -218,7 +217,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
             g2d.setColor(config.getGridColor());
             g2d.drawLine(graphX, lineY, graphX + graphWidth, lineY);
 
-            String priceText = priceFormatter.format(price);
+            String priceText = UIUtilities.quantityToRSDecimalStack(price, false);
             g2d.setColor(config.getLabelColor());
             int textWidth = fm.stringWidth(priceText);
             g2d.drawString(priceText, graphX - textWidth - 5, lineY + fm.getAscent() / 2);
