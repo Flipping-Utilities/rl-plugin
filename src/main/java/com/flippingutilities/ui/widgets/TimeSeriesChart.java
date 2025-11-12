@@ -48,15 +48,6 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         this.tickCalculator = new TickIntervalCalculator();
     }
 
-    public void setDataSeries(TimeseriesResponse timeseries, int offerPrice) {
-        this.timeseries = timeseries;
-        this.offerPrice = offerPrice;
-    }
-
-    public boolean hasData() {
-        return timeseries != null && timeseries.getData() != null && !timeseries.getData().isEmpty();
-    }
-
     @Override
     public Dimension render(Graphics2D g2d) {
         if (!hasData()) {
@@ -364,6 +355,14 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         g2d.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
     }
 
+    public void setDataSeries(TimeseriesResponse timeseries, int offerPrice) {
+        this.timeseries = timeseries;
+        this.offerPrice = offerPrice;
+    }
+
+    public boolean hasData() {
+        return timeseries != null && timeseries.getData() != null && !timeseries.getData().isEmpty();
+    }
 
     @Override
     public void setPreferredLocation(Point position) {
