@@ -36,13 +36,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
     private static final float OFFER_LINE_DASH_LENGTH = 5.0f;
     private static final float STROKE_ROUND_MITER = 10.0f;
 
-    private static final int LEFT_PADDING_100M = 55;
-    private static final int LEFT_PADDING_10M = 50;
-    private static final int LEFT_PADDING_1M = 48;
-    private static final int LEFT_PADDING_100K = 42;
-    private static final int LEFT_PADDING_10K = 38;
-    private static final int LEFT_PADDING_1K = 35;
-    private static final int LEFT_PADDING_DEFAULT = 30;
+    private static final int DEFAULT_LEFT_PADDING = 38;
 
     private static final String OFFER_LABEL_TEXT = "Your offer";
     private static final String[] TIME_LABELS = {"24h", "18h", "12h", "6h", "Now"};
@@ -88,9 +82,8 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         List<TimeseriesPoint> filteredData = filterLast24Hours(dataPoints);
 
         PriceRange priceRange = calculatePriceRange(filteredData);
-        int dynamicLeftPadding = calculateLeftPadding(priceRange.max);
 
-        ChartBounds bounds = calculateChartBounds(dynamicLeftPadding);
+        ChartBounds bounds = calculateChartBounds();
 
         priceRange = adjustPriceRange(priceRange);
 
@@ -182,10 +175,10 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         return new PriceRange(min, max);
     }
 
-    private ChartBounds calculateChartBounds(int leftPadding) {
-        int x = position.x + leftPadding;
+    private ChartBounds calculateChartBounds() {
+        int x = position.x + DEFAULT_LEFT_PADDING;
         int y = position.y + config.getTopPadding();
-        int width = config.getWidth() - leftPadding - config.getRightPadding();
+        int width = config.getWidth() - DEFAULT_LEFT_PADDING - config.getRightPadding();
         int height = config.getHeight() - config.getTopPadding() - config.getBottomPadding();
 
         return new ChartBounds(x, y, width, height);
@@ -378,27 +371,6 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         g2d.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
     }
 
-    private int calculateLeftPadding(long maxPrice) {
-        if (maxPrice >= HUNDRED_MILLION) {
-            return LEFT_PADDING_100M;
-        }
-        if (maxPrice >= TEN_MILLION) {
-            return LEFT_PADDING_10M;
-        }
-        if (maxPrice >= ONE_MILLION) {
-            return LEFT_PADDING_1M;
-        }
-        if (maxPrice >= HUNDRED_THOUSAND) {
-            return LEFT_PADDING_100K;
-        }
-        if (maxPrice >= TEN_THOUSAND) {
-            return LEFT_PADDING_10K;
-        }
-        if (maxPrice >= ONE_THOUSAND) {
-            return LEFT_PADDING_1K;
-        }
-        return LEFT_PADDING_DEFAULT;
-    }
 
     @Override
     public void setPreferredLocation(Point position) {
