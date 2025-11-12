@@ -3,22 +3,18 @@ package com.flippingutilities.ui.widgets;
 import com.flippingutilities.model.TimeseriesPoint;
 import com.flippingutilities.model.TimeseriesResponse;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
+import com.flippingutilities.ui.widgets.chart.ChartBounds;
+import com.flippingutilities.ui.widgets.chart.PriceRange;
+import com.flippingutilities.ui.widgets.chart.TimeRange;
 import net.runelite.client.ui.overlay.components.LayoutableRenderableEntity;
 
-import java.awt.BasicStroke;
-import java.awt.Dimension;
-import java.awt.FontMetrics;
-import java.awt.Graphics2D;
-import java.awt.Point;
-import java.awt.Rectangle;
-import java.awt.RenderingHints;
+import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
-    private static final long TWENTY_FOUR_HOURS_SECONDS = 24 * 60 * 60;
+    private static final long TWENTY_FOUR_HOURS_IN_SECONDS = 24 * 60 * 60;
 
     private static final long HUNDRED_MILLION = 100_000_000L;
     private static final long TEN_MILLION = 10_000_000L;
@@ -26,6 +22,30 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
     private static final long HUNDRED_THOUSAND = 100_000L;
     private static final long TEN_THOUSAND = 10_000L;
     private static final long ONE_THOUSAND = 1_000L;
+
+    private static final int PRICE_RANGE_MIN_THRESHOLD = 10;
+    private static final int PRICE_RANGE_SMALL_MARGIN = 20;
+    private static final int PRICE_RANGE_MARGIN_DIVISOR = 10;
+    private static final int MIN_PRICE_MARGIN = 5;
+
+    private static final int GRID_DIVISIONS = 4;
+    private static final int LABEL_PADDING = 5;
+    private static final int OFFER_LABEL_OFFSET = 3;
+
+    private static final float GRID_DASH_LENGTH = 2.0f;
+    private static final float OFFER_LINE_DASH_LENGTH = 5.0f;
+    private static final float STROKE_ROUND_MITER = 10.0f;
+
+    private static final int LEFT_PADDING_100M = 55;
+    private static final int LEFT_PADDING_10M = 50;
+    private static final int LEFT_PADDING_1M = 48;
+    private static final int LEFT_PADDING_100K = 42;
+    private static final int LEFT_PADDING_10K = 38;
+    private static final int LEFT_PADDING_1K = 35;
+    private static final int LEFT_PADDING_DEFAULT = 30;
+
+    private static final String OFFER_LABEL_TEXT = "Your offer";
+    private static final String[] TIME_LABELS = {"24h", "18h", "12h", "6h", "Now"};
 
     private final ChartConfig config;
     private final TickIntervalCalculator tickCalculator;
@@ -56,11 +76,8 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
             return new Dimension();
         }
 
-        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-
-        g2d.setColor(config.getBackgroundColor());
-        g2d.fillRect(position.x, position.y, config.getWidth(), config.getHeight());
+        setupRenderingHints(g2d);
+        drawBackground(g2d);
 
         List<TimeseriesPoint> dataPoints = timeseries.getData();
         if (dataPoints.isEmpty()) {
@@ -70,255 +87,317 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
         List<TimeseriesPoint> filteredData = filterLast24Hours(dataPoints);
 
-        long minPrice = calculateMinPrice(filteredData);
-        long maxPrice = calculateMaxPrice(filteredData);
+        PriceRange priceRange = calculatePriceRange(filteredData);
+        int dynamicLeftPadding = calculateLeftPadding(priceRange.max);
 
-        maxPrice = Math.max(maxPrice, offerPrice);
-        minPrice = Math.min(minPrice, offerPrice);
+        ChartBounds bounds = calculateChartBounds(dynamicLeftPadding);
 
-        int dynamicLeftPadding = calculateLeftPadding(maxPrice);
+        priceRange = adjustPriceRange(priceRange);
 
-        int graphX = position.x + dynamicLeftPadding;
-        int graphY = position.y + config.getTopPadding();
-        int graphWidth = config.getWidth() - dynamicLeftPadding - config.getRightPadding();
-        int graphHeight = config.getHeight() - config.getTopPadding() - config.getBottomPadding();
-
-        long priceRange = maxPrice - minPrice;
-        if (priceRange < 10) {
-            long midPrice = (maxPrice + minPrice) / 2;
-            maxPrice = midPrice + 20;
-            minPrice = midPrice - 20;
-        } else {
-            long margin = Math.max(priceRange / 10, 5);
-            maxPrice += margin;
-            minPrice = Math.max(0, minPrice - margin);
-        }
-        priceRange = maxPrice - minPrice;
-
-        drawGrid(g2d, graphX, graphY, graphWidth, graphHeight, minPrice, maxPrice, priceRange);
-
-        long timeRange = calculateTimeRange(filteredData);
-        long startTime = filteredData.isEmpty() ?
-            (System.currentTimeMillis() / 1000 - TWENTY_FOUR_HOURS_SECONDS) :
-            filteredData.get(0).getTimestamp();
-
-        List<Point> highPoints = new ArrayList<>();
-        List<Point> lowPoints = new ArrayList<>();
-
-        for (TimeseriesPoint point : filteredData) {
-            long timeOffset = point.getTimestamp() - startTime;
-            float timePercent = timeRange > 0 ? (float) timeOffset / timeRange : 0.5f;
-            int xPos = graphX + (int) (timePercent * graphWidth);
-
-            Integer highPrice = point.getAvgHighPrice();
-            if (highPrice != null) {
-                int yPos = graphY + graphHeight - (int) ((highPrice - minPrice) * graphHeight / priceRange);
-                highPoints.add(new Point(xPos, yPos));
-            }
-
-            Integer lowPrice = point.getAvgLowPrice();
-            if (lowPrice != null) {
-                int yPos = graphY + graphHeight - (int) ((lowPrice - minPrice) * graphHeight / priceRange);
-                lowPoints.add(new Point(xPos, yPos));
-            }
-        }
-
-        drawFillBetweenLines(g2d, highPoints, lowPoints);
-
-        g2d.setStroke(new BasicStroke(config.getLineStroke(), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        drawLine(g2d, highPoints, config.getHighLineColor());
-        drawLine(g2d, lowPoints, config.getLowLineColor());
-
-        drawOfferLine(g2d, graphX, graphY, graphWidth, graphHeight, minPrice, priceRange);
-
-        drawTimeLabels(g2d, graphX, graphWidth);
-
-        g2d.setStroke(new BasicStroke(1.0f));
-        g2d.setColor(config.getGridColor());
-        g2d.drawRect(graphX, graphY, graphWidth, graphHeight);
+        drawGrid(g2d, bounds, priceRange);
+        drawDataSeries(g2d, bounds, priceRange, filteredData);
+        drawOfferLine(g2d, bounds, priceRange);
+        drawTimeLabels(g2d, bounds);
+        drawBorder(g2d, bounds);
 
         dimension.setSize(config.getWidth(), config.getHeight());
         return dimension;
     }
 
+    private void setupRenderingHints(Graphics2D g2d) {
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+    }
+
+    private void drawBackground(Graphics2D g2d) {
+        g2d.setColor(config.getBackgroundColor());
+        g2d.fillRect(position.x, position.y, config.getWidth(), config.getHeight());
+    }
+
     private List<TimeseriesPoint> filterLast24Hours(List<TimeseriesPoint> dataPoints) {
         long currentTime = System.currentTimeMillis() / 1000;
-        long twentyFourHoursAgo = currentTime - TWENTY_FOUR_HOURS_SECONDS;
+        long twentyFourHoursAgo = currentTime - TWENTY_FOUR_HOURS_IN_SECONDS;
 
-        List<TimeseriesPoint> last24Hours = dataPoints.stream()
-                .filter(p -> p.getTimestamp() >= twentyFourHoursAgo)
-                .sorted((a, b) -> Long.compare(a.getTimestamp(), b.getTimestamp()))
-                .collect(Collectors.toList());
+        List<TimeseriesPoint> filtered = new ArrayList<>();
+        for (TimeseriesPoint point : dataPoints) {
+            if (point.getTimestamp() >= twentyFourHoursAgo) {
+                filtered.add(point);
+            }
+        }
 
-        if (last24Hours.isEmpty()) {
+        if (filtered.isEmpty()) {
             return new ArrayList<>(dataPoints);
         }
 
-        return last24Hours;
+        for (int i = 1; i < filtered.size(); i++) {
+            TimeseriesPoint key = filtered.get(i);
+            int j = i - 1;
+            while (j >= 0 && filtered.get(j).getTimestamp() > key.getTimestamp()) {
+                filtered.set(j + 1, filtered.get(j));
+                j--;
+            }
+            filtered.set(j + 1, key);
+        }
+
+        return filtered;
     }
 
-    private long calculateMinPrice(List<TimeseriesPoint> dataPoints) {
+    private PriceRange calculatePriceRange(List<TimeseriesPoint> dataPoints) {
         long minPrice = Long.MAX_VALUE;
+        long maxPrice = Long.MIN_VALUE;
 
         for (TimeseriesPoint point : dataPoints) {
-            Integer lowPrice = point.getAvgLowPrice();
-            if (lowPrice != null) {
+            if (point.getAvgHighPrice() != null) {
+                int highPrice = point.getAvgHighPrice();
+                maxPrice = Math.max(maxPrice, highPrice);
+            }
+
+            if (point.getAvgLowPrice() != null) {
+                int lowPrice = point.getAvgLowPrice();
                 minPrice = Math.min(minPrice, lowPrice);
             }
         }
 
-        return minPrice;
+        maxPrice = Math.max(maxPrice, offerPrice);
+        minPrice = Math.min(minPrice, offerPrice);
+
+        return new PriceRange(minPrice, maxPrice);
     }
 
-    private long calculateMaxPrice(List<TimeseriesPoint> dataPoints) {
-        long maxPrice = Long.MIN_VALUE;
+    private PriceRange adjustPriceRange(PriceRange original) {
+        long range = original.getRange();
+        long min = original.min;
+        long max = original.max;
 
-        for (TimeseriesPoint point : dataPoints) {
-            Integer highPrice = point.getAvgHighPrice();
-            if (highPrice != null) {
-                maxPrice = Math.max(maxPrice, highPrice);
-            }
+        if (range < PRICE_RANGE_MIN_THRESHOLD) {
+            long midPrice = (max + min) / 2;
+            max = midPrice + PRICE_RANGE_SMALL_MARGIN;
+            min = midPrice - PRICE_RANGE_SMALL_MARGIN;
+        } else {
+            long margin = Math.max(range / PRICE_RANGE_MARGIN_DIVISOR, MIN_PRICE_MARGIN);
+            max += margin;
+            min = Math.max(0, min - margin);
         }
 
-        return maxPrice;
+        return new PriceRange(min, max);
     }
 
-    private long calculateTimeRange(List<TimeseriesPoint> filteredData) {
+    private ChartBounds calculateChartBounds(int leftPadding) {
+        int x = position.x + leftPadding;
+        int y = position.y + config.getTopPadding();
+        int width = config.getWidth() - leftPadding - config.getRightPadding();
+        int height = config.getHeight() - config.getTopPadding() - config.getBottomPadding();
+
+        return new ChartBounds(x, y, width, height);
+    }
+
+    private TimeRange calculateTimeRange(List<TimeseriesPoint> filteredData) {
         if (filteredData.isEmpty()) {
-            return 1;
+            long currentTime = System.currentTimeMillis() / 1000;
+            return new TimeRange(currentTime - TWENTY_FOUR_HOURS_IN_SECONDS, 1);
         }
 
-        long timeRange = filteredData.get(filteredData.size() - 1).getTimestamp() -
-                        filteredData.get(0).getTimestamp();
+        TimeseriesPoint first = filteredData.get(0);
+        TimeseriesPoint last = filteredData.get(filteredData.size() - 1);
+        long start = first.getTimestamp();
+        long range = last.getTimestamp() - start;
 
-        return timeRange == 0 ? TWENTY_FOUR_HOURS_SECONDS : timeRange;
+        return new TimeRange(start, range == 0 ? TWENTY_FOUR_HOURS_IN_SECONDS : range);
     }
 
-    private void drawGrid(Graphics2D g2d, int graphX, int graphY, int graphWidth, int graphHeight,
-                         long minPrice, long maxPrice, long priceRange) {
+    private void drawGrid(Graphics2D g2d, ChartBounds bounds, PriceRange priceRange) {
         g2d.setColor(config.getGridColor());
         g2d.setStroke(new BasicStroke(config.getGridStroke(), BasicStroke.CAP_BUTT,
-                BasicStroke.JOIN_MITER, 10.0f, new float[]{2.0f, 2.0f}, 0.0f));
+                BasicStroke.JOIN_MITER, STROKE_ROUND_MITER,
+                new float[]{GRID_DASH_LENGTH, GRID_DASH_LENGTH}, 0.0f));
 
         g2d.setFont(config.getLabelFont());
         FontMetrics fm = g2d.getFontMetrics();
 
-        long tickInterval = tickCalculator.calculate(priceRange);
-        long startPrice = (minPrice / tickInterval) * tickInterval;
-        long endPrice = ((maxPrice / tickInterval) + 1) * tickInterval;
+        drawHorizontalGridLines(g2d, bounds, priceRange, fm);
+        drawVerticalGridLines(g2d, bounds);
+    }
+
+    private void drawHorizontalGridLines(Graphics2D g2d, ChartBounds bounds,
+                                         PriceRange priceRange, FontMetrics fm) {
+        long tickInterval = tickCalculator.calculate(priceRange.getRange());
+        long startPrice = (priceRange.min / tickInterval) * tickInterval;
+        long endPrice = ((priceRange.max / tickInterval) + 1) * tickInterval;
+
+        int rightEdge = bounds.getRightEdge();
 
         for (long price = startPrice; price <= endPrice; price += tickInterval) {
-            if (price < minPrice || price > maxPrice) {
+            if (price < priceRange.min || price > priceRange.max) {
                 continue;
             }
 
-            int lineY = graphY + graphHeight - (int)((price - minPrice) * graphHeight / priceRange);
+            int lineY = calculateYPosition(price, bounds, priceRange);
 
             g2d.setColor(config.getGridColor());
-            g2d.drawLine(graphX, lineY, graphX + graphWidth, lineY);
+            g2d.drawLine(bounds.x, lineY, rightEdge, lineY);
 
             String priceText = UIUtilities.quantityToRSDecimalStack(price, false);
             g2d.setColor(config.getLabelColor());
             int textWidth = fm.stringWidth(priceText);
-            g2d.drawString(priceText, graphX - textWidth - 5, lineY + fm.getAscent() / 2);
+            g2d.drawString(priceText, bounds.x - textWidth - LABEL_PADDING,
+                    lineY + fm.getAscent() / 2);
         }
+    }
 
-        for (int i = 0; i <= 4; i++) {
-            int lineX = graphX + (i * graphWidth / 4);
+    private void drawVerticalGridLines(Graphics2D g2d, ChartBounds bounds) {
+        int bottomEdge = bounds.getBottomEdge();
+
+        for (int i = 0; i <= GRID_DIVISIONS; i++) {
+            int lineX = bounds.x + (i * bounds.width / GRID_DIVISIONS);
             g2d.setColor(config.getGridColor());
-            g2d.drawLine(lineX, graphY, lineX, graphY + graphHeight);
+            g2d.drawLine(lineX, bounds.y, lineX, bottomEdge);
         }
     }
 
-    private void drawFillBetweenLines(Graphics2D g2d, List<Point> highPoints, List<Point> lowPoints) {
-        if (highPoints.size() > 1 && lowPoints.size() > 1) {
-            int[] fillX = new int[highPoints.size() + lowPoints.size()];
-            int[] fillY = new int[highPoints.size() + lowPoints.size()];
+    private int calculateYPosition(long price, ChartBounds bounds, PriceRange priceRange) {
+        int bottomEdge = bounds.getBottomEdge();
+        long range = priceRange.getRange();
+        return bottomEdge - (int) ((price - priceRange.min) * bounds.height / range);
+    }
 
-            for (int i = 0; i < highPoints.size(); i++) {
-                fillX[i] = highPoints.get(i).x;
-                fillY[i] = highPoints.get(i).y;
+    private void drawDataSeries(Graphics2D g2d, ChartBounds bounds,
+                                PriceRange priceRange, List<TimeseriesPoint> filteredData) {
+        if (filteredData.isEmpty()) {
+            return;
+        }
+
+        TimeRange timeRange = calculateTimeRange(filteredData);
+
+        int dataSize = filteredData.size();
+        int[] highX = new int[dataSize];
+        int[] highY = new int[dataSize];
+        int[] lowX = new int[dataSize];
+        int[] lowY = new int[dataSize];
+        int highCount = 0;
+        int lowCount = 0;
+
+        for (TimeseriesPoint point : filteredData) {
+            long timeOffset = point.getTimestamp() - timeRange.start;
+            float timePercent = timeRange.range > 0 ? (float) timeOffset / timeRange.range : 0.5f;
+            int xPos = bounds.x + (int) (timePercent * bounds.width);
+
+            if (point.getAvgHighPrice() != null) {
+                int highPrice = point.getAvgHighPrice();
+                highX[highCount] = xPos;
+                highY[highCount] = calculateYPosition(highPrice, bounds, priceRange);
+                highCount++;
             }
 
-            for (int i = 0; i < lowPoints.size(); i++) {
-                int idx = highPoints.size() + i;
-                fillX[idx] = lowPoints.get(lowPoints.size() - 1 - i).x;
-                fillY[idx] = lowPoints.get(lowPoints.size() - 1 - i).y;
+            if (point.getAvgLowPrice() != null) {
+                int lowPrice = point.getAvgLowPrice();
+                lowX[lowCount] = xPos;
+                lowY[lowCount] = calculateYPosition(lowPrice, bounds, priceRange);
+                lowCount++;
             }
+        }
 
-            g2d.setColor(config.getFillColor());
-            g2d.fillPolygon(fillX, fillY, fillX.length);
+        drawFillBetweenLines(g2d, highX, highY, highCount, lowX, lowY, lowCount);
+
+        g2d.setStroke(new BasicStroke(config.getLineStroke(),
+                BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        drawLine(g2d, highX, highY, highCount, config.getHighLineColor());
+        drawLine(g2d, lowX, lowY, lowCount, config.getLowLineColor());
+    }
+
+    private void drawFillBetweenLines(Graphics2D g2d, int[] highX, int[] highY, int highCount,
+                                      int[] lowX, int[] lowY, int lowCount) {
+        if (highCount <= 1 || lowCount <= 1) {
+            return;
+        }
+
+        int totalPoints = highCount + lowCount;
+        int[] fillX = new int[totalPoints];
+        int[] fillY = new int[totalPoints];
+
+        System.arraycopy(highX, 0, fillX, 0, highCount);
+        System.arraycopy(highY, 0, fillY, 0, highCount);
+
+        for (int i = 0; i < lowCount; i++) {
+            int idx = highCount + i;
+            fillX[idx] = lowX[lowCount - 1 - i];
+            fillY[idx] = lowY[lowCount - 1 - i];
+        }
+
+        g2d.setColor(config.getFillColor());
+        g2d.fillPolygon(fillX, fillY, totalPoints);
+    }
+
+    private void drawLine(Graphics2D g2d, int[] xPoints, int[] yPoints, int count, java.awt.Color color) {
+        if (count <= 1) {
+            return;
+        }
+
+        g2d.setColor(color);
+        for (int i = 0; i < count - 1; i++) {
+            g2d.drawLine(xPoints[i], yPoints[i], xPoints[i + 1], yPoints[i + 1]);
         }
     }
 
-    private void drawLine(Graphics2D g2d, List<Point> points, java.awt.Color color) {
-        if (points.size() > 1) {
-            g2d.setColor(color);
-            for (int i = 0; i < points.size() - 1; i++) {
-                Point p1 = points.get(i);
-                Point p2 = points.get(i + 1);
-                g2d.drawLine(p1.x, p1.y, p2.x, p2.y);
-            }
-        }
-    }
+    private void drawOfferLine(Graphics2D g2d, ChartBounds bounds, PriceRange priceRange) {
+        int offerY = calculateYPosition(offerPrice, bounds, priceRange);
 
-    private void drawOfferLine(Graphics2D g2d, int graphX, int graphY, int graphWidth, int graphHeight,
-                               long minPrice, long priceRange) {
-        int offerY = graphY + graphHeight - (int) ((offerPrice - minPrice) * graphHeight / priceRange);
         g2d.setStroke(new BasicStroke(config.getReferenceStroke(), BasicStroke.CAP_BUTT,
-                BasicStroke.JOIN_MITER, 10.0f, new float[]{5.0f, 5.0f}, 0.0f));
+                BasicStroke.JOIN_MITER, STROKE_ROUND_MITER,
+                new float[]{OFFER_LINE_DASH_LENGTH, OFFER_LINE_DASH_LENGTH}, 0.0f));
         g2d.setColor(config.getReferenceLineColor());
-        g2d.drawLine(graphX, offerY, graphX + graphWidth, offerY);
 
-        String offerLabel = "Your offer";
+        int rightEdge = bounds.getRightEdge();
+        g2d.drawLine(bounds.x, offerY, rightEdge, offerY);
+
         g2d.setFont(config.getLabelFont());
         g2d.setColor(config.getReferenceLineColor());
         FontMetrics fm = g2d.getFontMetrics();
-        int labelWidth = fm.stringWidth(offerLabel);
-        g2d.drawString(offerLabel, graphX + graphWidth - labelWidth - 5, offerY - 3);
+        int labelWidth = fm.stringWidth(OFFER_LABEL_TEXT);
+        g2d.drawString(OFFER_LABEL_TEXT, rightEdge - labelWidth - LABEL_PADDING,
+                offerY - OFFER_LABEL_OFFSET);
     }
 
-    private void drawTimeLabels(Graphics2D g2d, int graphX, int graphWidth) {
+    private void drawTimeLabels(Graphics2D g2d, ChartBounds bounds) {
         g2d.setColor(config.getLabelColor());
         g2d.setFont(config.getLabelFont());
         FontMetrics fm = g2d.getFontMetrics();
 
-        String[] timeLabels = {"24h", "18h", "12h", "6h", "Now"};
-        for (int i = 0; i < 5; i++) {
-            int labelX = graphX + (i * graphWidth / 4);
-            String label = timeLabels[i];
+        int bottomY = position.y + config.getHeight() - LABEL_PADDING;
+
+        for (int i = 0; i < TIME_LABELS.length; i++) {
+            int labelX = bounds.x + (i * bounds.width / GRID_DIVISIONS);
+            String label = TIME_LABELS[i];
             int labelWidth = fm.stringWidth(label);
-            g2d.drawString(label, labelX - labelWidth / 2,
-                position.y + config.getHeight() - 5);
+            g2d.drawString(label, labelX - labelWidth / 2, bottomY);
         }
+    }
+
+    private void drawBorder(Graphics2D g2d, ChartBounds bounds) {
+        g2d.setStroke(new BasicStroke(1.0f));
+        g2d.setColor(config.getGridColor());
+        g2d.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
     }
 
     private int calculateLeftPadding(long maxPrice) {
         if (maxPrice >= HUNDRED_MILLION) {
-            return 55;
+            return LEFT_PADDING_100M;
         }
-
         if (maxPrice >= TEN_MILLION) {
-            return 50;
+            return LEFT_PADDING_10M;
         }
-
         if (maxPrice >= ONE_MILLION) {
-            return 48;
+            return LEFT_PADDING_1M;
         }
-
         if (maxPrice >= HUNDRED_THOUSAND) {
-            return 42;
+            return LEFT_PADDING_100K;
         }
-
         if (maxPrice >= TEN_THOUSAND) {
-            return 38;
+            return LEFT_PADDING_10K;
         }
-
         if (maxPrice >= ONE_THOUSAND) {
-            return 35;
+            return LEFT_PADDING_1K;
         }
-
-        return 30;
+        return LEFT_PADDING_DEFAULT;
     }
 
     @Override
