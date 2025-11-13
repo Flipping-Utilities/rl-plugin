@@ -10,7 +10,8 @@ public final class TimeLabelGenerator {
 
     private static final DateTimeFormatter HOUR_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DAY_FORMATTER = DateTimeFormatter.ofPattern("MMM dd");
-    private static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("MMM yyyy");
+    private static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("MMM");
+    private static final DateTimeFormatter MONTH_YEAR_FORMATTER = DateTimeFormatter.ofPattern("MMM yy");
 
     public static String[] generate(Timestep timestep, long currentTimeSeconds) {
         int labelCount = timestep.getLabelCount();
@@ -40,7 +41,13 @@ public final class TimeLabelGenerator {
             case SIX_HOURS:
                 return DAY_FORMATTER.format(instant.atZone(zoneId));
             case TWENTY_FOUR_HOURS:
-                return MONTH_FORMATTER.format(instant.atZone(zoneId));
+                int timestampYear = instant.atZone(zoneId).getYear();
+                int currentYear = Instant.now().atZone(zoneId).getYear();
+                if (timestampYear == currentYear) {
+                    return MONTH_FORMATTER.format(instant.atZone(zoneId));
+                } else {
+                    return MONTH_YEAR_FORMATTER.format(instant.atZone(zoneId));
+                }
             default:
                 return "";
         }

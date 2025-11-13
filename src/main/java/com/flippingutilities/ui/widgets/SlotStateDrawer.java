@@ -347,11 +347,14 @@ public class SlotStateDrawer {
         if (currentTooltip == null) {
             currentTooltip = new QuickLookTooltip();
             currentTooltip.update(slotInfo, margins);
-            timeseriesFetcher.fetch(slotInfo.getItemId(), plugin.getConfig().priceGraphTimestep(), tsResponse -> {
-                if (currentTooltip != null) {
-                    currentTooltip.setGraphData(tsResponse, plugin.getConfig().priceGraphTimestep(), slotInfo.getOfferPrice());
-                }
-            });
+
+            if (plugin.getConfig().priceGraphEnabled()) {
+                timeseriesFetcher.fetch(slotInfo.getItemId(), plugin.getConfig().priceGraphTimestep(), tsResponse -> {
+                    if (currentTooltip != null) {
+                        currentTooltip.setGraphData(tsResponse, plugin.getConfig().priceGraphTimestep(), slotInfo.getOfferPrice());
+                    }
+                });
+            }
         }
 
         tooltipManager.add(new Tooltip(currentTooltip));

@@ -131,10 +131,30 @@ public interface FlippingConfig extends Config
 		return ColorScheme.GRAND_EXCHANGE_ALCH;
 	}
 
+	@ConfigSection(
+			name = "Quick lookup",
+			description = "Configure the price graph shown in quick lookup tooltips",
+			position = 50
+	)
+	String priceGraphSection = "priceGraphSection";
+
+	@ConfigItem(
+			keyName = "priceGraphEnabled",
+			name = "Enable price graph",
+			description = "Show price history graph in quick lookup tooltips",
+			section = priceGraphSection,
+			position = 1
+	)
+	default boolean priceGraphEnabled() {
+		return true;
+	}
+
 	@ConfigItem(
 			keyName = "priceGraphTimestep",
-			name = "Price graph time range",
-			description = "Select the time range for the price graph shown in quick lookup tooltips"
+			name = "Time range",
+			description = "Select the time range for the price graph",
+			section = priceGraphSection,
+			position = 2
 	)
 	default Timestep priceGraphTimestep() {
 		return Timestep.FIVE_MINUTES;
