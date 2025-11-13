@@ -33,7 +33,8 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
     private static final int PADDING = 5;
     private static final int LINE_SPACING = 2;
     private static final int COLUMN_GAP = 10;
-    private static final int TEXT_HORIZONTAL_PADDING = 60;
+    private static final int TEXT_HORIZONTAL_PADDING_WITH_GRAPH = 60;
+    private static final int TEXT_HORIZONTAL_PADDING_WITHOUT_GRAPH = 10;
     private static final Color BACKGROUND_COLOR = new Color(0, 0, 0, 180);
 
     private final List<TextRow> textRows = new ArrayList<>();
@@ -242,10 +243,14 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
             }
         }
 
+        int textHorizontalPadding = chart.hasData()
+                ? TEXT_HORIZONTAL_PADDING_WITH_GRAPH
+                : TEXT_HORIZONTAL_PADDING_WITHOUT_GRAPH;
+
         int twoColumnWidth =
                 maxLeftWidth + (maxRightWidth > 0 ? COLUMN_GAP + maxRightWidth : 0);
         int contentWidth = Math.max(twoColumnWidth, maxCenteredWidth);
-        int panelWidth = contentWidth + PADDING * 2 + TEXT_HORIZONTAL_PADDING * 2;
+        int panelWidth = contentWidth + PADDING * 2 + textHorizontalPadding * 2;
 
         if (chart.hasData()) {
             panelWidth = Math.max(panelWidth, chart.getBounds().width);
@@ -282,13 +287,13 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
                 graphics.drawString(textRow.left, centeredX, y);
             } else {
                 graphics.setColor(textRow.leftColor);
-                graphics.drawString(textRow.left, position.x + PADDING + TEXT_HORIZONTAL_PADDING, y);
+                graphics.drawString(textRow.left, position.x + PADDING + textHorizontalPadding, y);
 
                 if (textRow.right != null) {
                     int rightX = position.x +
                             panelWidth -
                             PADDING -
-                            TEXT_HORIZONTAL_PADDING -
+                            textHorizontalPadding -
                             metrics.stringWidth(textRow.right);
                     graphics.setColor(textRow.rightColor);
                     graphics.drawString(textRow.right, rightX, y);
