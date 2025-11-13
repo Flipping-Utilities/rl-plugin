@@ -315,9 +315,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
         g2d.setFont(config.getLabelFont());
         g2d.setColor(config.getReferenceLineColor());
-        FontMetrics fm = g2d.getFontMetrics();
-        int labelWidth = fm.stringWidth(OFFER_LABEL_TEXT);
-        g2d.drawString(OFFER_LABEL_TEXT, rightEdge - labelWidth - LABEL_PADDING,
+        g2d.drawString(OFFER_LABEL_TEXT, bounds.x + LABEL_PADDING,
                 offerY - OFFER_LABEL_OFFSET);
     }
 

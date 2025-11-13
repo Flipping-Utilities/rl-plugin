@@ -84,7 +84,7 @@ public class TimeseriesFetcher {
                                         );
                                         cache.put(
                                                 cacheKey,
-                                                new CachedTimeseries(tsResponse, Instant.now())
+                                                new CachedTimeseries(tsResponse, Instant.now(), timestep)
                                         );
                                         callback.accept(tsResponse);
                                     } catch (JsonSyntaxException e) {

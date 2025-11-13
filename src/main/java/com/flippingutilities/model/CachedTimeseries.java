@@ -4,14 +4,16 @@ import java.time.Duration;
 import java.time.Instant;
 
 public final class CachedTimeseries {
-    private static final Duration CACHE_DURATION = Duration.ofMinutes(5);
+    private static final long BUFFER_SECONDS = 15;
 
     private final TimeseriesResponse response;
     private final Instant fetchTime;
+    private final Timestep timestep;
 
-    public CachedTimeseries(TimeseriesResponse response, Instant fetchTime) {
+    public CachedTimeseries(TimeseriesResponse response, Instant fetchTime, Timestep timestep) {
         this.response = response;
         this.fetchTime = fetchTime;
+        this.timestep = timestep;
     }
 
     public TimeseriesResponse getResponse() {
@@ -19,6 +21,16 @@ public final class CachedTimeseries {
     }
 
     public boolean isStale() {
-        return Duration.between(fetchTime, Instant.now()).compareTo(CACHE_DURATION) > 0;
+        long cacheDurationSeconds = calculateCacheDuration();
+        Duration cacheDuration = Duration.ofSeconds(cacheDurationSeconds);
+        return Duration.between(fetchTime, Instant.now()).compareTo(cacheDuration) > 0;
+    }
+
+    private long calculateCacheDuration() {
+        long currentSeconds = fetchTime.getEpochSecond();
+        long intervalSeconds = timestep.getIntervalSeconds();
+        long secondsSinceLastInterval = currentSeconds % intervalSeconds;
+        long secondsUntilNextInterval = intervalSeconds - secondsSinceLastInterval;
+        return secondsUntilNextInterval + BUFFER_SECONDS;
     }
 }
