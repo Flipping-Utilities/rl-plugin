@@ -2,6 +2,8 @@ package com.flippingutilities.jobs;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.CachedTimeseries;
+import com.flippingutilities.model.TimeseriesCacheKey;
+import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesResponse;
 import com.google.gson.JsonSyntaxException;
 import lombok.extern.slf4j.Slf4j;
@@ -27,13 +29,12 @@ public class TimeseriesFetcher {
     private static final String TIMESERIES_API_URL = "https://prices.runescape.wiki/api/v1/osrs/timeseries";
     private static final String QUERY_PARAM_TIMESTEP = "timestep";
     private static final String QUERY_PARAM_ID = "id";
-    private static final String TIMESTEP_VALUE = "5m";
     private static final String USER_AGENT_HEADER = "User-Agent";
     private static final String USER_AGENT_VALUE = "FlippingUtilities";
 
     private final OkHttpClient httpClient;
     private final FlippingPlugin plugin;
-    private final Map<Integer, CachedTimeseries> cache = new ConcurrentHashMap<>();
+    private final Map<TimeseriesCacheKey, CachedTimeseries> cache = new ConcurrentHashMap<>();
 
     @Inject
     public TimeseriesFetcher(OkHttpClient httpClient, FlippingPlugin plugin) {
@@ -41,8 +42,9 @@ public class TimeseriesFetcher {
         this.plugin = plugin;
     }
 
-    public void fetch(int itemId, Consumer<TimeseriesResponse> callback) {
-        CachedTimeseries cachedData = cache.get(itemId);
+    public void fetch(int itemId, Timestep timestep, Consumer<TimeseriesResponse> callback) {
+        TimeseriesCacheKey cacheKey = new TimeseriesCacheKey(itemId, timestep);
+        CachedTimeseries cachedData = cache.get(cacheKey);
         if (cachedData != null && !cachedData.isStale()) {
             callback.accept(cachedData.getResponse());
             return;
@@ -51,7 +53,7 @@ public class TimeseriesFetcher {
         HttpUrl url = HttpUrl
                 .parse(TIMESERIES_API_URL)
                 .newBuilder()
-                .addQueryParameter(QUERY_PARAM_TIMESTEP, TIMESTEP_VALUE)
+                .addQueryParameter(QUERY_PARAM_TIMESTEP, timestep.getApiValue())
                 .addQueryParameter(QUERY_PARAM_ID, String.valueOf(itemId))
                 .build();
 
@@ -81,7 +83,7 @@ public class TimeseriesFetcher {
                                                 TimeseriesResponse.class
                                         );
                                         cache.put(
-                                                itemId,
+                                                cacheKey,
                                                 new CachedTimeseries(tsResponse, Instant.now())
                                         );
                                         callback.accept(tsResponse);

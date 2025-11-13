@@ -1,5 +1,6 @@
 package com.flippingutilities.ui.widgets;
 
+import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesPoint;
 import com.flippingutilities.model.TimeseriesResponse;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
@@ -14,14 +15,11 @@ import java.util.List;
 
 public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
-    private static final long TWENTY_FOUR_HOURS_IN_SECONDS = 24 * 60 * 60;
-
     private static final int PRICE_RANGE_MIN_THRESHOLD = 10;
     private static final int PRICE_RANGE_SMALL_MARGIN = 20;
     private static final int PRICE_RANGE_MARGIN_DIVISOR = 10;
     private static final int MIN_PRICE_MARGIN = 5;
 
-    private static final int GRID_DIVISIONS = 4;
     private static final int LABEL_PADDING = 5;
     private static final int OFFER_LABEL_OFFSET = 3;
 
@@ -32,7 +30,6 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
     private static final int DEFAULT_LEFT_PADDING = 38;
 
     private static final String OFFER_LABEL_TEXT = "Your offer";
-    private static final String[] TIME_LABELS = {"24h", "18h", "12h", "6h", "Now"};
 
     private final ChartConfig config;
     private final TickIntervalCalculator tickCalculator;
@@ -41,6 +38,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
     private final Dimension dimension = new Dimension();
 
     private TimeseriesResponse timeseries;
+    private Timestep timestep;
     private int offerPrice;
 
     public TimeSeriesChart(ChartConfig config) {
@@ -63,7 +61,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
             return dimension;
         }
 
-        List<TimeseriesPoint> filteredData = filterLast24Hours(dataPoints);
+        List<TimeseriesPoint> filteredData = filterAndSortData(dataPoints);
 
         PriceRange priceRange = calculatePriceRange(filteredData);
 
@@ -91,32 +89,20 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         g2d.fillRect(position.x, position.y, config.getWidth(), config.getHeight());
     }
 
-    private List<TimeseriesPoint> filterLast24Hours(List<TimeseriesPoint> dataPoints) {
-        long currentTime = System.currentTimeMillis() / 1000;
-        long twentyFourHoursAgo = currentTime - TWENTY_FOUR_HOURS_IN_SECONDS;
+    private List<TimeseriesPoint> filterAndSortData(List<TimeseriesPoint> dataPoints) {
+        List<TimeseriesPoint> sorted = new ArrayList<>(dataPoints);
 
-        List<TimeseriesPoint> filtered = new ArrayList<>();
-        for (TimeseriesPoint point : dataPoints) {
-            if (point.getTimestamp() >= twentyFourHoursAgo) {
-                filtered.add(point);
-            }
-        }
-
-        if (filtered.isEmpty()) {
-            return new ArrayList<>(dataPoints);
-        }
-
-        for (int i = 1; i < filtered.size(); i++) {
-            TimeseriesPoint key = filtered.get(i);
+        for (int i = 1; i < sorted.size(); i++) {
+            TimeseriesPoint key = sorted.get(i);
             int j = i - 1;
-            while (j >= 0 && filtered.get(j).getTimestamp() > key.getTimestamp()) {
-                filtered.set(j + 1, filtered.get(j));
+            while (j >= 0 && sorted.get(j).getTimestamp() > key.getTimestamp()) {
+                sorted.set(j + 1, sorted.get(j));
                 j--;
             }
-            filtered.set(j + 1, key);
+            sorted.set(j + 1, key);
         }
 
-        return filtered;
+        return sorted;
     }
 
     private PriceRange calculatePriceRange(List<TimeseriesPoint> dataPoints) {
@@ -171,7 +157,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
     private TimeRange calculateTimeRange(List<TimeseriesPoint> filteredData) {
         if (filteredData.isEmpty()) {
             long currentTime = System.currentTimeMillis() / 1000;
-            return new TimeRange(currentTime - TWENTY_FOUR_HOURS_IN_SECONDS, 1);
+            return new TimeRange(currentTime - timestep.getMaxTimeRangeSeconds(), 1);
         }
 
         TimeseriesPoint first = filteredData.get(0);
@@ -179,7 +165,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         long start = first.getTimestamp();
         long range = last.getTimestamp() - start;
 
-        return new TimeRange(start, range == 0 ? TWENTY_FOUR_HOURS_IN_SECONDS : range);
+        return new TimeRange(start, range == 0 ? timestep.getMaxTimeRangeSeconds() : range);
     }
 
     private void drawGrid(Graphics2D g2d, ChartBounds bounds, PriceRange priceRange) {
@@ -223,9 +209,10 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
     private void drawVerticalGridLines(Graphics2D g2d, ChartBounds bounds) {
         int bottomEdge = bounds.getBottomEdge();
+        int divisions = timestep.getLabelCount() - 1;
 
-        for (int i = 0; i <= GRID_DIVISIONS; i++) {
-            int lineX = bounds.x + (i * bounds.width / GRID_DIVISIONS);
+        for (int i = 0; i <= divisions; i++) {
+            int lineX = bounds.x + (i * bounds.width / divisions);
             g2d.setColor(config.getGridColor());
             g2d.drawLine(lineX, bounds.y, lineX, bottomEdge);
         }
@@ -340,10 +327,13 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         FontMetrics fm = g2d.getFontMetrics();
 
         int bottomY = position.y + config.getHeight() - LABEL_PADDING;
+        long currentTimeSeconds = System.currentTimeMillis() / 1000;
+        String[] timeLabels = TimeLabelGenerator.generate(timestep, currentTimeSeconds);
+        int divisions = timestep.getLabelCount() - 1;
 
-        for (int i = 0; i < TIME_LABELS.length; i++) {
-            int labelX = bounds.x + (i * bounds.width / GRID_DIVISIONS);
-            String label = TIME_LABELS[i];
+        for (int i = 0; i < timeLabels.length; i++) {
+            int labelX = bounds.x + (i * bounds.width / divisions);
+            String label = timeLabels[i];
             int labelWidth = fm.stringWidth(label);
             g2d.drawString(label, labelX - labelWidth / 2, bottomY);
         }
@@ -355,13 +345,14 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         g2d.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
     }
 
-    public void setDataSeries(TimeseriesResponse timeseries, int offerPrice) {
+    public void setDataSeries(TimeseriesResponse timeseries, Timestep timestep, int offerPrice) {
         this.timeseries = timeseries;
+        this.timestep = timestep;
         this.offerPrice = offerPrice;
     }
 
     public boolean hasData() {
-        return timeseries != null && timeseries.getData() != null && !timeseries.getData().isEmpty();
+        return timeseries != null && timestep != null && timeseries.getData() != null && !timeseries.getData().isEmpty();
     }
 
     @Override

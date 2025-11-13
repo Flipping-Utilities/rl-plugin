@@ -27,6 +27,7 @@
 package com.flippingutilities;
 
 import com.flippingutilities.controller.FlippingPlugin;
+import com.flippingutilities.model.Timestep;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
@@ -128,6 +129,15 @@ public interface FlippingConfig extends Config
 	)
 	default Color slotTimerSellColor() {
 		return ColorScheme.GRAND_EXCHANGE_ALCH;
+	}
+
+	@ConfigItem(
+			keyName = "priceGraphTimestep",
+			name = "Price graph time range",
+			description = "Select the time range for the price graph shown in quick lookup tooltips"
+	)
+	default Timestep priceGraphTimestep() {
+		return Timestep.FIVE_MINUTES;
 	}
 
 	@ConfigSection(

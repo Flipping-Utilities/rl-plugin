@@ -205,8 +205,8 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
         addRow("", null, Color.WHITE, null);
     }
 
-    public void setGraphData(TimeseriesResponse timeseries, int offerPrice) {
-        chart.setDataSeries(timeseries, offerPrice);
+    public void setGraphData(TimeseriesResponse timeseries, com.flippingutilities.model.Timestep timestep, int offerPrice) {
+        chart.setDataSeries(timeseries, timestep, offerPrice);
     }
 
     @Override

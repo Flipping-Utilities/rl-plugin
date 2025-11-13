@@ -347,9 +347,9 @@ public class SlotStateDrawer {
         if (currentTooltip == null) {
             currentTooltip = new QuickLookTooltip();
             currentTooltip.update(slotInfo, margins);
-            timeseriesFetcher.fetch(slotInfo.getItemId(), tsResponse -> {
+            timeseriesFetcher.fetch(slotInfo.getItemId(), plugin.getConfig().priceGraphTimestep(), tsResponse -> {
                 if (currentTooltip != null) {
-                    currentTooltip.setGraphData(tsResponse, slotInfo.getOfferPrice());
+                    currentTooltip.setGraphData(tsResponse, plugin.getConfig().priceGraphTimestep(), slotInfo.getOfferPrice());
                 }
             });
         }
