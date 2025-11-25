@@ -3,6 +3,7 @@ package com.flippingutilities.ui.statistics.recipes;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.RecipeFlipGroup;
 import com.flippingutilities.ui.statistics.StatsPanel;
+import com.flippingutilities.ui.statistics.recipes.customrecipes.CustomRecipeManagerPanel;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
@@ -36,6 +37,7 @@ public class RecipeGroupContainerPanel extends JPanel {
 
         setLayout(new BorderLayout());
 
+        add(createHeaderPanel(), BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
         add(paginator, BorderLayout.SOUTH);
     }
@@ -131,4 +133,37 @@ public class RecipeGroupContainerPanel extends JPanel {
     public void updateTimeDisplay() {
         activePanels.forEach(RecipeFlipGroupPanel::updateTimeLabels);
     }
+
+    private JPanel createHeaderPanel() {
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        headerPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+
+        JButton manageRecipesButton = new JButton("Manage Custom Recipes");
+        manageRecipesButton.setToolTipText("Create and manage your own custom recipes");
+        manageRecipesButton.addActionListener(e -> openCustomRecipeManager());
+
+        headerPanel.add(manageRecipesButton, BorderLayout.CENTER);
+
+        return headerPanel;
+    }
+
+    private void openCustomRecipeManager() {
+        CustomRecipeManagerPanel managerPanel = new CustomRecipeManagerPanel(plugin);
+
+        JDialog dialog = new JDialog();
+        dialog.setTitle("Custom Recipe Manager");
+        dialog.setModal(true);
+        dialog.setIconImage(Icons.FU_ICON.getImage());
+        dialog.add(managerPanel);
+        dialog.pack();
+
+        int minHeight = 160 + (2 * 145);
+        Dimension packedSize = dialog.getSize();
+        dialog.setSize(Math.max(packedSize.width, 735), Math.max(packedSize.height, minHeight));
+
+        dialog.setLocationRelativeTo(null);
+        dialog.setVisible(true);
+    }
 }
+

@@ -1,5 +1,6 @@
 package com.flippingutilities.model;
 
+import com.flippingutilities.utilities.Recipe;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -11,6 +12,7 @@ import java.util.List;
 public class AccountWideData {
     List<Option> options = new ArrayList<>();
     List<Section> sections = new ArrayList<>();
+    List<Recipe> localRecipes = new ArrayList<>();
     boolean shouldMakeNewAdditions = true;
     boolean enhancedSlots = true;
     String jwt;
