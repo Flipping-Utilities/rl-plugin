@@ -171,4 +171,55 @@ public interface FlippingConfig extends Config
 	default boolean showAutoSaveDisplay() {
 		return true;
 	}
+
+	@ConfigSection(
+			name = "Custom Recipes",
+			description = "Settings for custom recipe search",
+			position = 110
+	)
+	String customRecipesSection = "customRecipesSection";
+
+	@ConfigItem(
+			keyName = "includeNotedItems",
+			name = "Include noted items",
+			description = "Show noted versions of items when searching for recipe ingredients",
+			section = customRecipesSection,
+			position = 1
+	)
+	default boolean includeNotedItems() {
+		return false;
+	}
+
+	@ConfigItem(
+			keyName = "includeUntradeableItems",
+			name = "Include untradeable items",
+			description = "Show items that cannot be traded on the Grand Exchange",
+			section = customRecipesSection,
+			position = 2
+	)
+	default boolean includeUntradeableItems() {
+		return false;
+	}
+
+	@ConfigItem(
+			keyName = "defaultRecipeSort",
+			name = "Default sort option",
+			description = "How your custom recipes are sorted when you open the manager",
+			section = customRecipesSection,
+			position = 3
+	)
+	default RecipeSortOption defaultRecipeSort() {
+		return RecipeSortOption.INPUT_COUNT;
+	}
+
+	@ConfigItem(
+			keyName = "defaultRecipeSortDirection",
+			name = "Default sort direction",
+			description = "Sort order for custom recipes (ascending or descending)",
+			section = customRecipesSection,
+			position = 4
+	)
+	default SortDirection defaultRecipeSortDirection() {
+		return SortDirection.ASCENDING;
+	}
 }

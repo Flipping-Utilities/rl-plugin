@@ -53,14 +53,18 @@ import okhttp3.Response;
 public class RecipeHandler {
 
     private Gson gson;
-    private final Optional<Map<Integer, List<Recipe>>> idToRecipes;
+    private Optional<Map<Integer, List<Recipe>>> idToRecipes;
     private final Optional<Map<Integer, PotionGroup>> idToPotionGroup;
     private OkHttpClient httpClient;
+    private List<Recipe> localRecipes;
+    private Optional<List<Recipe>> apiRecipes;
 
-    public RecipeHandler(Gson gson, OkHttpClient httpClient) {
+    public RecipeHandler(Gson gson, OkHttpClient httpClient, List<Recipe> localRecipes) {
         this.gson = gson;
         this.httpClient = httpClient;
-        this.idToRecipes = getItemIdToRecipes(loadRecipes());
+        this.localRecipes = localRecipes != null ? localRecipes : new ArrayList<>();
+        this.apiRecipes = loadRecipes();
+        this.idToRecipes = getItemIdToRecipes(apiRecipes);
         this.idToPotionGroup = getItemIdToPotionGroup(loadPotionGroups());
 
         if (idToRecipes.isPresent()) {
@@ -223,16 +227,26 @@ public class RecipeHandler {
 
     /**
      * Gets a mapping of item id to the recipes it is in.
+     * removed early exit to allow custom recipes to work even when api recipes fail to load.
+     * if we returned empty immediately when api recipes are missing, local recipes would never be added to the map.
      */
     private Optional<Map<Integer, List<Recipe>>> getItemIdToRecipes(Optional<List<Recipe>> optionalRecipes) {
-        if (!optionalRecipes.isPresent()) {
-            return Optional.empty();
+        Map<Integer, List<Recipe>> idToRecipes = new HashMap<>();
+
+        if (optionalRecipes.isPresent()) {
+            List<Recipe> recipes = optionalRecipes.get();
+            stripElementalRunesFromRecipes(recipes);
+            deduplicateRecipes(recipes);
+            addRecipesToMap(recipes, idToRecipes);
         }
 
-        Map<Integer, List<Recipe>> idToRecipes = new HashMap<>();
-        List<Recipe> recipes = optionalRecipes.get();
-        stripElementalRunesFromRecipes(recipes);
-        deduplicateRecipes(recipes);
+        stripElementalRunesFromRecipes(localRecipes);
+        addRecipesToMap(localRecipes, idToRecipes);
+
+        return idToRecipes.isEmpty() ? Optional.empty() : Optional.of(idToRecipes);
+    }
+
+    private void addRecipesToMap(List<Recipe> recipes, Map<Integer, List<Recipe>> idToRecipes) {
         recipes.forEach(r -> {
             r.getIds().forEach(id -> {
                 if (idToRecipes.containsKey(id)) {
@@ -242,8 +256,6 @@ public class RecipeHandler {
                 }
             });
         });
-
-        return Optional.of(idToRecipes);
     }
 
     /**
@@ -536,5 +548,46 @@ public class RecipeHandler {
         });
 
         return future;
+    }
+
+    public void addLocalRecipe(Recipe recipe) {
+        if (recipe == null || recipe.getName() == null || recipe.getName().isEmpty()) {
+            return;
+        }
+        localRecipes.add(recipe);
+        refreshRecipeMappings();
+    }
+
+    public boolean removeLocalRecipe(Recipe recipe) {
+        boolean removed = localRecipes.remove(recipe);
+        if (removed) {
+            refreshRecipeMappings();
+        }
+        return removed;
+    }
+
+    public void updateLocalRecipe(Recipe oldRecipe, Recipe newRecipe) {
+        int index = localRecipes.indexOf(oldRecipe);
+        if (index == -1) {
+            return;
+        }
+        localRecipes.set(index, newRecipe);
+        refreshRecipeMappings();
+    }
+
+    public List<Recipe> getLocalRecipes() {
+        return new ArrayList<>(localRecipes);
+    }
+
+    public void setLocalRecipes(List<Recipe> localRecipes) {
+        this.localRecipes = localRecipes != null ? localRecipes : new ArrayList<>();
+        refreshRecipeMappings();
+    }
+
+    private void refreshRecipeMappings() {
+        this.idToRecipes = getItemIdToRecipes(apiRecipes);
+        log.info("Refreshed recipe mappings. Total items with recipes: {}", idToRecipes.isPresent() ? idToRecipes.get().size() : 0);
+        log.info("Local recipes count: {}", localRecipes.size());
+        localRecipes.forEach(r -> log.info("  - Local recipe: {} (items: {})", r.getName(), r.getIds()));
     }
 }
