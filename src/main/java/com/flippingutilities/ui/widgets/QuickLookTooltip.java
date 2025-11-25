@@ -1,5 +1,6 @@
 package com.flippingutilities.ui.widgets;
 
+import com.flippingutilities.model.TimeseriesResponse;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
@@ -25,20 +26,29 @@ import net.runelite.client.util.QuantityFormatter;
 
 /**
  * A custom tooltip component that displays item price information and offer
- * competitiveness. This component is
- * self-contained and responsible only for rendering.
+ * competitiveness. This component is self-contained and responsible only for rendering.
  */
 public class QuickLookTooltip implements LayoutableRenderableEntity {
 
-    // Component layout constants
     private static final int PADDING = 5;
     private static final int LINE_SPACING = 2;
     private static final int COLUMN_GAP = 10;
+    private static final int TEXT_HORIZONTAL_PADDING_WITH_GRAPH = 60;
+    private static final int TEXT_HORIZONTAL_PADDING_WITHOUT_GRAPH = 10;
     private static final Color BACKGROUND_COLOR = new Color(0, 0, 0, 180);
 
     private final List<TextRow> textRows = new ArrayList<>();
     private final Point position = new Point();
     private final Dimension dimension = new Dimension();
+
+    private final TimeSeriesChart chart;
+
+    public QuickLookTooltip() {
+        ChartConfig chartConfig = ChartConfig.builder()
+                .labelFont(FontManager.getRunescapeSmallFont())
+                .build();
+        this.chart = new TimeSeriesChart(chartConfig);
+    }
 
     /**
      * Clears all existing rows and rebuilds the tooltip content based on the
@@ -74,13 +84,16 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
             if (slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
                 buyPriceColor = ColorScheme.GRAND_EXCHANGE_PRICE;
                 competitivenessText = "Buy offer is ultra competitive";
+                competitivenessColor = ColorScheme.GRAND_EXCHANGE_PRICE;
             } else if (slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
                 buyPriceColor = ColorScheme.GRAND_EXCHANGE_PRICE;
                 sellPriceColor = CustomColors.IN_RANGE;
                 competitivenessText = "Buy offer is competitive";
+                competitivenessColor = CustomColors.IN_RANGE;
             } else if (slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
                 sellPriceColor = CustomColors.TOMATO;
                 competitivenessText = "Buy offer is not competitive";
+                competitivenessColor = CustomColors.TOMATO;
                 suggestionText =
                         "Set price to >= " +
                                 QuantityFormatter.formatNumber(wikiLow);
@@ -89,13 +102,16 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
             if (slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
                 sellPriceColor = ColorScheme.GRAND_EXCHANGE_PRICE;
                 competitivenessText = "Sell offer is ultra competitive";
+                competitivenessColor = ColorScheme.GRAND_EXCHANGE_PRICE;
             } else if (slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
                 buyPriceColor = CustomColors.IN_RANGE;
                 sellPriceColor = ColorScheme.GRAND_EXCHANGE_PRICE;
                 competitivenessText = "Sell offer is competitive";
+                competitivenessColor = CustomColors.IN_RANGE;
             } else if (slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
                 buyPriceColor = CustomColors.TOMATO;
                 competitivenessText = "Sell offer is not competitive";
+                competitivenessColor = CustomColors.TOMATO;
                 suggestionText =
                         "Set price to <= " +
                                 QuantityFormatter.formatNumber(wikiHigh);
@@ -190,6 +206,10 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
         addRow("", null, Color.WHITE, null);
     }
 
+    public void setGraphData(TimeseriesResponse timeseries, com.flippingutilities.model.Timestep timestep, int offerPrice) {
+        chart.setDataSeries(timeseries, timestep, offerPrice);
+    }
+
     @Override
     public Dimension render(Graphics2D graphics) {
         if (textRows.isEmpty()) {
@@ -223,10 +243,18 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
             }
         }
 
+        int textHorizontalPadding = chart.hasData()
+                ? TEXT_HORIZONTAL_PADDING_WITH_GRAPH
+                : TEXT_HORIZONTAL_PADDING_WITHOUT_GRAPH;
+
         int twoColumnWidth =
                 maxLeftWidth + (maxRightWidth > 0 ? COLUMN_GAP + maxRightWidth : 0);
-        int panelWidth =
-                Math.max(twoColumnWidth, maxCenteredWidth) + PADDING * 2;
+        int contentWidth = Math.max(twoColumnWidth, maxCenteredWidth);
+        int panelWidth = contentWidth + PADDING * 2 + textHorizontalPadding * 2;
+
+        if (chart.hasData()) {
+            panelWidth = Math.max(panelWidth, chart.getBounds().width);
+        }
 
         // Calculate panel height
         int panelHeight = PADDING * 2;
@@ -259,14 +287,14 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
                 graphics.drawString(textRow.left, centeredX, y);
             } else {
                 graphics.setColor(textRow.leftColor);
-                graphics.drawString(textRow.left, position.x + PADDING, y);
+                graphics.drawString(textRow.left, position.x + PADDING + textHorizontalPadding, y);
 
                 if (textRow.right != null) {
-                    int rightX =
-                            position.x +
-                                    panelWidth -
-                                    PADDING -
-                                    metrics.stringWidth(textRow.right);
+                    int rightX = position.x +
+                            panelWidth -
+                            PADDING -
+                            textHorizontalPadding -
+                            metrics.stringWidth(textRow.right);
                     graphics.setColor(textRow.rightColor);
                     graphics.drawString(textRow.right, rightX, y);
                 }
@@ -274,8 +302,19 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
             y += metrics.getDescent() + LINE_SPACING;
         }
 
-        graphics.setFont(defaultFont); // Reset to default font
-        dimension.setSize(panelWidth, panelHeight);
+        graphics.setFont(defaultFont);
+
+        int totalHeight = panelHeight;
+        int graphY = position.y + panelHeight;
+
+        if (chart.hasData()) {
+            chart.setPreferredLocation(new Point(position.x, graphY));
+            Dimension chartSize = chart.render(graphics);
+            totalHeight += chartSize.height;
+            panelWidth = Math.max(panelWidth, chartSize.width);
+        }
+
+        dimension.setSize(panelWidth, totalHeight);
         return dimension;
     }
 
