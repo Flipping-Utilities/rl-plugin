@@ -21,12 +21,12 @@ public final class CachedTimeseries {
     }
 
     public boolean isStale() {
-        long cacheDurationSeconds = calculateCacheDuration();
-        Duration cacheDuration = Duration.ofSeconds(cacheDurationSeconds);
-        return Duration.between(fetchTime, Instant.now()).compareTo(cacheDuration) > 0;
+        long cacheExpirationSeconds = calculateCacheExpiration();
+        Duration cacheExpiration = Duration.ofSeconds(cacheExpirationSeconds);
+        return Duration.between(fetchTime, Instant.now()).compareTo(cacheExpiration) > 0;
     }
 
-    private long calculateCacheDuration() {
+    private long calculateCacheExpiration() {
         long currentSeconds = fetchTime.getEpochSecond();
         long intervalSeconds = timestep.getIntervalSeconds();
         long secondsSinceLastInterval = currentSeconds % intervalSeconds;

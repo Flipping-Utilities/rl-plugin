@@ -2,6 +2,7 @@ package com.flippingutilities.jobs;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.CachedTimeseries;
+import com.flippingutilities.model.LruLinkedHashMap;
 import com.flippingutilities.model.TimeseriesCacheKey;
 import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesResponse;
@@ -19,8 +20,8 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 @Slf4j
@@ -30,11 +31,14 @@ public class TimeseriesFetcher {
     private static final String QUERY_PARAM_TIMESTEP = "timestep";
     private static final String QUERY_PARAM_ID = "id";
     private static final String USER_AGENT_HEADER = "User-Agent";
-    private static final String USER_AGENT_VALUE = "FlippingUtilities";
+    private static final String USER_AGENT_VALUE = "FlippingUtilities - discord.gg/flipping";
+    private static final int MAX_CACHE_SIZE = 40;
 
     private final OkHttpClient httpClient;
     private final FlippingPlugin plugin;
-    private final Map<TimeseriesCacheKey, CachedTimeseries> cache = new ConcurrentHashMap<>();
+    private final Map<TimeseriesCacheKey, CachedTimeseries> cache = Collections.synchronizedMap(
+            new LruLinkedHashMap<>(MAX_CACHE_SIZE)
+    );
 
     @Inject
     public TimeseriesFetcher(OkHttpClient httpClient, FlippingPlugin plugin) {
