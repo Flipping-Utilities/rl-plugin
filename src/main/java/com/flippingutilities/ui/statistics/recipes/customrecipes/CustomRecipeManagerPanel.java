@@ -1,14 +1,17 @@
 package com.flippingutilities.ui.statistics.recipes.customrecipes;
 
+import com.flippingutilities.SortDirection;
 import com.flippingutilities.controller.DataHandler;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.controller.RecipeHandler;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.utilities.Recipe;
 import com.flippingutilities.utilities.RecipeItem;
+import net.runelite.api.ItemComposition;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
+import net.runelite.client.util.AsyncBufferedImage;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -22,13 +25,13 @@ public class CustomRecipeManagerPanel extends JPanel {
     private final FlippingPlugin plugin;
     private JPanel recipeListPanel;
     private String currentSortOption;
-    private String currentSortDirection;
+    private SortDirection currentSortDirection;
     private String searchQuery = "";
 
     public CustomRecipeManagerPanel(FlippingPlugin plugin) {
         this.plugin = plugin;
         this.currentSortOption = plugin.getConfig().defaultRecipeSort().toString();
-        this.currentSortDirection = plugin.getConfig().defaultRecipeSortDirection().toString();
+        this.currentSortDirection = plugin.getConfig().defaultRecipeSortDirection();
         setLayout(new BorderLayout());
         setBackground(ColorScheme.DARK_GRAY_COLOR);
 
@@ -81,11 +84,11 @@ public class CustomRecipeManagerPanel extends JPanel {
         JLabel directionLabel = new JLabel("Direction:");
         directionLabel.setFont(FontManager.getRunescapeFont());
 
-        String[] directionOptions = {"Ascending", "Descending"};
-        JComboBox<String> directionDropdown = new JComboBox<>(directionOptions);
+        SortDirection[] directionOptions = {SortDirection.ASCENDING, SortDirection.DESCENDING};
+        JComboBox<SortDirection> directionDropdown = new JComboBox<>(directionOptions);
         directionDropdown.setSelectedItem(currentSortDirection);
         directionDropdown.addActionListener(e -> {
-            currentSortDirection = (String) directionDropdown.getSelectedItem();
+            currentSortDirection = (SortDirection) directionDropdown.getSelectedItem();
             refreshRecipeList();
         });
 
@@ -258,7 +261,7 @@ public class CustomRecipeManagerPanel extends JPanel {
                 break;
         }
 
-        if ("Descending".equals(currentSortDirection)) {
+        if (SortDirection.DESCENDING.equals(currentSortDirection)) {
             comparator = comparator.reversed();
         }
 
@@ -366,8 +369,8 @@ public class CustomRecipeManagerPanel extends JPanel {
             qtyLabel.setPreferredSize(new Dimension(50, 32));
 
             plugin.getClientThread().invoke(() -> {
-                net.runelite.api.ItemComposition itemComp = itemManager.getItemComposition(item.getId());
-                net.runelite.client.util.AsyncBufferedImage itemImage = itemManager.getImage(item.getId());
+                ItemComposition itemComp = itemManager.getItemComposition(item.getId());
+                AsyncBufferedImage itemImage = itemManager.getImage(item.getId());
                 SwingUtilities.invokeLater(() -> {
                     itemImage.addTo(iconLabel);
                     nameLabel.setText(itemComp.getName());
