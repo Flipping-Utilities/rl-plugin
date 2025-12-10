@@ -43,6 +43,7 @@ public class SlotStateDrawer {
 
     private Integer hoveredSlotIndex = null;
     private QuickLookTooltip currentTooltip = null;
+    private Integer currentlyFetchedItemId = null;
 
     public SlotStateDrawer(
             FlippingPlugin plugin,
@@ -241,6 +242,18 @@ public class SlotStateDrawer {
         quickLookWidget.setOnMouseOverListener(
                 (JavaScriptCallback) ev -> {
                     this.hoveredSlotIndex = slot.getIndex();
+
+                    if (currentlyFetchedItemId == null || !currentlyFetchedItemId.equals(slot.getItemId())) {
+                        currentlyFetchedItemId = slot.getItemId();
+
+                        if (plugin.getConfig().priceGraphEnabled()) {
+                            timeseriesFetcher.fetch(slot.getItemId(), plugin.getConfig().priceGraphTimestep(), tsResponse -> {
+                                if (currentTooltip != null) {
+                                    currentTooltip.setGraphData(tsResponse, plugin.getConfig().priceGraphTimestep(), slot.getOfferPrice());
+                                }
+                            });
+                        }
+                    }
                 }
         );
 
@@ -248,6 +261,7 @@ public class SlotStateDrawer {
                 (JavaScriptCallback) ev -> {
                     this.hoveredSlotIndex = null;
                     this.currentTooltip = null;
+                    this.currentlyFetchedItemId = null;
                 }
         );
 
@@ -347,14 +361,6 @@ public class SlotStateDrawer {
         if (currentTooltip == null) {
             currentTooltip = new QuickLookTooltip();
             currentTooltip.update(slotInfo, margins);
-
-            if (plugin.getConfig().priceGraphEnabled()) {
-                timeseriesFetcher.fetch(slotInfo.getItemId(), plugin.getConfig().priceGraphTimestep(), tsResponse -> {
-                    if (currentTooltip != null) {
-                        currentTooltip.setGraphData(tsResponse, plugin.getConfig().priceGraphTimestep(), slotInfo.getOfferPrice());
-                    }
-                });
-            }
         }
 
         tooltipManager.add(new Tooltip(currentTooltip));
