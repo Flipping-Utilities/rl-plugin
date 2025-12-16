@@ -53,7 +53,6 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         }
 
         setupRenderingHints(g2d);
-        drawBackground(g2d);
 
         List<TimeseriesPoint> dataPoints = timeseries.getData();
         if (dataPoints.isEmpty()) {
@@ -84,10 +83,6 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
     }
 
-    private void drawBackground(Graphics2D g2d) {
-        g2d.setColor(config.getBackgroundColor());
-        g2d.fillRect(position.x, position.y, config.getWidth(), config.getHeight());
-    }
 
     private List<TimeseriesPoint> filterAndSortData(List<TimeseriesPoint> dataPoints) {
         List<TimeseriesPoint> sorted = new ArrayList<>(dataPoints);
@@ -350,7 +345,8 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
     }
 
     public boolean hasData() {
-        return timeseries != null && timestep != null && timeseries.getData() != null && !timeseries.getData().isEmpty();
+        boolean hasData = timeseries != null && timestep != null && timeseries.getData() != null && !timeseries.getData().isEmpty();
+        return hasData;
     }
 
     @Override

@@ -242,12 +242,24 @@ public class SlotStateDrawer {
         quickLookWidget.setOnMouseOverListener(
                 (JavaScriptCallback) ev -> {
                     this.hoveredSlotIndex = slot.getIndex();
-
                     if (currentlyFetchedItemId == null || !currentlyFetchedItemId.equals(slot.getItemId())) {
                         currentlyFetchedItemId = slot.getItemId();
 
                         if (plugin.getConfig().priceGraphEnabled()) {
                             timeseriesFetcher.fetch(slot.getItemId(), plugin.getConfig().priceGraphTimestep(), tsResponse -> {
+                                // Ensure tooltip exists before setting data
+                                if (currentTooltip == null) {
+                                    currentTooltip = new QuickLookTooltip();
+                                    // Update tooltip content first
+                                    Optional<SlotInfo> slotInfoOpt = slotInfos.get(hoveredSlotIndex);
+                                    if (slotInfoOpt.isPresent()) {
+                                        SlotInfo slotInfo = slotInfoOpt.get();
+                                        WikiItemMargins margins = wikiRequest.getData().get(slotInfo.getItemId());
+                                        if (margins != null) {
+                                            currentTooltip.update(slotInfo, margins);
+                                        }
+                                    }
+                                }
                                 if (currentTooltip != null) {
                                     currentTooltip.setGraphData(tsResponse, plugin.getConfig().priceGraphTimestep(), slot.getOfferPrice());
                                 }
@@ -357,11 +369,11 @@ public class SlotStateDrawer {
 
         SlotInfo slotInfo = slotInfoOpt.get();
         WikiItemMargins margins = wikiRequest.getData().get(slotInfo.getItemId());
-
+        
         if (currentTooltip == null) {
             currentTooltip = new QuickLookTooltip();
-            currentTooltip.update(slotInfo, margins);
         }
+        currentTooltip.update(slotInfo, margins);
 
         tooltipManager.add(new Tooltip(currentTooltip));
     }

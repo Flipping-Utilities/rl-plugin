@@ -15,6 +15,9 @@ import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
+import java.awt.geom.Ellipse2D;
+import java.awt.BasicStroke;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +37,6 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
     private static final int LINE_SPACING = 2;
     private static final int COLUMN_GAP = 10;
     private static final int TEXT_HORIZONTAL_PADDING_WITH_GRAPH = 60;
-    private static final int TEXT_HORIZONTAL_PADDING_WITHOUT_GRAPH = 10;
     private static final Color BACKGROUND_COLOR = new Color(0, 0, 0, 180);
 
     private final List<TextRow> textRows = new ArrayList<>();
@@ -63,7 +65,7 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
         if (wikiItemInfo == null || slot == null) {
             addCenteredRow("Missing data.", Color.GRAY,
                     FontManager.getRunescapeBoldFont()
-            );
+                );
             return;
         }
 
@@ -95,8 +97,8 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
                 competitivenessText = "Buy offer is not competitive";
                 competitivenessColor = CustomColors.TOMATO;
                 suggestionText =
-                        "Set price to >= " +
-                                QuantityFormatter.formatNumber(wikiLow);
+                    "Set price to >= " +
+                        QuantityFormatter.formatNumber(wikiLow);
             }
         } else { // Is a sell offer
             if (slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
@@ -113,33 +115,32 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
                 competitivenessText = "Sell offer is not competitive";
                 competitivenessColor = CustomColors.TOMATO;
                 suggestionText =
-                        "Set price to <= " +
-                                QuantityFormatter.formatNumber(wikiHigh);
+                    "Set price to <= " +
+                        QuantityFormatter.formatNumber(wikiHigh);
             }
         }
 
         // Add price and age rows
-        String buyPriceText =
-                wikiHigh == 0
-                        ? "No data"
-                        : QuantityFormatter.formatNumber(wikiHigh) + " gp";
+        String buyPriceText = 
+            wikiHigh == 0
+                ? "No data"
+                : QuantityFormatter.formatNumber(wikiHigh) + " gp";
         String sellPriceText =
-                wikiLow == 0
-                        ? "No data"
-                        : QuantityFormatter.formatNumber(wikiLow) + " gp";
+            wikiLow == 0
+                ? "No data"
+                : QuantityFormatter.formatNumber(wikiLow) + " gp";
         String buyAgeText =
-                wikiItemInfo.getHighTime() == 0
-                        ? "No data"
-                        : TimeFormatters.formatDuration(
+            wikiItemInfo.getHighTime() == 0
+                ? "No data"
+                : TimeFormatters.formatDuration(
                         Instant.ofEpochSecond(wikiItemInfo.getHighTime())
-                );
+            );
         String sellAgeText =
-                wikiItemInfo.getLowTime() == 0
-                        ? "No data"
-                        : TimeFormatters.formatDuration(
+            wikiItemInfo.getLowTime() == 0
+                ? "No data"
+                : TimeFormatters.formatDuration(
                         Instant.ofEpochSecond(wikiItemInfo.getLowTime())
-                );
-
+                    );
 
         // Add summary text
         if (!competitivenessText.isEmpty()) {
@@ -217,7 +218,6 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
         }
 
         final Font defaultFont = graphics.getFont();
-        final FontMetrics defaultMetrics = graphics.getFontMetrics(defaultFont);
 
         int maxLeftWidth = 0;
         int maxRightWidth = 0;
@@ -229,34 +229,31 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
             FontMetrics metrics = graphics.getFontMetrics(font);
             if (textRow.centered) {
                 maxCenteredWidth =
-                        Math.max(maxCenteredWidth, metrics.stringWidth(textRow.left));
+                    Math.max(maxCenteredWidth, metrics.stringWidth(textRow.left));
             } else {
                 maxLeftWidth =
-                        Math.max(maxLeftWidth, metrics.stringWidth(textRow.left));
+                    Math.max(maxLeftWidth, metrics.stringWidth(textRow.left));
                 if (textRow.right != null) {
                     maxRightWidth =
-                            Math.max(
-                                    maxRightWidth,
-                                    metrics.stringWidth(textRow.right)
-                            );
+                        Math.max(
+                            maxRightWidth,
+                            metrics.stringWidth(textRow.right)
+                        );
                 }
             }
         }
 
-        int textHorizontalPadding = chart.hasData()
-                ? TEXT_HORIZONTAL_PADDING_WITH_GRAPH
-                : TEXT_HORIZONTAL_PADDING_WITHOUT_GRAPH;
+        int textHorizontalPadding = TEXT_HORIZONTAL_PADDING_WITH_GRAPH;
 
         int twoColumnWidth =
-                maxLeftWidth + (maxRightWidth > 0 ? COLUMN_GAP + maxRightWidth : 0);
+             maxLeftWidth + (maxRightWidth > 0 ? COLUMN_GAP + maxRightWidth : 0);
         int contentWidth = Math.max(twoColumnWidth, maxCenteredWidth);
         int panelWidth = contentWidth + PADDING * 2 + textHorizontalPadding * 2;
 
-        if (chart.hasData()) {
-            panelWidth = Math.max(panelWidth, chart.getBounds().width);
-        }
-
-        // Calculate panel height
+        // Use fixed chart dimensions instead of chart.getBounds() to ensure consistent sizing
+        int fixedChartWidth = 320;
+        int fixedChartHeight = 200;
+        panelWidth = Math.max(panelWidth, fixedChartWidth);
         int panelHeight = PADDING * 2;
         for (int i = 0; i < textRows.size(); i++) {
             TextRow textRow = textRows.get(i);
@@ -267,8 +264,10 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
                 panelHeight += LINE_SPACING;
             }
         }
+        panelHeight += PADDING + fixedChartHeight;
 
-        // Draw background
+        panelWidth = Math.max(panelWidth, fixedChartWidth);
+
         graphics.setColor(BACKGROUND_COLOR);
         graphics.fillRect(position.x, position.y, panelWidth, panelHeight);
 
@@ -304,17 +303,22 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
 
         graphics.setFont(defaultFont);
 
-        int totalHeight = panelHeight;
-        int graphY = position.y + panelHeight;
+        int chartX = position.x;
+        int chartY = position.y + panelHeight - fixedChartHeight;
 
+        chart.setPreferredLocation(new Point(chartX, chartY));
         if (chart.hasData()) {
-            chart.setPreferredLocation(new Point(position.x, graphY));
-            Dimension chartSize = chart.render(graphics);
-            totalHeight += chartSize.height;
-            panelWidth = Math.max(panelWidth, chartSize.width);
+            chart.setPreferredLocation(new Point(chartX, chartY));
+            java.awt.Shape originalClip = graphics.getClip();
+            graphics.setClip(chartX, chartY, fixedChartWidth, fixedChartHeight);
+            chart.render(graphics);
+            graphics.setClip(originalClip);
+        } else {
+            Rectangle chartBounds = new Rectangle(chartX, chartY, fixedChartWidth, fixedChartHeight);
+            drawLoadingAnimation(graphics, chartBounds);
         }
 
-        dimension.setSize(panelWidth, totalHeight);
+        dimension.setSize(panelWidth, panelHeight);
         return dimension;
     }
 
@@ -360,6 +364,145 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
             this.centered = centered;
             this.font = font;
         }
+    }
+
+    /**
+     * Draws a loading animation in the chart area when graph data is not available.
+     * Creates an animated chart with red and green lines moving around
+     */
+    private void drawLoadingAnimation(Graphics2D graphics, Rectangle chartBounds) {
+        java.awt.Shape originalClip = graphics.getClip();
+        graphics.setClip(chartBounds);
+        
+        // Set rendering hints for smooth animation
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        
+        // Chart padding
+        int leftPadding = 10;
+        int rightPadding = 10;
+        int topPadding = 10;
+        int bottomPadding = 25;
+        
+        int plotX = chartBounds.x + leftPadding;
+        int plotY = chartBounds.y + topPadding;
+        int plotWidth = chartBounds.width - leftPadding - rightPadding;
+        int plotHeight = chartBounds.height - topPadding - bottomPadding;
+        
+        // Draw background grid
+        graphics.setColor(new Color(60, 60, 60, 100));
+        graphics.setStroke(new BasicStroke(1f));
+        for (int i = 0; i <= 4; i++) {
+            int y = plotY + (plotHeight * i) / 4;
+            graphics.drawLine(plotX, y, plotX + plotWidth, y);
+        }
+        
+        // Animation parameters
+        long currentTime = System.currentTimeMillis();
+        int numPoints = 20; // Number of data points to display
+        
+        // Red vs Green battle
+        Color[] colors = {
+            new Color(255, 80, 80),    // Red
+            new Color(0, 220, 100)     // Green
+        };
+        
+        // Use full scale from 0-200 but keep values oscillating in the middle
+        double minValue = 0;
+        double maxValue = 200;
+        double centerValue = 100;
+        
+        // Generate and draw each line
+        for (int lineIndex = 0; lineIndex < colors.length; lineIndex++) {
+            List<Point> points = new ArrayList<>();
+            
+            double currentValue = centerValue + (lineIndex == 0 ? 5 : -5); // Start slightly apart
+            
+            for (int i = 0; i < numPoints; i++) {
+                // Faster, more aggressive animation
+                double seed = (currentTime / 50.0) + i * 0.5 + lineIndex * 500;
+                
+                // Multiple frequencies create chaotic but smooth movement
+                double noise = Math.sin(seed * 0.15) * 8
+                            + Math.sin(seed * 0.08) * 6
+                            + Math.sin(seed * 0.25) * 3;
+                
+                // Add competition effect - lines try to cross each other
+                double competition = Math.sin((currentTime / 300.0) + i * 0.1 + lineIndex * Math.PI) * 8;
+                
+                // Quick spikes for dramatic effect
+                double spike = Math.sin(seed * 0.3) > 0.9 ? Math.sin(seed) * 5 : 0;
+                
+                // Gentle pull back to center to keep lines from drifting too far
+                double centerPull = (centerValue - currentValue) * 0.15;
+                
+                currentValue += noise + competition + spike + centerPull;
+                
+                // Soft clamp - allow some overshoot but pull back
+                if (currentValue < centerValue - 30) {
+                    currentValue = centerValue - 30 + (currentValue - (centerValue - 30)) * 0.3;
+                }
+                if (currentValue > centerValue + 30) {
+                    currentValue = centerValue + 30 + (currentValue - (centerValue + 30)) * 0.3;
+                }
+                
+                int x = plotX + (plotWidth * i) / (numPoints - 1);
+                points.add(new Point(x, (int) (currentValue * 100) / 100));
+            }
+            
+            // Draw the line
+            graphics.setColor(colors[lineIndex]);
+            graphics.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            
+            for (int i = 0; i < points.size() - 1; i++) {
+                Point p1 = points.get(i);
+                Point p2 = points.get(i + 1);
+                
+                // Scale y values to fit plot height - invert because screen coords are top-down
+                int y1 = plotY + plotHeight - (int) ((p1.y - minValue) / (maxValue - minValue) * plotHeight);
+                int y2 = plotY + plotHeight - (int) ((p2.y - minValue) / (maxValue - minValue) * plotHeight);
+                
+                graphics.drawLine(p1.x, y1, p2.x, y2);
+            }
+            
+            // Draw a pulsing highlight dot at the end of the line
+            Point lastPoint = points.get(points.size() - 1);
+            int lastY = plotY + plotHeight - (int) ((lastPoint.y - minValue) / (maxValue - minValue) * plotHeight);
+            
+            // Pulsing effect
+            double pulse = Math.sin(currentTime / 150.0) * 0.3 + 0.7;
+            graphics.setColor(new Color(
+                colors[lineIndex].getRed(),
+                colors[lineIndex].getGreen(),
+                colors[lineIndex].getBlue(),
+                (int) (255 * pulse)
+            ));
+            graphics.fillOval(lastPoint.x - 5, lastY - 5, 10, 10);
+            
+            // Bright center
+            graphics.setColor(colors[lineIndex].brighter());
+            graphics.fillOval(lastPoint.x - 3, lastY - 3, 6, 6);
+        }
+        
+        // Draw "Loading graph..." text
+        graphics.setColor(new Color(200, 200, 200));
+        graphics.setFont(FontManager.getRunescapeSmallFont());
+        String loadingText = "Loading graph...";
+        FontMetrics fm = graphics.getFontMetrics();
+        int textX = chartBounds.x + chartBounds.width / 2 - fm.stringWidth(loadingText) / 2;
+        int textY = chartBounds.y + chartBounds.height - 8;
+        graphics.drawString(loadingText, textX, textY);
+        
+        // Animated progress dots
+        int numDots = 3;
+        int dotIndex = (int) ((currentTime / 400) % (numDots + 1));
+        String dots = "";
+        for (int i = 0; i < dotIndex; i++) {
+            dots += ".";
+        }
+        graphics.drawString(dots, textX + fm.stringWidth(loadingText) + 2, textY);
+        
+        // Restore original clip
+        graphics.setClip(originalClip);
     }
 
     /**
