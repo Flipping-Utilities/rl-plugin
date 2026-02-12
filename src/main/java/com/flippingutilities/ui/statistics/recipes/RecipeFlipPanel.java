@@ -117,7 +117,7 @@ public class RecipeFlipPanel extends JPanel {
             }
             else {
                 List<PartialOffer> partialOfferList = new ArrayList<>(partialOfferMap.values());
-                itemName = partialOfferList.get(0).offer.getItemName();
+                itemName = partialOfferList.get(0).getOffer().getItemName();
                 quantity = partialOfferList.stream().mapToInt(po -> po.amountConsumed).sum();
                 avgPrice =  partialOfferList.stream().mapToLong(po -> po.getOffer().getPrice() * po.amountConsumed).sum()/quantity;
             }

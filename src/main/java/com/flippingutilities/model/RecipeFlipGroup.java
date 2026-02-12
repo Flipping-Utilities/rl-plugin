@@ -1,25 +1,67 @@
 package com.flippingutilities.model;
 
+import com.flippingutilities.controller.RecipeHandler;
 import com.flippingutilities.utilities.Recipe;
 import com.flippingutilities.utilities.Searchable;
-import lombok.AllArgsConstructor;
+import com.google.gson.annotations.Expose;
+import com.google.gson.annotations.SerializedName;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Contains all the recipe flips for a recipe
+ * Contains all the recipe flips for a recipe.
+ * Stores only a recipeKey (derived from inputs/outputs) instead of the full Recipe object
+ * to reduce JSON file size. The full Recipe is resolved on load via RecipeHandler.
  */
 @Data
-@AllArgsConstructor
+@NoArgsConstructor
 public class RecipeFlipGroup implements Searchable {
+    @Expose
+    private String recipeKey;
+    
+    @SerializedName("recipe")
+    @Expose(serialize = false, deserialize = true)
     private Recipe recipe;
+    
+    @Expose
     private List<RecipeFlip> recipeFlips = new ArrayList<>();
 
     public RecipeFlipGroup(Recipe recipe) {
         this.recipe = recipe;
+        this.recipeKey = RecipeHandler.createRecipeKey(recipe);
+    }
+    
+    public RecipeFlipGroup(String recipeKey) {
+        this.recipeKey = recipeKey;
+    }
+    
+    public RecipeFlipGroup(Recipe recipe, List<RecipeFlip> recipeFlips) {
+        this.recipe = recipe;
+        this.recipeKey = recipe != null ? RecipeHandler.createRecipeKey(recipe) : null;
+        this.recipeFlips = recipeFlips;
+    }
+    
+    public void hydrateRecipe(RecipeHandler recipeHandler) {
+        if (recipeKey != null && recipe == null) {
+            recipe = recipeHandler.findRecipeByKey(recipeKey).orElse(null);
+        } else if (recipe != null && recipeKey == null) {
+            recipeKey = RecipeHandler.createRecipeKey(recipe);
+        }
+    }
+    
+    public Recipe getRecipe() {
+        return recipe;
+    }
+    
+    public void setRecipe(Recipe recipe) {
+        this.recipe = recipe;
+        if (recipe != null) {
+            this.recipeKey = RecipeHandler.createRecipeKey(recipe);
+        }
     }
 
     public RecipeFlipGroup clone() {
@@ -54,7 +96,7 @@ public class RecipeFlipGroup implements Searchable {
         for (RecipeFlip recipeFlip : recipeFlips) {
             List<PartialOffer> partialOffers = recipeFlip.getPartialOffers(itemId);
             partialOffers.forEach(po -> {
-                String offerId = po.offer.getUuid();
+                String offerId = po.getOfferUuid();
                 if (offerIdToPartialOffer.containsKey(offerId)) {
                     PartialOffer otherPartialOffer = offerIdToPartialOffer.get(offerId);
                     PartialOffer clonedPartialOffer = po.clone();
@@ -100,7 +142,7 @@ public class RecipeFlipGroup implements Searchable {
 
     public void deleteFlipsWithDeletedOffers(List<OfferEvent> offers) {
         Set<String> offerIds = offers.stream().map(OfferEvent::getUuid).collect(Collectors.toSet());
-        recipeFlips.removeIf(rf -> rf.getPartialOffers().stream().anyMatch(po -> offerIds.contains(po.offer.getUuid())));
+        recipeFlips.removeIf(rf -> rf.getPartialOffers().stream().anyMatch(po -> offerIds.contains(po.getOfferUuid())));
     }
 
     @Override

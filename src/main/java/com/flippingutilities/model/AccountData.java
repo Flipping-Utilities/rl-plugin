@@ -83,8 +83,15 @@ public class AccountData {
             item.getHistory().getCompressedOfferEvents().forEach(o -> hydratedOffers.put(o.getUuid(), o));
         }
 
+        hydrateRecipeFlipGroups(plugin);
         hydratePartialOffers(hydratedOffers);
         hydrateSlotTimers(plugin);
+    }
+
+    private void hydrateRecipeFlipGroups(FlippingPlugin plugin) {
+        for (RecipeFlipGroup group : recipeFlipGroups) {
+            group.hydrateRecipe(plugin.getRecipeHandler());
+        }
     }
 
     private void hydrateSlotTimers(FlippingPlugin plugin) {
@@ -99,14 +106,19 @@ public class AccountData {
     }
 
     private void hydratePartialOffers(Map<String, OfferEvent> hydratedOffers) {
-        List<PartialOffer> partialOffers = recipeFlipGroups.stream().flatMap(rfg -> rfg.getPartialOffers().stream()).collect(Collectors.toList());
+        List<PartialOffer> partialOffers = recipeFlipGroups.stream()
+            .flatMap(rfg -> rfg.getPartialOffers().stream())
+            .collect(Collectors.toList());
         partialOffers.forEach(po -> {
-            OfferEvent o = hydratedOffers.get(po.offer.getUuid());
-            if (o == null) {
-                log.warn("partial offer references deleted offer event, this should not happen!");
+            po.hydrateOffer(hydratedOffers);
+            if (po.getOffer() == null) {
+                log.warn("partial offer references deleted offer event with uuid: {}", po.getOfferUuid());
                 return;
             }
-            po.hydrateUnderlyingOfferEvent(o.getMadeBy(), o.getItemName());
+            OfferEvent o = hydratedOffers.get(po.getOfferUuid());
+            if (o != null) {
+                po.hydrateUnderlyingOfferEvent(o.getMadeBy(), o.getItemName());
+            }
         });
     }
 
