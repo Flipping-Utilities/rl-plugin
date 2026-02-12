@@ -301,10 +301,9 @@ public class RecipeHandler {
 
     /**
      * Creates a unique key for a recipe based on its inputs and outputs.
-     * Used for identifying duplicate recipes.
+     * Used for identifying duplicate recipes and for recipe references in RecipeFlipGroup.
      */
-    private String createRecipeKey(Recipe recipe) {
-        // Sort inputs by id, quantity to ensure consistent key generation
+    public static String createRecipeKey(Recipe recipe) {
         String inputsKey = recipe.getInputs().stream()
             .sorted((a, b) -> {
                 int idCompare = Integer.compare(a.getId(), b.getId());
@@ -313,7 +312,6 @@ public class RecipeHandler {
             .map(item -> item.getId() + ":" + item.getQuantity())
             .collect(Collectors.joining(","));
             
-        // Sort outputs by id, quantity to ensure consistent key generation  
         String outputsKey = recipe.getOutputs().stream()
             .sorted((a, b) -> {
                 int idCompare = Integer.compare(a.getId(), b.getId());
@@ -323,6 +321,22 @@ public class RecipeHandler {
             .collect(Collectors.joining(","));
             
         return inputsKey + "|" + outputsKey;
+    }
+    
+    /**
+     * Finds a recipe by its key. Looks in both API recipes and local recipes.
+     */
+    public Optional<Recipe> findRecipeByKey(String key) {
+        if (idToRecipes.isPresent()) {
+            for (List<Recipe> recipes : idToRecipes.get().values()) {
+                for (Recipe recipe : recipes) {
+                    if (createRecipeKey(recipe).equals(key)) {
+                        return Optional.of(recipe);
+                    }
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     private Optional<Map<Integer, PotionGroup>> getItemIdToPotionGroup(
