@@ -3,6 +3,7 @@ package com.flippingutilities.ui.statistics.recipes.customrecipes;
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.controller.FlippingPlugin;
 import net.runelite.api.ItemComposition;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.util.AsyncBufferedImage;
@@ -136,6 +137,11 @@ public class ItemSearchBox extends JPanel {
         List<ItemComposition> matches = new ArrayList<>();
         ItemManager itemManager = plugin.getItemManager();
 
+        if(query.startsWith("coin")){
+            ItemComposition item = itemManager.getItemComposition(ItemID.COINS);
+            matches.add(item);
+        }
+
         for (ItemPrice itemInfo : itemManager.search(query)) {
             ItemComposition item = itemManager.getItemComposition(itemInfo.getId());
             if (isInvalidItem(item)) continue;
@@ -169,7 +175,8 @@ public class ItemSearchBox extends JPanel {
 
     private boolean passesFilters(ItemComposition item, boolean includeNoted, boolean includeUntradeable, ItemManager itemManager) {
         int price = itemManager.getItemPrice(item.getId());
-        if (!includeUntradeable && price == 0) return false;
+        // Remove untradeables except coins
+        if (!includeUntradeable && price == 0 && item.getId() != ItemID.COINS) return false;
 
         return includeNoted || item.getNote() == -1;
     }

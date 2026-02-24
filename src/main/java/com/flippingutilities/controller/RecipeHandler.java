@@ -338,7 +338,61 @@ public class RecipeHandler {
                 }
             }
         }
+        // Also check local recipes
+        if (localRecipes != null) {
+            for (Recipe recipe : localRecipes) {
+                if (createRecipeKey(recipe).equals(key)) {
+                    return Optional.of(recipe);
+                }
+            }
+        }
         return Optional.empty();
+    }
+    
+    /**
+     * Creates a synthetic Recipe from a recipeKey when the original recipe is not found.
+     * RecipeKey format: "inputId:qty,inputId:qty|outputId:qty,outputId:qty"
+     */
+    public static Recipe createRecipeFromKey(String recipeKey) {
+        if (recipeKey == null || recipeKey.isEmpty()) {
+            return null;
+        }
+        
+        try {
+            String[] parts = recipeKey.split("\\|");
+            if (parts.length != 2) {
+                return null;
+            }
+            
+            List<RecipeItem> inputs = parseRecipeItems(parts[0]);
+            List<RecipeItem> outputs = parseRecipeItems(parts[1]);
+            
+            if (inputs.isEmpty() && outputs.isEmpty()) {
+                return null;
+            }
+            
+            return new Recipe(inputs, outputs, "Custom Recipe");
+        } catch (Exception e) {
+            log.warn("Failed to create recipe from key: {}", recipeKey, e);
+            return null;
+        }
+    }
+    
+    private static List<RecipeItem> parseRecipeItems(String itemsStr) {
+        List<RecipeItem> items = new ArrayList<>();
+        if (itemsStr.isEmpty()) {
+            return items;
+        }
+        
+        for (String itemStr : itemsStr.split(",")) {
+            String[] idQty = itemStr.split(":");
+            if (idQty.length == 2) {
+                int id = Integer.parseInt(idQty[0]);
+                int quantity = Integer.parseInt(idQty[1]);
+                items.add(new RecipeItem(id, quantity));
+            }
+        }
+        return items;
     }
 
     private Optional<Map<Integer, PotionGroup>> getItemIdToPotionGroup(
