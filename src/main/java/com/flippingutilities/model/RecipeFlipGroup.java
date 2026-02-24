@@ -47,13 +47,20 @@ public class RecipeFlipGroup implements Searchable {
     
     public void hydrateRecipe(RecipeHandler recipeHandler) {
         if (recipeKey != null && recipe == null) {
-            recipe = recipeHandler.findRecipeByKey(recipeKey).orElse(null);
+            recipe = recipeHandler.findRecipeByKey(recipeKey)
+                .orElseGet(() -> RecipeHandler.createRecipeFromKey(recipeKey));
         } else if (recipe != null && recipeKey == null) {
             recipeKey = RecipeHandler.createRecipeKey(recipe);
         }
     }
     
+    /**
+     * Gets the recipe, creating a synthetic one from recipeKey if needed.
+     */
     public Recipe getRecipe() {
+        if (recipe == null && recipeKey != null) {
+            recipe = RecipeHandler.createRecipeFromKey(recipeKey);
+        }
         return recipe;
     }
     
@@ -89,11 +96,13 @@ public class RecipeFlipGroup implements Searchable {
     }
 
     public boolean isInGroup(int itemId) {
-        if (recipe == null) {
-            log.warn("RecipeFlipGroup has null recipe, cannot check if item {} is in group", itemId);
-            return false;
+        Recipe r = getRecipe();
+        if (r == null) {
+            // Check if itemId is in inputs/outputs of any RecipeFlip
+            return recipeFlips.stream()
+                .anyMatch(rf -> rf.getInputs().containsKey(itemId) || rf.getOutputs().containsKey(itemId));
         }
-        return recipe.isInRecipe(itemId);
+        return r.isInRecipe(itemId);
     }
 
     /**
@@ -162,11 +171,11 @@ public class RecipeFlipGroup implements Searchable {
 
     @Override
     public String getNameForSearch() {
-        if (recipe == null) {
-            log.warn("RecipeFlipGroup has null recipe, returning 'Unknown Recipe' for search");
-            return "Unknown Recipe";
+        Recipe r = getRecipe();
+        if (r == null) {
+            return recipeKey != null ? "Recipe:" + recipeKey.substring(0, Math.min(20, recipeKey.length())) : "Unknown Recipe";
         }
-        return recipe.getName();
+        return r.getName();
     }
     
     /**

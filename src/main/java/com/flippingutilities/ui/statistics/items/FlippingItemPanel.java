@@ -146,7 +146,7 @@ public class FlippingItemPanel extends JPanel
         Paginator paginator = new Paginator(runnable);
         paginator.setPageSize(10);
         paginator.setBackground(CustomColors.DARK_GRAY);
-        paginator.getStatusText().setFont(FontManager.getRunescapeSmallFont());
+        paginator.setComponentsFont(FontManager.getRunescapeSmallFont());
         paginator.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
         return paginator;
     }

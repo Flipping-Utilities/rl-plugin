@@ -126,12 +126,28 @@ public class RecipeFlip {
         return partialOffers;
     }
 
+    /**
+     * Calculates how many times this recipe was made based on output consumption.
+     * If recipe is null, infers from the outputs map.
+     */
     public int getRecipeCountMade(Recipe recipe) {
-        RecipeItem randomItemInRecipe = recipe.getOutputs().get(0);
-        int quantityOfRandomItemInRecipe = randomItemInRecipe.getQuantity();
-        int randomItemIdInRecipe = randomItemInRecipe.getId();
-        int amountConsumed = getPartialOffers(randomItemIdInRecipe).stream().mapToInt(po -> po.amountConsumed).sum();
-        return amountConsumed/quantityOfRandomItemInRecipe;
+        if (outputs.isEmpty()) {
+            return 0;
+        }
+        
+        // Get any output item ID and quantity from outputs map
+        Map.Entry<Integer, Map<String, PartialOffer>> firstOutput = outputs.entrySet().iterator().next();
+        int outputItemId = firstOutput.getKey();
+        int amountConsumed = getPartialOffers(outputItemId).stream().mapToInt(po -> po.amountConsumed).sum();
+        
+        if (recipe != null && !recipe.getOutputs().isEmpty()) {
+            // Use recipe's quantity if available
+            int quantityPerRecipe = recipe.getOutputs().get(0).getQuantity();
+            return amountConsumed / quantityPerRecipe;
+        }
+        
+        // If no recipe, assume quantity of 1 per recipe
+        return amountConsumed;
     }
     
     /**
