@@ -29,7 +29,6 @@ package com.flippingutilities.db;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.annotations.Expose;
@@ -68,7 +67,7 @@ public class TradePersister
 	public TradePersister(Gson gson) {
 		this.gson = gson;
 		// Create a Gson for writing that excludes fields marked with @Expose(serialize=false)
-		this.writeGson = new GsonBuilder()
+		this.writeGson = gson.newBuilder()
 			.setExclusionStrategies(new ExclusionStrategy() {
 				@Override
 				public boolean shouldSkipField(FieldAttributes f) {
