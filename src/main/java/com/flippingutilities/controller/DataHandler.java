@@ -202,15 +202,23 @@ public class DataHandler {
     }
 
     private void prepareAllAccountData(Map<String, AccountData> allAccountData) {
-
         for (String displayName : allAccountData.keySet()) {
             AccountData accountData = allAccountData.get(displayName);
             try {
                 accountData.startNewSession();
                 accountData.prepareForUse(plugin);
-
+                
+                // Check if migration is needed and save immediately
+                if (accountData.needsMigration()) {
+                    log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
+                        displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
+                    TradePersister.createPreMigrationBackup(displayName);
+                    accountData.markMigrated();
+                    plugin.tradePersister.writeToFile(displayName, accountData);
+                    TradePersister.deletePreMigrationBackup(displayName);
+                    log.info("Migration complete for {}", displayName);
+                }
             }
-
             catch (Exception e) {
                 log.warn("Couldn't prepare account data for {} due to {}, setting default", displayName, e);
                 AccountData newAccountData = new AccountData();
@@ -248,6 +256,18 @@ public class DataHandler {
         try {
             AccountData accountData = plugin.tradePersister.loadAccount(displayName);
             accountData.prepareForUse(plugin);
+            
+            // Check if migration is needed and save immediately
+            if (accountData.needsMigration()) {
+                log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
+                    displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
+                TradePersister.createPreMigrationBackup(displayName);
+                accountData.markMigrated();
+                plugin.tradePersister.writeToFile(displayName, accountData);
+                TradePersister.deletePreMigrationBackup(displayName);
+                log.info("Migration complete for {}", displayName);
+            }
+            
             return accountData;
         }
         catch (Exception e)

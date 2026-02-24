@@ -7,3 +7,5 @@ bin/
 .settings/
 .classpath
 .project
+.sisyphus
+gradle.properties

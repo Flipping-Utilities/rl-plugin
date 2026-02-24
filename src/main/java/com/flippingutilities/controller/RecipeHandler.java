@@ -110,9 +110,11 @@ public class RecipeHandler {
     }
 
     public List<RecipeFlipGroup> createAccountWideRecipeFlipGroupList(Collection<AccountData> allAccountData) {
-        Map<Recipe, List<RecipeFlipGroup>> groupedItems = allAccountData.stream()
-                .flatMap(accountData -> accountData.getRecipeFlipGroups().stream()).map(RecipeFlipGroup::clone)
-                .collect(Collectors.groupingBy(RecipeFlipGroup::getRecipe));
+        Map<String, List<RecipeFlipGroup>> groupedItems = allAccountData.stream()
+                .flatMap(accountData -> accountData.getRecipeFlipGroups().stream())
+                .filter(rfg -> rfg.getRecipeKey() != null) // Filter out groups without recipeKey
+                .map(RecipeFlipGroup::clone)
+                .collect(Collectors.groupingBy(RecipeFlipGroup::getRecipeKey));
 
         List<RecipeFlipGroup> mergedRecipeFlipGroups = groupedItems.values().stream()
                 .map(list -> list.stream().reduce(RecipeFlipGroup::merge))

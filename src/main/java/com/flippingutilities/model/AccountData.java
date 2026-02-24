@@ -39,10 +39,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-
 @Slf4j
 @Data
 public class AccountData {
+    /**
+     * Current version of the AccountData format.
+     * Increment this when making breaking changes to the data format.
+     */
+    public static final int CURRENT_VERSION = 1;
+    
+    private Integer version;
     private Map<Integer, OfferEvent> lastOffers = new HashMap<>();
     private List<FlippingItem> trades = new ArrayList<>();
     private Instant sessionStartTime = Instant.now();
@@ -52,6 +58,39 @@ public class AccountData {
     private List<RecipeFlipGroup> recipeFlipGroups = new ArrayList<>();
     private Instant lastStoredAt = Instant.EPOCH;
     private Instant lastModifiedAt = Instant.now();
+    /**
+     * Returns true if this AccountData needs to be migrated.
+     * Old files don't have a version field (null), or have an older version.
+     * Only migrates if there's actual data to migrate (fails silently for empty/failed loads).
+     */
+    public boolean needsMigration() {
+        // Don't migrate if no data - could be a failed load (e.g., file too large)
+        // This prevents overwriting large files with empty data
+        if (trades.isEmpty() && recipeFlipGroups.isEmpty()) {
+            log.debug("No migration needed: no data (trades={}, recipeFlips={})", trades.size(), recipeFlipGroups.size());
+            return false;
+        }
+        boolean needed = version == null || version < CURRENT_VERSION;
+        log.debug("Migration check: version={}, CURRENT_VERSION={}, needed={}", version, CURRENT_VERSION, needed);
+        return needed;
+    }
+    
+    /**
+     * Marks this AccountData as migrated by setting the version to current.
+     * Also cleans up any redundant data.
+     */
+    public void markMigrated() {
+        version = CURRENT_VERSION;
+        cleanup();
+    }
+    
+    /**
+     * Cleans up redundant data to reduce file size.
+     * Removes PartialOffers with amountConsumed == 0.
+     */
+    public void cleanup() {
+        recipeFlipGroups.forEach(RecipeFlipGroup::cleanup);
+    }
 
     /**
      * Resets all session related data associated with an account. This is called when the plugin first starts

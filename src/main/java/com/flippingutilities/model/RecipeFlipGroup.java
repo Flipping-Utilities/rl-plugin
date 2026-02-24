@@ -6,6 +6,7 @@ import com.flippingutilities.utilities.Searchable;
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
@@ -18,16 +19,15 @@ import java.util.stream.Collectors;
  * to reduce JSON file size. The full Recipe is resolved on load via RecipeHandler.
  */
 @Data
+@Slf4j
 @NoArgsConstructor
 public class RecipeFlipGroup implements Searchable {
-    @Expose
     private String recipeKey;
     
     @SerializedName("recipe")
     @Expose(serialize = false, deserialize = true)
     private Recipe recipe;
     
-    @Expose
     private List<RecipeFlip> recipeFlips = new ArrayList<>();
 
     public RecipeFlipGroup(Recipe recipe) {
@@ -65,14 +65,20 @@ public class RecipeFlipGroup implements Searchable {
     }
 
     public RecipeFlipGroup clone() {
-        return new RecipeFlipGroup(recipe, recipeFlips.stream().map(RecipeFlip::clone).collect(Collectors.toList()));
+        RecipeFlipGroup cloned = new RecipeFlipGroup(recipeKey);
+        cloned.recipe = recipe;
+        cloned.recipeFlips = recipeFlips.stream().map(RecipeFlip::clone).collect(Collectors.toList());
+        return cloned;
     }
 
     public RecipeFlipGroup merge(RecipeFlipGroup otherRecipeFlipGroup) {
         List<RecipeFlip> allRecipeFlips = recipeFlips;
         allRecipeFlips.addAll(otherRecipeFlipGroup.getRecipeFlips());
         allRecipeFlips.sort(Comparator.comparing(RecipeFlip::getTimeOfCreation));
-        return new RecipeFlipGroup(recipe, allRecipeFlips);
+        RecipeFlipGroup merged = new RecipeFlipGroup(recipeKey);
+        merged.recipe = recipe;
+        merged.recipeFlips = allRecipeFlips;
+        return merged;
     }
 
     public Instant getLatestActivityTime() {
@@ -83,6 +89,10 @@ public class RecipeFlipGroup implements Searchable {
     }
 
     public boolean isInGroup(int itemId) {
+        if (recipe == null) {
+            log.warn("RecipeFlipGroup has null recipe, cannot check if item {} is in group", itemId);
+            return false;
+        }
         return recipe.isInRecipe(itemId);
     }
 
@@ -152,6 +162,17 @@ public class RecipeFlipGroup implements Searchable {
 
     @Override
     public String getNameForSearch() {
+        if (recipe == null) {
+            log.warn("RecipeFlipGroup has null recipe, returning 'Unknown Recipe' for search");
+            return "Unknown Recipe";
+        }
         return recipe.getName();
+    }
+    
+    /**
+     * Cleans up all RecipeFlips by removing PartialOffers with amountConsumed == 0.
+     */
+    public void cleanup() {
+        recipeFlips.forEach(RecipeFlip::cleanup);
     }
 }

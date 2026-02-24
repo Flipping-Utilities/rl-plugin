@@ -332,9 +332,9 @@ public class FlippingPlugin extends Plugin {
             slotTimersTask = null;
         }
         dataHandler.storeData();
-        cacheUpdaterJob.stop();
-        wikiDataFetcherJob.stop();
-        slotStateSenderJob.stop();
+        if (cacheUpdaterJob != null) cacheUpdaterJob.stop();
+        if (wikiDataFetcherJob != null) wikiDataFetcherJob.stop();
+        if (slotStateSenderJob != null) slotStateSenderJob.stop();
     }
 
     @Subscribe
@@ -387,7 +387,9 @@ public class FlippingPlugin extends Plugin {
     }
 
     public void handleLogin(String displayName) {
-        wikiDataFetcherJob.onWorldSwitch(client.getWorldType());
+        if (wikiDataFetcherJob != null) {
+            wikiDataFetcherJob.onWorldSwitch(client.getWorldType());
+        }
         if (client.getVarbitValue(VarbitID.IRONMAN) != 0) {
                 log.debug("account is an ironman, not adding it to the cache");
                 return;
@@ -734,22 +736,18 @@ public class FlippingPlugin extends Plugin {
     }
 
     public void setWidgetsOnSlotTimers() {
+        if (currentlyLoggedInAccount == null) {
+            return;
+        }
+        AccountData accountData = dataHandler.viewAccountData(currentlyLoggedInAccount);
+        if (accountData == null || accountData.getSlotTimers() == null) {
+            return;
+        }
         for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
-            SlotActivityTimer timer = dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().get(slotIndex);
-
-            //Get the offer slots from the window container
-            //We add one to the index, as the first widget is the text above the offer slots
-            Widget offerSlot = client.getWidget(InterfaceID.GeOffers.INDEX).getStaticChildren()[slotIndex + 1];
-
-            if (offerSlot == null) {
-                return;
+            SlotActivityTimer timer = accountData.getSlotTimers().get(slotIndex);
+            if (timer == null) {
+                continue;
             }
-
-            if (timer.getSlotWidget() == null) {
-                timer.setWidget(offerSlot);
-            }
-
-            clientThread.invokeLater(timer::updateTimerDisplay);
         }
     }
 

@@ -29,6 +29,11 @@ package com.flippingutilities.db;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.ExclusionStrategy;
+import com.google.gson.FieldAttributes;
+import com.google.gson.annotations.Expose;
+import com.google.gson.stream.JsonWriter;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.RuneLite;
@@ -37,6 +42,8 @@ import org.apache.commons.csv.CSVPrinter;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.io.BufferedWriter;
+import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
@@ -52,10 +59,29 @@ import java.util.Map;
 @Slf4j
 public class TradePersister
 {
+	/** Gson for deserialization (reads all fields) */
 	Gson gson;
+	
+	/** Gson for serialization (excludes fields with @Expose(serialize=false)) */
+	private final Gson writeGson;
 
 	public TradePersister(Gson gson) {
 		this.gson = gson;
+		// Create a Gson for writing that excludes fields marked with @Expose(serialize=false)
+		this.writeGson = new GsonBuilder()
+			.setExclusionStrategies(new ExclusionStrategy() {
+				@Override
+				public boolean shouldSkipField(FieldAttributes f) {
+					Expose expose = f.getAnnotation(Expose.class);
+					return expose != null && !expose.serialize();
+				}
+
+				@Override
+				public boolean shouldSkipClass(Class<?> clazz) {
+					return false;
+				}
+			})
+			.create();
 	}
 
 	//this is in {user's home directory}/.runelite/flipping
@@ -131,10 +157,14 @@ public class TradePersister
 			}
 			return accountData;
 		}
-		catch (Exception e) {
-			log.warn("Got exception {} while loading data for {}. Will try loading from backup", e, displayName);
-			return loadAccountFromBackup(displayName);
-		}
+    catch (OutOfMemoryError e) {
+        log.error("OutOfMemoryError while loading data for {}. File may be too large. Returning empty AccountData.", displayName);
+        return new AccountData();
+    }
+    catch (Exception e) {
+        log.warn("Got exception {} while loading data for {}. Will try loading from backup", e, displayName);
+        return loadAccountFromBackup(displayName);
+    }
 	}
 
 	private AccountData loadAccountFromBackup(String displayName) {
@@ -160,9 +190,13 @@ public class TradePersister
 
 	private AccountData loadFromFile(File f) throws IOException
 	{
-		String accountDataJson = new String(Files.readAllBytes(f.toPath()));
-		return gson.fromJson(accountDataJson, AccountData.class);
+		try (java.io.BufferedReader bufferedReader = Files.newBufferedReader(f.toPath(), java.nio.charset.StandardCharsets.UTF_8);
+			com.google.gson.stream.JsonReader jsonReader = new com.google.gson.stream.JsonReader(bufferedReader))
+		{
+			return gson.fromJson(jsonReader, AccountData.class);
+		}
 	}
+
 
 	public AccountWideData loadAccountWideData() throws IOException {
 		File accountFile = new File(PARENT_DIRECTORY, "accountwide.json");
@@ -201,12 +235,29 @@ public class TradePersister
 	 * @param data        the trades and last offers of that account
 	 * @throws IOException
 	 */
-	public void writeToFile(String displayName, Object data) throws IOException
-	{
+	public void writeToFile(String displayName, Object data) throws IOException {
 		log.debug("Writing to file for {}", displayName);
 		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
-		final String json = gson.toJson(data);
-		Files.write(accountFile.toPath(), json.getBytes());
+		File tempFile = new File(PARENT_DIRECTORY, displayName + ".json.tmp");
+		
+		try (BufferedWriter bufferedWriter = Files.newBufferedWriter(tempFile.toPath(), StandardCharsets.UTF_8);
+			JsonWriter jsonWriter = new JsonWriter(bufferedWriter)) {
+			writeGson.toJson(data, data.getClass(), jsonWriter);
+		} catch (IOException e) {
+			try { Files.deleteIfExists(tempFile.toPath()); } catch (IOException ignored) {}
+			throw e;
+		}
+		
+		try {
+				Files.move(tempFile.toPath(), accountFile.toPath(),
+						java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+		} catch (java.nio.file.AtomicMoveNotSupportedException ame) {
+				Files.move(tempFile.toPath(), accountFile.toPath(),
+						java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+		} catch (IOException e) {
+				try { Files.deleteIfExists(tempFile.toPath()); } catch (IOException ignored) {}
+				throw e;
+		}
 	}
 
 	public static long lastModified(String fileName)
@@ -219,16 +270,43 @@ public class TradePersister
 		File accountFile = new File(PARENT_DIRECTORY, fileName);
 		if (accountFile.exists())
 		{
-			if (accountFile.delete())
-			{
+			if (accountFile.delete()) {
 				log.debug("{} deleted", fileName);
-			}
-			else
-			{
+			} else {
 				log.debug("unable to delete {}", fileName);
 			}
 		}
 	}
+
+	/**
+	 * Creates a pre-migration backup file for an account before migration.
+	 * This should only be called when migration is actually needed.
+	 */
+	public static void createPreMigrationBackup(String displayName) throws IOException {
+		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
+		File backupFile = new File(PARENT_DIRECTORY, displayName + ".json.pre-migration");
+		if (!backupFile.exists() && accountFile.exists()) {
+			Files.copy(accountFile.toPath(), backupFile.toPath());
+			log.info("Created pre-migration backup: {}", backupFile.getName());
+		}
+	}
+
+	/**
+	 * Deletes the pre-migration backup file for an account after successful migration.
+	 * This should be called after the account data has been successfully saved in the new format.
+	 */
+	public static void deletePreMigrationBackup(String displayName) {
+		String backupFileName = displayName + ".json.pre-migration";
+		File backupFile = new File(PARENT_DIRECTORY, backupFileName);
+		if (backupFile.exists()) {
+			if (backupFile.delete()) {
+				log.info("Deleted pre-migration backup: {}", backupFileName);
+			} else {
+				log.warn("Failed to delete pre-migration backup: {}", backupFileName);
+			}
+		}
+	}
+
 
 	public static void exportToCsv(File file, List<FlippingItem> trades, String startOfIntervalName) throws IOException {
 		FileWriter out = new FileWriter(file);
