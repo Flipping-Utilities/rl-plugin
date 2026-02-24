@@ -1,5 +1,6 @@
 package com.flippingutilities.model;
 
+import com.google.gson.annotations.Expose;
 import com.flippingutilities.utilities.Recipe;
 import com.flippingutilities.utilities.RecipeItem;
 import lombok.AllArgsConstructor;
@@ -131,5 +132,30 @@ public class RecipeFlip {
         int randomItemIdInRecipe = randomItemInRecipe.getId();
         int amountConsumed = getPartialOffers(randomItemIdInRecipe).stream().mapToInt(po -> po.amountConsumed).sum();
         return amountConsumed/quantityOfRandomItemInRecipe;
+    }
+    
+    /**
+     * Removes PartialOffers with amountConsumed == 0 and empty maps.
+     * Should be called before serialization to reduce file size.
+     */
+    public void cleanup() {
+        inputs = cleanupComponent(inputs);
+        outputs = cleanupComponent(outputs);
+    }
+    
+    private Map<Integer, Map<String, PartialOffer>> cleanupComponent(Map<Integer, Map<String, PartialOffer>> component) {
+        Map<Integer, Map<String, PartialOffer>> cleaned = new HashMap<>();
+        for (Map.Entry<Integer, Map<String, PartialOffer>> entry : component.entrySet()) {
+            Map<String, PartialOffer> cleanedInner = new HashMap<>();
+            for (Map.Entry<String, PartialOffer> innerEntry : entry.getValue().entrySet()) {
+                if (innerEntry.getValue().amountConsumed > 0) {
+                    cleanedInner.put(innerEntry.getKey(), innerEntry.getValue());
+                }
+            }
+            if (!cleanedInner.isEmpty()) {
+                cleaned.put(entry.getKey(), cleanedInner);
+            }
+        }
+        return cleaned;
     }
 }
