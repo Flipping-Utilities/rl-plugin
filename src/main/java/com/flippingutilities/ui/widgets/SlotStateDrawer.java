@@ -3,7 +3,6 @@ package com.flippingutilities.ui.widgets;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.jobs.TimeseriesFetcher;
 import com.flippingutilities.ui.uiutilities.GeSpriteLoader;
-import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.SlotInfo;
 import com.flippingutilities.utilities.SlotPredictedState;
 import com.flippingutilities.utilities.WikiItemMargins;
@@ -17,7 +16,6 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.ui.overlay.tooltip.Tooltip;
 import net.runelite.client.ui.overlay.tooltip.TooltipManager;
 
-import java.awt.*;
 import java.util.*;
 import java.util.List;
 
@@ -212,6 +210,14 @@ public class SlotStateDrawer {
     private void addQuickLookWidget(Widget slotWidget, SlotInfo slot) {
         Widget existingWidget = slotIdxToQuickLookWidget.get(slot.getIndex());
 
+        // Hide widget if quick lookup is disabled
+        if (!plugin.getConfig().quickLookupEnabled()) {
+            if (existingWidget != null) {
+                existingWidget.setHidden(true);
+            }
+            return;
+        }
+
         if (existingWidget == null || !isWidgetStillAttached(existingWidget)) {
             Widget newWidget = createQuickLookWidget(slotWidget, slot);
             slotIdxToQuickLookWidget.put(slot.getIndex(), newWidget);
@@ -245,18 +251,24 @@ public class SlotStateDrawer {
                     if (currentlyFetchedItemId == null || !currentlyFetchedItemId.equals(slot.getItemId())) {
                         currentlyFetchedItemId = slot.getItemId();
 
-                        if (plugin.getConfig().priceGraphEnabled()) {
+                        if (plugin.getConfig().quickLookupEnabled()) {
                             timeseriesFetcher.fetch(slot.getItemId(), plugin.getConfig().priceGraphTimestep(), tsResponse -> {
-                                // Ensure tooltip exists before setting data
+                                if (hoveredSlotIndex == null || hoveredSlotIndex >= slotInfos.size()) {
+                                    return;
+                                }
+                                if (tsResponse == null) {
+                                    return;
+                                }
                                 if (currentTooltip == null) {
                                     currentTooltip = new QuickLookTooltip();
-                                    // Update tooltip content first
                                     Optional<SlotInfo> slotInfoOpt = slotInfos.get(hoveredSlotIndex);
                                     if (slotInfoOpt.isPresent()) {
                                         SlotInfo slotInfo = slotInfoOpt.get();
-                                        WikiItemMargins margins = wikiRequest.getData().get(slotInfo.getItemId());
-                                        if (margins != null) {
-                                            currentTooltip.update(slotInfo, margins);
+                                        if (wikiRequest != null && wikiRequest.getData() != null) {
+                                            WikiItemMargins margins = wikiRequest.getData().get(slotInfo.getItemId());
+                                            if (margins != null) {
+                                                currentTooltip.update(slotInfo, margins);
+                                            }
                                         }
                                     }
                                 }
@@ -340,7 +352,9 @@ public class SlotStateDrawer {
         }
 
         int listedPrice = offer.getPrice();
-        boolean isBuy = offer.getState() == GrandExchangeOfferState.BUYING;
+        GrandExchangeOfferState offerState = offer.getState();
+        boolean isBuy = offerState == GrandExchangeOfferState.BUYING || offerState == GrandExchangeOfferState.BOUGHT;
+        boolean isCompleted = offerState == GrandExchangeOfferState.BOUGHT || offerState == GrandExchangeOfferState.SOLD;
         SlotPredictedState predictedState = SlotPredictedState.getPredictedState(
                 isBuy,
                 listedPrice,
@@ -349,16 +363,12 @@ public class SlotStateDrawer {
         );
 
         return Optional.of(
-                new SlotInfo(index, predictedState, itemId, listedPrice, isBuy)
+                new SlotInfo(index, predictedState, itemId, listedPrice, isBuy, isCompleted)
         );
     }
 
     private void buildAndShowTooltip() {
-        if (
-                hoveredSlotIndex >= slotInfos.size() ||
-                        wikiRequest == null ||
-                        wikiRequest.getData() == null
-        ) {
+        if (hoveredSlotIndex >= slotInfos.size() || wikiRequest == null || wikiRequest.getData() == null) {
             return;
         }
 
@@ -369,7 +379,7 @@ public class SlotStateDrawer {
 
         SlotInfo slotInfo = slotInfoOpt.get();
         WikiItemMargins margins = wikiRequest.getData().get(slotInfo.getItemId());
-        
+
         if (currentTooltip == null) {
             currentTooltip = new QuickLookTooltip();
         }
