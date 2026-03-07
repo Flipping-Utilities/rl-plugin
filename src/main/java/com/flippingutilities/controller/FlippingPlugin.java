@@ -735,21 +735,41 @@ public class FlippingPlugin extends Plugin {
         }
     }
 
-    public void setWidgetsOnSlotTimers() {
-        if (currentlyLoggedInAccount == null) {
-            return;
-        }
-        AccountData accountData = dataHandler.viewAccountData(currentlyLoggedInAccount);
-        if (accountData == null || accountData.getSlotTimers() == null) {
-            return;
-        }
-        for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
-            SlotActivityTimer timer = accountData.getSlotTimers().get(slotIndex);
-            if (timer == null) {
-                continue;
-            }
-        }
-    }
+	public void setWidgetsOnSlotTimers() {
+		if (currentlyLoggedInAccount == null) {
+			return;
+		}
+		AccountData accountData = dataHandler.viewAccountData(currentlyLoggedInAccount);
+		if (accountData == null || accountData.getSlotTimers() == null) {
+			return;
+		}
+
+		Widget geOfferSlots = client.getWidget(InterfaceID.GeOffers.INDEX);
+		if (geOfferSlots == null) {
+			return;
+		}
+
+		Widget[] staticChildren = geOfferSlots.getStaticChildren();
+		if (staticChildren == null || staticChildren.length < 9) {
+			return;
+		}
+
+		for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
+			SlotActivityTimer timer = accountData.getSlotTimers().get(slotIndex);
+			if (timer == null) {
+				continue;
+			}
+
+			// We add one to the index, as the first widget is the text above the offer slots
+			Widget offerSlot = staticChildren[slotIndex + 1];
+			if (offerSlot == null) {
+				continue;
+			}
+
+			timer.setWidget(offerSlot);
+			clientThread.invokeLater(timer::updateTimerDisplay);
+		}
+	}
 
     public void setFavoriteOnAllAccounts(FlippingItem item, boolean favoriteStatus) {
         for (String accountName : dataHandler.getCurrentAccounts()) {
