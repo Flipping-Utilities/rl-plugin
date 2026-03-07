@@ -31,6 +31,7 @@ import net.runelite.api.Client;
 import net.runelite.api.FontID;
 import net.runelite.api.VarClientStr;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.VarClientID;
 import net.runelite.api.widgets.*;
 
 import javax.swing.*;
@@ -106,7 +107,7 @@ public class OfferEditor {
             nonWikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
                 client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(instaSellPrice + "*");
-                client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(instaSellPrice));
+                client.setVarcStrValue(VarClientID.MESLAYERINPUT, String.valueOf(instaSellPrice));
             });
         } else {
             nonWikiText.setText("no sell tracked");
@@ -118,7 +119,7 @@ public class OfferEditor {
             wikiText.setOnOpListener((JavaScriptCallback) ev ->
             {
                 client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(wikiInstaSellPrice + "*");
-                client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(wikiInstaSellPrice));
+                client.setVarcStrValue(VarClientID.MESLAYERINPUT, String.valueOf(wikiInstaSellPrice));
             });
         } else {
             wikiText.setText("No wiki data");

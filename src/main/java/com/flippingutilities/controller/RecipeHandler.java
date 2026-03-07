@@ -658,6 +658,5 @@ public class RecipeHandler {
         this.idToRecipes = getItemIdToRecipes(apiRecipes);
         log.info("Refreshed recipe mappings. Total items with recipes: {}", idToRecipes.isPresent() ? idToRecipes.get().size() : 0);
         log.info("Local recipes count: {}", localRecipes.size());
-        localRecipes.forEach(r -> log.info("  - Local recipe: {} (items: {})", r.getName(), r.getIds()));
     }
 }

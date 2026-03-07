@@ -72,18 +72,20 @@ public class TimeseriesFetcher {
                         new Callback() {
                             @Override
                             public void onFailure(Call call, IOException e) {
-                                log.warn("Failed to fetch timeseries for item {}", itemId, e);
+                                log.warn("[TimeseriesFetcher] Request FAILED for item {}: {}", itemId, e.getMessage());
                             }
 
                             @Override
                             public void onResponse(Call call, Response response) throws IOException {
                                 try (ResponseBody body = response.body()) {
                                     if (!response.isSuccessful()) {
+                                        log.warn("[TimeseriesFetcher] Response not successful, code={}", response.code());
                                         return;
                                     }
                                     try {
+                                        String rawBody = body.string();
                                         TimeseriesResponse tsResponse = plugin.gson.fromJson(
-                                                body.string(),
+                                                rawBody,
                                                 TimeseriesResponse.class
                                         );
                                         cache.put(
@@ -92,7 +94,7 @@ public class TimeseriesFetcher {
                                         );
                                         callback.accept(tsResponse);
                                     } catch (JsonSyntaxException e) {
-                                        log.warn("Failed to parse timeseries response", e);
+                                        log.warn("[TimeseriesFetcher] Failed to parse timeseries response: {}", e.getMessage());
                                     }
                                 }
                             }

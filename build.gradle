@@ -33,3 +33,10 @@ sourceCompatibility = '1.8'
 tasks.withType(JavaCompile) {
 	options.encoding = 'UTF-8'
 }
+
+tasks.register('runPlugin', JavaExec) {
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.flippingutilities.PluginRunner'
+    jvmArgs "-ea"
+    args "--developer-mode"
+}

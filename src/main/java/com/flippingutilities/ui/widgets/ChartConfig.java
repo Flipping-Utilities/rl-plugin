@@ -6,6 +6,8 @@ import lombok.Getter;
 import java.awt.Color;
 import java.awt.Font;
 
+import com.flippingutilities.ui.uiutilities.CustomColors;
+
 @Getter
 @Builder
 public final class ChartConfig {
@@ -25,26 +27,26 @@ public final class ChartConfig {
     @Builder.Default
     private final int rightPadding = 15;
 
-    @Builder.Default
-    private final Color backgroundColor = new Color(0, 0, 0, 180);
 
     @Builder.Default
-    private final Color gridColor = new Color(50, 50, 50, 200);
+    private final Color backgroundColor = CustomColors.CHART_BACKGROUND;
 
     @Builder.Default
-    private final Color fillColor = new Color(80, 80, 80, 100);
+    private final Color gridColor = CustomColors.CHART_GRID;
+    @Builder.Default
+    private final Color fillColor = CustomColors.CHART_FILL;
 
     @Builder.Default
-    private final Color highLineColor = new Color(0, 200, 0);
+    private final Color highLineColor = CustomColors.CHART_INSTABUY;
 
     @Builder.Default
-    private final Color lowLineColor = new Color(200, 0, 0);
+    private final Color lowLineColor = CustomColors.CHART_INSTASELL;
 
     @Builder.Default
-    private final Color referenceLineColor = new Color(0, 200, 255);
+    private final Color referenceLineColor = CustomColors.CHART_ACCENT;
 
     @Builder.Default
-    private final Color labelColor = new Color(200, 200, 200);
+    private final Color labelColor = CustomColors.CHART_LABEL;
 
     @Builder.Default
     private final float lineStroke = 1.3f;

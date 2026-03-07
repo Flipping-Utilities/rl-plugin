@@ -2,12 +2,14 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.utilities.Jwt;
 import com.flippingutilities.utilities.OsrsAccount;
-import com.flippingutilities.utilities.User;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;

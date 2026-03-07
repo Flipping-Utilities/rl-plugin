@@ -128,9 +128,54 @@ public class TimeFormatters {
         return timeFormatter.format(time);
     }
 
+    /**
+     * Formats a timestamp (epoch seconds) as a compact relative time string.
+     * e.g., "5s ago", "2m ago", "3h ago", "4d ago", "2w ago"
+     *
+     * @param timestamp Epoch timestamp in seconds
+     * @return Compact relative time string
+     */
+    public static String formatTimeAgo(long timestamp)
+    {
+        long timestampMs = timestamp * 1000;
+        long nowMs = System.currentTimeMillis();
+        long diffMs = nowMs - timestampMs;
+
+        if (diffMs < 0)
+        {
+            return "now";
+        }
+
+        long seconds = diffMs / 1000;
+        long minutes = seconds / 60;
+        long hours = minutes / 60;
+        long days = hours / 24;
+
+        if (seconds < 60)
+        {
+            return seconds + "s ago";
+        }
+        else if (minutes < 60)
+        {
+            return minutes + "m ago";
+        }
+        else if (hours < 24)
+        {
+            return hours + "h ago";
+        }
+        else if (days < 7)
+        {
+            return days + "d ago";
+        }
+        else
+        {
+            long weeks = days / 7;
+            return weeks + "w ago";
+        }
+    }
+
     public static String formatInstantToDate(Instant time) {
         DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm a").withZone(ZoneId.systemDefault());
         return timeFormatter.format(time);
     }
-
 }

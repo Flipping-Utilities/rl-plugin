@@ -4,10 +4,8 @@ import com.flippingutilities.model.OfferEvent;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 
-import java.time.Instant;
 import java.util.Date;
 
 @Data

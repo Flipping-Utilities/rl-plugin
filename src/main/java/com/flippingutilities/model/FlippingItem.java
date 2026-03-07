@@ -82,7 +82,6 @@ public class FlippingItem implements Searchable
 	//whether the item should be on the flipping panel or not.
 	@SerializedName("vFPI")
 	@Getter
-	@Setter
 	private Boolean validFlippingPanelItem;
 
 	@Getter
