@@ -167,7 +167,7 @@ public class SlotPanel extends JPanel {
         SlotPredictedState predictedState = SlotPredictedState.getPredictedState(offerEvent.isBuy(),
             offerEvent.getListedPrice(), margins.getLow(), margins.getHigh());
         SlotInfo slotInfo = new SlotInfo(offerEvent.getSlot(), predictedState, offerEvent.getItemId(),
-            offerEvent.getListedPrice(), offerEvent.isBuy());
+            offerEvent.getListedPrice(), offerEvent.isBuy(), offerEvent.isComplete());
         quickLookPanel.updateDetails(slotInfo, margins);
     }
 

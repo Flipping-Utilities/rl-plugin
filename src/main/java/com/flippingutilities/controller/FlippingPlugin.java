@@ -35,13 +35,13 @@ import com.flippingutilities.ui.MasterPanel;
 import com.flippingutilities.ui.flipping.FlippingPanel;
 import com.flippingutilities.ui.gehistorytab.GeHistoryTabPanel;
 import com.flippingutilities.ui.login.LoginPanel;
-import com.flippingutilities.ui.settings.SettingsPanel;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.uiutilities.GeSpriteLoader;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.flippingutilities.jobs.CacheUpdaterJob;
 import com.flippingutilities.ui.widgets.SlotStateDrawer;
+import com.flippingutilities.ui.widgets.OfferGraphChartOverlay;
 import com.flippingutilities.utilities.*;
 import com.flippingutilities.jobs.WikiDataFetcherJob;
 import com.google.common.primitives.Shorts;
@@ -62,7 +62,6 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ClientShutdown;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
-import net.runelite.client.game.SpriteManager;
 import net.runelite.client.input.KeyListener;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
@@ -126,10 +125,8 @@ public class FlippingPlugin extends Plugin {
     private NavigationButton navButton;
 
     @Inject
-    private ConfigManager configManager;
-
-    @Inject
     private TooltipManager tooltipManager;
+
 
     @Inject
     @Getter
@@ -141,9 +138,6 @@ public class FlippingPlugin extends Plugin {
 
     @Inject
     private KeyManager keyManager;
-
-    @Inject
-    private SpriteManager spriteManager;
 
     @Inject
     @Getter
@@ -163,7 +157,6 @@ public class FlippingPlugin extends Plugin {
     private MasterPanel masterPanel;
     @Getter
     private GeHistoryTabPanel geHistoryTabPanel;
-    private SettingsPanel settingsPanel;
     private LoginPanel loginPanel;
 
     //this flag is to know that when we see the login screen an account has actually logged out and its not just that the
@@ -236,6 +229,8 @@ public class FlippingPlugin extends Plugin {
     private FlippingItemHandler flippingItemHandler;
     @Getter
     private SlotStateDrawer slotStateDrawer;
+    @Inject
+    private OfferGraphChartOverlay offerGraphChartOverlay;
 
     @Override
     protected void startUp() {
@@ -247,13 +242,12 @@ public class FlippingPlugin extends Plugin {
 
         optionHandler = new OptionHandler(this);
         dataHandler = new DataHandler(this);
-        gameUiChangesHandler = new GameUiChangesHandler(this);
+        gameUiChangesHandler = new GameUiChangesHandler(this, eventBus);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
         apiAuthHandler = new ApiAuthHandler(this);
         apiRequestHandler = new ApiRequestHandler(this);
         slotStateDrawer = new SlotStateDrawer(this, this.tooltipManager, client, timeseriesFetcher);
         eventBus.register(slotStateDrawer);
-
         flippingPanel = new FlippingPanel(this);
         statPanel = new StatsPanel(this);
         geHistoryTabPanel = new GeHistoryTabPanel(this);
@@ -315,7 +309,6 @@ public class FlippingPlugin extends Plugin {
             autoSaveTask.cancel(true);
             autoSaveTask = null;
         }
-
         masterPanel.dispose();
 
         clientToolbar.removeNavigation(navButton);
@@ -735,41 +728,41 @@ public class FlippingPlugin extends Plugin {
         }
     }
 
-	public void setWidgetsOnSlotTimers() {
-		if (currentlyLoggedInAccount == null) {
-			return;
-		}
-		AccountData accountData = dataHandler.viewAccountData(currentlyLoggedInAccount);
-		if (accountData == null || accountData.getSlotTimers() == null) {
-			return;
-		}
+    public void setWidgetsOnSlotTimers() {
+        if (currentlyLoggedInAccount == null) {
+            return;
+        }
+        AccountData accountData = dataHandler.viewAccountData(currentlyLoggedInAccount);
+        if (accountData == null || accountData.getSlotTimers() == null) {
+            return;
+        }
 
-		Widget geOfferSlots = client.getWidget(InterfaceID.GeOffers.INDEX);
-		if (geOfferSlots == null) {
-			return;
-		}
+        Widget geOfferSlots = client.getWidget(InterfaceID.GeOffers.INDEX);
+        if (geOfferSlots == null) {
+            return;
+        }
 
-		Widget[] staticChildren = geOfferSlots.getStaticChildren();
-		if (staticChildren == null || staticChildren.length < 9) {
-			return;
-		}
+        Widget[] staticChildren = geOfferSlots.getStaticChildren();
+        if (staticChildren == null || staticChildren.length < 9) {
+            return;
+        }
 
-		for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
-			SlotActivityTimer timer = accountData.getSlotTimers().get(slotIndex);
-			if (timer == null) {
-				continue;
-			}
+        for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
+            SlotActivityTimer timer = accountData.getSlotTimers().get(slotIndex);
+            if (timer == null) {
+                continue;
+            }
 
-			// We add one to the index, as the first widget is the text above the offer slots
-			Widget offerSlot = staticChildren[slotIndex + 1];
-			if (offerSlot == null) {
-				continue;
-			}
+            // We add one to the index, as the first widget is the text above the offer slots
+            Widget offerSlot = staticChildren[slotIndex + 1];
+            if (offerSlot == null) {
+                continue;
+            }
 
-			timer.setWidget(offerSlot);
-			clientThread.invokeLater(timer::updateTimerDisplay);
-		}
-	}
+            timer.setWidget(offerSlot);
+            clientThread.invokeLater(timer::updateTimerDisplay);
+        }
+    }
 
     public void setFavoriteOnAllAccounts(FlippingItem item, boolean favoriteStatus) {
         for (String accountName : dataHandler.getCurrentAccounts()) {
@@ -1123,27 +1116,6 @@ public class FlippingPlugin extends Plugin {
         client.setGeSearchResultIds(Shorts.toArray(ids));
         event.consume();
     }
-
-    @Subscribe
-    public void onScriptPostFired(ScriptPostFired event) {
-        gameUiChangesHandler.onScriptPostFired(event);
-    }
-
-    @Subscribe
-    public void onWidgetLoaded(WidgetLoaded event) {
-        gameUiChangesHandler.onWidgetLoaded(event);
-    }
-
-    @Subscribe
-    public void onVarbitChanged(VarbitChanged event) {
-        gameUiChangesHandler.onVarbitChanged(event);
-    }
-
-    @Subscribe
-    public void onVarClientIntChanged(VarClientIntChanged event) {
-        gameUiChangesHandler.onVarClientIntChanged(event);
-    }
-
     @Subscribe
     public void onConfigChanged(ConfigChanged event) {
         if (!event.getGroup().equals(CONFIG_GROUP)) {

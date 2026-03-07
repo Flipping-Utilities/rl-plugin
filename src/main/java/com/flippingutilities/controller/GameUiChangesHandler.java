@@ -17,6 +17,8 @@ import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.*;
+import net.runelite.client.eventbus.EventBus;
+import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemStats;
 
 import java.util.Optional;
@@ -29,15 +31,17 @@ import java.util.Optional;
 @Slf4j
 public class GameUiChangesHandler {
     private static final int GE_OFFER_INIT_STATE_CHILD_ID = 20;
-    FlippingPlugin plugin;
+    private FlippingPlugin plugin;
     boolean quantityOrPriceChatboxOpen;
     Optional<FlippingItem> highlightedItem = Optional.empty();
     int highlightedItemId;
 
-    GameUiChangesHandler(FlippingPlugin plugin) {
+    GameUiChangesHandler(FlippingPlugin plugin, EventBus eventBus) {
         this.plugin = plugin;
+        eventBus.register(this);
     }
 
+    @Subscribe
     public void onVarClientIntChanged(VarClientIntChanged event) {
         Client client = plugin.getClient();
 
@@ -67,8 +71,6 @@ public class GameUiChangesHandler {
                 && client.getVarcIntValue(VarClientInt.INPUT_TYPE) == 0
         ) {
             quantityOrPriceChatboxOpen = false;
-
-            return;
         }
 
         //Check that it was the chat input that got enabled.
@@ -128,6 +130,7 @@ public class GameUiChangesHandler {
         });
     }
 
+    @Subscribe
     public void onVarbitChanged(VarbitChanged event) {
         Client client = plugin.getClient();
         int varpId = event.getVarpId();
@@ -146,7 +149,6 @@ public class GameUiChangesHandler {
             AbstractOfferEditorPanel quantityEditorPanel = offerEditorContainerPanel.quantityEditorPanel;
             quantityEditorPanel.rebuild(quantityEditorPanel.getOptions());
         }
-
 
         if (varpId == VarPlayerID.TRADINGPOST_SEARCH) {
             int varpValue = client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH);
@@ -183,6 +185,7 @@ public class GameUiChangesHandler {
      * Can't use this for resetting the widgets on the slot widget handlers bc no WidgetLoaded
      * events are fired when the widgets are redrawn (?).
      */
+    @Subscribe
     public void onWidgetLoaded(WidgetLoaded event) {
         int groupId = event.getGroupId();
         switch (groupId) {
@@ -226,6 +229,7 @@ public class GameUiChangesHandler {
      * script 782 fires at most of the times 804 is fired but also when the collect button is pressed
      * which is important bc that resets the widgets too
      */
+    @Subscribe
     public void onScriptPostFired(ScriptPostFired event) {
         //ge history interface closed, so the geHistoryTabPanel should no longer show
         if (event.getScriptId() == 29) {

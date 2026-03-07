@@ -11,4 +11,5 @@ public class SlotInfo {
     int itemId;
     int offerPrice;
     boolean isBuyOffer;
+    boolean isCompleted;
 }

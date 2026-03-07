@@ -16,4 +16,24 @@ public class CustomColors {
     public static final Color IN_RANGE_SLOTS_TAB = new Color(55, 70, 70);
     public static final Color BETTER_THAN_WIKI_SLOTS_TAB = new Color(55, 70, 50);
     public static final Color OUT_OF_RANGE_SLOTS_TAB = new Color(67, 50, 50);
+
+    public static final Color CHART_BACKGROUND = new Color(0, 0, 0, 180);
+    public static final Color CHART_GRID = new Color(50, 50, 50, 200);
+    public static final Color CHART_FILL = new Color(80, 80, 80, 100);
+    public static final Color CHART_INSTABUY = new Color(0, 200, 0);
+    public static final Color CHART_INSTASELL = new Color(200, 0, 0);
+    // Text is a bit brighter than line for readability
+    public static final Color CHART_INSTABUY_TEXT = new Color(0, 220, 100);
+    public static final Color CHART_INSTASELL_TEXT = new Color(255, 80, 80);
+    // Color for conditional display like hovered axis lines and data
+    public static final Color CHART_ACCENT = new Color(0, 200, 255);
+    public static final Color CHART_LABEL = new Color(200, 200, 200);
+    public static final Color CHART_PANEL_BG = new Color(23, 23, 23, 240);
+    public static final Color CHART_PANEL_BORDER = new Color(80, 80, 80);
+    public static final Color CHART_BUTTON_SELECTED_BG = new Color(70, 70, 70);
+    public static final Color CHART_BUTTON_SELECTED_BORDER = new Color(255, 215, 0);
+    public static final Color CHART_BUTTON_SELECTED_TEXT = Color.WHITE;
+    public static final Color CHART_BUTTON_UNSELECTED_BG = new Color(40, 40, 40);
+    public static final Color CHART_BUTTON_UNSELECTED_BORDER = new Color(100, 100, 100);
+    public static final Color CHART_BUTTON_UNSELECTED_TEXT = new Color(180, 180, 180);
 }

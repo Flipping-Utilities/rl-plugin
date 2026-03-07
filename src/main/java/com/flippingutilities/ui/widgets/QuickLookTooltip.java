@@ -2,6 +2,7 @@ package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.model.TimeseriesResponse;
 import com.flippingutilities.ui.uiutilities.CustomColors;
+import com.flippingutilities.ui.uiutilities.ChartLoadingAnimation;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.SlotInfo;
@@ -16,7 +17,6 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
-import java.awt.geom.Ellipse2D;
 import java.awt.BasicStroke;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -44,6 +44,7 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
     private final Dimension dimension = new Dimension();
 
     private final TimeSeriesChart chart;
+    private final ChartLoadingAnimation chartLoadingAnimation = new ChartLoadingAnimation();
 
     public QuickLookTooltip() {
         ChartConfig chartConfig = ChartConfig.builder()
@@ -81,8 +82,15 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
         int wikiHigh = wikiItemInfo.getHigh();
         int wikiLow = wikiItemInfo.getLow();
 
-        // Determine competitiveness and set colors/text accordingly
-        if (slot.isBuyOffer()) {
+        // Check if offer is completed first
+        if (slot.isCompleted()) {
+            if (slot.isBuyOffer()) {
+                competitivenessText = "Buy offer is completed";
+            } else {
+                competitivenessText = "Sell offer is completed";
+            }
+            competitivenessColor = ColorScheme.GRAND_EXCHANGE_PRICE;
+        } else if (slot.isBuyOffer()) {
             if (slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
                 buyPriceColor = ColorScheme.GRAND_EXCHANGE_PRICE;
                 competitivenessText = "Buy offer is ultra competitive";
@@ -315,7 +323,7 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
             graphics.setClip(originalClip);
         } else {
             Rectangle chartBounds = new Rectangle(chartX, chartY, fixedChartWidth, fixedChartHeight);
-            drawLoadingAnimation(graphics, chartBounds);
+            chartLoadingAnimation.render(graphics, chartBounds, System.currentTimeMillis());
         }
 
         dimension.setSize(panelWidth, panelHeight);
@@ -364,145 +372,6 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
             this.centered = centered;
             this.font = font;
         }
-    }
-
-    /**
-     * Draws a loading animation in the chart area when graph data is not available.
-     * Creates an animated chart with red and green lines moving around
-     */
-    private void drawLoadingAnimation(Graphics2D graphics, Rectangle chartBounds) {
-        java.awt.Shape originalClip = graphics.getClip();
-        graphics.setClip(chartBounds);
-        
-        // Set rendering hints for smooth animation
-        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        
-        // Chart padding
-        int leftPadding = 10;
-        int rightPadding = 10;
-        int topPadding = 10;
-        int bottomPadding = 25;
-        
-        int plotX = chartBounds.x + leftPadding;
-        int plotY = chartBounds.y + topPadding;
-        int plotWidth = chartBounds.width - leftPadding - rightPadding;
-        int plotHeight = chartBounds.height - topPadding - bottomPadding;
-        
-        // Draw background grid
-        graphics.setColor(new Color(60, 60, 60, 100));
-        graphics.setStroke(new BasicStroke(1f));
-        for (int i = 0; i <= 4; i++) {
-            int y = plotY + (plotHeight * i) / 4;
-            graphics.drawLine(plotX, y, plotX + plotWidth, y);
-        }
-        
-        // Animation parameters
-        long currentTime = System.currentTimeMillis();
-        int numPoints = 20; // Number of data points to display
-        
-        // Red vs Green battle
-        Color[] colors = {
-            new Color(255, 80, 80),    // Red
-            new Color(0, 220, 100)     // Green
-        };
-        
-        // Use full scale from 0-200 but keep values oscillating in the middle
-        double minValue = 0;
-        double maxValue = 200;
-        double centerValue = 100;
-        
-        // Generate and draw each line
-        for (int lineIndex = 0; lineIndex < colors.length; lineIndex++) {
-            List<Point> points = new ArrayList<>();
-            
-            double currentValue = centerValue + (lineIndex == 0 ? 5 : -5); // Start slightly apart
-            
-            for (int i = 0; i < numPoints; i++) {
-                // Faster, more aggressive animation
-                double seed = (currentTime / 50.0) + i * 0.5 + lineIndex * 500;
-                
-                // Multiple frequencies create chaotic but smooth movement
-                double noise = Math.sin(seed * 0.15) * 8
-                            + Math.sin(seed * 0.08) * 6
-                            + Math.sin(seed * 0.25) * 3;
-                
-                // Add competition effect - lines try to cross each other
-                double competition = Math.sin((currentTime / 300.0) + i * 0.1 + lineIndex * Math.PI) * 8;
-                
-                // Quick spikes for dramatic effect
-                double spike = Math.sin(seed * 0.3) > 0.9 ? Math.sin(seed) * 5 : 0;
-                
-                // Gentle pull back to center to keep lines from drifting too far
-                double centerPull = (centerValue - currentValue) * 0.15;
-                
-                currentValue += noise + competition + spike + centerPull;
-                
-                // Soft clamp - allow some overshoot but pull back
-                if (currentValue < centerValue - 30) {
-                    currentValue = centerValue - 30 + (currentValue - (centerValue - 30)) * 0.3;
-                }
-                if (currentValue > centerValue + 30) {
-                    currentValue = centerValue + 30 + (currentValue - (centerValue + 30)) * 0.3;
-                }
-                
-                int x = plotX + (plotWidth * i) / (numPoints - 1);
-                points.add(new Point(x, (int) (currentValue * 100) / 100));
-            }
-            
-            // Draw the line
-            graphics.setColor(colors[lineIndex]);
-            graphics.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            
-            for (int i = 0; i < points.size() - 1; i++) {
-                Point p1 = points.get(i);
-                Point p2 = points.get(i + 1);
-                
-                // Scale y values to fit plot height - invert because screen coords are top-down
-                int y1 = plotY + plotHeight - (int) ((p1.y - minValue) / (maxValue - minValue) * plotHeight);
-                int y2 = plotY + plotHeight - (int) ((p2.y - minValue) / (maxValue - minValue) * plotHeight);
-                
-                graphics.drawLine(p1.x, y1, p2.x, y2);
-            }
-            
-            // Draw a pulsing highlight dot at the end of the line
-            Point lastPoint = points.get(points.size() - 1);
-            int lastY = plotY + plotHeight - (int) ((lastPoint.y - minValue) / (maxValue - minValue) * plotHeight);
-            
-            // Pulsing effect
-            double pulse = Math.sin(currentTime / 150.0) * 0.3 + 0.7;
-            graphics.setColor(new Color(
-                colors[lineIndex].getRed(),
-                colors[lineIndex].getGreen(),
-                colors[lineIndex].getBlue(),
-                (int) (255 * pulse)
-            ));
-            graphics.fillOval(lastPoint.x - 5, lastY - 5, 10, 10);
-            
-            // Bright center
-            graphics.setColor(colors[lineIndex].brighter());
-            graphics.fillOval(lastPoint.x - 3, lastY - 3, 6, 6);
-        }
-        
-        // Draw "Loading graph..." text
-        graphics.setColor(new Color(200, 200, 200));
-        graphics.setFont(FontManager.getRunescapeSmallFont());
-        String loadingText = "Loading graph...";
-        FontMetrics fm = graphics.getFontMetrics();
-        int textX = chartBounds.x + chartBounds.width / 2 - fm.stringWidth(loadingText) / 2;
-        int textY = chartBounds.y + chartBounds.height - 8;
-        graphics.drawString(loadingText, textX, textY);
-        
-        // Animated progress dots
-        int numDots = 3;
-        int dotIndex = (int) ((currentTime / 400) % (numDots + 1));
-        String dots = "";
-        for (int i = 0; i < dotIndex; i++) {
-            dots += ".";
-        }
-        graphics.drawString(dots, textX + fm.stringWidth(loadingText) + 2, textY);
-        
-        // Restore original clip
-        graphics.setClip(originalClip);
     }
 
     /**
