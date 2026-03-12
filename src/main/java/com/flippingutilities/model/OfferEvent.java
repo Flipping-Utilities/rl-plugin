@@ -240,7 +240,6 @@ public class OfferEvent
 
 		return
 			isDuplicate(otherOffer)
-			&& uuid.equals(otherOffer.uuid)
 			&& tickArrivedAt == otherOffer.tickArrivedAt
 			&& ticksSinceFirstOffer == otherOffer.ticksSinceFirstOffer
 			&& time.equals(otherOffer.time);
