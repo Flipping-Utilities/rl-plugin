@@ -28,6 +28,10 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.db.TradePersister;
+import com.flippingutilities.db.MigrationService;
+import com.flippingutilities.db.SqliteStorage;
+import java.io.File;
+import net.runelite.client.RuneLite;
 import com.flippingutilities.jobs.SlotSenderJob;
 import com.flippingutilities.jobs.TimeseriesFetcher;
 import com.flippingutilities.model.*;
@@ -292,6 +296,35 @@ public class FlippingPlugin extends Plugin {
             GeSpriteLoader.setClientSpriteOverrides(client);
             return true;
         });
+        // Kick off a lightweight migration check on startup (async to avoid blocking startup flow)
+        try {
+            executor.submit(this::checkMigrationFlagAndMigrateIfNeeded);
+        } catch (Exception ignored) {
+            // best effort only
+        }
+    }
+
+    // Migration handling: check a lightweight flag in the SQLite-backed settings and migrate JSON -> SQLITE once
+    private void checkMigrationFlagAndMigrateIfNeeded() {
+        try {
+            // The database used for settings lives in Runelite's data directory under flipping/flipping.sqlite
+            File dbFile = new File(net.runelite.client.RuneLite.RUNELITE_DIR, "flipping.sqlite");
+            SqliteStorage storage = new SqliteStorage(dbFile);
+            // Ensure schema exists for settings table
+            storage.initializeSchema();
+            String flag = storage.getSetting("migration_pending");
+            if (flag != null && flag.equalsIgnoreCase("true")) {
+                log.info("Migration flag detected. Starting migration from JSON to SQLITE storage...");
+                MigrationService migrationService = new MigrationService();
+                migrationService.migrate();
+                // Clear the flag after successful migration
+                storage.clearSetting("migration_pending");
+                log.info("Migration completed and flag cleared.");
+            }
+            storage.close();
+        } catch (Exception ex) {
+            log.info("Migration check failed or not applicable: {}", ex.getMessage());
+        }
     }
 
     @Override
@@ -1124,6 +1157,22 @@ public class FlippingPlugin extends Plugin {
 
         handleSlotTimersConfigChange(event);
         handleAutoSaveConfigChange(event);
+        // Listen for storage backend changes to trigger migration flow
+        if (event.getKey().equals("dataSource")) {
+            // If user switched to SQLITE, set a migration_pending flag to migrate on next startup
+            if (config.dataSource().isSqlite()) {
+                try {
+                    File dbFile = new File(net.runelite.client.RuneLite.RUNELITE_DIR, "flipping.sqlite");
+                    SqliteStorage storage = new SqliteStorage(dbFile);
+                    storage.initializeSchema();
+                    storage.setSetting("migration_pending", "true");
+                    storage.close();
+                    log.info("Migration flag set due to dataSource=SQLITE change");
+                } catch (Exception e) {
+                    log.warn("Failed to set migration flag on dataSource change", e);
+                }
+            }
+        }
 
         statPanel.rebuildItemsDisplay(viewItemsForCurrentView());
         flippingPanel.rebuild(viewItemsForCurrentView());

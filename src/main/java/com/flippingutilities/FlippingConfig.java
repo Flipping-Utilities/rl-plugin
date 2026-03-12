@@ -138,6 +138,24 @@ public interface FlippingConfig extends Config
         )
         String chartsSection = "chartsSection";
 
+        @ConfigSection(
+            name = "Storage",
+            description = "Configure storage backend",
+            position = 120
+        )
+        String storageSection = "storageSection";
+
+        @ConfigItem(
+            keyName = "dataSource",
+            name = "Data source",
+            description = "Select the storage backend to use (JSON or SQLITE)",
+            section = storageSection,
+            position = 1
+        )
+        default DataSource dataSource() {
+            return DataSource.JSON;
+        }
+
         @ConfigItem(
                         keyName = "quickLookupEnabled",
                         name = "Quick lookup",
