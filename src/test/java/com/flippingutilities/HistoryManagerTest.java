@@ -45,7 +45,8 @@ import static org.junit.Assert.assertEquals;
 public class HistoryManagerTest
 {
 	private static HistoryManager historyManager;
-	private static Instant baseTime = Instant.now();
+	// Use a time before GE tax was introduced (1639072800 = Dec 9, 2021)
+	private static Instant baseTime = Instant.ofEpochSecond(1600000000);
 
 
 	@Before
