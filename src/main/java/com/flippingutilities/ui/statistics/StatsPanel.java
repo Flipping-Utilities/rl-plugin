@@ -48,6 +48,7 @@ import net.runelite.client.util.QuantityFormatter;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.text.StyleContext;
 import java.awt.*;
 import java.awt.event.ItemEvent;
@@ -677,6 +678,63 @@ public class StatsPanel extends JPanel
 		return resetIcon;
 	}
 
+	private JLabel createImportButton() {
+		JPanel parent = this;
+		JLabel importIcon = new JLabel(Icons.UPLOAD_ICON_OFF);
+		importIcon.setBorder(new EmptyBorder(0,6,0,0));
+		importIcon.setPreferredSize(Icons.ICON_SIZE);
+		importIcon.setToolTipText("Import GE History");
+		importIcon.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent e) {
+				String account = plugin.getAccountCurrentlyViewed();
+				if (account == null || account.equals("")) {
+					JOptionPane.showMessageDialog(parent,
+						"No account selected. Log into OSRS first.",
+						"Import", JOptionPane.WARNING_MESSAGE);
+					return;
+				}
+				if (account.equals(FlippingPlugin.ACCOUNT_WIDE)) {
+					JOptionPane.showMessageDialog(parent,
+						"Cannot import into the Accountwide view.\n" +
+						"Please select a specific account from the dropdown first.",
+						"Import", JOptionPane.WARNING_MESSAGE);
+					return;
+				}
+				JPopupMenu menu = new JPopupMenu();
+				JMenuItem syncItem = new JMenuItem("Sync GE History");
+				syncItem.setToolTipText("Auto-import from RuneLite config");
+				syncItem.addActionListener(ev -> {
+					plugin.getExecutor().submit(() -> plugin.syncGeHistory(account));
+				});
+				JMenuItem fileItem = new JMenuItem("Import from File...");
+				fileItem.setToolTipText("Import a GE history JSON file from runelite.net");
+				fileItem.addActionListener(ev -> {
+					JFileChooser fc = new JFileChooser();
+					fc.setFileFilter(new FileNameExtensionFilter("JSON files", "json"));
+					if (fc.showOpenDialog(parent) == JFileChooser.APPROVE_OPTION) {
+						File file = fc.getSelectedFile();
+						plugin.getExecutor().submit(() -> plugin.importGeHistory(account, file));
+					}
+				});
+				menu.add(syncItem);
+				menu.add(fileItem);
+				menu.show(importIcon, e.getX(), e.getY());
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				importIcon.setIcon(Icons.UPLOAD_ICON);
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				importIcon.setIcon(Icons.UPLOAD_ICON_OFF);
+			}
+		});
+		return importIcon;
+	}
+
 	private JLabel createDownloadButton() {
 		JPanel parent = this;
 		JLabel downloadIcon = new JLabel(Icons.DONWLOAD_ICON_OFF);
@@ -733,9 +791,13 @@ public class StatsPanel extends JPanel
 		searchAndDownloadPanel.add(createResetButton(), BorderLayout.EAST);
 		searchAndDownloadPanel.setBorder(new EmptyBorder(5,0,0,0));
 
+		JPanel exportImportButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+		exportImportButtons.add(createImportButton());
+		exportImportButtons.add(createDownloadButton());
+
 		JPanel timeIntervalDropdownAndResetPanel = new JPanel(new BorderLayout());
 		timeIntervalDropdownAndResetPanel.add(timeIntervalDropdown, BorderLayout.CENTER);
-		timeIntervalDropdownAndResetPanel.add(createDownloadButton(), BorderLayout.EAST);
+		timeIntervalDropdownAndResetPanel.add(exportImportButtons, BorderLayout.EAST);
 
 		topPanel.add(timeIntervalDropdownAndResetPanel, BorderLayout.NORTH);
 		topPanel.add(searchAndDownloadPanel, BorderLayout.CENTER);

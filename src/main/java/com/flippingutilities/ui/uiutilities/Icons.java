@@ -51,6 +51,9 @@ public class Icons {
     public static final ImageIcon DOWNLOAD_ICON;
     public static final ImageIcon DONWLOAD_ICON_OFF;
 
+    public static final ImageIcon UPLOAD_ICON;
+    public static final ImageIcon UPLOAD_ICON_OFF;
+
     public static final ImageIcon GITHUB_ICON;
     public static final ImageIcon GITHUB_ICON_ON;
 
@@ -176,6 +179,10 @@ public class Icons {
         final BufferedImage downloadIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/download.png");
         DOWNLOAD_ICON = new ImageIcon(downloadIcon);
         DONWLOAD_ICON_OFF = new ImageIcon(ImageUtil.alphaOffset(downloadIcon, 0.53f));
+
+        final BufferedImage uploadIcon = ImageUtil.rotateImage(downloadIcon, Math.toRadians(180));
+        UPLOAD_ICON = new ImageIcon(uploadIcon);
+        UPLOAD_ICON_OFF = new ImageIcon(ImageUtil.alphaOffset(uploadIcon, 0.53f));
 
         final BufferedImage githubIcon = ImageUtil.loadImageResource(FlippingPlugin.class, "/github-alch.png");
         final BufferedImage githubIconOn = ImageUtil.loadImageResource(FlippingPlugin.class, "/githubon.png");

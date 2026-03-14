@@ -73,6 +73,23 @@ public class NewOfferEventPipelineHandler {
 
         updateTradesList(currentlyLoggedInAccountsTrades, flippingItem, finalizedOfferEvent.clone());
 
+        // INSTANT SAVE: Write this offer to SQLite immediately so it's never lost,
+        // even if RuneLite crashes. This is the key improvement over the old JSON system
+        // where data could only be saved during periodic save cycles or shutdown.
+        Optional<FlippingItem> savedItem = currentlyLoggedInAccountsTrades.stream()
+            .filter(item -> item.getItemId() == finalizedOfferEvent.getItemId()).findFirst();
+        if (savedItem.isPresent()) {
+            FlippingItem item = savedItem.get();
+            plugin.getDataHandler().saveOfferEventIncrementally(
+                currentlyLoggedInAccount,
+                item.getItemId(),
+                item.getItemName(),
+                item.getTotalGELimit(),
+                item.getFlippedBy(),
+                finalizedOfferEvent
+            );
+        }
+
         plugin.setUpdateSinceLastItemAccountWideBuild(true);
 
         rebuildDisplayAfterOfferEvent(finalizedOfferEvent);

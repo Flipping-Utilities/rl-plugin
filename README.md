@@ -5,6 +5,33 @@ optimal prices according to your margin checks with just a key press, and a lot 
 
 old repo: https://github.com/Belieal/flipping-utilities
 
+## Fork Changes (SQLite Storage + GE History Import)
+
+This fork adds two key improvements:
+
+### SQLite Storage (replaces JSON files)
+Trade data is now stored in a SQLite database (`~/.runelite/flipping/flipping.db`) instead of individual JSON files per account. This provides:
+- **Crash-proof saves**: Each trade is saved instantly to the database the moment it happens. If RuneLite crashes, your data is safe.
+- **Better performance**: No more rewriting the entire trade history file on every save. Only the new trade is written.
+- **Automatic migration**: On first run, your existing JSON data is automatically migrated to SQLite. The original JSON files are renamed to `.pre-sqlite` as backups (not deleted).
+
+### GE History Import (up to 5 months of trade history)
+Import your Grand Exchange trade history from RuneLite instead of starting from scratch:
+- **One-click sync**: Click "Sync GE History" in Settings to automatically pull your trade history from RuneLite's config system.
+- **Manual import**: If sync doesn't work, export your history from [runelite.net/account/grand-exchange](https://runelite.net/account/grand-exchange) and use "Import from File..." to load the JSON.
+- **Smart deduplication**: Importing the same data twice won't create duplicates — trades are matched by timestamp.
+- **Full item resolution**: Item names and GE limits are resolved via the OSRS Wiki API with RuneLite's game cache as a fallback for newly released items.
+
+### New Files
+| File | Purpose |
+|------|---------|
+| `db/SqliteSchema.java` | Database table definitions |
+| `db/SqliteDataStore.java` | SQLite read/write operations |
+| `db/JsonToSqliteMigrator.java` | One-time JSON to SQLite migration |
+| `db/GeHistoryImporter.java` | GE history conversion + dedup + merge |
+| `db/RuneliteGeHistoryFetcher.java` | Reads GE history from RuneLite config |
+| `db/OsrsItemMapper.java` | Item ID to name/limit resolution (Wiki + ItemManager) |
+
 ## Community
 Join the community on discord at https://discord.gg/GDqVgMH26s, it's one of the largest trading related communities
 for OSRS!
@@ -151,8 +178,9 @@ This section will talk about the purpose of various parts of the codebase, speci
 
 
 **db/**
-- This folder contains the class responsible for taking the models and saving them
-  to disk as JSON. It also loads JSON from disk (previously saved) and turns them into objects.
+- This folder contains the classes responsible for persisting data. The original `TradePersister` saves/loads JSON files.
+  The new `SqliteDataStore` handles SQLite storage with instant per-trade saves. Also includes `GeHistoryImporter` (imports
+  GE history from runelite.net), `OsrsItemMapper` (resolves item names), and `JsonToSqliteMigrator` (one-time migration).
 
 **ui/**
 - This folder contains all the UI code for the plugin which is the code that draws the "plugin" you see, such as the slots
@@ -200,8 +228,8 @@ During the lifetime of the Runelite Client (between startup and shutdown), there
 
 #### On Runelite Client Shutdown
 The Runelite client will tell the plugin when it's shutting down and will allow it to execute some code before
-that happens. This occurs in `onClientShutdown` in the FlippingPlugin class. Not much happens other than saving
-user data to disk and cancelling any background jobs that were running.
+that happens. This occurs in `onClientShutdown` in the FlippingPlugin class. Not much happens other than saving user data to disk, closing the SQLite connection,
+and cancelling any background jobs that were running.
 
 
 ### Data model
@@ -209,14 +237,13 @@ user data to disk and cancelling any background jobs that were running.
 This section describes how the plugin models users' trade history. The main model classes used to do this are:
 AccountData, FlippingItem, HistoryManager, and OfferEvent.
 
-When you go to `.runelite/flipping/<username>.json` and open it, you will see the JSON version of an `AccountData`
-object. Each of the user's osrs accounts get their own AccountData object, each of which is stored in a file
-of the format `.runelite/flipping/<account_username>.json`.
+Trade data is stored in a SQLite database at `.runelite/flipping/flipping.db`. On first run, any existing
+JSON files (`.runelite/flipping/<username>.json`) are automatically migrated to the database and renamed
+to `.pre-sqlite` as backups. Each trade is saved to SQLite instantly — if RuneLite crashes, your data is safe.
 
-AccountData objects are created from the JSON in those files on client startup (or created on account login if they have
-no previously saved data for that account). As the user makes trades, deletes trades via the UI, and so on, the
-AccountData object for the correct account is mutated. Then, on account logout or client shutdown, it is turned back
-into JSON and saved into the same file it was loaded from (or creates a new file if there was no previously saved data).
+Each of the user's OSRS accounts gets their own set of rows in the database. As the user makes trades, deletes
+trades via the UI, and so on, the AccountData object for the correct account is mutated in memory and individual
+changes are persisted to SQLite immediately (for new offers) or during periodic saves (for metadata like session time).
 
 The AccountData object's most important field is `List<FlippingItem> trades`. This field contains FlippingItem objects.
 FlippingItem objects have an itemId (every runescape item has a unique number to identify it) and represents the trade history

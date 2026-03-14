@@ -26,18 +26,26 @@
 
 package com.flippingutilities.controller;
 
+import com.flippingutilities.db.JsonToSqliteMigrator;
+import com.flippingutilities.db.SqliteDataStore;
 import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
 import com.flippingutilities.model.BackupCheckpoints;
+import com.flippingutilities.model.OfferEvent;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.*;
 
 /**
- * Responsible for loading data from disk, handling any operations to access/change data during the plugin's life, and storing
- * data to disk.
+ * Responsible for loading data from disk, handling any operations to access/change data
+ * during the plugin's life, and storing data to disk.
+ *
+ * MODIFIED: Now uses SQLite as the primary storage backend instead of JSON files.
+ * On first run, existing JSON data is automatically migrated to SQLite.
+ * Individual trades are saved instantly (no more waiting for a full save cycle).
  */
 @Slf4j
 public class DataHandler {
@@ -48,6 +56,11 @@ public class DataHandler {
     private boolean accountWideDataChanged = false;
     private Set<String> accountsWithUnsavedChanges = new HashSet<>();
     public String thisClientLastStored;
+
+    // The SQLite database — replaces JSON file storage
+    @Getter
+    private SqliteDataStore sqliteStore;
+    private boolean usingSqlite = false;
 
     public DataHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
@@ -72,7 +85,15 @@ public class DataHandler {
     public void deleteAccount(String displayName) {
         log.info("deleting account: {}", displayName);
         accountSpecificData.remove(displayName);
-        TradePersister.deleteFile(displayName + ".json");
+        if (usingSqlite) {
+            try {
+                sqliteStore.deleteAccount(displayName);
+            } catch (Exception e) {
+                log.warn("Failed to delete account from SQLite: {}", e.getMessage());
+            }
+        } else {
+            TradePersister.deleteFile(displayName + ".json");
+        }
     }
 
     public Collection<AccountData> getAllAccountData() {
@@ -84,16 +105,11 @@ public class DataHandler {
         return accountSpecificData.values();
     }
 
-    //TODO this is a weird solution to the problem of having to know whether data changed...
-    //TODO change it to something that perhaps takes a snapshot of data at plugin start and compares it to
-    //TODO data at logout/plugin shutdown.
-    //calls it if data is going to be updated,
     public AccountData getAccountData(String displayName) {
         accountsWithUnsavedChanges.add(displayName);
         return accountSpecificData.get(displayName);
     }
 
-    //is called if account data just needs to be viewed, not updated
     public AccountData viewAccountData(String displayName) {
         return accountSpecificData.get(displayName);
     }
@@ -111,21 +127,79 @@ public class DataHandler {
         }
     }
 
+    /**
+     * Saves all pending changes to disk.
+     * With SQLite, individual offers are already saved instantly (via saveOfferEventIncrementally),
+     * but this handles metadata like session time and account-wide settings.
+     */
     public void storeData() {
         log.debug("storing data");
+        if (usingSqlite) {
+            storeDataSqlite();
+        } else {
+            storeDataJson();
+        }
+    }
+
+    private void storeDataSqlite() {
         if (accountsWithUnsavedChanges.size() > 0) {
-            log.debug("accounts with unsaved changes are {}. Saving them.", accountsWithUnsavedChanges);
-            accountsWithUnsavedChanges.forEach(accountName -> storeAccountData(accountName));
+            log.debug("SQLite: saving {} accounts with changes", accountsWithUnsavedChanges.size());
+            accountsWithUnsavedChanges.forEach(this::storeAccountDataSqlite);
             accountsWithUnsavedChanges.clear();
         }
-
         if (accountWideDataChanged) {
-            log.debug("accountwide data changed, saving it.");
-            storeData("accountwide", accountWideData);
+            log.debug("SQLite: saving accountwide data");
+            try {
+                sqliteStore.saveAccountWideData(accountWideData);
+            } catch (Exception e) {
+                log.warn("Failed to save accountwide data to SQLite: {}", e.getMessage());
+            }
             accountWideDataChanged = false;
         }
     }
 
+    private void storeDataJson() {
+        if (accountsWithUnsavedChanges.size() > 0) {
+            log.debug("accounts with unsaved changes are {}. Saving them.", accountsWithUnsavedChanges);
+            accountsWithUnsavedChanges.forEach(this::storeAccountDataJson);
+            accountsWithUnsavedChanges.clear();
+        }
+        if (accountWideDataChanged) {
+            log.debug("accountwide data changed, saving it.");
+            storeJsonFile("accountwide", accountWideData);
+            accountWideDataChanged = false;
+        }
+    }
+
+    /**
+     * THE KEY NEW METHOD: Saves a single offer event to SQLite immediately.
+     *
+     * Called every time a GE offer comes in. The trade is permanently stored
+     * in milliseconds — even if RuneLite crashes right after, the data is safe.
+     * This is what prevents the data loss that plagued the old JSON system.
+     */
+    public void saveOfferEventIncrementally(String displayName, int itemId, String itemName,
+                                             int geLimit, String flippedBy, OfferEvent offer) {
+        if (!usingSqlite) {
+            // Not using SQLite yet, will be saved during normal storeData() cycle
+            accountsWithUnsavedChanges.add(displayName);
+            return;
+        }
+        try {
+            sqliteStore.saveOfferEvent(displayName, itemId, itemName, geLimit, flippedBy, offer);
+        } catch (Exception e) {
+            log.warn("Failed to incrementally save offer to SQLite, will retry during full save: {}", e.getMessage());
+            accountsWithUnsavedChanges.add(displayName);
+        }
+    }
+
+    /**
+     * Main data loading method. Called once at startup.
+     * Handles three scenarios:
+     * 1. SQLite database already exists → load from it
+     * 2. JSON files exist but no database → migrate JSON to SQLite, then load
+     * 3. Nothing exists → create fresh empty database
+     */
     public void loadData() {
         log.debug("Loading data on startup");
         try {
@@ -141,65 +215,125 @@ public class DataHandler {
             return;
         }
 
+        // Try to initialize SQLite
+        sqliteStore = new SqliteDataStore(TradePersister.PARENT_DIRECTORY, plugin.gson);
+        boolean dbExisted = sqliteStore.databaseExists();
+
+        try {
+            sqliteStore.initialize();
+
+            if (!dbExisted) {
+                // Database is brand new — check if we need to migrate from JSON
+                Map<String, AccountData> jsonAccounts = plugin.tradePersister.loadAllAccounts();
+                if (!jsonAccounts.isEmpty()) {
+                    log.info("Found existing JSON data, migrating to SQLite...");
+                    JsonToSqliteMigrator migrator = new JsonToSqliteMigrator(plugin.tradePersister, sqliteStore);
+                    if (!migrator.migrate()) {
+                        log.warn("Migration failed, falling back to JSON storage");
+                        sqliteStore.close();
+                        fallbackToJson();
+                        return;
+                    }
+                }
+            }
+
+            // Load from SQLite
+            usingSqlite = true;
+            accountWideData = fetchAccountWideDataSqlite();
+            plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
+            accountSpecificData = fetchAndPrepareAllAccountDataSqlite();
+            log.info("Loaded data from SQLite: {} accounts", accountSpecificData.size());
+
+        } catch (Exception e) {
+            log.error("Failed to initialize SQLite, falling back to JSON: {}", e.getMessage(), e);
+            if (sqliteStore != null) sqliteStore.close();
+            fallbackToJson();
+        }
+    }
+
+    /**
+     * Falls back to the original JSON storage if SQLite fails.
+     */
+    private void fallbackToJson() {
+        usingSqlite = false;
         backupCheckpoints = plugin.tradePersister.fetchBackupCheckpoints();
-        accountWideData = fetchAccountWideData();
+        accountWideData = fetchAccountWideDataJson();
         plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
-        accountSpecificData = fetchAndPrepareAllAccountData();
+        accountSpecificData = fetchAndPrepareAllAccountDataJson();
         backupAllAccountData();
     }
-    
-    private void backupAllAccountData() {
-        log.debug("backing up account data");
-        boolean backupCheckpointsChanged = false;
-        for (String displayName : accountSpecificData.keySet()) {
-            AccountData accountData = accountSpecificData.get(displayName);
-            //the data could be empty because there was an exception when loading it (such as in fetchAccountData)
-            //or perhaps there are legitimately no trades because it is a new file or the user reset their history. In
-            //any of these cases, we shouldn't back it up as its useless to backup an empty AccountData and, even worse, 
-            //we may overwrite a previous backup with nothing.
 
-            if (!accountData.getTrades().isEmpty() && backupCheckpoints.shouldBackup(displayName, accountData.getLastStoredAt())) {
-                try { 
-                    plugin.tradePersister.writeToFile(displayName + ".backup", accountData);
-                    backupCheckpoints.getAccountToBackupTime().put(displayName, accountData.getLastStoredAt());
-                    backupCheckpointsChanged = true;
-                }
-                catch (Exception e) {
-                    log.warn("Couldn't backup account data for {} due to {}", displayName, e);
-                }
-            }
-            else {
-                log.debug("Not backing up data for {} as it's empty or it hasn't changed since last backup", displayName);
-            }
-        }
-        if (backupCheckpointsChanged) {
-            storeData("backupCheckpoints.special", backupCheckpoints);
+    /**
+     * Shuts down the SQLite connection cleanly.
+     */
+    public void shutdown() {
+        if (sqliteStore != null && usingSqlite) {
+            sqliteStore.close();
         }
     }
 
-    private AccountWideData fetchAccountWideData() {
+    public boolean isUsingSqlite() {
+        return usingSqlite;
+    }
+
+    // ==================== SQLite data loading ====================
+
+    private AccountWideData fetchAccountWideDataSqlite() {
         try {
-            log.debug("Fetching accountwide data");
-            AccountWideData accountWideData = plugin.tradePersister.loadAccountWideData();
-            boolean didActuallySetDefaults = accountWideData.setDefaults();
-            accountWideDataChanged = didActuallySetDefaults;
-            return accountWideData;
-        }
-        catch (Exception e) {
-            log.warn("couldn't load accountwide data, setting defaults", e);
-            AccountWideData accountWideData = new AccountWideData();
-            accountWideData.setDefaults();
+            AccountWideData data = sqliteStore.loadAccountWideData();
+            boolean didSetDefaults = data.setDefaults();
+            accountWideDataChanged = didSetDefaults;
+            return data;
+        } catch (Exception e) {
+            log.warn("Couldn't load accountwide data from SQLite, using defaults", e);
+            AccountWideData data = new AccountWideData();
+            data.setDefaults();
             accountWideDataChanged = true;
-            return accountWideData;
+            return data;
         }
     }
 
-    private Map<String, AccountData> fetchAndPrepareAllAccountData()
-    {
-        Map<String, AccountData> accounts = fetchAllAccountData();
-        prepareAllAccountData(accounts);
-        return accounts;
+    private Map<String, AccountData> fetchAndPrepareAllAccountDataSqlite() {
+        try {
+            Map<String, AccountData> accounts = sqliteStore.loadAllAccounts();
+            prepareAllAccountData(accounts);
+            return accounts;
+        } catch (Exception e) {
+            log.warn("Failed to load accounts from SQLite: {}", e.getMessage(), e);
+            return new HashMap<>();
+        }
     }
+
+    // ==================== JSON fallback data loading ====================
+
+    private AccountWideData fetchAccountWideDataJson() {
+        try {
+            log.debug("Fetching accountwide data from JSON");
+            AccountWideData data = plugin.tradePersister.loadAccountWideData();
+            boolean didSetDefaults = data.setDefaults();
+            accountWideDataChanged = didSetDefaults;
+            return data;
+        } catch (Exception e) {
+            log.warn("Couldn't load accountwide data from JSON, setting defaults", e);
+            AccountWideData data = new AccountWideData();
+            data.setDefaults();
+            accountWideDataChanged = true;
+            return data;
+        }
+    }
+
+    private Map<String, AccountData> fetchAndPrepareAllAccountDataJson() {
+        try {
+            Map<String, AccountData> accounts = plugin.tradePersister.loadAllAccounts();
+            prepareAllAccountData(accounts);
+            return accounts;
+        } catch (Exception e) {
+            log.warn("Error loading all account data from JSON, returning empty", e);
+            return new HashMap<>();
+        }
+    }
+
+    // ==================== Shared preparation logic ====================
 
     private void prepareAllAccountData(Map<String, AccountData> allAccountData) {
         for (String displayName : allAccountData.keySet()) {
@@ -207,17 +341,6 @@ public class DataHandler {
             try {
                 accountData.startNewSession();
                 accountData.prepareForUse(plugin);
-                
-                // Check if migration is needed and save immediately
-                if (accountData.needsMigration()) {
-                    log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
-                        displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
-                    TradePersister.createPreMigrationBackup(displayName);
-                    accountData.markMigrated();
-                    plugin.tradePersister.writeToFile(displayName, accountData);
-                    TradePersister.deletePreMigrationBackup(displayName);
-                    log.info("Migration complete for {}", displayName);
-                }
             }
             catch (Exception e) {
                 log.warn("Couldn't prepare account data for {} due to {}, setting default", displayName, e);
@@ -229,61 +352,27 @@ public class DataHandler {
         }
     }
 
-    private Map<String, AccountData> fetchAllAccountData() {
+    // ==================== Saving ====================
+
+    private void storeAccountDataSqlite(String displayName) {
         try {
-            return plugin.tradePersister.loadAllAccounts();
-        }
-        catch (Exception e) {
-            log.warn("error propagated from tradePersister.loadAllAccounts() when fetching all account data, returning empty hashmap", e);
-            return new HashMap<>();
-        }
-    }
-
-    // Used by other components to set accountWideData on DataHandler
-    public void loadAccountWideData() {
-        accountWideData = fetchAccountWideData();
-        plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
-    }
-    
-    // Used by other components to set account data on DataHandler
-    public void loadAccountData(String displayName) {
-        log.info("loading data for {}", displayName);
-        accountSpecificData.put(displayName, fetchAccountData(displayName));
-    }
-
-    private AccountData fetchAccountData(String displayName)
-    {
-        try {
-            AccountData accountData = plugin.tradePersister.loadAccount(displayName);
-            accountData.prepareForUse(plugin);
-            
-            // Check if migration is needed and save immediately
-            if (accountData.needsMigration()) {
-                log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
-                    displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
-                TradePersister.createPreMigrationBackup(displayName);
-                accountData.markMigrated();
-                plugin.tradePersister.writeToFile(displayName, accountData);
-                TradePersister.deletePreMigrationBackup(displayName);
-                log.info("Migration complete for {}", displayName);
-            }
-            
-            return accountData;
-        }
-        catch (Exception e)
-        {
-            log.warn("couldn't load trades for {}, e = " + e, displayName);
-            return new AccountData();
-        }
-    }
-
-    private void storeAccountData(String displayName)
-    {
-        try
-        {
             AccountData data = accountSpecificData.get(displayName);
-            if (data == null)
-            {
+            if (data == null) {
+                log.debug("Data for {} is null, saving empty AccountData", displayName);
+                data = new AccountData();
+            }
+            thisClientLastStored = displayName;
+            data.setLastStoredAt(Instant.now());
+            sqliteStore.saveAccount(displayName, data);
+        } catch (Exception e) {
+            log.warn("Failed to save account {} to SQLite: {}", displayName, e.getMessage());
+        }
+    }
+
+    private void storeAccountDataJson(String displayName) {
+        try {
+            AccountData data = accountSpecificData.get(displayName);
+            if (data == null) {
                 log.debug("for an unknown reason the data associated with {} has been set to null. Storing" +
                         "an empty AccountData object instead.", displayName);
                 data = new AccountData();
@@ -291,19 +380,64 @@ public class DataHandler {
             thisClientLastStored = displayName;
             data.setLastStoredAt(Instant.now());
             plugin.tradePersister.writeToFile(displayName, data);
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             log.warn("couldn't store trades, error = " + e);
         }
     }
 
-    private void storeData(String fileName, Object data) {
+    private void storeJsonFile(String fileName, Object data) {
         try {
             plugin.tradePersister.writeToFile(fileName, data);
+        } catch (Exception e) {
+            log.warn("couldn't store data to {} bc of {}", fileName, e);
         }
-        catch (Exception e) {
-            log.warn("couldn't store data to {} bc of {}",fileName, e);
+    }
+
+    // Used by other components to reload accountWideData
+    public void loadAccountWideData() {
+        if (usingSqlite) {
+            accountWideData = fetchAccountWideDataSqlite();
+        } else {
+            accountWideData = fetchAccountWideDataJson();
+        }
+        plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
+    }
+
+    // Used by other components to reload a single account
+    public void loadAccountData(String displayName) {
+        log.info("loading data for {}", displayName);
+        // For SQLite, we already have the data loaded. For JSON, re-read from file.
+        if (!usingSqlite) {
+            try {
+                AccountData accountData = plugin.tradePersister.loadAccount(displayName);
+                accountData.prepareForUse(plugin);
+                accountSpecificData.put(displayName, accountData);
+            } catch (Exception e) {
+                log.warn("couldn't load trades for {}: {}", displayName, e.getMessage());
+                accountSpecificData.put(displayName, new AccountData());
+            }
+        }
+    }
+
+    private void backupAllAccountData() {
+        if (usingSqlite) return; // SQLite doesn't need JSON-style backups
+
+        log.debug("backing up account data");
+        boolean backupCheckpointsChanged = false;
+        for (String displayName : accountSpecificData.keySet()) {
+            AccountData accountData = accountSpecificData.get(displayName);
+            if (!accountData.getTrades().isEmpty() && backupCheckpoints.shouldBackup(displayName, accountData.getLastStoredAt())) {
+                try {
+                    plugin.tradePersister.writeToFile(displayName + ".backup", accountData);
+                    backupCheckpoints.getAccountToBackupTime().put(displayName, accountData.getLastStoredAt());
+                    backupCheckpointsChanged = true;
+                } catch (Exception e) {
+                    log.warn("Couldn't backup account data for {} due to {}", displayName, e);
+                }
+            }
+        }
+        if (backupCheckpointsChanged) {
+            storeJsonFile("backupCheckpoints.special", backupCheckpoints);
         }
     }
 }
