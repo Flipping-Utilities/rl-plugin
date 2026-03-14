@@ -747,6 +747,9 @@ public class FlippingPlugin extends Plugin {
             return;
         }
 
+        if (accountData.getSlotTimers().size() < 8) {
+            return;
+        }
         for (int slotIndex = 0; slotIndex < 8; slotIndex++) {
             SlotActivityTimer timer = accountData.getSlotTimers().get(slotIndex);
             if (timer == null) {
