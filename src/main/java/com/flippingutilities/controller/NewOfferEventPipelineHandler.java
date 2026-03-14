@@ -117,6 +117,11 @@ public class NewOfferEventPipelineHandler {
 
         Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
         List<SlotActivityTimer> slotActivityTimers = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getSlotTimers();
+        if (slotActivityTimers == null || slotActivityTimers.size() < 8) {
+            log.warn("slotActivityTimers is missing or undersized ({}), skipping offer screening",
+                slotActivityTimers == null ? "null" : slotActivityTimers.size());
+            return Optional.empty();
+        }
         OfferEvent lastOfferEvent = lastOfferEventForEachSlot.get(newOfferEvent.getSlot());
 
         //completely useless updates
