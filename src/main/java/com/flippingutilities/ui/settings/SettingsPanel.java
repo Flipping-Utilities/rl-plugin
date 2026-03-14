@@ -223,11 +223,7 @@ public class SettingsPanel extends JPanel
 
 
 	/**
-	 * Creates a panel that represents all the settings options for the account with the given name. Currently, the
-	 * only option is the ability to delete the account.
-	 *
-	 * @param name the name of the account the options are for.
-	 * @return
+	 * Creates a panel that shows the option to delete this account.
 	 */
 	private JPanel optionsPanel(String name)
 	{
@@ -241,11 +237,7 @@ public class SettingsPanel extends JPanel
 
 		JLabel deleteButton = accountDeleteButton();
 
-		JPanel optionBody = new JPanel();
-		optionBody.setBackground(ColorScheme.DARKER_GRAY_COLOR.darker());
-
 		basePanel.add(title, BorderLayout.NORTH);
-		basePanel.add(optionBody, BorderLayout.CENTER);
 		basePanel.add(deleteButton, BorderLayout.SOUTH);
 
 		return basePanel;

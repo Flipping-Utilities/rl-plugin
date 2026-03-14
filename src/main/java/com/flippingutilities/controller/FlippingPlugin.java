@@ -27,6 +27,9 @@
 package com.flippingutilities.controller;
 
 import com.flippingutilities.FlippingConfig;
+import com.flippingutilities.db.GeHistoryImporter;
+import com.flippingutilities.db.OsrsItemMapper;
+import com.flippingutilities.db.RuneliteGeHistoryFetcher;
 import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.jobs.SlotSenderJob;
 import com.flippingutilities.jobs.TimeseriesFetcher;
@@ -80,6 +83,8 @@ import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -125,8 +130,10 @@ public class FlippingPlugin extends Plugin {
     private NavigationButton navButton;
 
     @Inject
-    private TooltipManager tooltipManager;
+    private ConfigManager configManager;
 
+    @Inject
+    private TooltipManager tooltipManager;
 
     @Inject
     @Getter
@@ -226,6 +233,9 @@ public class FlippingPlugin extends Plugin {
     public TradePersister tradePersister;
     @Getter
     private RecipeHandler recipeHandler;
+
+    // Cached item name/limit mapper for GE history import (fetched once per session)
+    private OsrsItemMapper osrsItemMapper;
     private FlippingItemHandler flippingItemHandler;
     @Getter
     private SlotStateDrawer slotStateDrawer;
@@ -325,6 +335,7 @@ public class FlippingPlugin extends Plugin {
             slotTimersTask = null;
         }
         dataHandler.storeData();
+        dataHandler.shutdown();
         if (cacheUpdaterJob != null) cacheUpdaterJob.stop();
         if (wikiDataFetcherJob != null) wikiDataFetcherJob.stop();
         if (slotStateSenderJob != null) slotStateSenderJob.stop();
@@ -985,6 +996,148 @@ public class FlippingPlugin extends Plugin {
 
             }
         };
+    }
+
+    /**
+     * Auto-fetches GE trade history from RuneLite's config system and imports it into the named account.
+     * Called from the "Sync GE History" button in the settings panel.
+     * Runs on a background thread — UI updates are dispatched to the EDT.
+     */
+    public void syncGeHistory(String accountName) {
+        log.info("Syncing GE history for account: {}", accountName);
+        try {
+            // Step 1: Read GE history from RuneLite's config
+            RuneliteGeHistoryFetcher fetcher = new RuneliteGeHistoryFetcher(configManager);
+            String json = fetcher.fetchTradeHistory();
+
+            if (json == null || json.isEmpty()) {
+                SwingUtilities.invokeLater(() ->
+                    javax.swing.JOptionPane.showMessageDialog(null,
+                        "No GE history found.\n\n" +
+                        "This usually means you're not logged into runelite.net.\n" +
+                        "Try the manual import instead:\n" +
+                        "1. Visit runelite.net/account/grand-exchange\n" +
+                        "2. Click 'Export Grand Exchange'\n" +
+                        "3. Use 'Import from File...' with the downloaded JSON",
+                        "Sync Failed", javax.swing.JOptionPane.WARNING_MESSAGE));
+                return;
+            }
+
+            // Steps 2-5: shared import logic
+            doGeHistoryImport(json, accountName);
+
+        } catch (Exception e) {
+            log.error("Error syncing GE history: {}", e.getMessage(), e);
+            SwingUtilities.invokeLater(() ->
+                javax.swing.JOptionPane.showMessageDialog(null,
+                    "Error syncing GE history: " + e.getMessage(),
+                    "Sync Error", javax.swing.JOptionPane.ERROR_MESSAGE));
+        }
+    }
+
+    /**
+     * Imports GE trade history from a user-selected JSON file into the named account.
+     * Called from the "Import from File..." button in the settings panel.
+     * Runs on a background thread — UI updates are dispatched to the EDT.
+     */
+    public void importGeHistory(String accountName, File file) {
+        log.info("Importing GE history from file {} for account: {}", file.getName(), accountName);
+        try {
+            String json = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+
+            if (json.isEmpty()) {
+                SwingUtilities.invokeLater(() ->
+                    javax.swing.JOptionPane.showMessageDialog(null,
+                        "The selected file is empty.",
+                        "Import Error", javax.swing.JOptionPane.ERROR_MESSAGE));
+                return;
+            }
+
+            doGeHistoryImport(json, accountName);
+
+        } catch (Exception e) {
+            log.error("Error importing GE history from file: {}", e.getMessage(), e);
+            SwingUtilities.invokeLater(() ->
+                javax.swing.JOptionPane.showMessageDialog(null,
+                    "Error importing GE history: " + e.getMessage(),
+                    "Import Error", javax.swing.JOptionPane.ERROR_MESSAGE));
+        }
+    }
+
+    /**
+     * Shared import logic used by both syncGeHistory and importGeHistory.
+     * Parses the JSON, resolves item names, deduplicates, merges into account data,
+     * saves to storage, and rebuilds the UI.
+     */
+    private void doGeHistoryImport(String json, String accountName) {
+        GeHistoryImporter importer = new GeHistoryImporter();
+
+        // Parse transactions from JSON
+        List<GeHistoryImporter.GeTransaction> transactions = importer.parseGeJson(json, gson);
+        if (transactions.isEmpty()) {
+            SwingUtilities.invokeLater(() ->
+                javax.swing.JOptionPane.showMessageDialog(null,
+                    "No transactions found in the GE history data.",
+                    "Import", javax.swing.JOptionPane.INFORMATION_MESSAGE));
+            return;
+        }
+
+        // Resolve item names/limits (Wiki API + ItemManager fallback)
+        if (osrsItemMapper == null) {
+            osrsItemMapper = new OsrsItemMapper();
+        }
+        try {
+            osrsItemMapper.fetchMapping(httpClient, gson);
+        } catch (IOException e) {
+            log.warn("Couldn't fetch Wiki item mapping, will rely on ItemManager: {}", e.getMessage());
+        }
+
+        Set<Integer> itemIds = importer.getUniqueItemIds(transactions);
+        clientThread.invokeLater(() -> {
+            // Fill gaps using RuneLite's game cache (must run on client thread)
+            osrsItemMapper.fillGapsFromItemManager(itemIds, itemManager);
+
+            // Ensure the account exists in the data handler
+            if (!dataHandler.getCurrentAccounts().contains(accountName)) {
+                dataHandler.addAccount(accountName);
+            }
+            AccountData accountData = dataHandler.getAccountData(accountName);
+
+            // Run the import (dedup + merge)
+            GeHistoryImporter.ImportResult result = importer.importIntoAccount(
+                transactions, accountData, accountName,
+                osrsItemMapper.getItemNames(), osrsItemMapper.getItemLimits());
+
+            // Save to storage
+            dataHandler.markDataAsHavingChanged(accountName);
+            dataHandler.storeData();
+
+            updateSinceLastItemAccountWideBuild = true;
+
+            // Rebuild UI on EDT
+            SwingUtilities.invokeLater(() -> {
+                flippingPanel.rebuild(viewItemsForCurrentView());
+                statPanel.rebuildItemsDisplay(viewItemsForCurrentView());
+
+                String message = String.format(
+                    "Import complete!\n\n" +
+                    "Total transactions: %d\n" +
+                    "New offers added: %d\n" +
+                    "Duplicates skipped: %d\n" +
+                    "New items created: %d",
+                    result.getTotalTransactions(),
+                    result.getNewOffersAdded(),
+                    result.getDuplicatesSkipped(),
+                    result.getNewItemsCreated());
+
+                if (!result.getErrors().isEmpty()) {
+                    message += "\nErrors: " + result.getErrors().size();
+                }
+
+                javax.swing.JOptionPane.showMessageDialog(null, message,
+                    "GE History Import", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            });
+        });
     }
 
     public void deleteAccount(String displayName) {
