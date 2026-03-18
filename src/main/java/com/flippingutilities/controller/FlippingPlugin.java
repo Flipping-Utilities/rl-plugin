@@ -26,13 +26,18 @@
 
 package com.flippingutilities.controller;
 
+import com.flippingutilities.DataSource;
 import com.flippingutilities.FlippingConfig;
-import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.db.MigrationService;
+import com.flippingutilities.db.FlipRepository;
 import com.flippingutilities.db.SqliteStorage;
+import com.flippingutilities.db.JsonFlipRepository;
 import java.io.File;
+import com.flippingutilities.db.SqliteFlipRepository;
 import net.runelite.client.RuneLite;
+import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.jobs.SlotSenderJob;
+import java.io.File;
 import com.flippingutilities.jobs.TimeseriesFetcher;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.MasterPanel;
@@ -236,6 +241,14 @@ public class FlippingPlugin extends Plugin {
     @Inject
     private OfferGraphChartOverlay offerGraphChartOverlay;
 
+    // SQLite storage backend (optional - used when dataSource=SQLITE)
+    @Getter
+    private SqliteStorage sqliteStorage;
+
+    // Repository for data access (routed based on config)
+    @Getter
+    private FlipRepository flipRepository;
+
     @Override
     protected void startUp() {
         accountCurrentlyViewed = ACCOUNT_WIDE;
@@ -246,6 +259,7 @@ public class FlippingPlugin extends Plugin {
 
         optionHandler = new OptionHandler(this);
         dataHandler = new DataHandler(this);
+        initializeRepository();
         gameUiChangesHandler = new GameUiChangesHandler(this, eventBus);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
         apiAuthHandler = new ApiAuthHandler(this);
@@ -307,23 +321,46 @@ public class FlippingPlugin extends Plugin {
     // Migration handling: check a lightweight flag in the SQLite-backed settings and migrate JSON -> SQLITE once
     private void checkMigrationFlagAndMigrateIfNeeded() {
         try {
-            // The database used for settings lives in Runelite's data directory under flipping/flipping.sqlite
-            File dbFile = new File(net.runelite.client.RuneLite.RUNELITE_DIR, "flipping.sqlite");
+            File dbFile = new File(net.runelite.client.RuneLite.RUNELITE_DIR, "flipping/flipping.db");
             SqliteStorage storage = new SqliteStorage(dbFile);
             // Ensure schema exists for settings table
             storage.initializeSchema();
             String flag = storage.getSetting("migration_pending");
             if (flag != null && flag.equalsIgnoreCase("true")) {
                 log.info("Migration flag detected. Starting migration from JSON to SQLITE storage...");
-                MigrationService migrationService = new MigrationService();
-                migrationService.migrate();
+                MigrationService migrationService = new MigrationService(storage, tradePersister);
+                int migrated = migrationService.migrate();
                 // Clear the flag after successful migration
                 storage.clearSetting("migration_pending");
-                log.info("Migration completed and flag cleared.");
+                log.info("Migration completed: {} accounts migrated.", migrated);
             }
             storage.close();
         } catch (Exception ex) {
             log.info("Migration check failed or not applicable: {}", ex.getMessage());
+        }
+    }
+
+    /**
+     * Initialize the appropriate FlipRepository based on config.
+     * If SQLite mode is enabled, creates SqliteStorage and SqliteFlipRepository.
+     * Otherwise, uses JsonFlipRepository which wraps the in-memory data.
+     */
+    private void initializeRepository() {
+        if (config.dataSource().isSqlite()) {
+            try {
+                File dbFile = new File(RuneLite.RUNELITE_DIR, "flipping/flipping.db");
+                sqliteStorage = new SqliteStorage(dbFile);
+                sqliteStorage.initializeSchema();
+                dataHandler.setSqliteStorage(sqliteStorage);
+                flipRepository = new SqliteFlipRepository(sqliteStorage, itemManager);
+                log.info("Initialized SQLite repository at {}", dbFile.getAbsolutePath());
+            } catch (Exception e) {
+                log.warn("Failed to initialize SQLite repository, falling back to JSON", e);
+                flipRepository = new JsonFlipRepository(this);
+            }
+        } else {
+            flipRepository = new JsonFlipRepository(this);
+            log.debug("Using JSON repository");
         }
     }
 
@@ -344,6 +381,12 @@ public class FlippingPlugin extends Plugin {
         }
         masterPanel.dispose();
 
+        // Close repository if it exists
+        if (flipRepository != null) {
+            flipRepository.close();
+            flipRepository = null;
+        }
+
         clientToolbar.removeNavigation(navButton);
     }
 
@@ -358,6 +401,9 @@ public class FlippingPlugin extends Plugin {
             slotTimersTask = null;
         }
         dataHandler.storeData();
+        if (flipRepository != null) {
+            flipRepository.close();
+        }
         if (cacheUpdaterJob != null) cacheUpdaterJob.stop();
         if (wikiDataFetcherJob != null) wikiDataFetcherJob.stop();
         if (slotStateSenderJob != null) slotStateSenderJob.stop();
@@ -1162,7 +1208,7 @@ public class FlippingPlugin extends Plugin {
             // If user switched to SQLITE, set a migration_pending flag to migrate on next startup
             if (config.dataSource().isSqlite()) {
                 try {
-                    File dbFile = new File(net.runelite.client.RuneLite.RUNELITE_DIR, "flipping.sqlite");
+                    File dbFile = new File(net.runelite.client.RuneLite.RUNELITE_DIR, "flipping/flipping.db");
                     SqliteStorage storage = new SqliteStorage(dbFile);
                     storage.initializeSchema();
                     storage.setSetting("migration_pending", "true");

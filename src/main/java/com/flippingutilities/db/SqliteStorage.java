@@ -82,9 +82,12 @@ public class SqliteStorage {
         this.dbFile = dbFile;
     }
 
-    /** Returns a valid JDBC Connection to the SQLite database. If the connection
-     * is not yet created, it will be established. WAL mode is enabled and a busy
-     * timeout is configured. */
+    /**
+     * Returns a valid JDBC Connection to the SQLite database.
+     * Creates connection if needed, enables WAL mode and sets busy timeout.
+     * @return Active database connection
+     * @throws SQLException if connection cannot be established
+     */
     public synchronized Connection getConnection() throws SQLException {
         if (connection == null || connection.isClosed()) {
             String url = "jdbc:sqlite:" + dbFile.getAbsolutePath();
@@ -101,7 +104,9 @@ public class SqliteStorage {
         return connection;
     }
 
-    /** Close the underlying connection if present. */
+    /**
+     * Close the underlying connection if present.
+     */
     public synchronized void close() {
         if (connection != null) {
             try {
@@ -114,7 +119,12 @@ public class SqliteStorage {
         }
     }
 
-    // Simple key-value settings helpers stored in the 'settings' table
+// Simple key-value settings helpers stored in the 'settings' table
+    /**
+     * Get a setting value from the settings table.
+     * @param key Setting key
+     * @return Value or null if not found
+     */
     public synchronized String getSetting(String key) {
         try {
             Connection conn = getConnection();
@@ -136,7 +146,11 @@ public class SqliteStorage {
         }
         return null;
     }
-
+/**
+     * Set a setting value in the settings table.
+     * @param key Setting key
+     * @param value Setting value
+     */
     public synchronized void setSetting(String key, String value) {
         try {
             Connection conn = getConnection();
@@ -155,7 +169,10 @@ public class SqliteStorage {
             }
         }
     }
-
+/**
+     * Clear a setting from the settings table.
+     * @param key Setting key to delete
+     */
     public synchronized void clearSetting(String key) {
         try {
             Connection conn = getConnection();
@@ -173,8 +190,10 @@ public class SqliteStorage {
             }
         }
     }
-
-    /** Initialize database schema using SqliteSchema DDL. */
+/**
+     * Initialize database schema using SqliteSchema DDL.
+     * Creates all tables, indexes, and sets user_version.
+     */
     public synchronized void initializeSchema() {
         try {
             Connection conn = getConnection();
@@ -205,7 +224,11 @@ public class SqliteStorage {
             logger.error("Error initializing SQLite schema", e);
         }
     }
-
+/**
+     * Upsert an account record. Creates new or updates existing.
+     * @param displayName Account display name
+     * @param playerId Player ID from RuneLite API
+     */
     public synchronized void upsertAccount(String displayName, String playerId) {
         final String sql = "INSERT OR REPLACE INTO accounts (id, display_name, player_id, session_start, accumulated_time) " +
                 "VALUES (" +
@@ -234,7 +257,11 @@ public class SqliteStorage {
             logger.error("Error upserting account for displayName={}", displayName, e);
         }
     }
-
+/**
+     * Load account data from SQLite.
+     * @param displayName Account display name
+     * @return AccountData object (empty if not found)
+     */
     public synchronized AccountData loadAccount(String displayName) {
         final String sql = "SELECT session_start, accumulated_time FROM accounts WHERE display_name = ?";
 
@@ -279,7 +306,10 @@ public class SqliteStorage {
             return new AccountData();
         }
     }
-
+/**
+     * List all account display names.
+     * @return List of display names sorted alphabetically
+     */
     public synchronized List<String> listAccounts() {
         final String sql = "SELECT display_name FROM accounts ORDER BY display_name";
         List<String> names = new ArrayList<>();
@@ -301,31 +331,49 @@ public class SqliteStorage {
 
         return names;
     }
-
-    public synchronized void insertTrade(String displayName, int itemId, long timestamp, int qty, int price, boolean isBuy) {
+/**
+     * Insert a trade record.
+     * Returns the generated trade ID, or -1 if account not found.
+     * @param displayName Account display name
+     * @param itemId Item ID
+     * @param timestamp Trade timestamp (epoch millis)
+     * @param qty Quantity
+     * @param price Price per item
+     * @param isBuy True if buy, false if sell
+     */
+    public synchronized int insertTrade(String displayName, int itemId, long timestamp, int qty, int price, boolean isBuy) {
         Integer accountId = getAccountId(displayName);
         if (accountId == null) {
             logger.warn("Trade insert: account not found for displayName={}", displayName);
-            return;
+            return -1;
         }
 
         final String sql = "INSERT INTO trades (account_id, item_id, timestamp, qty, price, is_buy) VALUES (?, ?, ?, ?, ?, ?)";
-        try {
-            Connection conn = getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
-                ps.setInt(2, itemId);
-                ps.setLong(3, timestamp);
-                ps.setInt(4, qty);
-                ps.setInt(5, price);
-                ps.setInt(6, isBuy ? 1 : 0);
-                ps.executeUpdate();
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setInt(1, accountId);
+            ps.setInt(2, itemId);
+            ps.setLong(3, timestamp);
+            ps.setInt(4, qty);
+            ps.setInt(5, price);
+            ps.setInt(6, isBuy ? 1 : 0);
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
             }
         } catch (SQLException e) {
             logger.error("Error inserting trade for displayName={}, itemId={}", displayName, itemId, e);
         }
+        return -1;
     }
-
+/**
+     * Load all trades for an account since a timestamp.
+     * @param displayName Account display name
+     * @param since Only include trades after this time (null = all)
+     * @return List of trade maps with id, itemId, timestamp, qty, price, isBuy
+     */
     public synchronized List<Map<String, Object>> loadTrades(String displayName, Instant since) {
         Integer accountId = getAccountId(displayName);
         List<Map<String, Object>> results = new ArrayList<>();
@@ -365,7 +413,13 @@ public class SqliteStorage {
 
         return results;
     }
-
+/**
+     * Load trades for a specific item.
+     * @param displayName Account display name
+     * @param itemId Item ID to filter
+     * @param since Only include trades after this time (null = all)
+     * @return List of trade maps
+     */
     public synchronized List<Map<String, Object>> loadTradesByItem(String displayName, int itemId, Instant since) {
         Integer accountId = getAccountId(displayName);
         List<Map<String, Object>> results = new ArrayList<>();
@@ -407,6 +461,89 @@ public class SqliteStorage {
         return results;
     }
 
+    /**
+     * Query items list with aggregated profit/ROI for UI display.
+     * This replaces in-memory aggregation by computing stats in SQL.
+     * 
+     * @param displayName Account to query
+     * @param since Only include trades after this timestamp
+     * @param sortBy "TIME", "PROFIT", or "ROI"
+     * @param limit Max results to return
+     * @param offset Pagination offset
+     * @return List of item maps with: itemId, totalQty, buyQty, sellQty, totalProfit, roi, latestTimestamp
+     */
+    public synchronized List<Map<String, Object>> queryItemsList(String displayName, Instant since, String sortBy, int limit, int offset) {
+        Integer accountId = getAccountId(displayName);
+        List<Map<String, Object>> results = new ArrayList<>();
+        if (accountId == null) {
+            return results;
+        }
+
+        // Map sortBy to actual column name
+        String orderColumn = "latest_timestamp";
+        if ("PROFIT".equalsIgnoreCase(sortBy)) {
+            orderColumn = "total_profit";
+        } else if ("ROI".equalsIgnoreCase(sortBy)) {
+            orderColumn = "roi";
+        }
+
+        // Query aggregates per item_id, excluding consumed trades
+        String sql = "SELECT " +
+            "t.item_id, " +
+            "SUM(t.qty) as total_qty, " +
+            "SUM(CASE WHEN t.is_buy = 1 THEN t.qty ELSE 0 END) as buy_qty, " +
+            "SUM(CASE WHEN t.is_buy = 0 THEN t.qty ELSE 0 END) as sell_qty, " +
+            "SUM(CASE WHEN t.is_buy = 0 THEN t.qty * t.price ELSE -t.qty * t.price END) as total_profit, " +
+            "CASE " +
+            "  WHEN SUM(CASE WHEN t.is_buy = 1 THEN t.qty * t.price ELSE 0 END) > 0 " +
+            "  THEN (SUM(CASE WHEN t.is_buy = 0 THEN t.qty * t.price ELSE -t.qty * t.price END) * 100.0 / " +
+            "        SUM(CASE WHEN t.is_buy = 1 THEN t.qty * t.price ELSE 0 END)) " +
+            "  ELSE 0 " +
+            "END as roi, " +
+            "MAX(t.timestamp) as latest_timestamp " +
+            "FROM trades t " +
+            "LEFT JOIN consumed_trade ct ON t.id = ct.trade_id " +
+            "WHERE t.account_id = ? AND t.timestamp > ? AND ct.id IS NULL " +
+            "GROUP BY t.item_id " +
+            "ORDER BY " + orderColumn + " DESC " +
+            "LIMIT ? OFFSET ?";
+
+        long sinceMillis = since == null ? 0L : since.toEpochMilli();
+
+        try {
+            Connection conn = getConnection();
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, accountId);
+                ps.setLong(2, sinceMillis);
+                ps.setInt(3, limit);
+                ps.setInt(4, offset);
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, Object> row = new HashMap<>();
+                        row.put("itemId", rs.getInt("item_id"));
+                        row.put("totalQty", rs.getInt("total_qty"));
+                        row.put("buyQty", rs.getInt("buy_qty"));
+                        row.put("sellQty", rs.getInt("sell_qty"));
+                        row.put("totalProfit", rs.getLong("total_profit"));
+                        row.put("roi", rs.getDouble("roi"));
+                        row.put("latestTimestamp", rs.getLong("latest_timestamp"));
+                        results.add(row);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("Error querying items list for displayName={}", displayName, e);
+        }
+
+        return results;
+    }
+/**
+     * Upsert an active slot with an offer event.
+     * @param displayName Account display name
+     * @param slotIndex GE slot index (0-7)
+     * @param offer The offer event to store (cleared if null/complete)
+     */
     public synchronized void upsertSlot(String displayName, int slotIndex, OfferEvent offer) {
         Integer accountId = getAccountId(displayName);
         if (accountId == null) {
@@ -473,7 +610,12 @@ public class SqliteStorage {
             logger.error("Error upserting active slot for displayName={}, slotIndex={}", displayName, slotIndex, e);
         }
     }
-
+/**
+     * Load an offer event from a specific slot.
+     * @param displayName Account display name
+     * @param slotIndex GE slot index (0-7)
+     * @return OfferEvent or null if slot is empty
+     */
     public synchronized OfferEvent loadSlot(String displayName, int slotIndex) {
         Integer accountId = getAccountId(displayName);
         if (accountId == null) {
@@ -542,7 +684,11 @@ public class SqliteStorage {
             return null;
         }
     }
-
+/**
+     * Load all active slots for an account.
+     * @param displayName Account display name
+     * @return Map of slot index to OfferEvent (empty slots excluded)
+     */
     public synchronized Map<Integer, OfferEvent> loadAllSlots(String displayName) {
         Integer accountId = getAccountId(displayName);
         Map<Integer, OfferEvent> slots = new HashMap<>();
@@ -613,7 +759,11 @@ public class SqliteStorage {
 
         return slots;
     }
-
+/**
+     * Clear (delete) a slot's active offer.
+     * @param displayName Account display name
+     * @param slotIndex GE slot index (0-7)
+     */
     public synchronized void clearSlot(String displayName, int slotIndex) {
         Integer accountId = getAccountId(displayName);
         if (accountId == null) {
@@ -632,8 +782,13 @@ public class SqliteStorage {
             logger.error("Error clearing active slot for displayName={}, slotIndex={}", displayName, slotIndex, e);
         }
     }
-
-    // GE limit state upsert: map displayName -> account_id, then insert/update ge_limit_state
+/**
+     * Upsert GE limit state for an item.
+     * @param displayName Account display name
+     * @param itemId Item ID
+     * @param nextRefresh Time when GE limit resets
+     * @param itemsBought Number of items bought this limit window
+     */
     public synchronized void upsertGeLimitState(String displayName, int itemId, Instant nextRefresh, int itemsBought) {
         Integer accountId = getAccountId(displayName);
         if (accountId == null) {
@@ -665,7 +820,12 @@ public class SqliteStorage {
         }
     }
 
-    // GE limit state load: return map with nextRefresh (Instant) and itemsBought, or null if not found
+/**
+     * Load GE limit state for an item.
+     * @param displayName Account display name
+     * @param itemId Item ID
+     * @return Map with nextRefresh and itemsBought, or null if not found
+     */
     public synchronized Map<String, Object> loadGeLimitState(String displayName, int itemId) {
         Integer accountId = getAccountId(displayName);
         if (accountId == null) {
@@ -696,8 +856,70 @@ public class SqliteStorage {
         }
     }
 
-    // Internal helper: find account_id from display_name
-    private synchronized Integer getAccountId(String displayName) {
+    /**
+     * Query aggregate statistics for an account.
+     * Computes total profit, expense, revenue, flip count, and tax in a single query.
+     * 
+     * @param displayName Account to query
+     * @param since Only include trades after this timestamp
+     * @return Map with: totalProfit, totalExpense, totalRevenue, flipCount, taxPaid
+     */
+    public synchronized Map<String, Object> queryAggregateStats(String displayName, Instant since) {
+        Integer accountId = getAccountId(displayName);
+        Map<String, Object> result = new HashMap<>();
+        
+        // Default values
+        result.put("totalProfit", 0L);
+        result.put("totalExpense", 0L);
+        result.put("totalRevenue", 0L);
+        result.put("flipCount", 0);
+        result.put("taxPaid", 0L);
+        
+        if (accountId == null) {
+            return result;
+        }
+
+        // Aggregate trade stats, excluding consumed trades
+        String sql = "SELECT " +
+            "COALESCE(SUM(CASE WHEN t.is_buy = 1 THEN t.qty * t.price ELSE 0 END), 0) as total_expense, " +
+            "COALESCE(SUM(CASE WHEN t.is_buy = 0 THEN t.qty * t.price ELSE 0 END), 0) as total_revenue, " +
+            "COALESCE(SUM(CASE WHEN t.is_buy = 0 THEN t.qty * t.price ELSE -t.qty * t.price END), 0) as total_profit, " +
+            "COUNT(DISTINCT t.id) as flip_count " +
+            "FROM trades t " +
+            "LEFT JOIN consumed_trade ct ON t.id = ct.trade_id " +
+            "WHERE t.account_id = ? AND t.timestamp > ? AND ct.id IS NULL";
+
+        long sinceMillis = since == null ? 0L : since.toEpochMilli();
+
+        try {
+            Connection conn = getConnection();
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, accountId);
+                ps.setLong(2, sinceMillis);
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        result.put("totalExpense", rs.getLong("total_expense"));
+                        result.put("totalRevenue", rs.getLong("total_revenue"));
+                        result.put("totalProfit", rs.getLong("total_profit"));
+                        result.put("flipCount", rs.getInt("flip_count"));
+                        // Tax is typically 1% of sell value for items > 100gp, capped at 5M
+                        // For simplicity, estimate as 1% of revenue (actual calculation is more complex)
+                        long revenue = rs.getLong("total_revenue");
+                        long estimatedTax = Math.min(revenue / 100, 5_000_000);
+                        result.put("taxPaid", estimatedTax);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("Error querying aggregate stats for displayName={}", displayName, e);
+        }
+
+        return result;
+    }
+
+// Internal helper: find account_id from display_name
+    synchronized Integer getAccountId(String displayName) { // package-private for repository access
         final String sql = "SELECT id FROM accounts WHERE display_name = ?";
         try {
             Connection conn = getConnection();
@@ -715,7 +937,13 @@ public class SqliteStorage {
         return null;
     }
 
-    // Slot timer CRUD methods
+// Slot timer CRUD methods
+    /**
+     * Upsert a slot timer with last activity time.
+     * @param displayName Account display name
+     * @param slotIndex GE slot index (0-7)
+     * @param lastActivity Time of last activity
+     */
     public synchronized void upsertSlotTimer(String displayName, int slotIndex, Instant lastActivity) {
         Integer accountId = getAccountId(displayName);
         if (accountId == null) {
@@ -743,7 +971,12 @@ public class SqliteStorage {
             logger.error("Error upserting slot timer for displayName={}, slotIndex={}", displayName, slotIndex, e);
         }
     }
-
+/**
+     * Load last activity time for a slot.
+     * @param displayName Account display name
+     * @param slotIndex GE slot index (0-7)
+     * @return Last activity time or null
+     */
     public synchronized Instant loadSlotTimer(String displayName, int slotIndex) {
         Integer accountId = getAccountId(displayName);
         if (accountId == null) {
@@ -771,7 +1004,11 @@ public class SqliteStorage {
             return null;
         }
     }
-
+/**
+     * Load all slot timers for an account.
+     * @param displayName Account display name
+     * @return Map of slot index to last activity time (null for inactive slots)
+     */
     public synchronized Map<Integer, Instant> loadAllSlotTimers(String displayName) {
         Integer accountId = getAccountId(displayName);
         Map<Integer, Instant> timers = new HashMap<>();
@@ -798,7 +1035,15 @@ public class SqliteStorage {
         }
         return timers;
     }
-
+/**
+     * Insert an event record (flip, recipe, or void).
+     * @param displayName Account display name
+     * @param type Event type: "flip", "recipe", or "void"
+     * @param cost Total cost in coins
+     * @param profit Profit in coins
+     * @param note Optional note (can be null)
+     * @return Generated event ID, or -1 on failure
+     */
     public synchronized int insertEvent(String displayName, String type, int cost, int profit, String note) {
         Integer accountId = getAccountId(displayName);
         if (accountId == null) {
@@ -841,7 +1086,12 @@ public class SqliteStorage {
 
         return -1;
     }
-
+/**
+     * Load events for an account since a timestamp.
+     * @param displayName Account display name
+     * @param since Only include events after this time (null = all)
+     * @return List of event maps with id, timestamp, type, cost, profit, note
+     */
     public synchronized List<Map<String, Object>> loadEvents(String displayName, Instant since) {
         Integer accountId = getAccountId(displayName);
         List<Map<String, Object>> results = new ArrayList<>();
@@ -882,6 +1132,101 @@ public class SqliteStorage {
         return results;
     }
 
+    /**
+     * Query recipe flip groups for UI display.
+     * Groups recipe flip events by recipe_key with aggregated totals.
+     *
+     * @param displayName Account to query
+     * @param since Only include events after this timestamp
+     * @return List of group maps with: recipeKey, totalCount, totalProfit, totalCost, events
+     */
+    public synchronized List<Map<String, Object>> queryRecipeFlipGroups(String displayName, Instant since) {
+        Integer accountId = getAccountId(displayName);
+        List<Map<String, Object>> results = new ArrayList<>();
+        if (accountId == null) {
+            return results;
+        }
+
+        // First, get aggregated group stats
+        String groupSql = "SELECT " +
+            "rf.recipe_key, " +
+            "COUNT(DISTINCT rf.id) as total_count, " +
+            "SUM(rf.coin_cost) as total_cost, " +
+            "SUM(e.profit) as total_profit " +
+            "FROM recipe_flips rf " +
+            "JOIN events e ON rf.event_id = e.id " +
+            "WHERE e.account_id = ? AND e.timestamp > ? AND e.type = 'recipe' " +
+            "GROUP BY rf.recipe_key " +
+            "ORDER BY total_profit DESC";
+
+        long sinceMillis = since == null ? 0L : since.toEpochMilli();
+
+        try {
+            Connection conn = getConnection();
+
+            // Get groups
+            Map<String, Map<String, Object>> groupMap = new HashMap<>();
+            try (PreparedStatement ps = conn.prepareStatement(groupSql)) {
+                ps.setInt(1, accountId);
+                ps.setLong(2, sinceMillis);
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, Object> group = new HashMap<>();
+                        String recipeKey = rs.getString("recipe_key");
+                        group.put("recipeKey", recipeKey);
+                        group.put("totalCount", rs.getInt("total_count"));
+                        group.put("totalCost", rs.getLong("total_cost"));
+                        group.put("totalProfit", rs.getLong("total_profit"));
+                        group.put("events", new ArrayList<Map<String, Object>>());
+                        groupMap.put(recipeKey, group);
+                    }
+                }
+            }
+
+            // Get individual events for each group
+            String eventSql = "SELECT e.id, e.timestamp, e.profit, e.cost, rf.recipe_key " +
+                "FROM events e " +
+                "JOIN recipe_flips rf ON e.id = rf.event_id " +
+                "WHERE e.account_id = ? AND e.timestamp > ? AND e.type = 'recipe' " +
+                "ORDER BY e.timestamp DESC";
+
+            try (PreparedStatement ps = conn.prepareStatement(eventSql)) {
+                ps.setInt(1, accountId);
+                ps.setLong(2, sinceMillis);
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        String recipeKey = rs.getString("recipe_key");
+                        Map<String, Object> group = groupMap.get(recipeKey);
+                        if (group != null) {
+                            @SuppressWarnings("unchecked")
+                            List<Map<String, Object>> events = (List<Map<String, Object>>) group.get("events");
+                            Map<String, Object> event = new HashMap<>();
+                            event.put("id", rs.getLong("id"));
+                            event.put("timestamp", rs.getLong("timestamp"));
+                            event.put("profit", rs.getLong("profit"));
+                            event.put("cost", rs.getLong("cost"));
+                            events.add(event);
+                        }
+                    }
+                }
+            }
+
+            results.addAll(groupMap.values());
+
+        } catch (SQLException e) {
+            logger.error("Error querying recipe flip groups for displayName={}", displayName, e);
+        }
+
+        return results;
+    }
+/**
+     * Mark a trade as consumed by an event.
+     * @param tradeId Trade ID to consume
+     * @param qty Quantity consumed
+     * @param eventId Event ID that consumed it (can be null for voided trades)
+     */
     public synchronized void consumeTrade(int tradeId, int qty, Integer eventId) {
         final String sql = "INSERT OR REPLACE INTO consumed_trade (id, trade_id, qty, event_id) " +
             "VALUES ((SELECT id FROM consumed_trade WHERE trade_id = ?), ?, ?, ?)";
@@ -903,7 +1248,10 @@ public class SqliteStorage {
             logger.error("Error consuming trade tradeId={}, qty={}, eventId={}", tradeId, qty, eventId, e);
         }
     }
-
+/**
+     * Remove consumed status from a trade.
+     * @param tradeId Trade ID to unconsume
+     */
     public synchronized void unconsumeTrade(int tradeId) {
         final String sql = "DELETE FROM consumed_trade WHERE trade_id = ?";
 
@@ -916,5 +1264,51 @@ public class SqliteStorage {
         } catch (SQLException e) {
             logger.error("Error unconsuming trade tradeId={}", tradeId, e);
         }
+    }
+
+    /**
+     * Load unique items for an account with their latest trade data.
+     * Used to reconstruct FlippingItem objects when loading from SQLite.
+     * @param displayName Account display name
+     * @return List of maps with itemId, latestTimestamp, totalQty, latestPrice, isBuy
+     */
+    public synchronized List<Map<String, Object>> loadUniqueItems(String displayName) {
+        Integer accountId = getAccountId(displayName);
+        List<Map<String, Object>> results = new ArrayList<>();
+        if (accountId == null) {
+            return results;
+        }
+
+        final String sql = "SELECT item_id, MAX(timestamp) as latest_timestamp, " +
+            "SUM(qty) as total_qty, " +
+            "SUM(CASE WHEN is_buy = 1 THEN qty ELSE 0 END) as total_buy_qty, " +
+            "SUM(CASE WHEN is_buy = 0 THEN qty ELSE 0 END) as total_sell_qty " +
+            "FROM trades " +
+            "WHERE account_id = ? " +
+            "GROUP BY item_id " +
+            "ORDER BY latest_timestamp DESC";
+
+        try {
+            Connection conn = getConnection();
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, accountId);
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, Object> row = new HashMap<>(5);
+                        row.put("itemId", rs.getInt("item_id"));
+                        row.put("latestTimestamp", rs.getLong("latest_timestamp"));
+                        row.put("totalQty", rs.getInt("total_qty"));
+                        row.put("totalBuyQty", rs.getInt("total_buy_qty"));
+                        row.put("totalSellQty", rs.getInt("total_sell_qty"));
+                        results.add(row);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("Error loading unique items for displayName={}", displayName, e);
+        }
+
+        return results;
     }
 }

@@ -73,6 +73,9 @@ public class NewOfferEventPipelineHandler {
 
         updateTradesList(currentlyLoggedInAccountsTrades, flippingItem, finalizedOfferEvent.clone());
 
+        // Dual-write: Also record trade to SQLite if enabled
+        recordTradeToSqlite(currentlyLoggedInAccount, finalizedOfferEvent);
+
         plugin.setUpdateSinceLastItemAccountWideBuild(true);
 
         rebuildDisplayAfterOfferEvent(finalizedOfferEvent);
@@ -222,5 +225,34 @@ public class NewOfferEventPipelineHandler {
         flippingItem.updateLatestProperties(newOffer);
 
         tradesList.add(0, flippingItem);
+    }
+
+    /**
+     * Records trade to SQLite storage (dual-write).
+     * Best-effort: logs errors but does not throw.
+     */
+    private void recordTradeToSqlite(String account, OfferEvent offer) {
+        try {
+            com.flippingutilities.db.SqliteStorage sqliteStorage = plugin.getSqliteStorage();
+            if (sqliteStorage == null) {
+                return; // SQLite not enabled
+            }
+            
+            // Ensure account exists in SQLite
+            String playerId = null; // We don't have playerId from OfferEvent
+            sqliteStorage.upsertAccount(account, playerId);
+            
+            // Insert trade
+            long timestamp = offer.getTime() != null ? offer.getTime().toEpochMilli() : System.currentTimeMillis();
+            int qty = offer.getCurrentQuantityInTrade();
+            int price = offer.getPreTaxPrice();
+            boolean isBuy = offer.isBuy();
+            
+            sqliteStorage.insertTrade(account, offer.getItemId(), timestamp, qty, price, isBuy);
+            log.debug("Recorded trade to SQLite: account={}, item={}, qty={}, price={}, isBuy={}", 
+                account, offer.getItemId(), qty, price, isBuy);
+        } catch (Exception e) {
+            log.warn("Failed to record trade to SQLite (best-effort): {}", e.getMessage());
+        }
     }
 }
