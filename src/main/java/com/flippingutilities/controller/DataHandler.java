@@ -30,17 +30,20 @@ import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
 import com.flippingutilities.model.BackupCheckpoints;
+import com.flippingutilities.model.FlippingItem;
+import com.flippingutilities.model.OfferEvent;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.*;
-
 /**
  * Responsible for loading data from disk, handling any operations to access/change data during the plugin's life, and storing
  * data to disk.
  */
 @Slf4j
 public class DataHandler {
+    // SQLite storage backend (optional)
+    private com.flippingutilities.db.SqliteStorage sqliteStorage;
     FlippingPlugin plugin;
     private AccountWideData accountWideData;
     private BackupCheckpoints backupCheckpoints;
@@ -51,6 +54,10 @@ public class DataHandler {
 
     public DataHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    public void setSqliteStorage(com.flippingutilities.db.SqliteStorage storage) {
+        this.sqliteStorage = storage;
     }
 
     public AccountWideData viewAccountWideData() {
@@ -146,6 +153,15 @@ public class DataHandler {
         plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
         accountSpecificData = fetchAndPrepareAllAccountData();
         backupAllAccountData();
+        // After the JSON loading completes, optionally route to SQLite backend
+        if (plugin.getConfig().dataSource().isSqlite() && sqliteStorage != null) {
+            log.info("Using SQLite storage backend");
+            // If no accounts were loaded from JSON, load from SQLite
+            if (accountSpecificData.isEmpty()) {
+                log.info("No JSON data found, loading accounts from SQLite");
+                loadAccountsFromSqlite();
+            }
+        }
     }
     
     private void backupAllAccountData() {
@@ -230,6 +246,19 @@ public class DataHandler {
     }
 
     private Map<String, AccountData> fetchAllAccountData() {
+        // SQLite path: try loading from SQLite first
+        if (sqliteStorage != null && plugin.getConfig().dataSource().isSqlite()) {
+            try {
+                Map<String, AccountData> accounts = new HashMap<>();
+                for (String displayName : sqliteStorage.listAccounts()) {
+                    AccountData data = fetchAccountData(displayName);
+                    accounts.put(displayName, data);
+                }
+                return accounts;
+            } catch (Exception e) {
+                log.warn("Failed to load from SQLite, falling back to JSON", e);
+            }
+        }
         try {
             return plugin.tradePersister.loadAllAccounts();
         }
@@ -253,6 +282,19 @@ public class DataHandler {
 
     private AccountData fetchAccountData(String displayName)
     {
+        // SQLite path: attempt to load from SQLite when configured
+        if (sqliteStorage != null && plugin.getConfig().dataSource().isSqlite()) {
+            try {
+                AccountData accountData = sqliteStorage.loadAccount(displayName);
+                accountData.prepareForUse(plugin);
+                if (accountData.needsMigration()) {
+                    accountData.markMigrated();
+                }
+                return accountData;
+            } catch (Exception e) {
+                log.warn("Couldn't load from SQLite for {}, falling back to JSON", displayName, e);
+            }
+        }
         try {
             AccountData accountData = plugin.tradePersister.loadAccount(displayName);
             accountData.prepareForUse(plugin);
@@ -304,6 +346,57 @@ public class DataHandler {
         }
         catch (Exception e) {
             log.warn("couldn't store data to {} bc of {}",fileName, e);
+        }
+    }
+
+    /**
+     * Load accounts from SQLite when JSON files don't exist.
+     * This is used when transitioning to SQLite mode.
+     */
+    public void loadAccountsFromSqlite() {
+        if (sqliteStorage == null) {
+            log.warn("SQLite storage not available");
+            return;
+        }
+
+        List<String> sqliteAccounts = sqliteStorage.listAccounts();
+        log.info("Loading {} accounts from SQLite", sqliteAccounts.size());
+
+        for (String displayName : sqliteAccounts) {
+            if (!accountSpecificData.containsKey(displayName)) {
+                AccountData accountData = new AccountData();
+                accountData.startNewSession();
+                
+                // Load unique items from SQLite and create minimal FlippingItems
+                List<Map<String, Object>> items = sqliteStorage.loadUniqueItems(displayName);
+                for (Map<String, Object> item : items) {
+                    int itemId = (Integer) item.get("itemId");
+                    long latestTs = (Long) item.get("latestTimestamp");
+                    
+                    // Create minimal FlippingItem - itemName and geLimit will be populated by prepareForUse
+                    FlippingItem flippingItem = new FlippingItem(itemId, "", 0, displayName);
+                    flippingItem.setValidFlippingPanelItem(true);
+                    
+                    // Load full trades for this item and create OfferEvents
+                    List<Map<String, Object>> trades = sqliteStorage.loadTradesByItem(displayName, itemId, null);
+                    for (Map<String, Object> trade : trades) {
+                        OfferEvent offer = new OfferEvent();
+                        offer.setItemId(itemId);
+                        offer.setBuy((Integer) trade.get("isBuy") == 1);
+                        offer.setCurrentQuantityInTrade((Integer) trade.get("qty"));
+                        offer.setPrice((Integer) trade.get("price"));
+                        offer.setTime(Instant.ofEpochMilli((Long) trade.get("timestamp")));
+                        offer.setMadeBy(displayName);
+                        flippingItem.updateHistory(offer);
+                    }
+                    
+                    accountData.getTrades().add(flippingItem);
+                }
+                
+                accountData.prepareForUse(plugin);
+                accountSpecificData.put(displayName, accountData);
+                log.info("Loaded {} items for account {} from SQLite", items.size(), displayName);
+            }
         }
     }
 }
