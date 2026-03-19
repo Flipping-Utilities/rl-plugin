@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.util.QuantityFormatter;
 import net.runelite.api.Client;
 import net.runelite.api.GrandExchangeOffer;
-import net.runelite.api.MenuAction;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.InterfaceID;
@@ -73,7 +72,6 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     private int currentOfferPrice = 0;
     private GraphDuration selectedDuration;
 
-    // Price info to display
     private String instabuyText = "Instabuy: -";
     private String instasellText = "Instasell: -";
 
@@ -282,6 +280,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
      */
     public void hide() {
         this.currentItemId = -1;
+        this.priceToSet = -1;
     }
 
     public void setSelectedDuration(GraphDuration duration) {
@@ -324,7 +323,11 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         if (geBox == null) {
             return false;
         }
-        return Arrays.stream(geBox.getChildren()).anyMatch(w -> w.getText().contains(text));
+        Widget[] children = geBox.getDynamicChildren();
+        if (children == null) {
+            return false;
+        }
+        return Arrays.stream(children).anyMatch(w -> w.getText().contains(text));
     }
 
     private boolean isSelectingItem() {
@@ -355,6 +358,9 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     @Override
     public Dimension render(Graphics2D graphics) {
         if (!shouldRender()) {
+            if (!isOfferCreation()) {
+                priceToSet = -1;
+            }
             return null;
         }
 
@@ -421,7 +427,45 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         }
 
         graphics.setClip(originalClip);
+
+        if (priceToSet != -1 && isOfferCreation()) {
+            drawChangePriceHighlight(graphics);
+        }
+
         return new Dimension(graphWidth, totalHeight);
+    }
+
+    private void drawChangePriceHighlight(Graphics2D graphics) {
+        Widget geContainer = client.getWidget(InterfaceID.GeOffers.SETUP);
+        if (geContainer == null) {
+            return;
+        }
+        Widget[] children = geContainer.getDynamicChildren();
+        if (children == null) {
+            return;
+        }
+
+        Widget enterPriceButton = Arrays.stream(children)
+                .filter(btn -> {
+                    String[] actions = btn.getActions();
+                    return actions != null && Arrays.asList(actions).contains("Enter price");
+                })
+                .findFirst()
+                .orElse(null);
+
+        if (enterPriceButton == null) {
+            return;
+        }
+
+        Rectangle bounds = enterPriceButton.getBounds();
+        if (bounds == null || bounds.isEmpty()) {
+            return;
+        }
+
+        graphics.setColor(CustomColors.BUTTON_HIGHLIGHT);
+        graphics.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+        graphics.setColor(CustomColors.BUTTON_BORDER_HIGHLIGHT);
+        graphics.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
     }
 
     private void drawDurationButtons(Graphics2D graphics, int graphX, int graphY) {
@@ -542,9 +586,10 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
                 }
             }
             // Check if click is in chart area - set price
-            else if (chartBounds.contains(p) && chart != null && chart.hasData()) {
-                handleChartClick(p.y);
+            else if (chartBounds != null && chartBounds.contains(p) && chart != null && chart.hasData() && isOfferCreation()) {
                 e.consume();
+                int price = Math.max(chart.calculatePriceFromY(p.y, chartBounds), 0);
+                this.priceToSet = price;
             }
         }
         return e;
@@ -634,50 +679,6 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
                 }
             });
         }
-    }
-
-    /**
-     * Handles a click on the chart to set the offer price.
-     * Calculates the price from the Y position and sets it via varbit.
-     */
-    private void handleChartClick(int mouseY) {
-        if (this.isSelectingItem()) {
-            return;
-        }
-        if (!this.isOfferCreation()) {
-            return;
-        }
-        if (!hasChartData()) {
-            return;
-        }
-
-        // Calculate price from Y position using the chart's method
-        int price = Math.max(chart.calculatePriceFromY(mouseY, chartBounds), 0);
-
-        Widget geContainer = client.getWidget(InterfaceID.GeOffers.SETUP);
-        if (geContainer == null) {
-            return;
-        }
-        Widget[] children = geContainer.getDynamicChildren();
-        final Widget changePriceButton = Arrays.stream(children)
-                .filter(button -> Arrays.asList(button.getActions()).contains("Enter price"))
-                .findFirst()
-                .orElse(null);
-
-        if (changePriceButton == null) {
-            return;
-        }
-        clientThread.invokeLater(() -> {
-            client.menuAction(
-                    changePriceButton.getIndex(),
-                    changePriceButton.getId(),
-                    MenuAction.CC_OP,
-                    1,
-                    -1,
-                    "Enter price",
-                    "");
-        });
-        this.priceToSet = price;
     }
 
     private void clearPriceInfo() {
