@@ -1,4 +1,4 @@
-package com.flippingutilities.ui.widgets;
+package com.flippingutilities.ui.widgets.graph;
 
 import com.flippingutilities.model.Timestep;
 

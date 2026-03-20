@@ -39,5 +39,9 @@ public class CustomColors {
     public static final Color CHART_BUTTON_UNSELECTED_BG = new Color(40, 40, 40);
     public static final Color CHART_BUTTON_UNSELECTED_BORDER = new Color(100, 100, 100);
     public static final Color CHART_BUTTON_UNSELECTED_TEXT = new Color(180, 180, 180);
+    public static final Color CHART_TAX_REGION_FILL = new Color(255, 200, 0, 40);
+    public static final Color CHART_TAX_REGION_BORDER = new Color(255, 200, 0, 150);
+    public static final Color CHART_DESIRED_PRICE_LINE = new Color(0, 255, 200);
+    public static final Color CHART_DESIRED_PRICE_FILL = new Color(0, 255, 200, 30);
 
 }
