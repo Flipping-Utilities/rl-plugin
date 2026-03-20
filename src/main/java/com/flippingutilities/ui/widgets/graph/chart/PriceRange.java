@@ -1,4 +1,4 @@
-package com.flippingutilities.ui.widgets.chart;
+package com.flippingutilities.ui.widgets.graph.chart;
 
 /**
  * represents a price range with minimum and maximum values.

@@ -1,17 +1,22 @@
-package com.flippingutilities.ui.widgets;
+package com.flippingutilities.ui.widgets.graph;
 
 import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesPoint;
 import com.flippingutilities.model.TimeseriesResponse;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
-import com.flippingutilities.ui.widgets.chart.ChartBounds;
-import com.flippingutilities.ui.widgets.chart.PriceRange;
-import com.flippingutilities.ui.widgets.chart.TimeRange;
+import com.flippingutilities.ui.widgets.graph.chart.ChartBounds;
+import com.flippingutilities.ui.widgets.graph.chart.PriceRange;
+import com.flippingutilities.ui.widgets.graph.chart.TimeRange;
+import com.flippingutilities.ui.widgets.graph.AreaMarker;
+import com.flippingutilities.ui.widgets.graph.ChartMarker;
+import com.flippingutilities.ui.widgets.graph.HorizontalMarker;
+import com.flippingutilities.ui.widgets.graph.VerticalMarker;
 import net.runelite.client.ui.overlay.components.LayoutableRenderableEntity;
 import lombok.extern.slf4j.Slf4j;
 
 import java.awt.BasicStroke;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
@@ -60,6 +65,9 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
     // Hover state for horizontal price line indicator
     private Integer hoveredPriceY;
 
+    // Markers for chart overlays (horizontal bars, vertical bars, areas)
+    private List<ChartMarker> markers = new ArrayList<>();
+
     public TimeSeriesChart(ChartConfig config) {
         this.config = config;
         this.tickCalculator = new TickIntervalCalculator();
@@ -91,13 +99,152 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
         drawGrid(g2d, bounds, priceRange);
         drawDataSeries(g2d, bounds, priceRange, filteredData);
-        drawOfferLine(g2d, bounds, priceRange);
         drawTimeLabels(g2d, bounds);
         drawHoverLine(g2d, bounds, filteredData);
+        drawMarkers(g2d, bounds, priceRange, filteredData);
+        // Draw offer line and horizontal price line after markers so their labels
+        // are always visible on top of area marker fills (e.g., tax regions)
+        drawOfferLine(g2d, bounds, priceRange);
         drawHorizontalPriceLine(g2d, bounds, priceRange);
 
         dimension.setSize(config.getWidth(), config.getHeight());
         return dimension;
+    }
+
+    public void setMarkers(List<ChartMarker> markers) {
+        this.markers = markers != null ? markers : new ArrayList<>();
+    }
+
+    public void clearMarkers() {
+        this.markers.clear();
+    }
+
+    private void drawMarkers(Graphics2D g2d, ChartBounds bounds, PriceRange priceRange, List<TimeseriesPoint> filteredData) {
+        for (ChartMarker marker : markers) {
+            if (marker instanceof HorizontalMarker) {
+                drawHorizontalMarker(g2d, bounds, priceRange, (HorizontalMarker) marker);
+            } else if (marker instanceof VerticalMarker) {
+                drawVerticalMarker(g2d, bounds, filteredData, (VerticalMarker) marker);
+            } else if (marker instanceof AreaMarker) {
+                drawAreaMarker(g2d, bounds, priceRange, (AreaMarker) marker);
+            }
+        }
+    }
+
+    private void drawHorizontalMarker(Graphics2D g2d, ChartBounds bounds, PriceRange priceRange, HorizontalMarker marker) {
+        int lineY = calculateYPosition(marker.getPrice(), bounds, priceRange);
+        int rightEdge = bounds.getRightEdge();
+
+        if (marker.isDashed()) {
+            g2d.setStroke(new BasicStroke(HOVER_LINE_STROKE, BasicStroke.CAP_BUTT,
+                    BasicStroke.JOIN_MITER, STROKE_ROUND_MITER,
+                    new float[] { 5.0f, 5.0f }, 0.0f));
+        } else {
+            g2d.setStroke(new BasicStroke(HOVER_LINE_STROKE));
+        }
+
+        g2d.setColor(marker.getLineColor());
+        g2d.drawLine(bounds.x, lineY, rightEdge, lineY);
+
+        if (marker.isShowLabel() && marker.getLabel() != null) {
+            g2d.setFont(config.getLabelFont());
+            FontMetrics fm = g2d.getFontMetrics();
+            int textWidth = fm.stringWidth(marker.getLabel());
+            int textAscent = fm.getAscent();
+
+            int boxX = bounds.x + LABEL_PADDING;
+            int boxY = lineY - textAscent - 6;
+            int boxWidth = textWidth + LABEL_PADDING * 2;
+            int boxHeight = textAscent + 6;
+
+            g2d.setColor(new Color(0, 0, 0, 180));
+            g2d.fillRect(boxX, boxY, boxWidth, boxHeight);
+
+            g2d.setColor(marker.getLineColor());
+            g2d.drawString(marker.getLabel(), boxX + LABEL_PADDING, lineY - 4);
+        }
+    }
+
+    private void drawVerticalMarker(Graphics2D g2d, ChartBounds bounds, List<TimeseriesPoint> filteredData, VerticalMarker marker) {
+        if (filteredData.isEmpty()) {
+            return;
+        }
+
+        TimeRange timeRange = calculateTimeRange(filteredData);
+        long timeOffset = marker.getTimestamp() - timeRange.start;
+        float timePercent = timeRange.range > 0 ? (float) timeOffset / timeRange.range : 0.5f;
+        int lineX = bounds.x + (int) (timePercent * bounds.width);
+
+        lineX = Math.max(bounds.x, Math.min(lineX, bounds.x + bounds.width));
+
+        if (marker.isDashed()) {
+            g2d.setStroke(new BasicStroke(HOVER_LINE_STROKE, BasicStroke.CAP_BUTT,
+                    BasicStroke.JOIN_MITER, STROKE_ROUND_MITER,
+                    new float[] { 5.0f, 5.0f }, 0.0f));
+        } else {
+            g2d.setStroke(new BasicStroke(HOVER_LINE_STROKE));
+        }
+
+        g2d.setColor(marker.getLineColor());
+        g2d.drawLine(lineX, bounds.y, lineX, bounds.getBottomEdge());
+
+        if (marker.isShowLabel() && marker.getLabel() != null) {
+            g2d.setFont(config.getLabelFont());
+            g2d.drawString(marker.getLabel(), lineX + LABEL_PADDING, bounds.y + LABEL_PADDING);
+        }
+    }
+
+    private void drawAreaMarker(Graphics2D g2d, ChartBounds bounds, PriceRange priceRange, AreaMarker marker) {
+        int minY = calculateYPosition(marker.getMaxPrice(), bounds, priceRange);
+        int maxY = calculateYPosition(marker.getMinPrice(), bounds, priceRange);
+        int rightEdge = bounds.getRightEdge();
+
+        if (marker.getFillColor() != null) {
+            g2d.setColor(marker.getFillColor());
+            g2d.fillRect(bounds.x, minY, rightEdge - bounds.x, maxY - minY);
+        }
+
+        if (marker.isDashed()) {
+            g2d.setStroke(new BasicStroke(HOVER_LINE_STROKE, BasicStroke.CAP_BUTT,
+                    BasicStroke.JOIN_MITER, STROKE_ROUND_MITER,
+                    new float[] { 5.0f, 5.0f }, 0.0f));
+        } else {
+            g2d.setStroke(new BasicStroke(HOVER_LINE_STROKE));
+        }
+
+        g2d.setColor(marker.getLineColor());
+        g2d.drawLine(bounds.x, minY, rightEdge, minY);
+        g2d.drawLine(bounds.x, maxY, rightEdge, maxY);
+
+        if (marker.isShowLabel() && marker.getLabel() != null) {
+            g2d.setFont(config.getLabelFont());
+            FontMetrics fm = g2d.getFontMetrics();
+            int textWidth = fm.stringWidth(marker.getLabel());
+            int textAscent = fm.getAscent();
+
+            int boxX = bounds.x + LABEL_PADDING;
+            int boxWidth = textWidth + LABEL_PADDING * 2;
+            int boxHeight = textAscent + 6;
+
+            boolean isLabelAtTop = marker.getLabelPosition() == AreaMarker.LabelPosition.TOP;
+            int labelLineY = isLabelAtTop ? minY : maxY;
+
+            int boxY;
+            int textY;
+            if (isLabelAtTop) {
+                boxY = labelLineY - textAscent - 6;
+                textY = labelLineY - 4;
+            } else {
+                boxY = labelLineY + 4;
+                textY = labelLineY + textAscent + 6;
+            }
+
+            g2d.setColor(new Color(0, 0, 0, 180));
+            g2d.fillRect(boxX, boxY, boxWidth, boxHeight);
+
+            g2d.setColor(marker.getLineColor());
+            g2d.drawString(marker.getLabel(), boxX + LABEL_PADDING, textY);
+        }
     }
 
     private void setupRenderingHints(Graphics2D g2d) {
@@ -223,13 +370,13 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
     private void drawHorizontalGridLines(Graphics2D g2d, ChartBounds bounds,
             PriceRange priceRange, FontMetrics fm) {
-        long tickInterval = tickCalculator.calculate(priceRange.getRange());
-        long startPrice = (priceRange.min / tickInterval) * tickInterval;
-        long endPrice = ((priceRange.max / tickInterval) + 1) * tickInterval;
+        int tickInterval = tickCalculator.calculate(priceRange.getRange());
+        int startPrice = (priceRange.min / tickInterval) * tickInterval;
+        int endPrice = ((priceRange.max / tickInterval) + 1) * tickInterval;
 
         int rightEdge = bounds.getRightEdge();
 
-        for (long price = startPrice; price <= endPrice; price += tickInterval) {
+        for (int price = startPrice; price <= endPrice; price += tickInterval) {
             if (price < priceRange.min || price > priceRange.max) {
                 continue;
             }
@@ -239,7 +386,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
             g2d.setColor(config.getGridColor());
             g2d.drawLine(bounds.x, lineY, rightEdge, lineY);
 
-            String priceText = UIUtilities.quantityToRSDecimalStack(price, false);
+            String priceText = UIUtilities.quantityToRSDecimalStack(price, true);
             g2d.setColor(config.getLabelColor());
             int textWidth = fm.stringWidth(priceText);
             g2d.drawString(priceText, bounds.x - textWidth - LABEL_PADDING,
@@ -258,10 +405,11 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         }
     }
 
-    private int calculateYPosition(long price, ChartBounds bounds, PriceRange priceRange) {
+    private int calculateYPosition(int price, ChartBounds bounds, PriceRange priceRange) {
         int bottomEdge = bounds.getBottomEdge();
-        long range = priceRange.getRange();
-        return bottomEdge - (int) ((price - priceRange.min) * bounds.height / range);
+        int range = priceRange.getRange();
+        // Cast to long before multiplication to prevent overflow with large price ranges
+        return bottomEdge - (int) ((long) (price - priceRange.min) * bounds.height / range);
     }
 
     private void drawDataSeries(Graphics2D g2d, ChartBounds bounds,
@@ -540,7 +688,8 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         int range = priceRange.getRange();
         // Inverse of: y = bottomEdge - (price - min) * height / range
         // price = min + (bottomEdge - y) * range / height
-        int price = priceRange.min + ((bottomEdge - mouseY) * range / bounds.height);
+        // Use long arithmetic to prevent integer overflow with large price ranges
+        int price = priceRange.min + (int) ((long) (bottomEdge - mouseY) * range / bounds.height);
         return Math.max(0, price);
     }
 
@@ -597,15 +746,23 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         g2d.drawLine(bounds.x, lineY, bounds.getRightEdge(), lineY);
 
         // Calculate and display the price at this Y position
-        long price = calculatePriceFromY(lineY, bounds, priceRange);
+        int price = calculatePriceFromY(lineY, bounds, priceRange);
         String priceText = UIUtilities.quantityToRSDecimalStack(price, false);
 
         g2d.setFont(config.getLabelFont());
         FontMetrics fm = g2d.getFontMetrics();
         int textWidth = fm.stringWidth(priceText);
+        int textAscent = fm.getAscent();
 
-        // Draw price label at right edge of chart
+        int boxX = bounds.getRightEdge() - textWidth - LABEL_PADDING * 2;
+        int boxY = lineY - textAscent - 6;
+        int boxWidth = textWidth + LABEL_PADDING * 2;
+        int boxHeight = textAscent + 4;
+
+        g2d.setColor(new Color(0, 0, 0, 180));
+        g2d.fillRect(boxX, boxY, boxWidth, boxHeight);
+
         g2d.setColor(CustomColors.CHART_ACCENT);
-        g2d.drawString(priceText, bounds.getRightEdge() - textWidth - LABEL_PADDING, lineY - 2);
+        g2d.drawString(priceText, boxX + LABEL_PADDING, lineY - 4);
     }
 }
