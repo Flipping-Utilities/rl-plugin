@@ -36,7 +36,8 @@ import org.junit.runners.Suite;
 @RunWith(Suite.class)
 @Suite.SuiteClasses({
 	HistoryManagerTest.class,
-	FlippingPluginTest.class
+	FlippingPluginTest.class,
+	OfferEventSerializationTest.class
 })
 public class TestRunner {
 
