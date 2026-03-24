@@ -189,6 +189,18 @@ public interface FlippingConfig extends Config
                 return Timestep.FIVE_MINUTES;
         }
 
+	@ConfigItem(
+			keyName = "showTax",
+			name = "Show tax",
+			description = "Show the tax impact when hovering over the chart on the offer page.",
+			section = chartsSection,
+			position = 4
+	)
+	default boolean showTax() {
+		return true;
+	}
+
+
 	@ConfigSection(
 			name = "Auto-Save",
 			description = "Configure automatic saving of trade data",

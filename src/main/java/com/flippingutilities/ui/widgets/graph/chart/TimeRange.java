@@ -1,4 +1,4 @@
-package com.flippingutilities.ui.widgets.chart;
+package com.flippingutilities.ui.widgets.graph.chart;
 
 public final class TimeRange {
     public final long start;

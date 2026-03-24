@@ -5,18 +5,23 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.jobs.TimeseriesFetcher;
 import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesPoint;
-import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.ChartLoadingAnimation;
+import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
-
+import com.flippingutilities.ui.widgets.graph.AreaMarker;
+import com.flippingutilities.ui.widgets.graph.ChartConfig;
+import com.flippingutilities.ui.widgets.graph.ChartMarker;
+import com.flippingutilities.ui.widgets.graph.HorizontalMarker;
+import com.flippingutilities.ui.widgets.graph.TimeSeriesChart;
+import com.flippingutilities.utilities.Constants;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.client.util.QuantityFormatter;
 import net.runelite.api.Client;
 import net.runelite.api.GrandExchangeOffer;
-import net.runelite.api.MenuAction;
+import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarClientID;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
@@ -32,6 +37,7 @@ import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.ui.overlay.OverlayPosition;
+import net.runelite.client.util.QuantityFormatter;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -43,7 +49,9 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Shape;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Overlay that renders a price history graph over the chatbox area.
@@ -71,9 +79,9 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     private int priceToSet = -1;
     private int currentItemId = -1;
     private int currentOfferPrice = 0;
+    private boolean isBuyOffer = true;
     private GraphDuration selectedDuration;
 
-    // Price info to display
     private String instabuyText = "Instabuy: -";
     private String instasellText = "Instasell: -";
 
@@ -91,9 +99,9 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
 
         private final String label;
         private final Timestep timestep;
-        private final long maxTimeRangeSeconds;
+        private final int maxTimeRangeSeconds;
 
-        GraphDuration(String label, Timestep timestep, long maxTimeRangeSeconds) {
+        GraphDuration(String label, Timestep timestep, int maxTimeRangeSeconds) {
             this.label = label;
             this.timestep = timestep;
             this.maxTimeRangeSeconds = maxTimeRangeSeconds;
@@ -107,7 +115,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
             return this.label;
         }
 
-        public long getMaxTimeRangeSeconds() {
+        public int getMaxTimeRangeSeconds() {
             return this.maxTimeRangeSeconds;
         }
 
@@ -241,14 +249,29 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
             return;
         }
         
-        int offerPrice = getOfferPriceFromClient(itemId);
-        show(itemId, offerPrice);
+        boolean isBuy = getOfferInfoFromClient(itemId);
+        show(itemId, getOfferPriceFromClient(itemId), isBuy);
+    }
+
+    private boolean getOfferInfoFromClient(int itemId) {
+        int selectedSlot = client.getVarbitValue(VarbitID.GE_SELECTEDSLOT) - 1;
+        if (selectedSlot >= 0 && selectedSlot < client.getGrandExchangeOffers().length) {
+            GrandExchangeOffer offer = client.getGrandExchangeOffers()[selectedSlot];
+            if (offer != null && offer.getItemId() == itemId && offer.getPrice() > 0) {
+                return offer.getState() == GrandExchangeOfferState.BOUGHT
+                        || offer.getState() == GrandExchangeOfferState.BUYING
+                        || offer.getState() == GrandExchangeOfferState.CANCELLED_BUY;
+            }
+        }
+        
+        // For new offers, check the offer type varbit (0 = buy, 1 = sell)
+        int offerType = client.getVarbitValue(VarbitID.GE_NEWOFFER_TYPE);
+        return (offerType == 0);
     }
 
     private int getOfferPriceFromClient(int itemId) {
         int offerPrice = 0;
         
-        // Get the price from the existing offer
         int selectedSlot = client.getVarbitValue(VarbitID.GE_SELECTEDSLOT) - 1;
         if (selectedSlot >= 0 && selectedSlot < client.getGrandExchangeOffers().length) {
             GrandExchangeOffer offer = client.getGrandExchangeOffers()[selectedSlot];
@@ -257,7 +280,6 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
             }
         }
         
-        // For new offers, get price from varbit
         if (offerPrice == 0) {
             offerPrice = client.getVarbitValue(VarbitID.GE_NEWOFFER_PRICE);
         }
@@ -265,12 +287,10 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         return offerPrice;
     }
 
-    /*
-     * Enable the chart for the specified item & offer price
-     */
-    private void show(int itemId, int offerPrice) {
+    private void show(int itemId, int offerPrice, boolean isBuy) {
         this.currentItemId = itemId;
         this.currentOfferPrice = offerPrice;
+        this.isBuyOffer = isBuy;
         if (chart != null) {
             chart.setOfferPrice(offerPrice);
         }
@@ -282,6 +302,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
      */
     public void hide() {
         this.currentItemId = -1;
+        this.priceToSet = -1;
     }
 
     public void setSelectedDuration(GraphDuration duration) {
@@ -324,7 +345,11 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         if (geBox == null) {
             return false;
         }
-        return Arrays.stream(geBox.getChildren()).anyMatch(w -> w.getText().contains(text));
+        Widget[] children = geBox.getDynamicChildren();
+        if (children == null) {
+            return false;
+        }
+        return Arrays.stream(children).anyMatch(w -> w.getText().contains(text));
     }
 
     private boolean isSelectingItem() {
@@ -355,6 +380,9 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     @Override
     public Dimension render(Graphics2D graphics) {
         if (!shouldRender()) {
+            if (!isOfferCreation()) {
+                priceToSet = -1;
+            }
             return null;
         }
 
@@ -421,7 +449,45 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         }
 
         graphics.setClip(originalClip);
+
+        if (priceToSet != -1 && isOfferCreation()) {
+            drawChangePriceHighlight(graphics);
+        }
+
         return new Dimension(graphWidth, totalHeight);
+    }
+
+    private void drawChangePriceHighlight(Graphics2D graphics) {
+        Widget geContainer = client.getWidget(InterfaceID.GeOffers.SETUP);
+        if (geContainer == null) {
+            return;
+        }
+        Widget[] children = geContainer.getDynamicChildren();
+        if (children == null) {
+            return;
+        }
+
+        Widget enterPriceButton = Arrays.stream(children)
+                .filter(btn -> {
+                    String[] actions = btn.getActions();
+                    return actions != null && Arrays.asList(actions).contains("Enter price");
+                })
+                .findFirst()
+                .orElse(null);
+
+        if (enterPriceButton == null) {
+            return;
+        }
+
+        Rectangle bounds = enterPriceButton.getBounds();
+        if (bounds == null || bounds.isEmpty()) {
+            return;
+        }
+
+        graphics.setColor(CustomColors.BUTTON_HIGHLIGHT);
+        graphics.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+        graphics.setColor(CustomColors.BUTTON_BORDER_HIGHLIGHT);
+        graphics.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
     }
 
     private void drawDurationButtons(Graphics2D graphics, int graphX, int graphY) {
@@ -542,9 +608,10 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
                 }
             }
             // Check if click is in chart area - set price
-            else if (chartBounds.contains(p) && chart != null && chart.hasData()) {
-                handleChartClick(p.y);
+            else if (chartBounds != null && chartBounds.contains(p) && chart != null && chart.hasData() && isOfferCreation()) {
                 e.consume();
+                int price = Math.max(chart.calculatePriceFromY(p.y, chartBounds), 0);
+                this.priceToSet = price;
             }
         }
         return e;
@@ -555,6 +622,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
             chart.setHoveredPoint(null);
             chart.setHoveredPriceY(null);
             clearPriceInfo();
+            clearChartMarkers();
             return;
         }
 
@@ -583,12 +651,14 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         }
         chart.setHoveredPoint(hoveredPoint);
 
-        // Update price info based on hovered point
+        int hoveredPrice = chart.calculatePriceFromY(mouseY, chartBounds);
+        updateChartMarkers(hoveredPrice);
+
         String buyPrice = hoveredPoint.getAvgHighPrice() != null
-                ? QuantityFormatter.quantityToRSDecimalStack(hoveredPoint.getAvgHighPrice(), false)
+                ? QuantityFormatter.quantityToRSDecimalStack(hoveredPoint.getAvgHighPrice(), true)
                 : null;
         String sellPrice = hoveredPoint.getAvgLowPrice() != null
-                ? QuantityFormatter.quantityToRSDecimalStack(hoveredPoint.getAvgLowPrice(), false)
+                ? QuantityFormatter.quantityToRSDecimalStack(hoveredPoint.getAvgLowPrice(), true)
                 : null;
         String timeAgo = TimeFormatters.formatTimeAgo(hoveredPoint.getTimestamp());
 
@@ -596,9 +666,9 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     }
 
     private void showLatestPrices(TimeSeriesChart chart) {
-        // Clear hover state when showing latest prices
         chart.setHoveredPoint(null);
         chart.setHoveredPriceY(null);
+        clearChartMarkers();
 
         TimeseriesPoint lastIB = chart.getLatestInstabuyDataPoint();
         TimeseriesPoint lastIS = chart.getLatestInstasellDataPoint();
@@ -608,11 +678,11 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         }
 
         String instabuyPrice = lastIB != null && lastIB.getAvgHighPrice() != null
-                ? QuantityFormatter.quantityToRSDecimalStack(lastIB.getAvgHighPrice(), false)
+                ? QuantityFormatter.quantityToRSDecimalStack(lastIB.getAvgHighPrice(), true)
                 : null;
         String ibTimeAgo = lastIB != null ? TimeFormatters.formatTimeAgo(lastIB.getTimestamp()) : "-";
         String instasellPrice = lastIS != null && lastIS.getAvgLowPrice() != null
-                ? QuantityFormatter.quantityToRSDecimalStack(lastIS.getAvgLowPrice(), false)
+                ? QuantityFormatter.quantityToRSDecimalStack(lastIS.getAvgLowPrice(), true)
                 : null;
         String isTimeAgo = lastIS != null ? TimeFormatters.formatTimeAgo(lastIS.getTimestamp()) : "-";
 
@@ -636,50 +706,6 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         }
     }
 
-    /**
-     * Handles a click on the chart to set the offer price.
-     * Calculates the price from the Y position and sets it via varbit.
-     */
-    private void handleChartClick(int mouseY) {
-        if (this.isSelectingItem()) {
-            return;
-        }
-        if (!this.isOfferCreation()) {
-            return;
-        }
-        if (!hasChartData()) {
-            return;
-        }
-
-        // Calculate price from Y position using the chart's method
-        int price = Math.max(chart.calculatePriceFromY(mouseY, chartBounds), 0);
-
-        Widget geContainer = client.getWidget(InterfaceID.GeOffers.SETUP);
-        if (geContainer == null) {
-            return;
-        }
-        Widget[] children = geContainer.getDynamicChildren();
-        final Widget changePriceButton = Arrays.stream(children)
-                .filter(button -> Arrays.asList(button.getActions()).contains("Enter price"))
-                .findFirst()
-                .orElse(null);
-
-        if (changePriceButton == null) {
-            return;
-        }
-        clientThread.invokeLater(() -> {
-            client.menuAction(
-                    changePriceButton.getIndex(),
-                    changePriceButton.getId(),
-                    MenuAction.CC_OP,
-                    1,
-                    -1,
-                    "Enter price",
-                    "");
-        });
-        this.priceToSet = price;
-    }
-
     private void clearPriceInfo() {
         instabuyText = "Instabuy: -";
         instasellText = "Instasell: -";
@@ -698,6 +724,93 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
      */
     private boolean hasChartData() {
         return chart != null && chart.hasData();
+    }
+
+    private boolean isBond(int itemId) {
+        return itemId == ItemID.OSRS_BOND;
+    }
+
+    private boolean isTaxExempt(int itemId) {
+        return Constants.TAX_EXEMPT_ITEMS.contains(itemId)
+                || Constants.NEW_TAX_EXEMPT_ITEMS.contains(itemId);
+    }
+
+    private int calculateTaxThreshold(int basePrice, int itemId) {
+        if (isBond(itemId)) {
+            return (int) (basePrice * 0.10);
+        }
+        if (isTaxExempt(itemId)) {
+            return 0;
+        }
+        return (int) Math.min(basePrice * Constants.GE_TAX, Constants.GE_TAX_CAP);
+    }
+
+    private void updateChartMarkers(int hoveredPrice) {
+        if (chart == null) {
+            return;
+        }
+
+        List<ChartMarker> markers = new ArrayList<>();
+
+        if (priceToSet != -1) {
+            HorizontalMarker desiredPriceMarker = HorizontalMarker.desiredPrice(
+                    priceToSet,
+                    "Set: " + QuantityFormatter.quantityToRSDecimalStack(priceToSet, true),
+                    CustomColors.CHART_DESIRED_PRICE_LINE
+            );
+            markers.add(desiredPriceMarker);
+        }
+
+        if (config.showTax() && hoveredPrice > 0 && !isTaxExempt(currentItemId)) {
+            int taxThreshold = calculateTaxThreshold(hoveredPrice, currentItemId);
+
+            if (taxThreshold > 0) {
+                int regionMinPrice;
+                int regionMaxPrice;
+                String label;
+
+                if (isBuyOffer) {
+                    regionMinPrice = hoveredPrice;
+                    regionMaxPrice = hoveredPrice + taxThreshold;
+                    label = "+" + QuantityFormatter.quantityToRSDecimalStack(taxThreshold, true);
+                } else {
+                    regionMinPrice = Math.max(0, hoveredPrice - taxThreshold);
+                    regionMaxPrice = hoveredPrice;
+                    label = "-" + QuantityFormatter.quantityToRSDecimalStack(taxThreshold, true);
+                }
+
+                AreaMarker taxRegion = AreaMarker.taxRegion(
+                        regionMinPrice,
+                        regionMaxPrice,
+                        label,
+                        CustomColors.CHART_TAX_REGION_BORDER,
+                        CustomColors.CHART_TAX_REGION_FILL,
+                        isBuyOffer ? AreaMarker.LabelPosition.TOP : AreaMarker.LabelPosition.BOTTOM
+                );
+                markers.add(taxRegion);
+            }
+        }
+
+        chart.setMarkers(markers);
+    }
+
+    private void clearChartMarkers() {
+        if (chart == null) {
+            return;
+        }
+
+        if (priceToSet != -1) {
+            List<ChartMarker> markers = new ArrayList<>();
+            HorizontalMarker desiredPriceMarker = HorizontalMarker.desiredPrice(
+                    priceToSet,
+                    "Set: " + QuantityFormatter.quantityToRSDecimalStack(priceToSet, true),
+                    CustomColors.CHART_DESIRED_PRICE_LINE
+            );
+            markers.add(desiredPriceMarker);
+            chart.setMarkers(markers);
+        } else {
+            chart.clearMarkers();
+        }
     }
 
 }

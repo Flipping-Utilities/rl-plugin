@@ -17,6 +17,9 @@ public class CustomColors {
     public static final Color BETTER_THAN_WIKI_SLOTS_TAB = new Color(55, 70, 50);
     public static final Color OUT_OF_RANGE_SLOTS_TAB = new Color(67, 50, 50);
 
+    public static final Color BUTTON_HIGHLIGHT = new Color(255, 215, 0, 80);
+    public static final Color BUTTON_BORDER_HIGHLIGHT = new Color(255, 215, 0, 200);
+
     public static final Color CHART_BACKGROUND = new Color(0, 0, 0, 180);
     public static final Color CHART_GRID = new Color(50, 50, 50, 200);
     public static final Color CHART_FILL = new Color(80, 80, 80, 100);
@@ -36,4 +39,9 @@ public class CustomColors {
     public static final Color CHART_BUTTON_UNSELECTED_BG = new Color(40, 40, 40);
     public static final Color CHART_BUTTON_UNSELECTED_BORDER = new Color(100, 100, 100);
     public static final Color CHART_BUTTON_UNSELECTED_TEXT = new Color(180, 180, 180);
+    public static final Color CHART_TAX_REGION_FILL = new Color(255, 200, 0, 40);
+    public static final Color CHART_TAX_REGION_BORDER = new Color(255, 200, 0, 150);
+    public static final Color CHART_DESIRED_PRICE_LINE = new Color(0, 255, 200);
+    public static final Color CHART_DESIRED_PRICE_FILL = new Color(0, 255, 200, 30);
+
 }
