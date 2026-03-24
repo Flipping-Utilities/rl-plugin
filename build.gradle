@@ -11,11 +11,12 @@ repositories {
 }
 
 def runeLiteVersion = 'latest.release'
+def lombokVersion = '1.18.30'
 
 dependencies {
     compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
-    compileOnly 'org.projectlombok:lombok:1.18.30'
-    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
 
     implementation "org.apache.commons:commons-csv:1.4"
 
