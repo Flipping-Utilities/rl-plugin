@@ -1,7 +1,8 @@
-package com.flippingutilities.ui.widgets;
+package com.flippingutilities.ui.widgets.graph;
 
 import lombok.Builder;
 import lombok.Getter;
+import net.runelite.client.ui.FontManager;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -57,5 +58,6 @@ public final class ChartConfig {
     @Builder.Default
     private final float referenceStroke = 1.3f;
 
-    private final Font labelFont;
+    @Builder.Default
+    private final Font labelFont = FontManager.getRunescapeSmallFont();
 }

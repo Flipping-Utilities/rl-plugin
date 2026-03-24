@@ -1,4 +1,4 @@
-package com.flippingutilities.ui.widgets;
+package com.flippingutilities.ui.widgets.graph;
 
 /**
  * calculates visually pleasing tick intervals for chart axes.
@@ -6,19 +6,17 @@ package com.flippingutilities.ui.widgets;
  */
 public final class TickIntervalCalculator {
 
-    /** standard nice numbers for tick intervals */
-    private static final long[] NICE_NUMBERS = {1, 2, 5, 10};
     /** target number of ticks to display on chart axis */
     private static final int TARGET_TICK_COUNT = 6;
 
-    public long calculate(long range) {
-        long roughInterval = range / TARGET_TICK_COUNT;
+    public int calculate(int range) {
+        int roughInterval = range / TARGET_TICK_COUNT;
 
         if (roughInterval <= 0) {
             return 1;
         }
 
-        long magnitude = 1;
+        int magnitude = 1;
         while (magnitude * 10 <= roughInterval) {
             magnitude *= 10;
         }
