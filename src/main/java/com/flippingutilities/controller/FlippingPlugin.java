@@ -1002,16 +1002,22 @@ public class FlippingPlugin extends Plugin {
     }
 
     private ScheduledFuture startSlotTimers() {
-        return executor.scheduleAtFixedRate(() ->
-                dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().forEach(slotWidgetTimer ->
-                        clientThread.invokeLater(() -> {
-                            try {
-                                slotsPanel.updateTimerDisplays(slotWidgetTimer.getSlotIndex(), slotWidgetTimer.createFormattedTimeString());
-                                slotWidgetTimer.updateTimerDisplay();
-                            } catch (Exception e) {
-                                log.error("exception when trying to update timer", e);
-                            }
-                        })), 1000, 1000, TimeUnit.MILLISECONDS);
+        return executor.scheduleAtFixedRate(() -> {
+            List<SlotActivityTimer> slotTimers = dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers();
+            if (slotTimers == null || slotTimers.size() < 8) {
+                log.warn("slotTimers missing or undersized in startSlotTimers, skipping update");
+                return;
+            }
+            slotTimers.forEach(slotWidgetTimer ->
+                    clientThread.invokeLater(() -> {
+                        try {
+                            slotsPanel.updateTimerDisplays(slotWidgetTimer.getSlotIndex(), slotWidgetTimer.createFormattedTimeString());
+                            slotWidgetTimer.updateTimerDisplay();
+                        } catch (Exception e) {
+                            log.error("exception when trying to update timer", e);
+                        }
+                    }));
+        }, 1000, 1000, TimeUnit.MILLISECONDS);
     }
 
     private ScheduledFuture startAutoSave() {
