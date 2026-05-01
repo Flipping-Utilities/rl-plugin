@@ -310,39 +310,12 @@ public class FlippingPlugin extends Plugin {
             GeSpriteLoader.setClientSpriteOverrides(client);
             return true;
         });
-        // Kick off a lightweight migration check on startup (async to avoid blocking startup flow)
-        try {
-            executor.submit(this::checkMigrationFlagAndMigrateIfNeeded);
-        } catch (Exception ignored) {
-            // best effort only
-        }
-    }
-
-    // Migration handling: check a lightweight flag in the SQLite-backed settings and migrate JSON -> SQLITE once
-    private void checkMigrationFlagAndMigrateIfNeeded() {
-        try {
-            File dbFile = new File(net.runelite.client.RuneLite.RUNELITE_DIR, "flipping/flipping.db");
-            SqliteStorage storage = new SqliteStorage(dbFile);
-            // Ensure schema exists for settings table
-            storage.initializeSchema();
-            String flag = storage.getSetting("migration_pending");
-            if (flag != null && flag.equalsIgnoreCase("true")) {
-                log.info("Migration flag detected. Starting migration from JSON to SQLITE storage...");
-                MigrationService migrationService = new MigrationService(storage, tradePersister);
-                int migrated = migrationService.migrate();
-                // Clear the flag after successful migration
-                storage.clearSetting("migration_pending");
-                log.info("Migration completed: {} accounts migrated.", migrated);
-            }
-            storage.close();
-        } catch (Exception ex) {
-            log.info("Migration check failed or not applicable: {}", ex.getMessage());
-        }
     }
 
     /**
      * Initialize the appropriate FlipRepository based on config.
      * If SQLite mode is enabled, creates SqliteStorage and SqliteFlipRepository.
+     * Also schedules async migration if needed.
      * Otherwise, uses JsonFlipRepository which wraps the in-memory data.
      */
     private void initializeRepository() {
@@ -354,6 +327,9 @@ public class FlippingPlugin extends Plugin {
                 dataHandler.setSqliteStorage(sqliteStorage);
                 flipRepository = new SqliteFlipRepository(sqliteStorage, itemManager);
                 log.info("Initialized SQLite repository at {}", dbFile.getAbsolutePath());
+
+                // Run migration asynchronously to avoid blocking client launch
+                executor.submit(this::runMigrationIfNeeded);
             } catch (Exception e) {
                 log.warn("Failed to initialize SQLite repository, falling back to JSON", e);
                 flipRepository = new JsonFlipRepository(this);
@@ -361,6 +337,77 @@ public class FlippingPlugin extends Plugin {
         } else {
             flipRepository = new JsonFlipRepository(this);
             log.debug("Using JSON repository");
+        }
+    }
+
+    /**
+     * Run migration from JSON to SQLite if needed.
+     * This runs asynchronously on a background thread to avoid blocking client launch.
+     */
+    private void runMigrationIfNeeded() {
+        if (sqliteStorage == null) {
+            return;
+        }
+
+        try {
+            boolean shouldMigrate = false;
+            String reason = "";
+
+            // Check 1: Explicit migration pending flag
+            String flag = sqliteStorage.getSetting("migration_pending");
+            if (flag != null && flag.equalsIgnoreCase("true")) {
+                shouldMigrate = true;
+                reason = "migration_pending flag set";
+            }
+
+            // Check 2: SQLite mode enabled, but SQLite is empty and JSON files exist
+            if (!shouldMigrate) {
+                List<String> sqliteAccounts = sqliteStorage.listAccounts();
+                boolean sqliteEmpty = sqliteAccounts == null || sqliteAccounts.isEmpty();
+
+                if (sqliteEmpty) {
+                    // Check if JSON files exist
+                    File flippingDir = new File(RuneLite.RUNELITE_DIR, "flipping");
+                    if (flippingDir.exists() && flippingDir.isDirectory()) {
+                        File[] jsonFiles = flippingDir.listFiles((dir, name) ->
+                            name.endsWith(".json") &&
+                            !name.endsWith(".backup.json") &&
+                            !name.equals("accountwide.json") &&
+                            !name.equals("backupCheckpoints.special.json"));
+                        if (jsonFiles != null && jsonFiles.length > 0) {
+                            shouldMigrate = true;
+                            reason = "SQLite empty with " + jsonFiles.length + " JSON files found";
+                        }
+                    }
+                }
+            }
+
+            if (shouldMigrate) {
+                log.info("Migration needed ({}). Starting migration from JSON to SQLITE storage...", reason);
+                MigrationService migrationService = new MigrationService(sqliteStorage, tradePersister);
+                int migrated = migrationService.migrate();
+                sqliteStorage.clearSetting("migration_pending");
+                log.info("Migration completed: {} accounts migrated.", migrated);
+
+                clientThread.invokeLater(() -> {
+                    if (dataHandler == null || masterPanel == null) {
+                        log.debug("Skipping post-migration reload because UI components are not initialized yet");
+                        return false;
+                    }
+
+                    try {
+                        log.info("Reloading account data from SQLite after migration completion");
+                        dataHandler.reloadFromSqlite();
+                        masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
+                        log.info("Post-migration SQLite reload complete. {} accounts loaded.", dataHandler.getCurrentAccounts().size());
+                    } catch (Exception reloadEx) {
+                        log.warn("Post-migration SQLite reload failed", reloadEx);
+                    }
+                    return true;
+                });
+            }
+        } catch (Exception ex) {
+            log.warn("Migration check failed: {}", ex.getMessage());
         }
     }
 
@@ -785,6 +832,11 @@ public class FlippingPlugin extends Plugin {
         dataHandler.getAccountData(currentlyLoggedInAccount).setAccumulatedSessionTimeMillis(newTotalTime);
         dataHandler.getAccountData(currentlyLoggedInAccount).setLastSessionTimeUpdate(Instant.now());
 
+        // Persist session time to SQLite if active
+        if (sqliteStorage != null) {
+            sqliteStorage.updateAccountSessionTime(currentlyLoggedInAccount, newTotalTime);
+        }
+
         if (shouldUpdateSessionTimeDisplay()) {
             statPanel.updateSessionTimeDisplay(viewAccumulatedTimeForCurrentView());
         }
@@ -854,6 +906,10 @@ public class FlippingPlugin extends Plugin {
                     ifPresent(accountItem -> {
                         accountItem.setFavorite(favoriteStatus);
                         markAccountTradesAsHavingChanged(accountName);
+                        // Persist to SQLite if active
+                        if (sqliteStorage != null) {
+                            sqliteStorage.upsertFavorite(accountName, item.getItemId(), favoriteStatus, accountItem.getFavoriteCode());
+                        }
                     });
         }
     }
@@ -869,6 +925,10 @@ public class FlippingPlugin extends Plugin {
                     ifPresent(accountItem -> {
                         accountItem.setFavoriteCode(favoriteCode);
                         markAccountTradesAsHavingChanged(accountName);
+                        // Persist to SQLite if active
+                        if (sqliteStorage != null) {
+                            sqliteStorage.upsertFavorite(accountName, item.getItemId(), accountItem.isFavorite(), favoriteCode);
+                        }
                     });
         }
     }

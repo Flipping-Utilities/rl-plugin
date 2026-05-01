@@ -30,6 +30,16 @@ public class RecipeFlipGroup implements Searchable {
     
     private List<RecipeFlip> recipeFlips = new ArrayList<>();
 
+    // Cached stats from the events table (set by SqliteStorage when loading from DB)
+    @Expose(serialize = false, deserialize = false)
+    private long cachedTotalProfit;
+    @Expose(serialize = false, deserialize = false)
+    private long cachedTotalExpense;
+    @Expose(serialize = false, deserialize = false)
+    private int cachedFlipCount;
+    @Expose(serialize = false, deserialize = false)
+    private boolean hasCachedStats;
+
     public RecipeFlipGroup(Recipe recipe) {
         this.recipe = recipe;
         this.recipeKey = RecipeHandler.createRecipeKey(recipe);

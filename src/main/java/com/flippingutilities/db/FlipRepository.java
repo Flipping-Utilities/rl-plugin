@@ -193,4 +193,21 @@ public interface FlipRepository {
      * Close any resources.
      */
     void close();
+
+    /**
+     * Set the favorite status and code for an item.
+     * @param account Account display name
+     * @param itemId Item ID
+     * @param isFavorite Whether the item is favorited
+     * @param favoriteCode Quick search code
+     */
+    default void setFavorite(String account, int itemId, boolean isFavorite, String favoriteCode) {}
+
+    /**
+     * Get the favorite status for an item.
+     * @param account Account display name
+     * @param itemId Item ID
+     * @return Map with "isFavorite" and "favoriteCode", or null if not found
+     */
+    default Map<String, Object> getFavorite(String account, int itemId) { return null; }
 }
