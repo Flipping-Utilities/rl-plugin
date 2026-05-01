@@ -30,8 +30,6 @@ import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
 import com.flippingutilities.model.BackupCheckpoints;
-import com.flippingutilities.model.FlippingItem;
-import com.flippingutilities.model.OfferEvent;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
@@ -333,6 +331,15 @@ public class DataHandler {
             thisClientLastStored = displayName;
             data.setLastStoredAt(Instant.now());
             plugin.tradePersister.writeToFile(displayName, data);
+
+            if (plugin.getConfig().dataSource().isSqlite() && sqliteStorage != null) {
+                try {
+                    sqliteStorage.syncAccountData(displayName, data);
+                }
+                catch (Exception sqliteEx) {
+                    log.warn("SQLite sync failed for {} (best-effort): {}", displayName, sqliteEx.getMessage());
+                }
+            }
         }
         catch (Exception e)
         {
@@ -364,39 +371,28 @@ public class DataHandler {
 
         for (String displayName : sqliteAccounts) {
             if (!accountSpecificData.containsKey(displayName)) {
-                AccountData accountData = new AccountData();
-                accountData.startNewSession();
-                
-                // Load unique items from SQLite and create minimal FlippingItems
-                List<Map<String, Object>> items = sqliteStorage.loadUniqueItems(displayName);
-                for (Map<String, Object> item : items) {
-                    int itemId = (Integer) item.get("itemId");
-                    long latestTs = (Long) item.get("latestTimestamp");
-                    
-                    // Create minimal FlippingItem - itemName and geLimit will be populated by prepareForUse
-                    FlippingItem flippingItem = new FlippingItem(itemId, "", 0, displayName);
-                    flippingItem.setValidFlippingPanelItem(true);
-                    
-                    // Load full trades for this item and create OfferEvents
-                    List<Map<String, Object>> trades = sqliteStorage.loadTradesByItem(displayName, itemId, null);
-                    for (Map<String, Object> trade : trades) {
-                        OfferEvent offer = new OfferEvent();
-                        offer.setItemId(itemId);
-                        offer.setBuy((Integer) trade.get("isBuy") == 1);
-                        offer.setCurrentQuantityInTrade((Integer) trade.get("qty"));
-                        offer.setPrice((Integer) trade.get("price"));
-                        offer.setTime(Instant.ofEpochMilli((Long) trade.get("timestamp")));
-                        offer.setMadeBy(displayName);
-                        flippingItem.updateHistory(offer);
-                    }
-                    
-                    accountData.getTrades().add(flippingItem);
-                }
-                
-                accountData.prepareForUse(plugin);
+                AccountData accountData = fetchAccountData(displayName);
                 accountSpecificData.put(displayName, accountData);
-                log.info("Loaded {} items for account {} from SQLite", items.size(), displayName);
+                log.info("Loaded account {} from SQLite", displayName);
             }
         }
+    }
+
+    public void reloadFromSqlite() {
+        if (sqliteStorage == null || !plugin.getConfig().dataSource().isSqlite()) {
+            log.debug("Skipping SQLite reload because storage is not enabled");
+            return;
+        }
+
+        List<String> sqliteAccounts = sqliteStorage.listAccounts();
+        Map<String, AccountData> reloadedAccounts = new HashMap<>();
+        log.info("Reloading {} accounts from SQLite", sqliteAccounts.size());
+
+        for (String displayName : sqliteAccounts) {
+            reloadedAccounts.put(displayName, fetchAccountData(displayName));
+        }
+
+        accountSpecificData = reloadedAccounts;
+        accountsWithUnsavedChanges.clear();
     }
 }

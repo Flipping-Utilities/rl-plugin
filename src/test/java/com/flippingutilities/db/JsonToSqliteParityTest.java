@@ -219,4 +219,87 @@ public class JsonToSqliteParityTest {
         if (value instanceof Integer) return ((Integer) value).longValue();
         return 0L;
     }
+
+    @Test
+    public void testConsumedTradesDirect() {
+        // Simple test: insert trades, mark as consumed, verify stats
+        storage.upsertAccount(TEST_ACCOUNT, "player-" + TEST_ACCOUNT);
+
+        // Insert buy trade
+        storage.insertTrade(TEST_ACCOUNT, WHIP_ITEM_ID, Instant.now().toEpochMilli(), 10, 50000, true);
+        // Insert sell trade
+        storage.insertTrade(TEST_ACCOUNT, WHIP_ITEM_ID, Instant.now().toEpochMilli() + 1000, 10, 55000, false);
+
+        // Load trades to get their IDs
+        List<Map<String, Object>> trades = storage.loadTrades(TEST_ACCOUNT, Instant.EPOCH);
+        assertEquals("Should have 2 trades", 2, trades.size());
+
+        // Insert flip event
+        int profit = (55000 - 50000) * 10; // 50000
+        int eventId = storage.insertEventWithTimestamp(TEST_ACCOUNT, "flip", Instant.now().toEpochMilli(), 50000 * 10, profit, null);
+        assertTrue("Event should be created", eventId > 0);
+
+        // Mark both trades as consumed
+        for (Map<String, Object> trade : trades) {
+            Long tradeId = (Long) trade.get("id");
+            int qty = (Integer) trade.get("qty");
+            storage.consumeTrade(tradeId.intValue(), qty, eventId);
+        }
+
+        // Verify stats - unconsumed trades should be 0
+        Map<String, Object> stats = storage.queryAggregateStats(TEST_ACCOUNT, Instant.EPOCH);
+        assertEquals("All trades consumed, expense should be 0", 0L, getLongValue(stats, "totalExpense"));
+        assertEquals("All trades consumed, revenue should be 0", 0L, getLongValue(stats, "totalRevenue"));
+
+        // But profit from events should show correctly
+        FlipRepository repository = new SqliteFlipRepository(storage, null);
+        AggregateStats repoStats = repository.getAggregateStats(TEST_ACCOUNT, Instant.EPOCH);
+        assertEquals("Profit from events should be 50000", 50000L, repoStats.totalProfit);
+    }
+
+    @Test
+    public void testPartialConsumedTrades() {
+        // Test: Buy 20, Sell 10 - consume only 10 of the buy
+        storage.upsertAccount(TEST_ACCOUNT, "player-" + TEST_ACCOUNT);
+
+        // Insert buy trade (20 items)
+        storage.insertTrade(TEST_ACCOUNT, WHIP_ITEM_ID, Instant.now().toEpochMilli(), 20, 50000, true);
+        // Insert sell trade (10 items)
+        storage.insertTrade(TEST_ACCOUNT, WHIP_ITEM_ID, Instant.now().toEpochMilli() + 1000, 10, 55000, false);
+
+        // Load trades to get their IDs
+        List<Map<String, Object>> trades = storage.loadTrades(TEST_ACCOUNT, Instant.EPOCH);
+        assertEquals("Should have 2 trades", 2, trades.size());
+
+        // Insert flip event (10 items flipped)
+        int profit = (55000 - 50000) * 10; // 50000
+        int eventId = storage.insertEventWithTimestamp(TEST_ACCOUNT, "flip", Instant.now().toEpochMilli(), 50000 * 10, profit, null);
+        assertTrue("Event should be created", eventId > 0);
+
+        // Consume 10 from buy trade, and all 10 from sell trade
+        for (Map<String, Object> trade : trades) {
+            Long tradeId = (Long) trade.get("id");
+            int qty = (Integer) trade.get("qty");
+            int isBuy = (Integer) trade.get("isBuy");
+
+            if (isBuy == 1) {
+                // Consume only 10 of the 20 buy
+                storage.consumeTrade(tradeId.intValue(), 10, eventId);
+            } else {
+                // Consume all 10 sell
+                storage.consumeTrade(tradeId.intValue(), qty, eventId);
+            }
+        }
+
+        // Check stats
+        FlipRepository repository = new SqliteFlipRepository(storage, null);
+        AggregateStats repoStats = repository.getAggregateStats(TEST_ACCOUNT, Instant.EPOCH);
+
+        // Profit from events
+        assertEquals("Profit should be 50000", 50000L, repoStats.totalProfit);
+
+        // Unconsumed: 10 buys remaining @ 50000 = 500000
+        assertEquals("Unconsumed expense should be 500000", 500000L, repoStats.totalExpense);
+        assertEquals("Unconsumed revenue should be 0 (all sells consumed)", 0L, repoStats.totalRevenue);
+    }
 }

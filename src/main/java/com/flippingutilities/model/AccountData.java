@@ -166,12 +166,18 @@ public class AccountData {
      * the item manager retrieves the item's name as "Members object". The item manager returns the correct
      * name when the user is on a member's world or logged out. As such, this method is called when the plugin starts
      * and whenever the user logs into a members world to clean up any "Members object" item names.
+     * Also fixes placeholder names like "Item 12345" from SQLite migration.
      */
     public void fixIncorrectItemNames(ItemManager itemManager) {
         trades.forEach(item -> {
-            if (item.getItemName().equals("Members object")) {
-                String actualName = itemManager.getItemComposition(item.getItemId()).getName();
-                item.setItemName(actualName);
+            String currentName = item.getItemName();
+            if (currentName.equals("Members object") || currentName.startsWith("Item ")) {
+                try {
+                    String actualName = itemManager.getItemComposition(item.getItemId()).getName();
+                    item.setItemName(actualName);
+                } catch (Exception e) {
+                    // Item composition not available, keep current name
+                }
             }
         });
     }

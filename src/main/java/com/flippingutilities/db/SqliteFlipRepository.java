@@ -26,6 +26,7 @@
 
 package com.flippingutilities.db;
 
+import com.flippingutilities.utilities.Constants;
 import net.runelite.client.game.ItemManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,7 +57,7 @@ public class SqliteFlipRepository implements FlipRepository {
         if (accountId == null) {
             return results;
         }
-        
+
         // Map sortBy to column
         String orderColumn = "latest_timestamp";
         if ("PROFIT".equalsIgnoreCase(sortBy)) {
@@ -64,37 +65,53 @@ public class SqliteFlipRepository implements FlipRepository {
         } else if ("ROI".equalsIgnoreCase(sortBy)) {
             orderColumn = "roi";
         }
-        
+
         long sinceMillis = since != null ? since.toEpochMilli() : 0L;
-        
+
+        // Calculate profit from completed flips (events table) grouped by item
+        // This matches how getAggregateStats calculates total profit
+        // Use DISTINCT subquery to avoid double-counting when both buy and sell trades have same item_id
         String sql = "SELECT " +
             "t.item_id, " +
             "SUM(t.qty) as total_qty, " +
             "SUM(CASE WHEN t.is_buy = 1 THEN t.qty ELSE 0 END) as buy_qty, " +
             "SUM(CASE WHEN t.is_buy = 0 THEN t.qty ELSE 0 END) as sell_qty, " +
-            "SUM(CASE WHEN t.is_buy = 0 THEN t.qty * t.price ELSE -t.qty * t.price END) as total_profit, " +
-            "CASE " +
-            "  WHEN SUM(CASE WHEN t.is_buy = 1 THEN t.qty * t.price ELSE 0 END) > 0 " +
-            "  THEN (SUM(CASE WHEN t.is_buy = 0 THEN t.qty * t.price ELSE -t.qty * t.price END) * 100.0 / " +
-            "        SUM(CASE WHEN t.is_buy = 1 THEN t.qty * t.price ELSE 0 END)) " +
-            "  ELSE 0 " +
-            "END as roi, " +
+            "COALESCE((" +
+            "  SELECT SUM(sub.profit) FROM (" +
+            "    SELECT DISTINCT e.id, e.profit FROM events e " +
+            "    JOIN consumed_trade ct ON ct.event_id = e.id " +
+            "    JOIN trades ct_trade ON ct_trade.id = ct.trade_id " +
+            "    WHERE e.account_id = ? AND e.timestamp > ? AND e.type = 'flip' AND ct_trade.item_id = t.item_id" +
+            "  ) sub" +
+            "), 0) as total_profit, " +
+            "COALESCE((" +
+            "  SELECT SUM(sub.cost) FROM (" +
+            "    SELECT DISTINCT e.id, e.cost FROM events e " +
+            "    JOIN consumed_trade ct ON ct.event_id = e.id " +
+            "    JOIN trades ct_trade ON ct_trade.id = ct.trade_id " +
+            "    WHERE e.account_id = ? AND e.timestamp > ? AND e.type = 'flip' AND ct_trade.item_id = t.item_id" +
+            "  ) sub" +
+            "), 0) as total_cost, " +
             "MAX(t.timestamp) as latest_timestamp, " +
-            "(SELECT value FROM settings WHERE key = 'favorite_' || t.item_id) as is_favorite " +
+            "COALESCE(fav.is_favorite, 0) as is_favorite " +
             "FROM trades t " +
-            "LEFT JOIN consumed_trade ct ON t.id = ct.trade_id " +
-            "WHERE t.account_id = ? AND t.timestamp > ? AND ct.id IS NULL " +
+            "LEFT JOIN item_favorites fav ON fav.account_id = t.account_id AND fav.item_id = t.item_id " +
+            "WHERE t.account_id = ? AND t.timestamp > ? " +
             "GROUP BY t.item_id " +
             "ORDER BY " + orderColumn + " DESC " +
             "LIMIT ? OFFSET ?";
-        
+
         try (Connection conn = storage.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, accountId);
             ps.setLong(2, sinceMillis);
-            ps.setInt(3, limit);
-            ps.setInt(4, offset);
-            
+            ps.setInt(3, accountId);
+            ps.setLong(4, sinceMillis);
+            ps.setInt(5, accountId);
+            ps.setLong(6, sinceMillis);
+            ps.setInt(7, limit);
+            ps.setInt(8, offset);
+
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     int itemId = rs.getInt("item_id");
@@ -103,10 +120,12 @@ public class SqliteFlipRepository implements FlipRepository {
                     int buyQty = rs.getInt("buy_qty");
                     int sellQty = rs.getInt("sell_qty");
                     long totalProfit = rs.getLong("total_profit");
-                    double roi = rs.getDouble("roi");
+                    long totalCost = rs.getLong("total_cost");
+                    // ROI = profit / cost * 100
+                    double roi = totalCost > 0 ? (totalProfit * 100.0 / totalCost) : 0;
                     long latestTimestamp = rs.getLong("latest_timestamp");
-                    boolean isFavorite = "true".equals(rs.getString("is_favorite"));
-                    
+                    boolean isFavorite = rs.getInt("is_favorite") == 1;
+
                     results.add(new ItemSummary(itemId, itemName, totalQty, buyQty, sellQty,
                         totalProfit, roi, latestTimestamp, isFavorite));
                 }
@@ -114,7 +133,7 @@ public class SqliteFlipRepository implements FlipRepository {
         } catch (SQLException e) {
             log.error("Error getting item summaries for account={}", account, e);
         }
-        
+
         return results;
     }
     
@@ -124,13 +143,13 @@ public class SqliteFlipRepository implements FlipRepository {
         if (accountId == null) {
             return 0;
         }
-        
+
         long sinceMillis = since != null ? since.toEpochMilli() : 0L;
-        
+
+        // Count all traded items (not filtered by consumed_trade)
         String sql = "SELECT COUNT(DISTINCT item_id) as item_count " +
             "FROM trades t " +
-            "LEFT JOIN consumed_trade ct ON t.id = ct.trade_id " +
-            "WHERE t.account_id = ? AND t.timestamp > ? AND ct.id IS NULL";
+            "WHERE t.account_id = ? AND t.timestamp > ?";
         
         try (Connection conn = storage.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -199,17 +218,18 @@ public class SqliteFlipRepository implements FlipRepository {
         }
         
         long sinceMillis = since != null ? since.toEpochMilli() : 0L;
-        
+
         // Query events for profit (completed flips)
-        // Query trades for expense/revenue (unconsumed trades = potential future flips)
+        // Query trades for expense/revenue (unconsumed qty = potential future flips)
+        // For partially consumed trades, only count the remaining (unconsumed) quantity
         String sql = "SELECT " +
             "COALESCE((SELECT SUM(e.profit) FROM events e WHERE e.account_id = ? AND e.timestamp > ?), 0) as total_profit, " +
-            "COALESCE((SELECT SUM(t.qty * t.price) FROM trades t " +
+            "COALESCE((SELECT SUM((t.qty - COALESCE(ct.qty, 0)) * t.price) FROM trades t " +
             "  LEFT JOIN consumed_trade ct ON t.id = ct.trade_id " +
-            "  WHERE t.account_id = ? AND t.timestamp > ? AND ct.id IS NULL AND t.is_buy = 1), 0) as total_expense, " +
-            "COALESCE((SELECT SUM(t.qty * t.price) FROM trades t " +
+            "  WHERE t.account_id = ? AND t.timestamp > ? AND (ct.id IS NULL OR ct.qty < t.qty) AND t.is_buy = 1), 0) as total_expense, " +
+            "COALESCE((SELECT SUM((t.qty - COALESCE(ct.qty, 0)) * t.price) FROM trades t " +
             "  LEFT JOIN consumed_trade ct ON t.id = ct.trade_id " +
-            "  WHERE t.account_id = ? AND t.timestamp > ? AND ct.id IS NULL AND t.is_buy = 0), 0) as total_revenue, " +
+            "  WHERE t.account_id = ? AND t.timestamp > ? AND (ct.id IS NULL OR ct.qty < t.qty) AND t.is_buy = 0), 0) as total_revenue, " +
             "COALESCE((SELECT COUNT(*) FROM events e WHERE e.account_id = ? AND e.timestamp > ?), 0) as flip_count";
 
         try (Connection conn = storage.getConnection();
@@ -222,15 +242,15 @@ public class SqliteFlipRepository implements FlipRepository {
             ps.setLong(6, sinceMillis);
             ps.setInt(7, accountId);
             ps.setLong(8, sinceMillis);
-            
+
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     long profit = rs.getLong("total_profit");
                     long expense = rs.getLong("total_expense");
                     long revenue = rs.getLong("total_revenue");
                     int flipCount = rs.getInt("flip_count");
-                    // Tax is 1% of sell value, capped at 5M per trade
-                    long tax = Math.min(revenue / 100, 5_000_000);
+                    // Tax is calculated per trade: 1% of sell value, capped at 5M per trade
+                    long tax = calculateTotalTax(accountId, sinceMillis);
                     return new AggregateStats(profit, expense, revenue, flipCount, tax, sessionTime);
                 }
             }
@@ -239,6 +259,82 @@ public class SqliteFlipRepository implements FlipRepository {
         }
         
         return defaultStats;
+    }
+
+    /**
+     * Calculate total tax by summing per-trade tax.
+     * Tax rules:
+     * - Before GE_TAX_START: no tax
+     * - Between GE_TAX_START and GE_TAX_INCREASED: 1% tax, capped at 5M per trade
+     * - After GE_TAX_INCREASED: 2% tax, capped at 5M per trade
+     * - TAX_EXEMPT_ITEMS: always exempt
+     * - NEW_TAX_EXEMPT_ITEMS: exempt after GE_TAX_INCREASED
+     */
+    private long calculateTotalTax(int accountId, long sinceMillis) {
+        String sql = "SELECT item_id, timestamp, qty, price FROM trades WHERE account_id = ? AND timestamp > ? AND is_buy = 0";
+        long totalTax = 0L;
+
+        try (Connection conn = storage.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, accountId);
+            ps.setLong(2, sinceMillis);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    int itemId = rs.getInt("item_id");
+                    long timestamp = rs.getLong("timestamp");
+                    int qty = rs.getInt("qty");
+                    int price = rs.getInt("price");
+
+                    long tradeTax = calculateTaxForTrade(itemId, timestamp, qty, price);
+                    totalTax += tradeTax;
+                }
+            }
+        } catch (SQLException e) {
+            log.error("Error calculating tax for accountId={}", accountId, e);
+        }
+
+        return totalTax;
+    }
+
+    /**
+     * Calculate tax for a single trade based on item, timestamp, quantity, and price.
+     */
+    private long calculateTaxForTrade(int itemId, long timestamp, int qty, int price) {
+        long epochSeconds = timestamp / 1000;
+
+        // No tax before GE tax was introduced
+        if (epochSeconds < Constants.GE_TAX_START) {
+            return 0;
+        }
+
+        // Always exempt items
+        if (Constants.TAX_EXEMPT_ITEMS.contains(itemId)) {
+            return 0;
+        }
+
+        // New exempt items (only after tax increase)
+        if (epochSeconds >= Constants.GE_TAX_INCREASED
+            && Constants.NEW_TAX_EXEMPT_ITEMS.contains(itemId)) {
+            return 0;
+        }
+
+        long tradeValue = (long) qty * price;
+
+        // Calculate tax based on time period
+        if (epochSeconds < Constants.GE_TAX_INCREASED) {
+            // 1% tax period
+            if (tradeValue >= Constants.OLD_MAX_PRICE_FOR_GE_TAX) {
+                return Constants.GE_TAX_CAP;
+            }
+            return (long) Math.floor(tradeValue * Constants.OLD_GE_TAX);
+        } else {
+            // 2% tax period
+            if (tradeValue >= Constants.MAX_PRICE_FOR_GE_TAX) {
+                return Constants.GE_TAX_CAP;
+            }
+            return (long) Math.floor(tradeValue * Constants.GE_TAX);
+        }
     }
     
     @Override
@@ -264,6 +360,16 @@ public class SqliteFlipRepository implements FlipRepository {
     @Override
     public void close() {
         storage.close();
+    }
+
+    @Override
+    public void setFavorite(String account, int itemId, boolean isFavorite, String favoriteCode) {
+        storage.upsertFavorite(account, itemId, isFavorite, favoriteCode);
+    }
+
+    @Override
+    public Map<String, Object> getFavorite(String account, int itemId) {
+        return storage.loadFavorite(account, itemId);
     }
     
     private long getSessionTime(Integer accountId) {

@@ -1,20 +1,15 @@
 package com.flippingutilities.db;
 
+
+
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * SQLite schema constants and DDL for the Flipping Utilities storage.
- * <p>
- * This file defines the schema version, all CREATE TABLE statements, index
- * definitions and a PRAGMA-based migration hook. All DDL statements are exposed
- * as string constants and can be retrieved in a defined order to ensure proper
- * table creation order with foreign key dependencies.
- */
 public final class SqliteSchema {
 
     // Schema version for migration tracking
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
 
     // PRAGMA for reading current version and for migrating to the current version
     public static final String PRAGMA_GET_USER_VERSION = "PRAGMA user_version";
@@ -53,6 +48,7 @@ public final class SqliteSchema {
         "  id INTEGER PRIMARY KEY," +
         "  account_id INTEGER," +
         "  item_id INTEGER," +
+        "  uuid TEXT," +
         "  timestamp INTEGER," +
         "  qty INTEGER," +
         "  price INTEGER," +
@@ -77,7 +73,7 @@ public final class SqliteSchema {
         "  id INTEGER PRIMARY KEY," +
         "  trade_id INTEGER," +
         "  qty INTEGER," +
-        "  event_id INTEGER NULLABLE," +
+        "  event_id INTEGER NULL," +
         "  FOREIGN KEY(trade_id) REFERENCES trades(id)," +
         "  FOREIGN KEY(event_id) REFERENCES events(id)" +
         ");";
@@ -97,7 +93,8 @@ public final class SqliteSchema {
         "  recipe_flip_id INTEGER," +
         "  item_id INTEGER," +
         "  offer_uuid TEXT," +
-        "  amount_consumed INTEGER" +
+        "  amount_consumed INTEGER," +
+        "  FOREIGN KEY(recipe_flip_id) REFERENCES recipe_flips(id)" +
         ");";
 
     public static final String CREATE_TABLE_RECIPE_FLIP_OUTPUTS =
@@ -106,7 +103,8 @@ public final class SqliteSchema {
         "  recipe_flip_id INTEGER," +
         "  item_id INTEGER," +
         "  offer_uuid TEXT," +
-        "  amount_consumed INTEGER" +
+        "  amount_consumed INTEGER," +
+        "  FOREIGN KEY(recipe_flip_id) REFERENCES recipe_flips(id)" +
         ");";
 
     public static final String CREATE_TABLE_RECIPES =
@@ -143,6 +141,17 @@ public final class SqliteSchema {
         "  FOREIGN KEY(account_id) REFERENCES accounts(id)" +
         ");";
 
+    public static final String CREATE_TABLE_ITEM_FAVORITES =
+        "CREATE TABLE IF NOT EXISTS item_favorites (" +
+        "  id INTEGER PRIMARY KEY," +
+        "  account_id INTEGER," +
+        "  item_id INTEGER," +
+        "  is_favorite INTEGER DEFAULT 0," +
+        "  favorite_code TEXT DEFAULT '1'," +
+        "  FOREIGN KEY(account_id) REFERENCES accounts(id)," +
+        "  UNIQUE(account_id, item_id)" +
+        ");";
+
     // INDEX statements for common query patterns
     public static final String INDEX_ACTIVE_SLOTS_ACCOUNT_TIME =
         "CREATE INDEX IF NOT EXISTS idx_active_slots_account_time ON active_slots (account_id, time)";
@@ -153,8 +162,26 @@ public final class SqliteSchema {
     public static final String INDEX_TRADES_ITEM_TIMESTAMP =
         "CREATE INDEX IF NOT EXISTS idx_trades_item_timestamp ON trades (item_id, timestamp)";
 
+    public static final String INDEX_TRADES_ACCOUNT_ITEM_TIMESTAMP =
+        "CREATE INDEX IF NOT EXISTS idx_trades_account_item_timestamp ON trades (account_id, item_id, timestamp)";
+
+    public static final String INDEX_CONSUMED_TRADE_TRADE_ID =
+        "CREATE INDEX IF NOT EXISTS idx_consumed_trade_trade_id ON consumed_trade (trade_id)";
+
+    public static final String INDEX_CONSUMED_TRADE_EVENT_ID =
+        "CREATE INDEX IF NOT EXISTS idx_consumed_trade_event_id ON consumed_trade (event_id)";
+
     public static final String INDEX_EVENTS_ACCOUNT_TIMESTAMP =
         "CREATE INDEX IF NOT EXISTS idx_events_account_timestamp ON events (account_id, timestamp)";
+
+    public static final String INDEX_TRADES_UUID =
+        "CREATE INDEX IF NOT EXISTS idx_trades_uuid ON trades (uuid)";
+
+    public static final String INDEX_ITEM_FAVORITES_ACCOUNT_ITEM =
+        "CREATE INDEX IF NOT EXISTS idx_item_favorites_account_item ON item_favorites (account_id, item_id)";
+
+    public static final String INDEX_RECIPE_FLIPS_RECIPE_KEY =
+        "CREATE INDEX IF NOT EXISTS idx_recipe_flips_recipe_key ON recipe_flips (recipe_key)";
 
     public static final List<String> getCreateStatementsInOrder() {
         return Arrays.asList(
@@ -169,7 +196,8 @@ public final class SqliteSchema {
             CREATE_TABLE_RECIPES,
             CREATE_TABLE_SETTINGS,
             CREATE_TABLE_GE_LIMIT_STATE,
-            CREATE_TABLE_SLOT_TIMERS
+            CREATE_TABLE_SLOT_TIMERS,
+            CREATE_TABLE_ITEM_FAVORITES
         );
     }
 
@@ -178,7 +206,27 @@ public final class SqliteSchema {
             INDEX_ACTIVE_SLOTS_ACCOUNT_TIME,
             INDEX_TRADES_ACCOUNT_TIMESTAMP,
             INDEX_TRADES_ITEM_TIMESTAMP,
-            INDEX_EVENTS_ACCOUNT_TIMESTAMP
+            INDEX_TRADES_ACCOUNT_ITEM_TIMESTAMP,
+            INDEX_TRADES_UUID,
+            INDEX_RECIPE_FLIPS_RECIPE_KEY,
+            INDEX_CONSUMED_TRADE_TRADE_ID,
+            INDEX_CONSUMED_TRADE_EVENT_ID,
+            INDEX_EVENTS_ACCOUNT_TIMESTAMP,
+            INDEX_ITEM_FAVORITES_ACCOUNT_ITEM
         );
+    }
+
+    /**
+     * Returns DDL statements to upgrade the schema from the given version to the current version.
+     * Each version range (fromVersion &lt; N) produces the necessary DDL.
+     */
+    public static List<String> getMigrationStatements(int fromVersion) {
+        List<String> stmts = new ArrayList<>();
+        if (fromVersion < 2) {
+            stmts.add(CREATE_TABLE_ITEM_FAVORITES);
+            stmts.add(INDEX_ITEM_FAVORITES_ACCOUNT_ITEM);
+        }
+        // Future: if (fromVersion < 3) { stmts.add(...); }
+        return stmts;
     }
 }

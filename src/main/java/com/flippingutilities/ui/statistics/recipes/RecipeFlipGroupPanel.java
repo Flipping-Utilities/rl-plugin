@@ -321,12 +321,25 @@ public class RecipeFlipGroupPanel extends JPanel {
 
         Recipe recipe = recipeFlipGroup.getRecipe();
 
-        int recipesMade = recipeFlips.stream().mapToInt(rf -> rf.getRecipeCountMade(recipe)).sum();
-        long revenue = recipeFlips.stream().mapToLong(RecipeFlip::getRevenue).sum();
-        long expense = recipeFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
-        long profit = revenue - expense;
+        long profit;
+        long expense;
+        int recipesMade;
+
+        if (recipeFlipGroup.isHasCachedStats()) {
+            // Use pre-computed stats from events table (SQLite mode)
+            profit = recipeFlipGroup.getCachedTotalProfit();
+            expense = recipeFlipGroup.getCachedTotalExpense();
+            recipesMade = recipeFlipGroup.getCachedFlipCount();
+        } else {
+            // Compute from RecipeFlips (JSON mode)
+            recipesMade = recipeFlips.stream().mapToInt(rf -> rf.getRecipeCountMade(recipe)).sum();
+            long revenue = recipeFlips.stream().mapToLong(RecipeFlip::getRevenue).sum();
+            expense = recipeFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
+            profit = revenue - expense;
+        }
 
         updateTitleLabels(profit, recipesMade);
+        long revenue = profit + expense;
         updateFlippingLabels(expense, revenue, recipesMade);
         updateTimeLabels();
     }
