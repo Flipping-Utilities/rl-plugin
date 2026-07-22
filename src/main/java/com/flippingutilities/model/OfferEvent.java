@@ -93,8 +93,12 @@ public class OfferEvent
 
 	//Used in theGeHistoryTabOfferPanel and RecipeFlipPanel
 	private transient String itemName;
-	//used in the live slot view to show what price something was listed at
-	private transient int listedPrice;
+	// Exact limit price posted in the GE. This is distinct from `price`, which
+	// is the average execution price of filled units. Persisting it lets other
+	// local tools and a restarted client recover the price of an unfilled live
+	// offer; older account files simply deserialize it as 0.
+	@SerializedName("lp")
+	private int listedPrice;
 	private transient int spent;
 
 	/**
