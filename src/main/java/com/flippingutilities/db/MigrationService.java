@@ -53,6 +53,16 @@ public class MigrationService {
      * @return Number of accounts migrated
      */
     public int migrate() {
+        storage.initializeSchema();
+        if ("true".equalsIgnoreCase(storage.getSetting("migration_completed"))) {
+            return 0;
+        }
+        return migrate(tradePersister.loadAllAccountsForMigration());
+    }
+
+    /** Imports a previously read snapshot so a rebuild cannot reread a changed source. */
+    public int migrate(Map<String, AccountData> accounts) {
+        Objects.requireNonNull(accounts, "Account snapshot is required");
         log.info("Starting JSON -> SQLite migration...");
         long startTime = System.currentTimeMillis();
         storage.initializeSchema();
@@ -66,10 +76,7 @@ public class MigrationService {
         // Best-effort pre-migration backup so a botched run can be restored.
         createPreMigrationBackup();
 
-        // Use TradePersister to load all accounts
-        Map<String, AccountData> accounts = tradePersister.loadAllAccounts();
-
-        if (accounts == null || accounts.isEmpty()) {
+        if (accounts.isEmpty()) {
             log.info("No account data found to migrate.");
             // Nothing to migrate; mark complete so we don't keep retrying.
             storage.setSetting("migration_completed", "true");

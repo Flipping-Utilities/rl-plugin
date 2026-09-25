@@ -8,8 +8,6 @@ import com.flippingutilities.model.RecipeFlip;
 import com.flippingutilities.model.RecipeFlipGroup;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonNull;
-import com.google.gson.JsonObject;
 import com.google.gson.TypeAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
@@ -37,7 +35,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import net.runelite.api.GrandExchangeOfferState;
 
 /**
  * SQLite storage with connection management and schema initialization.
@@ -134,12 +131,11 @@ public class SqliteStorage {
     }
 
     public synchronized boolean requiresFullResync() {
-        return Files.exists(recoveryMarker()) || "true".equalsIgnoreCase(getSetting("full_resync_required"));
+        return Files.exists(recoveryMarker());
     }
 
     /** Called only after the full JSON import has committed successfully. */
     public synchronized void markSynchronized() {
-        clearSetting("full_resync_required");
         try {
             Files.deleteIfExists(recoveryMarker());
         } catch (IOException e) {
@@ -327,78 +323,35 @@ public class SqliteStorage {
                 return;
             }
 
-            if (currentVersion == 0) {
-                // Fresh database: create all tables and indexes
-                List<String> creates = SqliteSchema.getCreateStatementsInOrder();
+            if (currentVersion != 0) {
+                throw new IllegalStateException("Unsupported SQLite schema version: " + currentVersion);
+            }
+
+            // Create the complete initial schema and its version stamp atomically. There
+            // are no historical database versions to upgrade before the first release.
+            boolean wasAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            try {
                 try (Statement stmt = conn.createStatement()) {
-                    for (String sql : creates) {
+                    for (String sql : SqliteSchema.getCreateStatementsInOrder()) {
                         stmt.execute(sql);
                     }
-                }
-                List<String> indexes = SqliteSchema.getIndexStatements();
-                try (Statement stmt = conn.createStatement()) {
-                    for (String sql : indexes) {
+                    for (String sql : SqliteSchema.getIndexStatements()) {
                         stmt.execute(sql);
                     }
-                }
-                // Stamp the version (idempotent DDL above, so a crash before this just re-runs it)
-                String migration = SqliteSchema.getMigrationStatement();
-                if (migration != null && !migration.trim().isEmpty()) {
-                    try (Statement stmt = conn.createStatement()) {
-                        stmt.execute(migration);
-                    }
-                }
-            } else if (currentVersion < SqliteSchema.SCHEMA_VERSION) {
-                // Incremental migration. Run inside a transaction so a partial upgrade rolls back.
-                // Foreign keys are disabled during the migration because the rebuild steps
-                // (ALTER TABLE ... RENAME / DROP TABLE) trip FK checks while child rows exist
-                // (PRAGMA foreign_keys is a no-op inside a transaction, so it must be toggled
-                // outside of it), and re-enabled + verified afterwards.
-                List<String> migrationStmts = SqliteSchema.getMigrationStatements(currentVersion);
-                // Bump the version inside the same transaction as the DDL so a crash between
-                // the two can't leave the DB migrated-but-unversioned (and re-run is safe anyway
-                // thanks to IF NOT EXISTS / INSERT-SELECT rebuilds).
-                String versionStmt = SqliteSchema.getMigrationStatement();
-                if (versionStmt != null && !versionStmt.trim().isEmpty()) {
-                    migrationStmts = new ArrayList<>(migrationStmts);
-                    migrationStmts.add(versionStmt);
-                }
-                try (Statement pragma = conn.createStatement()) {
-                    pragma.execute("PRAGMA foreign_keys=OFF;");
-                }
-                boolean wasAutoCommit = conn.getAutoCommit();
-                try {
-                    conn.setAutoCommit(false);
-                    try {
-                        try (Statement stmt = conn.createStatement()) {
-                            for (String sql : migrationStmts) {
-                                stmt.execute(sql);
-                            }
-                        }
-                        conn.commit();
-                    } catch (SQLException ex) {
-                        conn.rollback();
-                        throw ex;
-                    } finally {
-                        conn.setAutoCommit(wasAutoCommit);
-                    }
-                    // Post-migration integrity check: report any FK violations the rebuild
-                    // may have introduced (e.g. consumed_trade rows referencing dropped
-                    // duplicate trades), then re-enable enforcement.
-                    try (Statement check = conn.createStatement();
-                         ResultSet rs = check.executeQuery("PRAGMA foreign_key_check;")) {
-                        if (rs.next()) {
-                            logger.error("Foreign key violations after schema migration (first: table={}, rowid={})",
-                                rs.getString(1), rs.getLong(2));
+                    stmt.execute(SqliteSchema.getMigrationStatement());
+                    try (ResultSet violations = stmt.executeQuery("PRAGMA foreign_key_check")) {
+                        if (violations.next()) {
+                            throw new SQLException("Foreign key violation while initializing SQLite schema");
                         }
                     }
-                } finally {
-                    try (Statement pragma = conn.createStatement()) {
-                        pragma.execute("PRAGMA foreign_keys=ON;");
-                    } catch (SQLException e) {
-                        logger.warn("Could not re-enable foreign keys after migration", e);
-                    }
                 }
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(wasAutoCommit);
             }
         } catch (SQLException e) {
             // Rethrow instead of swallowing: callers (notably FlippingPlugin.rebuildSqliteFromJson)
@@ -702,24 +655,15 @@ public class SqliteStorage {
         // recipe PartialOffers hydrate from them. Excluding them here made reloadFromSqlite
         // shrink the in-memory history, and the next storeData() then overwrote the JSON with
         // the degraded state, permanently destroying those offers in both backends.
-        String sql = "SELECT uuid, item_id, timestamp, qty, price, is_buy, offer_json FROM trades WHERE account_id = ? ORDER BY item_id, timestamp, id";
+        String sql = "SELECT item_id, offer_json FROM trades WHERE account_id = ? ORDER BY item_id, timestamp, id";
         try {
             Connection conn = getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setInt(1, accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
-                        String uuid = rs.getString("uuid");
                         int itemId = rs.getInt("item_id");
-                        long timestamp = rs.getLong("timestamp");
-                        int qty = rs.getInt("qty");
-                        int price = rs.getInt("price");
-                        boolean isBuy = rs.getInt("is_buy") == 1;
-
-                        String offerJson = rs.getString("offer_json");
-                        OfferEvent offer = offerJson == null
-                            ? createOfferEvent(uuid, itemId, timestamp, qty, price, isBuy, displayName)
-                            : SLOT_GSON.fromJson(offerJson, OfferEvent.class);
+                        OfferEvent offer = SLOT_GSON.fromJson(rs.getString("offer_json"), OfferEvent.class);
                         offer.setMadeBy(displayName);
                         offersByItem.computeIfAbsent(itemId, k -> new ArrayList<>()).add(offer);
                     }
@@ -853,23 +797,6 @@ public class SqliteStorage {
     }
 
     /**
-     * Create an OfferEvent from trade record data.
-     */
-    private OfferEvent createOfferEvent(String uuid, int itemId, long timestamp, int qty, int price, boolean isBuy, String displayName) {
-        return new OfferEvent(
-            uuid,
-            isBuy,
-            itemId,
-            qty,
-            price,
-            Instant.ofEpochMilli(timestamp),
-            0,
-            isBuy ? net.runelite.api.GrandExchangeOfferState.BOUGHT : net.runelite.api.GrandExchangeOfferState.SOLD,
-            0, 100, qty, null, false, displayName, "Item " + itemId, price, price * qty
-        );
-    }
-
-    /**
      * List all account display names.
      * @return List of display names sorted alphabetically
      */
@@ -972,7 +899,7 @@ public class SqliteStorage {
             return slots;
         }
 
-        final String sql = "SELECT slot_index, offer_uuid, item_id, is_buy, price, qty, total_qty, state, time, trade_started_at, offer_json, history_visible " +
+        final String sql = "SELECT slot_index, offer_json, history_visible " +
             "FROM active_slots WHERE account_id = ?";
 
         try {
@@ -986,61 +913,8 @@ public class SqliteStorage {
                             continue;
                         }
 
-                        String offerJson = rs.getString("offer_json");
-                        if (offerJson != null) {
-                            OfferEvent offer = SLOT_GSON.fromJson(offerJson, OfferEvent.class);
-                            offer.setMadeBy(displayName);
-                            if (!offer.isComplete() && !offer.isCausedByEmptySlot()) {
-                                slots.put(idx, offer);
-                                if (partialHistory != null && rs.getBoolean("history_visible")) {
-                                    partialHistory.put(idx, offer);
-                                }
-                            }
-                            continue;
-                        }
-
-                        String stateStr = rs.getString("state");
-                        if (stateStr != null && !stateStr.trim().isEmpty()) {
-                            try {
-                                GrandExchangeOfferState.valueOf(stateStr);
-                            } catch (IllegalArgumentException ex) {
-                                logger.warn("Unknown offer state '{}' in active_slots for displayName={}, slotIndex={}", stateStr, displayName, idx);
-                                stateStr = GrandExchangeOfferState.EMPTY.name();
-                            }
-                        }
-
-                        JsonObject json = new JsonObject();
-                        String uuid = rs.getString("offer_uuid");
-                        if (uuid == null) {
-                            json.add("uuid", JsonNull.INSTANCE);
-                        } else {
-                            json.addProperty("uuid", uuid);
-                        }
-                        json.addProperty("b", rs.getInt("is_buy") == 1);
-                        json.addProperty("id", rs.getInt("item_id"));
-                        json.addProperty("cQIT", rs.getInt("qty"));
-                        json.addProperty("tQIT", rs.getInt("total_qty"));
-                        json.addProperty("p", rs.getInt("price"));
-                        json.addProperty("s", idx);
-                        if (stateStr == null || stateStr.trim().isEmpty()) {
-                            json.add("st", JsonNull.INSTANCE);
-                        } else {
-                            json.addProperty("st", stateStr);
-                        }
-                        long timeMillis = rs.getLong("time");
-                        if (rs.wasNull() || timeMillis <= 0) {
-                            json.add("t", JsonNull.INSTANCE);
-                        } else {
-                            json.addProperty("t", timeMillis);
-                        }
-                        long tradeStartMillis = rs.getLong("trade_started_at");
-                        if (rs.wasNull() || tradeStartMillis <= 0) {
-                            json.add("tradeStartedAt", JsonNull.INSTANCE);
-                        } else {
-                            json.addProperty("tradeStartedAt", tradeStartMillis);
-                        }
-
-                        OfferEvent offer = SLOT_GSON.fromJson(json, OfferEvent.class);
+                        OfferEvent offer = SLOT_GSON.fromJson(rs.getString("offer_json"), OfferEvent.class);
+                        offer.setMadeBy(displayName);
 
                         if (!offer.isComplete() && !offer.isCausedByEmptySlot()) {
                             slots.put(idx, offer);
@@ -1330,7 +1204,6 @@ public class SqliteStorage {
                 execDelete(conn, "DELETE FROM trades WHERE account_id = ?", accountId);
                 execDelete(conn, "DELETE FROM ge_limit_state WHERE account_id = ?", accountId);
                 execDelete(conn, "DELETE FROM active_slots WHERE account_id = ?", accountId);
-                execDelete(conn, "DELETE FROM slot_timers WHERE account_id = ?", accountId);
                 execDelete(conn, "DELETE FROM item_favorites WHERE account_id = ?", accountId);
                 execDelete(conn, "DELETE FROM item_visibility WHERE account_id = ?", accountId);
                 try (PreparedStatement ps = conn.prepareStatement("DELETE FROM settings WHERE key = ?")) {

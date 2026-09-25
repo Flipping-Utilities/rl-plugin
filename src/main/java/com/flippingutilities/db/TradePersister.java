@@ -63,9 +63,15 @@ public class TradePersister
 	
 	/** Gson for serialization (excludes fields with @Expose(serialize=false)) */
 	private final Gson writeGson;
+	private final File accountDirectory;
 
 	public TradePersister(Gson gson) {
+		this(gson, PARENT_DIRECTORY);
+	}
+
+	TradePersister(Gson gson, File accountDirectory) {
 		this.gson = gson;
+		this.accountDirectory = accountDirectory;
 		// Create a Gson for writing that excludes fields marked with @Expose(serialize=false)
 		this.writeGson = gson.newBuilder()
 			.setExclusionStrategies(new ExclusionStrategy() {
@@ -128,7 +134,7 @@ public class TradePersister
 	public Map<String, AccountData> loadAllAccounts()
 	{
 		Map<String, AccountData> accountsData = new HashMap<>();
-		for (File f : PARENT_DIRECTORY.listFiles())
+		for (File f : accountDirectory.listFiles())
 		{
 			// case-insensitive accountwide check: a stray "Accountwide.json" (e.g. written by an
 			// older build treating the pseudo view as an account) must not load as an account,
@@ -144,13 +150,58 @@ public class TradePersister
 		return accountsData;
 	}
 
+	/** Migration must never turn an unreadable snapshot into an authoritative empty account. */
+	public Map<String, AccountData> loadAllAccountsForMigration() {
+		File[] files = accountDirectory.listFiles();
+		if (files == null) {
+			throw new IllegalStateException("Cannot list account snapshots in " + accountDirectory);
+		}
+		Map<String, AccountData> accounts = new HashMap<>();
+		for (File file : files) {
+			String name = file.getName();
+			if (!name.endsWith(".json") || name.equalsIgnoreCase("accountwide.json")
+					|| name.endsWith(".backup.json") || name.endsWith(".special.json")) {
+				continue;
+			}
+			String displayName = name.substring(0, name.length() - ".json".length());
+			accounts.put(displayName, loadAccountForMigration(displayName, file));
+		}
+		return accounts;
+	}
+
+	private AccountData loadAccountForMigration(String displayName, File primary) {
+		try {
+			return readMigrationSnapshot(primary);
+		} catch (IOException | RuntimeException | OutOfMemoryError primaryFailure) {
+			try {
+				return readMigrationSnapshot(new File(accountDirectory, displayName + ".backup.json"));
+			} catch (IOException | RuntimeException | OutOfMemoryError backupFailure) {
+				IllegalStateException failure = new IllegalStateException(
+					"Cannot read account snapshot or backup for " + displayName, primaryFailure);
+				failure.addSuppressed(backupFailure);
+				throw failure;
+			}
+		}
+	}
+
+	private AccountData readMigrationSnapshot(File file) throws IOException {
+		try (java.io.BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8);
+			com.google.gson.stream.JsonReader json = new com.google.gson.stream.JsonReader(reader)) {
+			AccountData data = gson.fromJson(json, AccountData.class);
+			if (data == null || json.peek() != com.google.gson.stream.JsonToken.END_DOCUMENT) {
+				throw new IOException("Account snapshot is empty or incomplete: " + file);
+			}
+			return data;
+		}
+	}
+
 	//anything that wants to load an account's data MUST go through this method as it handles various cases such as
 	//loading from backups
 	public AccountData loadAccount(String displayName)
 	{
 		log.debug("loading data for {}", displayName);
 		try {
-			File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
+			File accountFile = new File(accountDirectory, displayName + ".json");
 			AccountData accountData = loadFromFile(accountFile);
 			if (accountData == null)
 			{
@@ -172,7 +223,7 @@ public class TradePersister
 	private AccountData loadAccountFromBackup(String displayName) {
 		log.debug("loading data for {} from backup", displayName);
 		try {
-			File accountFile = new File(PARENT_DIRECTORY, displayName + ".backup.json");
+			File accountFile = new File(accountDirectory, displayName + ".backup.json");
 			if (!accountFile.exists()) {
 				log.debug("backup for {} does not exist, returning empty AccountData", displayName);
 				return new AccountData();
@@ -201,7 +252,7 @@ public class TradePersister
 
 
 	public AccountWideData loadAccountWideData() throws IOException {
-		File accountFile = new File(PARENT_DIRECTORY, "accountwide.json");
+		File accountFile = new File(accountDirectory, "accountwide.json");
 		if (accountFile.exists()){
 			String accountWideDataJson = new String(Files.readAllBytes(accountFile.toPath()));
 			Type type = new TypeToken<AccountWideData>(){}.getType();
@@ -215,7 +266,7 @@ public class TradePersister
 	public BackupCheckpoints fetchBackupCheckpoints() {
 		try {
 			log.debug("Fetching backup checkpoints");
-			File backupCheckpointsFile = new File(PARENT_DIRECTORY, "backupcheckpoints.special.json");
+			File backupCheckpointsFile = new File(accountDirectory, "backupcheckpoints.special.json");
 			if (backupCheckpointsFile.exists()){
 				String backupCheckpointsJson = new String(Files.readAllBytes(backupCheckpointsFile.toPath()));
 				Type type = new TypeToken<BackupCheckpoints>(){}.getType();
@@ -239,7 +290,7 @@ public class TradePersister
 	 */
 	public void writeToFile(String displayName, Object data) throws IOException {
 		log.debug("Writing to file for {}", displayName);
-		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
+		File accountFile = new File(accountDirectory, displayName + ".json");
 		File tempFile = new File(PARENT_DIRECTORY, displayName + ".json.tmp");
 		
 		try (BufferedWriter bufferedWriter = Files.newBufferedWriter(tempFile.toPath(), StandardCharsets.UTF_8);

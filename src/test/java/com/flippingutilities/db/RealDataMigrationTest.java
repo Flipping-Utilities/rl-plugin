@@ -259,29 +259,15 @@ public class RealDataMigrationTest {
         return favorited.size();
     }
 
-    /**
-     * Items that should materialize from loadAccount: any item with at least one trade row
-     * (qty-0/recipe-consumed rows included, matching loadTradeItems), PLUS favorite-only
-     * items (favorited from search, never traded) which loadAccount recreates.
-     */
+    /** Visibility records preserve every source item, including hidden items without history. */
     private static long expectedLoadedItemCount(AccountData data) {
-        Set<Integer> itemsWithTrades = new HashSet<>();
-        Set<Integer> favorited = new HashSet<>();
+        Set<Integer> itemIds = new HashSet<>();
         for (FlippingItem item : data.getTrades()) {
-            if (item == null || item.getHistory() == null) continue;
-            if (item.isFavorite()) {
-                favorited.add(item.getItemId());
-            }
-            for (OfferEvent offer : item.getHistory().getCompressedOfferEvents()) {
-                if (offer == null || !offer.isComplete() || offer.isCausedByEmptySlot()) continue;
-                itemsWithTrades.add(item.getItemId());
-                break;
+            if (item != null) {
+                itemIds.add(item.getItemId());
             }
         }
-        long favoriteOnly = favorited.stream()
-            .filter(id -> !itemsWithTrades.contains(id))
-            .count();
-        return itemsWithTrades.size() + favoriteOnly;
+        return itemIds.size();
     }
 
     @Test
@@ -321,7 +307,7 @@ public class RealDataMigrationTest {
         storage = new SqliteStorage(new File(tempDir.toFile(), "realdata.db"));
         TradePersister stub = new TradePersister(gson) {
             @Override
-            public Map<String, AccountData> loadAllAccounts() {
+            public Map<String, AccountData> loadAllAccountsForMigration() {
                 return accounts;
             }
 

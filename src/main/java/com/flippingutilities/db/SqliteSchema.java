@@ -1,15 +1,13 @@
 package com.flippingutilities.db;
 
 
-
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 public final class SqliteSchema {
 
-    // Schema version for migration tracking
-    public static final int SCHEMA_VERSION = 8;
+    // The initial released schema; every SQLite database starts here.
+    public static final int SCHEMA_VERSION = 1;
 
     // PRAGMA for reading current version and for migrating to the current version
     public static final String PRAGMA_GET_USER_VERSION = "PRAGMA user_version";
@@ -41,7 +39,7 @@ public final class SqliteSchema {
         "  state TEXT," +
         "  time INTEGER," +
         "  trade_started_at INTEGER," +
-        "  offer_json TEXT," +
+        "  offer_json TEXT NOT NULL," +
         "  history_visible INTEGER NOT NULL DEFAULT 0," +
         "  FOREIGN KEY(account_id) REFERENCES accounts(id)" +
         ");";
@@ -57,7 +55,7 @@ public final class SqliteSchema {
         "  price INTEGER NOT NULL," +
         "  is_buy INTEGER NOT NULL," +
         "  tax INTEGER DEFAULT 0," +
-        "  offer_json TEXT," +
+        "  offer_json TEXT NOT NULL," +
         "  FOREIGN KEY(account_id) REFERENCES accounts(id)," +
         "  UNIQUE(account_id, uuid)" +
         ");";
@@ -116,15 +114,6 @@ public final class SqliteSchema {
         "  FOREIGN KEY(recipe_flip_id) REFERENCES recipe_flips(id)" +
         ");";
 
-    public static final String CREATE_TABLE_RECIPES =
-        "CREATE TABLE IF NOT EXISTS recipes (" +
-        "  id INTEGER PRIMARY KEY," +
-        "  recipe_key TEXT UNIQUE," +
-        "  name TEXT," +
-        "  inputs_json TEXT," +
-        "  outputs_json TEXT" +
-        ");";
-
     public static final String CREATE_TABLE_SETTINGS =
         "CREATE TABLE IF NOT EXISTS settings (" +
         "  key TEXT PRIMARY KEY," +
@@ -139,15 +128,6 @@ public final class SqliteSchema {
         "  next_refresh INTEGER," +
         "  items_bought INTEGER," +
         "  items_bought_complete INTEGER DEFAULT 0," +
-        "  FOREIGN KEY(account_id) REFERENCES accounts(id)" +
-        ");";
-
-    public static final String CREATE_TABLE_SLOT_TIMERS =
-        "CREATE TABLE IF NOT EXISTS slot_timers (" +
-        "  id INTEGER PRIMARY KEY," +
-        "  account_id INTEGER," +
-        "  slot_index INTEGER," +
-        "  last_activity INTEGER," +
         "  FOREIGN KEY(account_id) REFERENCES accounts(id)" +
         ");";
 
@@ -226,10 +206,8 @@ public final class SqliteSchema {
             CREATE_TABLE_RECIPE_FLIPS,
             CREATE_TABLE_RECIPE_FLIP_INPUTS,
             CREATE_TABLE_RECIPE_FLIP_OUTPUTS,
-            CREATE_TABLE_RECIPES,
             CREATE_TABLE_SETTINGS,
             CREATE_TABLE_GE_LIMIT_STATE,
-            CREATE_TABLE_SLOT_TIMERS,
             CREATE_TABLE_ITEM_FAVORITES,
             CREATE_TABLE_ITEM_VISIBILITY
         );
@@ -254,33 +232,4 @@ public final class SqliteSchema {
         );
     }
 
-    /**
-     * Returns DDL statements to upgrade the schema from the given version to the current version.
-     *
-     * The SQLite backend has never shipped, so the only databases that can exist below the
-     * current version are development databases. Fresh installs create the full
-     * schema directly. Version 6 persists {@code itemsBoughtThroughCompleteOffers} so GE
-     * limit counts survive restarts; version 7 indexes recipe components for account loading.
-     */
-    public static List<String> getMigrationStatements(int fromVersion) {
-        List<String> stmts = new ArrayList<>();
-        if (fromVersion < 6) {
-            stmts.add("ALTER TABLE ge_limit_state ADD COLUMN items_bought_complete INTEGER DEFAULT 0;");
-        }
-        if (fromVersion < 7) {
-            stmts.add(INDEX_RECIPE_FLIP_INPUTS_FLIP);
-            stmts.add(INDEX_RECIPE_FLIP_OUTPUTS_FLIP);
-        }
-        if (fromVersion < 8) {
-            stmts.add("ALTER TABLE trades ADD COLUMN offer_json TEXT;");
-            stmts.add("ALTER TABLE active_slots ADD COLUMN offer_json TEXT;");
-            stmts.add("ALTER TABLE active_slots ADD COLUMN history_visible INTEGER NOT NULL DEFAULT 0;");
-            stmts.add(CREATE_TABLE_ITEM_VISIBILITY);
-            // Earlier versions discarded classification and visibility metadata. The JSON
-            // copy must be imported before this database can be authoritative again.
-            stmts.add("INSERT OR REPLACE INTO settings (key, value) VALUES ('migration_pending', 'true');");
-            stmts.add("INSERT OR REPLACE INTO settings (key, value) VALUES ('full_resync_required', 'true');");
-        }
-        return stmts;
-    }
 }

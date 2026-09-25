@@ -183,7 +183,7 @@ public class AccountRoundTripTest {
         try {
             TradePersister source = new TradePersister(new Gson()) {
                 @Override
-                public Map<String, AccountData> loadAllAccounts() {
+                public Map<String, AccountData> loadAllAccountsForMigration() {
                     return Collections.singletonMap(ACCOUNT, original);
                 }
 
