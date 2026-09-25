@@ -511,9 +511,6 @@ public class SqliteStorage {
     private List<RecipeFlipGroup> loadRecipeFlipGroups(int accountId) {
         List<RecipeFlipGroup> groups = new ArrayList<>();
 
-        // Query per-group stats from events table
-        Map<String, long[]> groupStats = queryPerRecipeStats(accountId);
-
         // Get all recipe flip events for this account, grouped by recipe_key
         String groupSql = "SELECT rf.recipe_key, rf.id as recipe_flip_id, rf.coin_cost, " +
             "e.id as event_id, e.timestamp, e.profit, e.cost " +
@@ -536,19 +533,7 @@ public class SqliteStorage {
                         long recipeFlipId = rs.getLong("recipe_flip_id");
 
                         // Get or create the group
-                        RecipeFlipGroup group = groupMap.computeIfAbsent(recipeKey, k -> {
-                            RecipeFlipGroup g = new RecipeFlipGroup();
-                            g.setRecipeKey(k);
-                            // Set cached stats from events table
-                            long[] stats = groupStats.get(k);
-                            if (stats != null) {
-                                g.setCachedTotalProfit(stats[0]);
-                                g.setCachedTotalExpense(stats[1]);
-                                g.setCachedFlipCount((int) stats[2]);
-                                g.setHasCachedStats(true);
-                            }
-                            return g;
-                        });
+                        RecipeFlipGroup group = groupMap.computeIfAbsent(recipeKey, RecipeFlipGroup::new);
 
                         // Load inputs and outputs for this recipe flip
                         Map<Integer, Map<String, PartialOffer>> inputs = loadRecipeFlipInputs(recipeFlipId);
@@ -573,37 +558,6 @@ public class SqliteStorage {
         }
 
         return groups;
-    }
-
-    /**
-     * Query per-recipe-group stats from the events table.
-     * Returns a map of recipe_key -> [totalProfit, totalExpense, flipCount].
-     */
-    private Map<String, long[]> queryPerRecipeStats(int accountId) {
-        Map<String, long[]> stats = new HashMap<>();
-        String sql = "SELECT rf.recipe_key, COALESCE(SUM(e.profit), 0) as total_profit, " +
-            "COALESCE(SUM(e.cost), 0) as total_cost, COUNT(*) as flip_count " +
-            "FROM events e JOIN recipe_flips rf ON rf.event_id = e.id " +
-            "WHERE e.account_id = ? AND e.type = 'recipe' " +
-            "GROUP BY rf.recipe_key";
-        try {
-            Connection conn = getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        String key = rs.getString("recipe_key");
-                        long profit = rs.getLong("total_profit");
-                        long cost = rs.getLong("total_cost");
-                        long count = rs.getLong("flip_count");
-                        stats.put(key, new long[]{profit, cost, count});
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            logger.error("Error querying per-recipe stats for accountId={}", accountId, e);
-        }
-        return stats;
     }
 
     /**
@@ -2239,7 +2193,11 @@ public class SqliteStorage {
      */
     public synchronized void upsertFavorite(String displayName, int itemId, boolean isFavorite, String favoriteCode) {
         Integer accountId = getAccountId(displayName);
-        if (accountId == null) return;
+        if (accountId == null) {
+            upsertAccount(displayName, null);
+            accountId = getAccountId(displayName);
+            if (accountId == null) return;
+        }
 
         String sql = "INSERT OR REPLACE INTO item_favorites (account_id, item_id, is_favorite, favorite_code) VALUES (?, ?, ?, ?)";
         try {

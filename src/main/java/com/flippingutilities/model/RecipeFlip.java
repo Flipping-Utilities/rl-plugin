@@ -41,10 +41,9 @@ public class RecipeFlip {
     }
 
     public RecipeFlip clone() {
-        Instant clonedInstant = Instant.ofEpochSecond(timeOfCreation.getEpochSecond());
         Map<Integer, Map<String, PartialOffer>> clonedOutputs = cloneComponents(outputs);
         Map<Integer, Map<String, PartialOffer>> clonedInputs = cloneComponents(inputs);
-        return new RecipeFlip(clonedInstant, clonedOutputs, clonedInputs, coinCost);
+        return new RecipeFlip(timeOfCreation, clonedOutputs, clonedInputs, coinCost);
     }
 
     private Map<Integer, Map<String, PartialOffer>> cloneComponents(Map<Integer, Map<String, PartialOffer>> component) {

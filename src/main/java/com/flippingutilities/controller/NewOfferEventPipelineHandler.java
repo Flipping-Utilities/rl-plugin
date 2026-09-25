@@ -74,7 +74,7 @@ public class NewOfferEventPipelineHandler {
         updateTradesList(currentlyLoggedInAccountsTrades, flippingItem, finalizedOfferEvent.clone());
 
         // Dual-write: also record the trade (and reconcile flip events) to SQLite if enabled
-        recordTradeToRepository(currentlyLoggedInAccount, finalizedOfferEvent);
+        plugin.recordTradeToRepository(currentlyLoggedInAccount, finalizedOfferEvent);
 
         // Keep the persisted GE limit state in sync (only buys change it)
         persistGeLimitState(currentlyLoggedInAccount, finalizedOfferEvent);
@@ -236,77 +236,21 @@ public class NewOfferEventPipelineHandler {
     }
 
     /**
-     * Records the trade to the active repository (dual-write to SQLite when enabled).
-     *
-     * <p>Only TERMINAL offer states (BOUGHT/SOLD/CANCELLED_*) with a non-zero quantity are
-     * recorded: {@code currentQuantityInTrade} is cumulative, so recording intermediate
-     * partial fills would insert one row per fill (20, 40, ... 1000 for a 1000-qty offer)
-     * and massively inflate quantities. Each event also carries a fresh random uuid, so the
-     * UNIQUE(account_id, uuid) dedup cannot catch those intermediate snapshots. The JSON path
-     * compresses partial fills the same way (one terminal event per trade via
-     * HistoryManager), and MigrationService.migrateAccountBatched likewise only migrates
-     * complete offers — recording terminal events keeps the two paths at parity.
-     *
-     * <p>The DB write is queued on the plugin executor (single-threaded, so ordering with
-     * other queued writes and the migration task is preserved) instead of running on the
-     * client thread. Best-effort: logs errors but does not throw.
-     */
-    private void recordTradeToRepository(String account, OfferEvent offer) {
-        try {
-            if (!offer.isComplete() || offer.getCurrentQuantityInTrade() <= 0) {
-                return; // in-progress partial fill or a cancelled offer that filled nothing
-            }
-            com.flippingutilities.db.FlipRepository repository = plugin.getFlipRepository();
-            if (!(repository instanceof com.flippingutilities.db.SqliteFlipRepository)) {
-                return; // SQLite not enabled
-            }
-
-            final int itemId = offer.getItemId();
-            final String uuid = offer.getUuid();
-            final long timestamp = offer.getTime() != null ? offer.getTime().toEpochMilli() : System.currentTimeMillis();
-            final int qty = offer.getCurrentQuantityInTrade();
-            final int price = offer.getPreTaxPrice();
-            final boolean isBuy = offer.isBuy();
-            final long taxPaid = offer.getTaxPaid();
-            final String accountName = account;
-
-            plugin.getExecutor().submit(() -> {
-                try {
-                    repository.recordTrade(accountName, itemId, uuid, timestamp, qty, price, isBuy, taxPaid);
-                    log.debug("Recorded trade to SQLite: account={}, item={}, qty={}, price={}, isBuy={}",
-                        accountName, itemId, qty, price, isBuy);
-                } catch (Exception e) {
-                    log.warn("Failed to record trade to SQLite (best-effort): {}", e.getMessage());
-                }
-            });
-        } catch (Exception e) {
-            log.warn("Failed to queue trade recording to SQLite (best-effort): {}", e.getMessage());
-        }
-    }
-
-    /**
      * Persists the in-progress offer state of a slot (or clears it when the slot empties) to
      * SQLite when enabled, so active offers survive restarts. The write is queued on the
-     * plugin executor to keep DB I/O off the client thread. Best-effort.
+     * storage executor to keep DB I/O off the client thread. Best-effort.
      */
     private void persistSlotState(String account, int slotIndex, OfferEvent offer) {
         try {
             if (account == null) {
                 return;
             }
-            com.flippingutilities.db.SqliteStorage sqliteStorage = plugin.getSqliteStorage();
-            if (sqliteStorage == null) {
+            if (plugin.getSqliteStorage() == null) {
                 return;
             }
             final String accountName = account;
             final OfferEvent offerSnapshot = offer == null ? null : offer.clone();
-            plugin.getExecutor().submit(() -> {
-                try {
-                    sqliteStorage.upsertSlot(accountName, slotIndex, offerSnapshot);
-                } catch (Exception e) {
-                    log.debug("Failed to persist slot state to SQLite (best-effort): {}", e.getMessage());
-                }
-            });
+            plugin.submitStorageTask(storage -> storage.upsertSlot(accountName, slotIndex, offerSnapshot));
         } catch (Exception e) {
             log.debug("Failed to queue slot state persistence (best-effort): {}", e.getMessage());
         }
@@ -344,14 +288,8 @@ public class NewOfferEventPipelineHandler {
             final java.time.Instant finalResetTime = resetTime;
             final int finalItemsBought = itemsBought;
             final int finalItemsBoughtThroughComplete = itemsBoughtThroughComplete;
-            com.flippingutilities.db.SqliteStorage sqliteStorage = plugin.getSqliteStorage();
-            plugin.getExecutor().submit(() -> {
-                try {
-                    sqliteStorage.upsertGeLimitState(accountName, finalItemId, finalResetTime, finalItemsBought, finalItemsBoughtThroughComplete);
-                } catch (Exception e) {
-                    log.debug("Failed to persist GE limit state to SQLite (best-effort): {}", e.getMessage());
-                }
-            });
+            plugin.submitStorageTask(storage -> storage.upsertGeLimitState(
+                accountName, finalItemId, finalResetTime, finalItemsBought, finalItemsBoughtThroughComplete));
         } catch (Exception e) {
             log.debug("Failed to queue GE limit state persistence (best-effort): {}", e.getMessage());
         }
