@@ -5,17 +5,18 @@ plugins {
 
 repositories {
 	maven {
-		url = 'http://repo.runelite.net'
+		url = 'https://repo.runelite.net'
 	}
 	mavenCentral()
 }
 
 def runeLiteVersion = 'latest.release'
+def lombokVersion = '1.18.30'
 
 dependencies {
     compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
-    compileOnly 'org.projectlombok:lombok:1.18.4'
-    annotationProcessor 'org.projectlombok:lombok:1.18.4'
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
 
     implementation "org.apache.commons:commons-csv:1.4"
 
@@ -28,10 +29,10 @@ dependencies {
 
 group = 'com.flippingutilities'
 version = '1.4.1'
-sourceCompatibility = '1.8'
 
 tasks.withType(JavaCompile) {
 	options.encoding = 'UTF-8'
+	options.release.set(11)
 }
 
 tasks.register('runPlugin', JavaExec) {
