@@ -41,6 +41,7 @@ import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 
@@ -52,10 +53,10 @@ import static org.junit.Assume.assumeTrue;
  * The full production path is exercised: {@link MigrationService#migrate()} over every
  * account file, then verified:
  * - migration completes and flags every account,
- * - one trade row per complete offer (uuid dedupe must not lose real rows),
+ * - completed and archived filled offers persist as trades; active fills persist in slots,
  * - restored flip profit exactly matches the JSON path's flip computation,
  * - recipe-flip and favorite counts match the source data,
- * - no dangling components or invalid consumed quantities,
+ * - unresolved offer references survive, without orphaned recipe rows or invalid consumption,
  * - loadAccount round-trips every account,
  * - a forced re-run (flags cleared, i.e. the partial-failure retry path) inserts nothing new,
  * - the source JSON files are never modified.
@@ -186,17 +187,24 @@ public class RealDataMigrationTest {
         return consumption;
     }
 
-    /** Mirrors MigrationService.migrateAccountBatched's trade-row counting: one row per complete offer. */
+    /** Active partials are restored from slots, so only archived partials need trade rows. */
     private static long expectedTradeRows(AccountData data) {
+        Set<String> activeUuids = new HashSet<>();
+        if (data.getLastOffers() != null) {
+            for (OfferEvent offer : data.getLastOffers().values()) {
+                if (offer != null && !offer.isComplete() && !offer.isCausedByEmptySlot()
+                    && offer.getUuid() != null) {
+                    activeUuids.add(offer.getUuid());
+                }
+            }
+        }
         long rows = 0;
         for (FlippingItem item : data.getTrades()) {
             if (item == null || item.getHistory() == null) continue;
             for (OfferEvent offer : item.getHistory().getCompressedOfferEvents()) {
                 if (offer == null || offer.isCausedByEmptySlot()) continue;
-                // Complete offers, plus incomplete offers with filled units (cancelled
-                // partials / offers abandoned mid-fill): their filled volume is real money
-                // the JSON backend counts, so they migrate as trades too.
-                if (!offer.isComplete() && offer.getCurrentQuantityInTrade() <= 0) continue;
+                if (!offer.isComplete() && (offer.getCurrentQuantityInTrade() <= 0
+                    || activeUuids.contains(offer.getUuid()))) continue;
                 rows++;
             }
         }
@@ -213,7 +221,7 @@ public class RealDataMigrationTest {
             if (item == null || item.getHistory() == null) continue;
             List<OfferEvent> valid = new ArrayList<>();
             for (OfferEvent offer : item.getHistory().getCompressedOfferEvents()) {
-                if (offer == null || !offer.isComplete() || offer.isCausedByEmptySlot()) continue;
+                if (offer == null || offer.isCausedByEmptySlot()) continue;
                 Integer consumed = consumption.get(offer.getUuid());
                 int qty = offer.getCurrentQuantityInTrade() - (consumed == null ? 0 : consumed);
                 if (qty <= 0) continue;
@@ -243,6 +251,24 @@ public class RealDataMigrationTest {
         return sum;
     }
 
+    /** Compare restored history independently of which SQLite table holds each snapshot. */
+    private static Map<List<Object>, Integer> historySnapshots(AccountData data) {
+        Map<List<Object>, Integer> snapshots = new HashMap<>();
+        for (FlippingItem item : data.getTrades()) {
+            if (item == null || item.getHistory() == null) continue;
+            for (OfferEvent offer : item.getHistory().getCompressedOfferEvents()) {
+                if (offer == null || offer.isCausedByEmptySlot()
+                    || (!offer.isComplete() && offer.getCurrentQuantityInTrade() <= 0)) continue;
+                List<Object> snapshot = Arrays.asList(item.getItemId(), offer.getUuid(), offer.isBuy(),
+                    offer.getCurrentQuantityInTrade(), offer.getPreTaxPrice(), offer.getState(),
+                    offer.getSlot(), offer.getTotalQuantityInTrade(),
+                    offer.getTime() == null ? null : offer.getTime().toEpochMilli());
+                snapshots.merge(snapshot, 1, Integer::sum);
+            }
+        }
+        return snapshots;
+    }
+
     private static long expectedRecipeFlips(AccountData data) {
         long count = 0;
         if (data.getRecipeFlipGroups() == null) return 0;
@@ -270,10 +296,13 @@ public class RealDataMigrationTest {
                 assertRecipeComponents(context + " inputs", flip.getInputs(), restored.getInputs());
                 assertRecipeComponents(context + " outputs", flip.getOutputs(), restored.getOutputs());
                 assertEquals(context + " coin cost", flip.getCoinCost(), restored.getCoinCost());
-                assertEquals(context + " expense", flip.getExpense(), restored.getExpense());
-                assertEquals(context + " revenue", flip.getRevenue(), restored.getRevenue());
-                assertEquals(context + " profit", flip.getProfit(), restored.getProfit());
-                assertEquals(context + " tax", flip.getTaxPaid(), restored.getTaxPaid());
+                assertEquals(context + " missing offer data", flip.hasMissingOffers(), restored.hasMissingOffers());
+                if (!flip.hasMissingOffers()) {
+                    assertEquals(context + " expense", flip.getExpense(), restored.getExpense());
+                    assertEquals(context + " revenue", flip.getRevenue(), restored.getRevenue());
+                    assertEquals(context + " profit", flip.getProfit(), restored.getProfit());
+                    assertEquals(context + " tax", flip.getTaxPaid(), restored.getTaxPaid());
+                }
             }
         }
     }
@@ -289,11 +318,15 @@ public class RealDataMigrationTest {
                 assertNotNull(detail + " missing item", actual.get(item.getKey()));
                 PartialOffer restored = actual.get(item.getKey()).get(component.getOfferUuid());
                 assertNotNull(detail + " missing component", restored);
-                assertNotNull(detail + " missing source offer", component.getOffer());
-                assertNotNull(detail + " missing restored offer", restored.getOffer());
+                assertEquals(detail + " UUID", component.getOfferUuid(), restored.getOfferUuid());
                 assertEquals(detail + " consumed", component.getAmountConsumed(), restored.getAmountConsumed());
                 OfferEvent before = component.getOffer();
                 OfferEvent after = restored.getOffer();
+                if (before == null) {
+                    assertNull(detail + " unresolved offer must stay unresolved", after);
+                    continue;
+                }
+                assertNotNull(detail + " missing restored offer", after);
                 assertEquals(detail + " price", before.getPreTaxPrice(), after.getPreTaxPrice());
                 assertEquals(detail + " original quantity", before.getCurrentQuantityInTrade(), after.getCurrentQuantityInTrade());
                 assertEquals(detail + " item", before.getItemId(), after.getItemId());
@@ -384,10 +417,12 @@ public class RealDataMigrationTest {
             assertNotNull("migrated_ flag missing for " + name, storage.getSetting("migrated_" + name));
 
             long tradeRows = q("SELECT COUNT(*) FROM trades t JOIN accounts a ON a.id = t.account_id WHERE a.display_name = ?", name);
-            assertEquals("trade rows must match complete + filled partial offers for " + name, expectedTradeRows(data), tradeRows);
+            assertEquals("trade rows must match completed + archived filled offers for " + name, expectedTradeRows(data), tradeRows);
 
             AccountData loaded = storage.loadAccount(name);
             assertNotNull("loadAccount must return data for " + name, loaded);
+            assertEquals("Restored history must include active and archived fills for " + name,
+                historySnapshots(data), historySnapshots(loaded));
             assertRecipeParity(name, data, loaded);
             long flipProfit = expectedFlipProfit(loaded);
             assertEquals("Restored flip profit must match the JSON flip computation for " + name,

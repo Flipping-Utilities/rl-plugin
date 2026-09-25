@@ -327,6 +327,18 @@ public class RecipeFlipGroupPanel extends JPanel {
 
         // Use the same interval-filtered flips for summary, details, and totals.
         recipesMade = recipeFlips.stream().mapToInt(rf -> rf.getRecipeCountMade(recipe)).sum();
+        if (recipeFlips.stream().anyMatch(RecipeFlip::hasMissingOffers)) {
+            recipeProfitAndQuantityLabel.setText("Unknown (x " + QuantityFormatter.formatNumber(recipesMade) + ")");
+            for (JLabel label : new JLabel[]{recipeProfitAndQuantityLabel, totalProfitValLabel, profitEachValLabel, roiValLabel}) {
+                if (label != recipeProfitAndQuantityLabel) label.setText("Unknown");
+                label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+                label.setToolTipText("Original offer details are missing; recipe financial totals are unavailable.");
+            }
+            quantityFlipped.setText(QuantityFormatter.formatNumber(recipesMade) + " Items");
+            updateTimeLabels();
+            return;
+        }
+        recipeProfitAndQuantityLabel.setToolTipText(null);
         long flipRevenue = recipeFlips.stream().mapToLong(RecipeFlip::getRevenue).sum();
         expense = recipeFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
         profit = flipRevenue - expense;

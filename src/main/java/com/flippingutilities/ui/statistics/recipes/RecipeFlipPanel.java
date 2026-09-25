@@ -107,22 +107,22 @@ public class RecipeFlipPanel extends JPanel {
 
         //if the recipe does not contain coins but the user added coins to the input by using the coin selector
         if (userAddedCoinsThatWereNotInRecipe) {
-            componentGroupPanel.add(createComponentPanel("Coins", recipeFlip.getCoinCost(), 1));
+            componentGroupPanel.add(createComponentPanel("Coins", recipeFlip.getCoinCost(), 1L));
         }
 
         partialOffers.forEach((itemId, partialOfferMap) -> {
             String itemName;
             long quantity;
-            long avgPrice;
+            Long avgPrice;
 
             if (itemId == ItemID.COINS) {
                 itemName = "Coins";
                 quantity = recipeFlip.getCoinCost();
-                avgPrice = 1;
+                avgPrice = 1L;
             }
             else {
                 List<PartialOffer> partialOfferList = new ArrayList<>(partialOfferMap.values());
-                quantity = partialOfferList.stream().mapToInt(po -> po.amountConsumed).sum();
+                quantity = partialOfferList.stream().mapToLong(po -> po.amountConsumed).sum();
 
                 // The backing offer may be missing if the original trade was deleted; fall back to the item id.
                 OfferEvent offer = partialOfferList.stream()
@@ -139,7 +139,8 @@ public class RecipeFlipPanel extends JPanel {
                     .filter(po -> po.getOffer() != null)
                     .mapToLong(po -> (long) po.getOffer().getPrice() * po.amountConsumed)
                     .sum();
-                avgPrice = quantity > 0 ? totalValue / quantity : 0;
+                avgPrice = partialOfferList.stream().anyMatch(po -> po.amountConsumed > 0 && po.getOffer() == null)
+                    ? null : (quantity > 0 ? totalValue / quantity : 0);
             }
 
             componentGroupPanel.add(createComponentPanel(itemName, quantity, avgPrice));
@@ -148,7 +149,7 @@ public class RecipeFlipPanel extends JPanel {
         return componentGroupPanel;
     }
 
-    private JPanel createComponentPanel(String itemName, long quantity, long avgPrice){
+    private JPanel createComponentPanel(String itemName, long quantity, Long avgPrice){
         if (quantity == 0) {
             JPanel panel = new JPanel(new BorderLayout());
             panel.setBackground(CustomColors.DARK_GRAY);
@@ -175,7 +176,8 @@ public class RecipeFlipPanel extends JPanel {
         pricePanel.setBackground(CustomColors.DARK_GRAY);
         JLabel priceLabel = new JLabel("Avg Price", SwingConstants.CENTER);
         priceLabel.setFont(FontManager.getRunescapeSmallFont());
-        JLabel priceValueLabel = new JLabel(itemName.equals("Coins")? "N/A": QuantityFormatter.formatNumber(avgPrice) + " gp");
+        JLabel priceValueLabel = new JLabel(itemName.equals("Coins")? "N/A": (avgPrice == null ? "Unknown" : QuantityFormatter.formatNumber(avgPrice) + " gp"));
+        if (avgPrice == null) priceValueLabel.setToolTipText("Original offer details are missing.");
         priceValueLabel.setFont(FontManager.getRunescapeSmallFont());
         pricePanel.add(priceLabel, BorderLayout.WEST);
         pricePanel.add(priceValueLabel, BorderLayout.EAST);
@@ -288,19 +290,21 @@ public class RecipeFlipPanel extends JPanel {
             panel.add(label, BorderLayout.CENTER);
             return panel;
         }
-        long profit = recipeFlip.getProfit();
+        boolean missingOffers = recipeFlip.hasMissingOffers();
+        long profit = missingOffers ? 0 : recipeFlip.getProfit();
         long profitEach = profit/quantity;
-        String profitString = UIUtilities.quantityToRSDecimalStack(profit, true) + " gp";
-        String profitEachString = quantity == 1? "": " (" + UIUtilities.quantityToRSDecimalStack(profitEach, false) + " gp ea)";
+        String profitString = missingOffers ? "Unknown" : UIUtilities.quantityToRSDecimalStack(profit, true) + " gp";
+        String profitEachString = missingOffers || quantity == 1? "": " (" + UIUtilities.quantityToRSDecimalStack(profitEach, false) + " gp ea)";
         String profitDescription = profit < 0? "Loss": "Profit:";
 
         JLabel profitValLabel = new JLabel(profitString + profitEachString);
+        if (missingOffers) profitValLabel.setToolTipText("Original offer details are missing; profit is unavailable.");
         profitValLabel.setFont(FontManager.getRunescapeSmallFont());
 
         JLabel profitDescriptionLabel = new JLabel(profitDescription);
         profitDescriptionLabel.setFont(FontManager.getRunescapeSmallFont());
 
-        profitDescriptionLabel.setForeground(profit >= 0? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
+        profitDescriptionLabel.setForeground(missingOffers ? ColorScheme.LIGHT_GRAY_COLOR : profit >= 0? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
 
         JPanel profitPanel = new JPanel(new BorderLayout());
         profitPanel.setBackground(CustomColors.DARK_GRAY);

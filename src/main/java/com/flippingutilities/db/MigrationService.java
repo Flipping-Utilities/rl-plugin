@@ -221,6 +221,16 @@ public class MigrationService {
         // Collect all trades for batch insert
         List<TradeRecord> tradesToInsert = new ArrayList<>();
         Set<String> historyOfferUuids = new HashSet<>();
+        Map<Integer, OfferEvent> lastOffers = accountData.getLastOffers();
+        Set<String> activeOfferUuids = new HashSet<>();
+        if (lastOffers != null) {
+            for (OfferEvent offer : lastOffers.values()) {
+                if (offer != null && !offer.isComplete() && !offer.isCausedByEmptySlot()
+                    && offer.getUuid() != null) {
+                    activeOfferUuids.add(offer.getUuid());
+                }
+            }
+        }
 
         for (FlippingItem item : tradeItems) {
             storage.upsertItemVisibility(displayName, item.getItemId(), !Boolean.FALSE.equals(item.getValidFlippingPanelItem()));
@@ -234,12 +244,11 @@ public class MigrationService {
                     historyOfferUuids.add(offer.getUuid());
                 }
                 if (offer == null || offer.isCausedByEmptySlot()) continue;
-                // Incomplete offers with filled units are real money: the JSON backend's
-                // flip computation counts them (cancelled partials, offers abandoned
-                // mid-fill when the client closed). Filtering them out here silently
-                // undercounted profit after migration. Fully-empty in-progress offers
-                // (qty 0, nothing filled) still carry no information - skip those.
-                if (!offer.isComplete() && offer.getCurrentQuantityInTrade() <= 0) continue;
+                // Active partials belong only in active_slots: the next GE update has a new
+                // UUID and replaces that slot. Archived filled partials still belong in
+                // history, even if another offer now occupies the same item/slot.
+                if (!offer.isComplete() && (offer.getCurrentQuantityInTrade() <= 0
+                    || activeOfferUuids.contains(offer.getUuid()))) continue;
 
                 long timestamp = offer.getTime() != null ? offer.getTime().toEpochMilli() : Instant.now().toEpochMilli();
                 // Recipe components retain consumption separately from the original trade.
@@ -272,14 +281,12 @@ public class MigrationService {
                 // hundreds of references to offers destroyed by historical data-loss bugs,
                 // and the per-component spam buried actually-useful log output.
                 log.warn("{} recipe component(s) in account {} reference offers that no longer "
-                    + "exist anywhere; they were stored as zero-price snapshots so the account "
-                    + "can migrate", dangling, displayName);
+                    + "exist anywhere; their references were preserved without prices", dangling, displayName);
             }
             recipeFlipsCount = migrateRecipeFlips(conn, accountId, recipeFlipGroups);
         }
 
         // Migrate last offers (active slots) - skip for batch, use storage method
-        Map<Integer, OfferEvent> lastOffers = accountData.getLastOffers();
         if (lastOffers != null) {
             for (Map.Entry<Integer, OfferEvent> slotEntry : lastOffers.entrySet()) {
                 int slotIndex = slotEntry.getKey();
@@ -407,8 +414,8 @@ public class MigrationService {
      * Hydrate PartialOffers in recipe flips by linking them to their corresponding OfferEvents.
      * Older UUID-only files need the history lookup; embedded legacy offers also
      * normalize their UUID here. Neither source may be discarded before snapshotting.
+     * @return the number of components whose offers remain unresolved
      */
-    /** @return the number of components whose offers exist nowhere (stored as zero-price stubs). */
     private int hydrateRecipeFlipOffers(List<RecipeFlipGroup> recipeFlipGroups, List<FlippingItem> tradeItems) {
         // Build UUID -> OfferEvent lookup map from all trade items
         Map<String, OfferEvent> offersByUuid = new HashMap<>();
@@ -423,32 +430,26 @@ public class MigrationService {
             }
         }
 
-        // Hydrate each PartialOffer in recipe flips. Legacy files reference offers by uuid
-        // only; most resolve against the account's own history. References to offers that
-        // no longer exist anywhere (destroyed by historical data-loss bugs) must NOT abort
-        // the account's whole migration — that drops every trade of the account from
-        // SQLite and wrecks its totals. Synthesize a zero-price snapshot instead: the
-        // component renders as 0 gp, everything else stays intact.
+        // Missing backing offers must neither abort account migration nor acquire invented
+        // prices. Preserve unresolved references so the UI can report incomplete data.
         int dangling = 0;
         for (RecipeFlipGroup group : recipeFlipGroups) {
             for (RecipeFlip flip : group.getRecipeFlips()) {
-                dangling += hydrateComponents(flip.getInputs(), offersByUuid, true, flip.getTimeOfCreation());
-                dangling += hydrateComponents(flip.getOutputs(), offersByUuid, false, flip.getTimeOfCreation());
+                dangling += hydrateComponents(flip.getInputs(), offersByUuid);
+                dangling += hydrateComponents(flip.getOutputs(), offersByUuid);
             }
         }
         return dangling;
     }
 
-    /** @return the number of components whose offers exist nowhere (stored as zero-price stubs). */
+    /** @return the number of components whose offers remain unresolved */
     private int hydrateComponents(Map<Integer, Map<String, PartialOffer>> components,
-                                  Map<String, OfferEvent> offersByUuid, boolean inputs, Instant timeOfCreation) {
+                                  Map<String, OfferEvent> offersByUuid) {
         if (components == null) {
             return 0;
         }
         int dangling = 0;
-        for (Map.Entry<Integer, Map<String, PartialOffer>> entry : components.entrySet()) {
-            int itemId = entry.getKey();
-            Map<String, PartialOffer> offerMap = entry.getValue();
+        for (Map<String, PartialOffer> offerMap : components.values()) {
             if (offerMap == null) {
                 continue;
             }
@@ -458,8 +459,6 @@ public class MigrationService {
                 }
                 po.hydrateOffer(offersByUuid);
                 if (po.getOffer() == null) {
-                    po.setOffer(SqliteStorage.synthesizeComponentStub(
-                        po.getOfferUuid(), itemId, inputs, po.getAmountConsumed(), timeOfCreation));
                     dangling++;
                 }
             }

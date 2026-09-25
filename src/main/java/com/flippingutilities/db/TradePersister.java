@@ -50,6 +50,8 @@ import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * This class is responsible for handling all the IO related tasks for persisting trades. This class should contain
@@ -124,6 +126,17 @@ public class TradePersister
 	/** Gson for serialization (excludes fields with @Expose(serialize=false)) */
 	private final Gson writeGson;
 	private final File accountDirectory;
+	private final Set<String> accountsWithLoadFailures = ConcurrentHashMap.newKeySet();
+	private volatile boolean accountDirectoryUnreadable;
+
+	/** A failed read or preparation must not turn a fallback empty account into saved data. */
+	public void protectAccount(String displayName) {
+		accountsWithLoadFailures.add(displayName);
+	}
+
+	public boolean isAccountProtected(String displayName) {
+		return accountDirectoryUnreadable || accountsWithLoadFailures.contains(displayName);
+	}
 
 	public TradePersister(Gson gson) {
 		this(gson, PARENT_DIRECTORY);
@@ -154,8 +167,7 @@ public class TradePersister
 	public static final File OLD_FILE = new File(PARENT_DIRECTORY, "trades.json");
 
 	/**
-	 * Creates flipping directory if it doesn't exist and partitions trades.json into individual files
-	 * for each account, if it exists.
+	 * Creates the flipping directory if it does not exist. Legacy source files are preserved.
 	 *
 	 * @throws IOException handled in FlippingPlugin
 	 */
@@ -172,69 +184,58 @@ public class TradePersister
 		else
 		{
 			log.debug("flipping directory already exists so it's not being created");
-			if (OLD_FILE.exists())
-			{
-				OLD_FILE.delete();
-
-			}
 		}
 	}
 
-	/**
-	 * loads each account's data from the parent directory located at {user's home directory}/.runelite/flipping/
-	 * Each account's data is stored in separate file in that directory and is named {displayName}.json
-	 *
-	 * Why not use loadAccount(displayName) in this method? Here we have access to the files first so we can call
-	 * loadFromFile directly. rather than getting the display name from the file and then calling
-	 * loadAccount
-	 *
-	 * @return a map of display name to that account's data
-	 * @throws IOException handled in FlippingPlugin
-	 */
-	public Map<String, AccountData> loadAllAccounts()
-	{
-		Map<String, AccountData> accountsData = new HashMap<>();
-		for (File f : accountDirectory.listFiles())
-		{
-			// case-insensitive accountwide check: a stray "Accountwide.json" (e.g. written by an
-			// older build treating the pseudo view as an account) must not load as an account,
-			// which would duplicate the account-wide view in the account selector
-			if (f.getName().equalsIgnoreCase("accountwide.json") || !f.getName().contains(".json") || f.getName().contains(".backup.json") || f.getName().contains(".special.json")) {
-				continue;
-			}
-			String displayName = f.getName().split("\\.")[0];
-			AccountData accountData  = loadAccount(displayName);
-			accountsData.put(displayName, accountData);
-		}
-
-		return accountsData;
-	}
-
-	/** Migration must never turn an unreadable snapshot into an authoritative empty account. */
-	public Map<String, AccountData> loadAllAccountsForMigration() {
-		File[] files = accountDirectory.listFiles();
-		if (files == null) {
-			throw new IllegalStateException("Cannot list account snapshots in " + accountDirectory);
-		}
+	/** Loads healthy accounts independently; failed accounts remain protected from later writes. */
+	public Map<String, AccountData> loadAllAccounts() {
 		Map<String, AccountData> accounts = new HashMap<>();
-		for (File file : files) {
-			String name = file.getName();
-			if (!name.endsWith(".json") || name.equalsIgnoreCase("accountwide.json")
-					|| name.endsWith(".backup.json") || name.endsWith(".special.json")) {
-				continue;
+		for (File file : accountFiles()) {
+			if (!isAccountSnapshot(file.getName())) continue;
+			String displayName = file.getName().substring(0, file.getName().length() - ".json".length());
+			try {
+				accounts.put(displayName, loadAccount(displayName));
+			} catch (IllegalStateException failure) {
+				log.error("Cannot load {}; its JSON saves and backups are disabled until valid data is loaded", displayName, failure);
 			}
-			String displayName = name.substring(0, name.length() - ".json".length());
-			accounts.put(displayName, loadAccountForMigration(displayName, file));
 		}
 		return accounts;
 	}
 
-	private AccountData loadAccountForMigration(String displayName, File primary) {
+	private File[] accountFiles() {
+		File[] files = accountDirectory.listFiles();
+		accountDirectoryUnreadable = files == null;
+		if (files == null) {
+			throw new IllegalStateException("Cannot list account snapshots in " + accountDirectory);
+		}
+		return files;
+	}
+
+	private static boolean isAccountSnapshot(String name) {
+		return name.endsWith(".json") && !name.equalsIgnoreCase("accountwide.json")
+			&& !name.equalsIgnoreCase("trades.json")
+			&& !name.endsWith(".backup.json") && !name.endsWith(".special.json");
+	}
+
+	/** Migration must never turn an unreadable snapshot into an authoritative empty account. */
+	public Map<String, AccountData> loadAllAccountsForMigration() {
+		Map<String, AccountData> accounts = new HashMap<>();
+		for (File file : accountFiles()) {
+			if (!isAccountSnapshot(file.getName())) continue;
+			String displayName = file.getName().substring(0, file.getName().length() - ".json".length());
+			accounts.put(displayName, loadExistingAccount(displayName, file));
+		}
+		return accounts;
+	}
+
+	private AccountData readAccountWithBackup(String displayName, File primary) {
 		try {
-			return readMigrationSnapshot(primary);
+			return readAccountSnapshot(primary);
 		} catch (IOException | RuntimeException | OutOfMemoryError primaryFailure) {
 			try {
-				return readMigrationSnapshot(new File(accountDirectory, displayName + ".backup.json"));
+				AccountData backup = readAccountSnapshot(new File(accountDirectory, displayName + ".backup.json"));
+				log.warn("Loaded {} from backup because its primary snapshot could not be read", displayName, primaryFailure);
+				return backup;
 			} catch (IOException | RuntimeException | OutOfMemoryError backupFailure) {
 				IllegalStateException failure = new IllegalStateException(
 					"Cannot read account snapshot or backup for " + displayName, primaryFailure);
@@ -244,7 +245,7 @@ public class TradePersister
 		}
 	}
 
-	private AccountData readMigrationSnapshot(File file) throws IOException {
+	private AccountData readAccountSnapshot(File file) throws IOException {
 		try (java.io.BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8);
 			com.google.gson.stream.JsonReader json = new com.google.gson.stream.JsonReader(reader)) {
 			AccountData data = gson.fromJson(json, AccountData.class);
@@ -255,71 +256,44 @@ public class TradePersister
 		}
 	}
 
-	//anything that wants to load an account's data MUST go through this method as it handles various cases such as
-	//loading from backups
-	public AccountData loadAccount(String displayName)
-	{
-		log.debug("loading data for {}", displayName);
-		try {
-			File accountFile = new File(accountDirectory, displayName + ".json");
-			AccountData accountData = loadFromFile(accountFile);
-			if (accountData == null)
-			{
-				log.warn("data for {} is null for some reason. Will try loading from backup", displayName);
-				accountData = loadAccountFromBackup(displayName);
-			}
-			return accountData;
-		}
-    catch (OutOfMemoryError e) {
-        log.error("OutOfMemoryError while loading data for {}. File may be too large. Returning empty AccountData.", displayName);
-        return new AccountData();
-    }
-    catch (Exception e) {
-        log.warn("Got exception {} while loading data for {}. Will try loading from backup", e, displayName);
-        return loadAccountFromBackup(displayName);
-    }
-	}
-
-	private AccountData loadAccountFromBackup(String displayName) {
-		log.debug("loading data for {} from backup", displayName);
-		try {
-			File accountFile = new File(accountDirectory, displayName + ".backup.json");
-			if (!accountFile.exists()) {
-				log.debug("backup for {} does not exist, returning empty AccountData", displayName);
-				return new AccountData();
-			}
-			AccountData accountData = loadFromFile(accountFile);
-			if (accountData == null) {
-				log.debug("data loaded from backup for {} is null for some reason, returning an empty AccountData object", displayName);
-				accountData = new AccountData();
-			}
-			return accountData;
-		}
-		catch (Exception e) {
-			log.debug("Couldn't load data for {} from backup due to {}", displayName, e);
+	/** Loads an existing primary or backup; only a genuinely new account may be empty. */
+	public AccountData loadAccount(String displayName) {
+		File primary = new File(accountDirectory, displayName + ".json");
+		File backup = new File(accountDirectory, displayName + ".backup.json");
+		if (accountDirectory.isDirectory() && Files.notExists(primary.toPath())
+			&& Files.notExists(backup.toPath()) && !isAccountProtected(displayName)) {
 			return new AccountData();
 		}
+		return loadExistingAccount(displayName, primary);
 	}
 
-	private AccountData loadFromFile(File f) throws IOException
-	{
-		try (java.io.BufferedReader bufferedReader = Files.newBufferedReader(f.toPath(), java.nio.charset.StandardCharsets.UTF_8);
-			com.google.gson.stream.JsonReader jsonReader = new com.google.gson.stream.JsonReader(bufferedReader))
-		{
-			return gson.fromJson(jsonReader, AccountData.class);
+	private AccountData loadExistingAccount(String displayName, File primary) {
+		try {
+			AccountData account = readAccountWithBackup(displayName, primary);
+			accountsWithLoadFailures.remove(displayName);
+			return account;
+		} catch (IllegalStateException failure) {
+			protectAccount(displayName);
+			throw failure;
 		}
 	}
-
 
 	public AccountWideData loadAccountWideData() throws IOException {
 		File accountFile = new File(accountDirectory, "accountwide.json");
-		if (accountFile.exists()){
-			String accountWideDataJson = new String(Files.readAllBytes(accountFile.toPath()));
-			Type type = new TypeToken<AccountWideData>(){}.getType();
-			return gson.fromJson(accountWideDataJson, type);
-		}
-		else {
+		if (accountDirectory.isDirectory() && Files.notExists(accountFile.toPath()) && !isAccountProtected("accountwide")) {
 			return new AccountWideData();
+		}
+		try (java.io.BufferedReader reader = Files.newBufferedReader(accountFile.toPath(), StandardCharsets.UTF_8);
+			com.google.gson.stream.JsonReader json = new com.google.gson.stream.JsonReader(reader)) {
+			AccountWideData data = gson.fromJson(json, AccountWideData.class);
+			if (data == null || json.peek() != com.google.gson.stream.JsonToken.END_DOCUMENT) {
+				throw new IOException("Account-wide snapshot is empty or incomplete: " + accountFile);
+			}
+			accountsWithLoadFailures.remove("accountwide");
+			return data;
+		} catch (IOException | RuntimeException | OutOfMemoryError failure) {
+			protectAccount("accountwide");
+			throw new IOException("Cannot load account-wide data; saves disabled until valid data is loaded", failure);
 		}
 	}
 
@@ -349,6 +323,12 @@ public class TradePersister
 	 * @throws IOException
 	 */
 	public void writeToFile(String displayName, Object data) throws IOException {
+		String accountName = displayName.endsWith(".backup")
+			? displayName.substring(0, displayName.length() - ".backup".length()) : displayName;
+		if (isAccountProtected(accountName)) {
+			throw new IOException("Refusing to overwrite unreadable data for " + accountName
+				+ "; restore and load a valid snapshot before saving");
+		}
 		log.debug("Writing to file for {}", displayName);
 		File accountFile = new File(accountDirectory, displayName + ".json");
 		File tempFile = new File(accountDirectory, displayName + ".json.tmp");
@@ -395,28 +375,12 @@ public class TradePersister
 	 * Creates a pre-migration backup file for an account before migration.
 	 * This should only be called when migration is actually needed.
 	 */
-	public static void createPreMigrationBackup(String displayName) throws IOException {
-		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
-		File backupFile = new File(PARENT_DIRECTORY, displayName + ".json.pre-migration");
+	public void createPreMigrationBackup(String displayName) throws IOException {
+		File accountFile = new File(accountDirectory, displayName + ".json");
+		File backupFile = new File(accountDirectory, displayName + ".json.pre-migration");
 		if (!backupFile.exists() && accountFile.exists()) {
 			Files.copy(accountFile.toPath(), backupFile.toPath());
 			log.info("Created pre-migration backup: {}", backupFile.getName());
-		}
-	}
-
-	/**
-	 * Deletes the pre-migration backup file for an account after successful migration.
-	 * This should be called after the account data has been successfully saved in the new format.
-	 */
-	public static void deletePreMigrationBackup(String displayName) {
-		String backupFileName = displayName + ".json.pre-migration";
-		File backupFile = new File(PARENT_DIRECTORY, backupFileName);
-		if (backupFile.exists()) {
-			if (backupFile.delete()) {
-				log.info("Deleted pre-migration backup: {}", backupFileName);
-			} else {
-				log.warn("Failed to delete pre-migration backup: {}", backupFileName);
-			}
 		}
 	}
 

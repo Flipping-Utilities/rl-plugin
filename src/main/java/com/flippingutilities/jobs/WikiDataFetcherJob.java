@@ -37,6 +37,7 @@ public class WikiDataFetcherJob {
     Instant timeOfLastRequestCompletion;
     boolean inFlightRequest = false;
     String apiUrl = API;
+    private long requestGeneration;
 
 
     public WikiDataFetcherJob(FlippingPlugin plugin, OkHttpClient httpClient) {
@@ -45,7 +46,7 @@ public class WikiDataFetcherJob {
         this.executor = Executors.newSingleThreadScheduledExecutor();
     }
 
-    public void subscribe(BiConsumer<WikiRequestWrapper, Instant> subscriber) {
+    public synchronized void subscribe(BiConsumer<WikiRequestWrapper, Instant> subscriber) {
         subscribers.add(subscriber);
     }
 
@@ -61,7 +62,7 @@ public class WikiDataFetcherJob {
         }
     }
 
-    public void onWorldSwitch(EnumSet<WorldType> worldType) {
+    public synchronized void onWorldSwitch(EnumSet<WorldType> worldType) {
         if (worldType.contains(WorldType.DEADMAN)) {
             log.debug("Switching to requesting deadman api");
             apiUrl = DEADMAN_API;
@@ -91,38 +92,46 @@ public class WikiDataFetcherJob {
         return (plugin.getMasterPanel().isVisible() || plugin.getApiAuthHandler().isPremium()) && !inFlightRequest && lastRequestOldEnough;
     }
 
-    public void attemptToFetchWikiData(boolean force) {
+    public synchronized void attemptToFetchWikiData(boolean force) {
         if (!force && !shouldFetch()) {
             return;
         }
         inFlightRequest = true;
+        long generation = ++requestGeneration;
+        WikiDataSource source = getWikiDataSourceType();
         Request request = new Request.Builder().header("User-Agent", "FlippingUtilities").url(apiUrl).build();
         httpClient.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
-                timeOfLastRequestCompletion = Instant.now();
-                inFlightRequest = false;
+                completeRequest(generation, source, null);
             }
 
             @Override
-            public void onResponse(Call call, Response response) throws IOException {
-                try (ResponseBody responseBody = response.body()) {
-                    if (!response.isSuccessful()) {
-                        timeOfLastRequestCompletion = Instant.now();
-                        inFlightRequest = false;
-                        return;
+            public void onResponse(Call call, Response response) {
+                WikiRequest result = null;
+                try (Response ignored = response) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        result = plugin.gson.fromJson(response.body().string(), WikiRequest.class);
                     }
-                    try {
-                        timeOfLastRequestCompletion = Instant.now();
-                        inFlightRequest = false;
-                        WikiRequest wikiRequest = plugin.gson.fromJson(responseBody.string(), WikiRequest.class);
-                        WikiRequestWrapper wikiRequestWrapper = new WikiRequestWrapper(wikiRequest, getWikiDataSourceType());
-                        subscribers.forEach(subscriber -> subscriber.accept(wikiRequestWrapper, timeOfLastRequestCompletion));
-                    }
-                    catch (JsonSyntaxException e) { }
+                } catch (IOException | JsonSyntaxException e) {
+                    log.debug("Could not read wiki prices", e);
+                } finally {
+                    completeRequest(generation, source, result);
                 }
             }
         });
     }
-}
 
+    private synchronized void completeRequest(long generation, WikiDataSource source, WikiRequest result) {
+        // A world switch or forced refresh may have started a newer request.
+        if (generation != requestGeneration) {
+            return;
+        }
+        timeOfLastRequestCompletion = Instant.now();
+        inFlightRequest = false;
+        if (result != null) {
+            WikiRequestWrapper wrapper = new WikiRequestWrapper(result, source);
+            subscribers.forEach(subscriber -> subscriber.accept(wrapper, timeOfLastRequestCompletion));
+        }
+    }
+}

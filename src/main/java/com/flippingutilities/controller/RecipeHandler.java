@@ -518,6 +518,17 @@ public class RecipeHandler {
             return result;
         }
 
+        List<RecipeFlipGroup> unknownGroups = new ArrayList<>();
+        if (selectedSort == SORT.TOTAL_PROFIT || selectedSort == SORT.PROFIT_EACH || selectedSort == SORT.ROI) {
+            result.removeIf(group -> {
+                if (group.getFlipsInInterval(startOfInterval).stream().anyMatch(RecipeFlip::hasMissingOffers)) {
+                    unknownGroups.add(group);
+                    return true;
+                }
+                return false;
+            });
+        }
+
         switch (selectedSort) {
             case TIME:
                 result.sort(Comparator.comparing(RecipeFlipGroup::getLatestFlipTime));
@@ -540,7 +551,7 @@ public class RecipeHandler {
                     long totalProfit = flips.stream().mapToLong(RecipeFlip::getProfit).sum();
                     long totalRecipesMade = flips.stream().mapToInt(rf -> rf.getRecipeCountMade(group.getRecipe()))
                             .sum();
-                    return totalProfit / totalRecipesMade;
+                    return totalRecipesMade > 0 ? totalProfit / totalRecipesMade : 0;
                 }));
                 break;
             case ROI:
@@ -548,11 +559,12 @@ public class RecipeHandler {
                     List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
                     long totalProfit = flips.stream().mapToLong(RecipeFlip::getProfit).sum();
                     long totalExpense = flips.stream().mapToLong(RecipeFlip::getExpense).sum();
-                    return (float) totalProfit / totalExpense * 100;
+                    return totalExpense > 0 ? (float) totalProfit / totalExpense * 100 : 0;
                 }));
                 break;
         }
         Collections.reverse(result);
+        result.addAll(unknownGroups);
         return result;
     }
 
