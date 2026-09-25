@@ -28,6 +28,7 @@ package com.flippingutilities.ui.statistics;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.*;
+import com.flippingutilities.db.FlipRepository;
 import com.flippingutilities.ui.statistics.items.FlippingItemPanel;
 import com.flippingutilities.ui.statistics.items.FlippingItemContainerPanel;
 import com.flippingutilities.ui.statistics.recipes.RecipeFlipGroupPanel;
@@ -363,6 +364,12 @@ public class StatsPanel extends JPanel
 
 	public void updateCumulativeDisplays(List<FlippingItem> tradesList, List<RecipeFlipGroup> recipeFlipGroups)
 	{
+		// Use FlipRepository for SQLite mode (on-demand queries)
+		if (plugin.getConfig().dataSource().isSqlite() && plugin.getFlipRepository() != null)
+		{
+			updateCumulativeDisplaysFromRepository();
+			return;
+		}
 		subInfoPanel.remove(autoSavePanel);
 
 		if (!Objects.equals(timeIntervalDropdown.getSelectedItem(), "Session"))
@@ -554,6 +561,7 @@ public class StatsPanel extends JPanel
 
 	public void deleteRecipeFlipGroupPanel(RecipeFlipGroupPanel recipeFlipGroupPanel) {
 		recipeFlipGroupPanel.getRecipeFlipGroup().deleteFlips(startOfInterval);
+		plugin.deleteRecipeFlipsSinceFromStorage(startOfInterval);
 		plugin.setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
 		plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
@@ -923,5 +931,44 @@ public class StatsPanel extends JPanel
 		long minutes = secondsUntilNextSave / 60;
 		long seconds = secondsUntilNextSave % 60;
 		return String.format("%02d:%02d", minutes, seconds);
+	}
+	private void updateCumulativeDisplaysFromRepository() {
+		String account = plugin.getAccountCurrentlyViewed();
+		FlipRepository repository = plugin.getFlipRepository();
+
+		if (repository == null) {
+			log.warn("FlipRepository is null, falling back to in-memory calculation");
+			return;
+		}
+
+		// DB queries must not run on the Swing EDT. Dispatch to the plugin executor and
+		// marshal the UI update back onto the EDT.
+		plugin.getExecutor().submit(() -> {
+			FlipRepository.AggregateStats stats;
+			try {
+				stats = repository.getAggregateStats(account, startOfInterval);
+			} catch (Exception e) {
+				log.warn("Error getting aggregate stats from repository", e);
+				return;
+			}
+			javax.swing.SwingUtilities.invokeLater(() -> {
+				try {
+					updateTotalProfitDisplay(stats.totalProfit);
+
+					if (Objects.equals(timeIntervalDropdown.getSelectedItem(), "Session")) {
+						Duration accumulatedTime = Duration.ofMillis(stats.sessionTimeMillis);
+						updateSessionTimeDisplay(accumulatedTime);
+						updateHourlyProfitDisplay(stats.totalProfit, accumulatedTime);
+					}
+
+					updateRoiDisplay(stats.totalProfit, stats.totalExpense);
+					updateTotalFlipsDisplay(stats.flipCount);
+					updateTaxPaidDisplay(stats.taxPaid);
+					updateAutoSaveDisplay();
+				} catch (Exception e) {
+					log.warn("Error updating cumulative displays from repository stats", e);
+				}
+			});
+		});
 	}
 }

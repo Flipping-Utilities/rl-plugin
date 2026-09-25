@@ -60,6 +60,7 @@ public class MasterPanel extends PluginPanel
 	private FlippingPlugin plugin;
 	private FastTabGroup tabGroup;
 	private JDialog loginModal;
+	private MaterialTab statisticsTab;
 
 	/**
 	 * THe master panel is always present. The components added to it are components that should always be visible
@@ -103,6 +104,8 @@ public class MasterPanel extends PluginPanel
 
 		add(header, BorderLayout.NORTH);
 		add(mainDisplay, BorderLayout.CENTER);
+
+		updateSqliteIndicator();
 	}
 
 	/**
@@ -198,6 +201,7 @@ public class MasterPanel extends PluginPanel
 	private JComboBox accountSelector()
 	{
 		JComboBox viewSelectorDropdown = new JComboBox();
+		viewSelectorDropdown.setVisible(false);
 		viewSelectorDropdown.setBackground(CustomColors.DARK_GRAY_LIGHTER);
 		viewSelectorDropdown.setFocusable(false);
 		viewSelectorDropdown.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
@@ -231,7 +235,9 @@ public class MasterPanel extends PluginPanel
 	{
 		FastTabGroup tabGroup = new FastTabGroup(mainDisplay);
 		MaterialTab flippingTab = new MaterialTab("flipping", tabGroup, flippingPanel);
-		MaterialTab statisticsTab = new MaterialTab("stats", tabGroup, statPanel);
+		statisticsTab = new MaterialTab("stats", tabGroup, statPanel);
+		// Icon (when shown) renders to the right of the "stats" text, inside the tab.
+		statisticsTab.setHorizontalTextPosition(SwingConstants.LEFT);
 		MaterialTab slotsTab = new MaterialTab("slots", tabGroup, slotsPanel);
 
 		tabGroup.addTab(slotsTab);
@@ -240,6 +246,22 @@ public class MasterPanel extends PluginPanel
 
 		tabGroup.select(flippingTab);
 		return tabGroup;
+	}
+
+	/**
+	 * Shows or hides the SQLite indicator icon on the stats tab based on the current data source.
+	 */
+	public void updateSqliteIndicator()
+	{
+		if (statisticsTab == null)
+		{
+			return;
+		}
+		boolean sqlite = plugin != null && plugin.getConfig() != null && plugin.getConfig().dataSource().isSqlite();
+		statisticsTab.setIcon(sqlite ? Icons.DATABASE_ICON : null);
+		statisticsTab.setToolTipText(sqlite ? "stats (SQLite storage active)" : null);
+		tabGroup.revalidate();
+		tabGroup.repaint();
 	}
 
 	public Set<String> getViewSelectorItems()
@@ -280,9 +302,14 @@ public class MasterPanel extends PluginPanel
 	public void setupAccSelectorDropdown(Set<String> currentAccounts) {
 		//adding an item causes the event listener (changeView) to fire which causes stat panel
 		//and flipping panel to rebuildItemsDisplay. I think this only happens on the first item you add.
+		accountSelector.removeAllItems();
 		accountSelector.addItem(FlippingPlugin.ACCOUNT_WIDE);
 
-		currentAccounts.forEach(displayName -> accountSelector.addItem(displayName));
+		// guard against a pseudo account-wide entry sneaking into the account set (it would
+		// show up as a second, identical "accountwide" view in the dropdown)
+		currentAccounts.stream()
+			.filter(name -> !name.equalsIgnoreCase(FlippingPlugin.ACCOUNT_WIDE))
+			.forEach(displayName -> accountSelector.addItem(displayName));
 
 		//sets the account selector dropdown to visible or not depending on whether the config option has been
 		//selected and there are > 1 accounts.

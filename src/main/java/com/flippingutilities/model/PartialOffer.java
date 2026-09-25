@@ -65,7 +65,10 @@ public class PartialOffer {
         if (offer == null) {
             return null;
         }
-        int remainingAmount = offer.getCurrentQuantityInTrade() - amountConsumed;
+        // Clamp at 0: legacy recipe data can reference more consumption than the offer holds
+        // (e.g. offers deleted after the recipe flip was made). A negative remaining quantity
+        // used to propagate into flip displays as e.g. "-666 flipped (ongoing)".
+        int remainingAmount = Math.max(0, offer.getCurrentQuantityInTrade() - amountConsumed);
         OfferEvent adjustedOfferEvent = offer.clone();
         adjustedOfferEvent.setCurrentQuantityInTrade(remainingAmount);
         return adjustedOfferEvent;

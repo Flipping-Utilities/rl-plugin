@@ -2,12 +2,14 @@ package com.flippingutilities.model;
 
 import com.flippingutilities.controller.RecipeHandler;
 import com.flippingutilities.utilities.Recipe;
+import com.flippingutilities.utilities.RecipeItem;
 import com.flippingutilities.utilities.Searchable;
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import lombok.NoArgsConstructor;
+import net.runelite.client.game.ItemManager;
 
 import java.time.Instant;
 import java.util.*;
@@ -29,6 +31,17 @@ public class RecipeFlipGroup implements Searchable {
     private Recipe recipe;
     
     private List<RecipeFlip> recipeFlips = new ArrayList<>();
+
+    // Cached stats from the events table (set by SqliteStorage when loading from DB).
+    // transient + @Expose ensures they are never serialized to JSON regardless of Gson config.
+    @Expose(serialize = false, deserialize = false)
+    private transient long cachedTotalProfit;
+    @Expose(serialize = false, deserialize = false)
+    private transient long cachedTotalExpense;
+    @Expose(serialize = false, deserialize = false)
+    private transient int cachedFlipCount;
+    @Expose(serialize = false, deserialize = false)
+    private transient boolean hasCachedStats;
 
     public RecipeFlipGroup(Recipe recipe) {
         this.recipe = recipe;
@@ -52,6 +65,65 @@ public class RecipeFlipGroup implements Searchable {
         } else if (recipe != null && recipeKey == null) {
             recipeKey = RecipeHandler.createRecipeKey(recipe);
         }
+    }
+
+    /**
+     * Builds a synthetic Recipe from the inputs/outputs of this group's flips when no
+     * recipe could be resolved (e.g. legacy/migrated data with a null or malformed recipeKey).
+     * Named "Making [output]" when combining inputs into an output, or "Breaking [input]"
+     * when splitting a single input into several outputs.
+     */
+    public void synthesizeRecipe(ItemManager itemManager) {
+        if (recipe != null) {
+            return;
+        }
+
+        Set<Integer> inputIds = new LinkedHashSet<>();
+        Set<Integer> outputIds = new LinkedHashSet<>();
+        for (RecipeFlip flip : recipeFlips) {
+            if (flip.getInputs() != null) {
+                inputIds.addAll(flip.getInputs().keySet());
+            }
+            if (flip.getOutputs() != null) {
+                outputIds.addAll(flip.getOutputs().keySet());
+            }
+        }
+
+        List<RecipeItem> inputs = inputIds.stream().map(id -> new RecipeItem(id, 1)).collect(Collectors.toList());
+        List<RecipeItem> outputs = outputIds.stream().map(id -> new RecipeItem(id, 1)).collect(Collectors.toList());
+
+        this.recipe = new Recipe(inputs, outputs, buildSyntheticName(itemManager, inputIds, outputIds));
+        if (recipeKey == null) {
+            recipeKey = RecipeHandler.createRecipeKey(recipe);
+        }
+    }
+
+    private String buildSyntheticName(ItemManager itemManager, Set<Integer> inputIds, Set<Integer> outputIds) {
+        // Breaking: a single input split into several outputs.
+        if (inputIds.size() == 1 && outputIds.size() > 1) {
+            return "Breaking " + itemName(itemManager, inputIds.iterator().next());
+        }
+        // Making: combining inputs into (at least one) output.
+        if (!outputIds.isEmpty()) {
+            return "Making " + itemName(itemManager, outputIds.iterator().next());
+        }
+        if (!inputIds.isEmpty()) {
+            return "Breaking " + itemName(itemManager, inputIds.iterator().next());
+        }
+        return "Unknown Recipe";
+    }
+
+    private String itemName(ItemManager itemManager, int id) {
+        try {
+            if (itemManager != null && itemManager.getItemComposition(id) != null) {
+                String name = itemManager.getItemComposition(id).getName();
+                if (name != null && !name.isEmpty()) {
+                    return name;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "item " + id;
     }
     
     /**

@@ -130,7 +130,10 @@ public class TradePersister
 		Map<String, AccountData> accountsData = new HashMap<>();
 		for (File f : PARENT_DIRECTORY.listFiles())
 		{
-			if (f.getName().equals("accountwide.json") || !f.getName().contains(".json") || f.getName().contains(".backup.json") || f.getName().contains(".special.json")) {
+			// case-insensitive accountwide check: a stray "Accountwide.json" (e.g. written by an
+			// older build treating the pseudo view as an account) must not load as an account,
+			// which would duplicate the account-wide view in the account selector
+			if (f.getName().equalsIgnoreCase("accountwide.json") || !f.getName().contains(".json") || f.getName().contains(".backup.json") || f.getName().contains(".special.json")) {
 				continue;
 			}
 			String displayName = f.getName().split("\\.")[0];
