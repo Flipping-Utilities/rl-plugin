@@ -42,6 +42,7 @@ import org.apache.commons.csv.CSVPrinter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.BufferedWriter;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.lang.reflect.Type;
@@ -58,9 +59,68 @@ import java.util.Map;
 @Slf4j
 public class TradePersister
 {
-	/** Gson for deserialization (reads all fields) */
+	/**
+	 * Reads every Instant encoding the plugin has ever written:
+	 * - epoch-millis numbers (current format),
+	 * - ISO-8601 strings,
+	 * - nested {"seconds":X,"nanos":Y} objects (historical format from builds whose Gson
+	 *   had no Instant adapter and serialized the field reflectively).
+	 * Older files that contain the object form failed to parse with the adapter-bearing
+	 * Gson; the lenient loader then fell back to the (equally old) backup, returned an
+	 * EMPTY account, and the next save overwrote years of data with the empty state.
+	 * Writes the current number format.
+	 */
+	private static final com.google.gson.TypeAdapter<Instant> LEGACY_INSTANT =
+		new com.google.gson.TypeAdapter<Instant>() {
+			@Override
+			public void write(com.google.gson.stream.JsonWriter out, Instant value) throws java.io.IOException {
+				if (value == null) { out.nullValue(); return; }
+				out.value(value.toEpochMilli());
+			}
+
+			@Override
+			public Instant read(com.google.gson.stream.JsonReader in) throws java.io.IOException {
+				com.google.gson.stream.JsonToken token = in.peek();
+				if (token == com.google.gson.stream.JsonToken.NULL) { in.nextNull(); return null; }
+				if (token == com.google.gson.stream.JsonToken.NUMBER) { return Instant.ofEpochMilli(in.nextLong()); }
+				if (token == com.google.gson.stream.JsonToken.STRING) {
+					String s = in.nextString();
+					if (s == null || s.trim().isEmpty()) { return null; }
+					try {
+						return Instant.parse(s);
+					} catch (Exception ignored) {
+						try {
+							return Instant.ofEpochMilli(Long.parseLong(s.trim()));
+						} catch (NumberFormatException nfe) {
+							throw new com.google.gson.JsonSyntaxException("Unparseable Instant: " + s, nfe);
+						}
+					}
+				}
+				if (token == com.google.gson.stream.JsonToken.BEGIN_OBJECT) {
+					long seconds = 0;
+					int nanos = 0;
+					in.beginObject();
+					while (in.hasNext()) {
+						String name = in.nextName();
+						if (name.equals("seconds") || name.equals("epochSecond")) {
+							seconds = in.nextLong();
+						} else if (name.equals("nanos") || name.equals("nano")) {
+							nanos = (int) in.nextLong();
+						} else {
+							in.skipValue();
+						}
+					}
+					in.endObject();
+					return Instant.ofEpochSecond(seconds, nanos);
+				}
+				in.skipValue();
+				return null;
+			}
+		};
+
+	/** Gson for deserialization (reads all fields and all historical Instant encodings) */
 	Gson gson;
-	
+
 	/** Gson for serialization (excludes fields with @Expose(serialize=false)) */
 	private final Gson writeGson;
 	private final File accountDirectory;
@@ -70,10 +130,10 @@ public class TradePersister
 	}
 
 	TradePersister(Gson gson, File accountDirectory) {
-		this.gson = gson;
+		this.gson = gson.newBuilder().registerTypeAdapter(Instant.class, LEGACY_INSTANT).create();
 		this.accountDirectory = accountDirectory;
 		// Create a Gson for writing that excludes fields marked with @Expose(serialize=false)
-		this.writeGson = gson.newBuilder()
+		this.writeGson = this.gson.newBuilder()
 			.setExclusionStrategies(new ExclusionStrategy() {
 				@Override
 				public boolean shouldSkipField(FieldAttributes f) {
