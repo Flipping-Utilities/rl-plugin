@@ -286,19 +286,7 @@ public class StorageBackendSwitchTest {
 
     @Test
     public void failedAccountReadKeepsNewerCachedHistoryThroughRecovery() throws Exception {
-        account.getTrades().clear();
-        switchTo(DataSource.SQLITE);
-        finishStorageWork();
-
-        // Keep JSON at the switch snapshot while the live account and SQLite receive newer trades.
-        account.getTrades().add(item);
-        plugin.recordTrade(ACCOUNT, offer("original", 10));
-        plugin.addSelectedGeTabOffers(singletonList(offer("since-snapshot", 7)));
-        finishStorageWork();
-
-        assertEquals(17, totalQuantity(account));
-        assertEquals(17, totalQuantity(plugin.getSqliteStorage().loadAccount(ACCOUNT)));
-        assertEquals(0, totalQuantity(persister.loadAccount(ACCOUNT)));
+        prepareNewerCachedHistory();
         SqliteStorage failedStorage = plugin.getSqliteStorage();
         Connection failedConnection = failedStorage.getConnection();
         try (Statement statement = failedConnection.createStatement()) {
@@ -333,6 +321,166 @@ public class StorageBackendSwitchTest {
         assertFalse(plugin.getSqliteStorage().requiresFullResync());
         assertEquals(17, totalQuantity(plugin.getSqliteStorage().loadAccount(ACCOUNT)));
         assertLiveStateUnchanged();
+    }
+
+    @Test
+    public void failedRecoverySnapshotKeepsNewerCachedHistoryUntilRetryAndRebuild() throws Exception {
+        prepareNewerCachedHistory();
+        failAccountRead();
+        persister.failWrites = true;
+
+        finishStorageWork();
+        assertNull(plugin.getSqliteStorage());
+        assertEquals("The failed recovery save leaves the old JSON snapshot", 0,
+            totalQuantity(persister.loadAccount(ACCOUNT)));
+
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+
+        assertSame("Reload notifications must retain the account whose recovery save failed", account,
+            plugin.getDataHandler().viewAccountData(ACCOUNT));
+        assertEquals(17, totalQuantity(plugin.getDataHandler().viewAccountData(ACCOUNT)));
+        assertFalse("Autosave remains retryable while JSON is unwritable", plugin.getDataHandler().storeData());
+
+        persister.failWrites = false;
+        assertTrue(plugin.getDataHandler().storeData());
+        assertEquals("Retry must save the cached history, not the older JSON snapshot", 17,
+            totalQuantity(persister.loadAccount(ACCOUNT)));
+
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+
+        assertFalse(plugin.getSqliteStorage().requiresFullResync());
+        assertEquals(17, totalQuantity(plugin.getSqliteStorage().loadAccount(ACCOUNT)));
+        assertLiveStateUnchanged();
+    }
+
+    @Test
+    public void successfulRecoveryRetryResumesExternalJsonReloads() throws Exception {
+        account.getTrades().clear();
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        account.setAccumulatedSessionTimeMillis(654321L);
+        failAccountRead();
+        persister.failWrites = true;
+        finishStorageWork();
+
+        persister.failWrites = false;
+        assertTrue(plugin.getDataHandler().storeData());
+        assertEquals(654321L, persister.loadAccount(ACCOUNT).getAccumulatedSessionTimeMillis());
+
+        AccountData externalUpdate = new AccountData();
+        externalUpdate.setVersion(AccountData.CURRENT_VERSION);
+        externalUpdate.setAccumulatedSessionTimeMillis(987654L);
+        persister.writeToFile(ACCOUNT, externalUpdate);
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+
+        assertNotSame("A saved recovery must release the cached account for normal reloads", account,
+            plugin.getDataHandler().viewAccountData(ACCOUNT));
+        assertEquals(987654L, plugin.getDataHandler().viewAccountData(ACCOUNT).getAccumulatedSessionTimeMillis());
+    }
+
+    @Test
+    public void failedLiveWriteRecoverySnapshotKeepsNewerCachedHistoryUntilRetry() throws Exception {
+        account.getTrades().clear();
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        try (Statement statement = plugin.getSqliteStorage().getConnection().createStatement()) {
+            statement.execute("PRAGMA query_only=ON");
+        }
+        account.getTrades().add(item);
+        plugin.recordTrade(ACCOUNT, offer("original", 10));
+        plugin.addSelectedGeTabOffers(singletonList(offer("write-failed", 7)));
+        executor.drain();
+
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+
+        assertSame("Reloads must preserve the live account before queued write recovery runs", account,
+            plugin.getDataHandler().viewAccountData(ACCOUNT));
+        assertEquals(17, totalQuantity(plugin.getDataHandler().viewAccountData(ACCOUNT)));
+        persister.failWrites = true;
+
+        finishStorageWork();
+        assertNull(plugin.getSqliteStorage());
+        assertEquals(0, totalQuantity(persister.loadAccount(ACCOUNT)));
+
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+
+        assertSame("A failed write recovery must preserve its unsaved account through reloads", account,
+            plugin.getDataHandler().viewAccountData(ACCOUNT));
+        assertEquals(17, totalQuantity(plugin.getDataHandler().viewAccountData(ACCOUNT)));
+
+        persister.failWrites = false;
+        assertTrue(plugin.getDataHandler().storeData());
+        assertEquals(17, totalQuantity(persister.loadAccount(ACCOUNT)));
+    }
+
+    @Test
+    public void switchToJsonBeforeWriteRecoveryKeepsFailedSnapshotProtected() throws Exception {
+        prepareNewerCachedHistory();
+        try (Statement statement = plugin.getSqliteStorage().getConnection().createStatement()) {
+            statement.execute("PRAGMA query_only=ON");
+        }
+        plugin.addSelectedGeTabOffers(singletonList(offer("write-failed", 7)));
+        persister.failWrites = true;
+
+        // Queue the config change first so it detaches storage before the recovery callback runs.
+        queueSwitchTo(DataSource.JSON);
+        finishStorageWork();
+
+        assertNull(plugin.getSqliteStorage());
+        assertEquals(0, totalQuantity(persister.loadAccount(ACCOUNT)));
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+
+        assertSame("A config switch must retain recovery protection after its snapshot fails", account,
+            plugin.getDataHandler().viewAccountData(ACCOUNT));
+        assertEquals(24, totalQuantity(plugin.getDataHandler().viewAccountData(ACCOUNT)));
+
+        persister.failWrites = false;
+        assertTrue(plugin.getDataHandler().storeData());
+        assertEquals(24, totalQuantity(persister.loadAccount(ACCOUNT)));
+    }
+
+    @Test
+    public void partialRecoverySnapshotRetainsFailedAccountAndResumesHealthyReloads() throws Exception {
+        String healthyName = "Healthy player";
+        plugin.getDataHandler().addAccount(healthyName);
+        AccountData healthyAccount = plugin.getDataHandler().viewAccountData(healthyName);
+        healthyAccount.setVersion(AccountData.CURRENT_VERSION);
+        plugin.getDataHandler().markDataAsHavingChanged(healthyName);
+        prepareNewerCachedHistory();
+        healthyAccount.setAccumulatedSessionTimeMillis(654321L);
+        failAccountRead();
+        persister.failedWriteAccount = ACCOUNT;
+
+        finishStorageWork();
+
+        assertEquals("Other accounts must still be saved when one recovery snapshot fails", 654321L,
+            persister.loadAccount(healthyName).getAccumulatedSessionTimeMillis());
+        assertEquals(0, totalQuantity(persister.loadAccount(ACCOUNT)));
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        assertSame(account, plugin.getDataHandler().viewAccountData(ACCOUNT));
+        assertEquals(17, totalQuantity(plugin.getDataHandler().viewAccountData(ACCOUNT)));
+
+        AccountData externalUpdate = new AccountData();
+        externalUpdate.setVersion(AccountData.CURRENT_VERSION);
+        externalUpdate.setAccumulatedSessionTimeMillis(987654L);
+        persister.writeToFile(healthyName, externalUpdate);
+        plugin.getDataHandler().loadAccountData(healthyName);
+
+        assertNotSame(healthyAccount, plugin.getDataHandler().viewAccountData(healthyName));
+        assertEquals(987654L,
+            plugin.getDataHandler().viewAccountData(healthyName).getAccumulatedSessionTimeMillis());
+        assertEquals("The healthy account can reload while the other account still needs its snapshot", 0,
+            totalQuantity(persister.loadAccount(ACCOUNT)));
+
+        persister.failedWriteAccount = null;
+        assertTrue(plugin.getDataHandler().storeData());
+        assertEquals(17, totalQuantity(persister.loadAccount(ACCOUNT)));
+        assertEquals("Retry must not overwrite the healthy account's external update", 987654L,
+            persister.loadAccount(healthyName).getAccumulatedSessionTimeMillis());
     }
 
     @Test
@@ -426,13 +574,17 @@ public class StorageBackendSwitchTest {
     }
 
     private void switchTo(DataSource source) {
+        queueSwitchTo(source);
+        clientThread.drain();
+    }
+
+    private void queueSwitchTo(DataSource source) {
         config.source = source;
         ConfigChanged event = new ConfigChanged();
         event.setGroup(FlippingPlugin.CONFIG_GROUP);
         event.setKey("dataSource");
         event.setNewValue(source.name());
         plugin.onConfigChanged(event);
-        clientThread.drain();
     }
 
     private void finishStorageWork() {
@@ -440,6 +592,32 @@ public class StorageBackendSwitchTest {
             executor.drain();
             clientThread.drain();
         } while (executor.hasTasks());
+    }
+
+    private void prepareNewerCachedHistory() {
+        account.getTrades().clear();
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        // Keep JSON at the switch snapshot while the live account and SQLite receive newer trades.
+        account.getTrades().add(item);
+        plugin.recordTrade(ACCOUNT, offer("original", 10));
+        plugin.addSelectedGeTabOffers(singletonList(offer("since-snapshot", 7)));
+        finishStorageWork();
+        assertEquals(17, totalQuantity(account));
+        assertEquals(17, totalQuantity(plugin.getSqliteStorage().loadAccount(ACCOUNT)));
+        assertEquals(0, totalQuantity(persister.loadAccount(ACCOUNT)));
+    }
+
+    private void failAccountRead() throws Exception {
+        try (Statement statement = plugin.getSqliteStorage().getConnection().createStatement()) {
+            statement.execute("ALTER TABLE item_favorites RENAME TO unavailable_favorites");
+            try {
+                plugin.getDataHandler().loadAccountData(ACCOUNT);
+            } finally {
+                statement.execute("ALTER TABLE unavailable_favorites RENAME TO item_favorites");
+            }
+        }
+        assertSame(account, plugin.getDataHandler().viewAccountData(ACCOUNT));
     }
 
     private void assertLiveStateUnchanged() {
@@ -492,10 +670,11 @@ public class StorageBackendSwitchTest {
         private int loads;
         private boolean failLoads;
         private boolean failWrites;
+        private String failedWriteAccount;
 
         MemoryTradePersister() { super(new Gson()); }
         @Override public void writeToFile(String name, Object data) {
-            if (failWrites) throw new IllegalStateException("Account file is read-only");
+            if (failWrites || name.equals(failedWriteAccount)) throw new IllegalStateException("Account file is read-only");
             if (data instanceof AccountData) accounts.put(name, gson.toJson(data));
         }
         @Override public Map<String, AccountData> loadAllAccounts() {

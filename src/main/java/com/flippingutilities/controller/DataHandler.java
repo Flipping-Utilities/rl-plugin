@@ -42,7 +42,7 @@ import java.util.*;
 public class DataHandler {
     // SQLite storage backend (optional)
     private com.flippingutilities.db.SqliteStorage sqliteStorage;
-    private boolean sqliteReadRecoveryPending;
+    private final Set<String> accountsAwaitingRecoverySnapshot = new HashSet<>();
     FlippingPlugin plugin;
     private AccountWideData accountWideData;
     private BackupCheckpoints backupCheckpoints;
@@ -56,8 +56,10 @@ public class DataHandler {
     }
 
     public void setSqliteStorage(com.flippingutilities.db.SqliteStorage storage) {
+        if (plugin.isStorageFailed(sqliteStorage)) {
+            preserveAccountsForRecovery();
+        }
         this.sqliteStorage = storage;
-        sqliteReadRecoveryPending = false;
     }
 
     public AccountWideData viewAccountWideData() {
@@ -79,7 +81,15 @@ public class DataHandler {
     public void deleteAccount(String displayName) {
         log.info("deleting account: {}", displayName);
         accountSpecificData.remove(displayName);
+        accountsAwaitingRecoverySnapshot.remove(displayName);
+        accountsWithUnsavedChanges.remove(displayName);
         TradePersister.deleteFile(displayName + ".json");
+    }
+
+    /** Keep cached accounts authoritative until each recovery snapshot is safely written. */
+    void preserveAccountsForRecovery() {
+        accountsAwaitingRecoverySnapshot.addAll(accountSpecificData.keySet());
+        accountsWithUnsavedChanges.addAll(accountSpecificData.keySet());
     }
 
     public Collection<AccountData> getAllAccountData() {
@@ -270,7 +280,7 @@ public class DataHandler {
     private void handleSqliteReadFailure(Exception failure) {
         com.flippingutilities.db.SqliteStorage failed = sqliteStorage;
         sqliteStorage = null;
-        sqliteReadRecoveryPending = true;
+        preserveAccountsForRecovery();
         plugin.recoverFromStorageFailure(failed, failure);
     }
 
@@ -288,6 +298,14 @@ public class DataHandler {
 
     private AccountData fetchAccountData(String displayName)
     {
+        // A write can fail before its queued client-thread recovery callback runs.
+        if (plugin.isStorageFailed(sqliteStorage)) {
+            setSqliteStorage(null);
+        }
+        if (accountsAwaitingRecoverySnapshot.contains(displayName)
+                && accountSpecificData.containsKey(displayName)) {
+            return accountSpecificData.get(displayName);
+        }
         // SQLite path: attempt to load from SQLite when configured
         if (sqliteStorage != null && plugin.getConfig().dataSource().isSqlite()) {
             try {
@@ -302,12 +320,10 @@ public class DataHandler {
                 // SQLite returned null (account not found); fall through to JSON.
             } catch (Exception e) {
                 handleSqliteReadFailure(e);
+                if (accountSpecificData.containsKey(displayName)) {
+                    return accountSpecificData.get(displayName);
+                }
             }
-        }
-        // Preserve every cached account until queued recovery saves the live model, including
-        // subsequent reload notifications after the failed SQLite backend was detached.
-        if (sqliteReadRecoveryPending && accountSpecificData.containsKey(displayName)) {
-            return accountSpecificData.get(displayName);
         }
         try {
             AccountData accountData = plugin.tradePersister.loadAccount(displayName);
@@ -343,7 +359,11 @@ public class DataHandler {
         }
         thisClientLastStored = displayName;
         data.setLastStoredAt(Instant.now());
-        return storeData(displayName, data);
+        boolean stored = storeData(displayName, data);
+        if (stored) {
+            accountsAwaitingRecoverySnapshot.remove(displayName);
+        }
+        return stored;
     }
 
     private boolean storeData(String fileName, Object data) {
