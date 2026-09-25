@@ -38,6 +38,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
 @Slf4j
 @Data
@@ -108,6 +110,7 @@ public class AccountData {
      * that the FlippingItems have their non persisted fields set from history.
      */
     public void prepareForUse(FlippingPlugin plugin) {
+        normalizeOfferIds();
         fixIncorrectItemNames(plugin.getItemManager());
 
         Map<String, OfferEvent> hydratedOffers = new HashMap<>();
@@ -125,6 +128,86 @@ public class AccountData {
         hydrateRecipeFlipGroups(plugin);
         hydratePartialOffers(hydratedOffers, plugin.getItemManager());
         hydrateSlotTimers(plugin);
+    }
+
+    /**
+     * Legacy JSON stores independent copies of the same offer in history and lastOffers,
+     * without UUIDs. Give a slot and its unique, exact history snapshot one identity
+     * before history hydration assigns IDs. Missing or ambiguous history stays independent:
+     * slot reuse and deleted history must never attach a slot to an older partial fill.
+     * This also runs during migration, which does not hydrate accounts through the UI.
+     */
+    public void normalizeOfferIds() {
+        if (lastOffers != null) {
+            for (Map.Entry<Integer, OfferEvent> entry : lastOffers.entrySet()) {
+                OfferEvent active = entry.getValue();
+                if (active == null || active.getUuid() != null) {
+                    continue;
+                }
+                OfferEvent historical = findLegacySlotSnapshot(entry.getKey(), active);
+                if (historical != null) {
+                    if (historical.getUuid() == null) {
+                        historical.setUuid(UUID.randomUUID().toString());
+                    }
+                    active.setUuid(historical.getUuid());
+                } else {
+                    active.setUuid(UUID.randomUUID().toString());
+                }
+            }
+        }
+        if (trades != null) {
+            for (FlippingItem item : trades) {
+                if (item.getHistory() == null || item.getHistory().getCompressedOfferEvents() == null) {
+                    continue;
+                }
+                for (OfferEvent offer : item.getHistory().getCompressedOfferEvents()) {
+                    if (offer != null && offer.getUuid() == null) {
+                        offer.setUuid(UUID.randomUUID().toString());
+                    }
+                }
+            }
+        }
+    }
+
+    private OfferEvent findLegacySlotSnapshot(Integer slot, OfferEvent active) {
+        if (slot == null || slot < 0 || slot >= 8 || slot != active.getSlot()
+            || active.getTime() == null || active.getCurrentQuantityInTrade() <= 0
+            || active.isCausedByEmptySlot() || trades == null) {
+            return null;
+        }
+        OfferEvent match = null;
+        for (FlippingItem item : trades) {
+            if (item.getItemId() != active.getItemId() || item.getHistory() == null
+                || item.getHistory().getCompressedOfferEvents() == null) {
+                continue;
+            }
+            for (OfferEvent offer : item.getHistory().getCompressedOfferEvents()) {
+                if (offer == null || !samePersistedSnapshot(active, offer)) {
+                    continue;
+                }
+                if (match != null) {
+                    return null;
+                }
+                match = offer;
+            }
+        }
+        return match;
+    }
+
+    private boolean samePersistedSnapshot(OfferEvent left, OfferEvent right) {
+        // OfferEvent.equals omits persisted fields and compares post-tax prices.
+        return left.isBuy() == right.isBuy()
+            && left.getItemId() == right.getItemId()
+            && left.getSlot() == right.getSlot()
+            && left.getState() == right.getState()
+            && left.getCurrentQuantityInTrade() == right.getCurrentQuantityInTrade()
+            && left.getTotalQuantityInTrade() == right.getTotalQuantityInTrade()
+            && left.getPreTaxPrice() == right.getPreTaxPrice()
+            && left.getTime().equals(right.getTime())
+            && left.getTickArrivedAt() == right.getTickArrivedAt()
+            && left.getTicksSinceFirstOffer() == right.getTicksSinceFirstOffer()
+            && Objects.equals(left.getTradeStartedAt(), right.getTradeStartedAt())
+            && left.isBeforeLogin() == right.isBeforeLogin();
     }
 
     private void hydrateRecipeFlipGroups(FlippingPlugin plugin) {
