@@ -707,6 +707,79 @@ public class StorageBackendSwitchTest {
         assertFalse(retained.requiresFullResync());
     }
 
+    @Test
+    public void retrySavesRetainsFailedAndLaterCommandsInOrder() throws Exception {
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        OfferEvent enriched = offer("seed-exact", 1);
+        enriched.setCumulativeAmount(100L);
+        plugin.recordTrade(ACCOUNT, enriched);
+        finishStorageWork();
+        SqliteStorage storage = plugin.getSqliteStorage();
+        try (Statement statement = storage.getConnection().createStatement()) { statement.execute("PRAGMA query_only=ON"); }
+        plugin.recordTrade(ACCOUNT, offer("pending-first", 2));
+        plugin.recordTrade(ACCOUNT, offer("pending-second", 3));
+        finishStorageWork();
+        assertTrue(plugin.hasPendingAccountingSaves());
+        assertFalse(hasOffer(storage.loadAccount(ACCOUNT), "pending-first"));
+        assertFalse(hasOffer(storage.loadAccount(ACCOUNT), "pending-second"));
+
+        java.util.concurrent.CompletableFuture<String> failedRetry = plugin.retryAccountingStorage();
+        finishStorageWork();
+        assertTrue(failedRetry.isCompletedExceptionally());
+        assertTrue(plugin.hasPendingAccountingSaves());
+        try (Statement statement = storage.getConnection().createStatement()) { statement.execute("PRAGMA query_only=OFF"); }
+        java.util.concurrent.CompletableFuture<String> retry = plugin.retryAccountingStorage();
+        assertSame("Simultaneous retry clicks share one ordered retry", retry, plugin.retryAccountingStorage());
+        finishStorageWork();
+        assertTrue(retry.join().contains("saved"));
+        assertFalse(plugin.hasPendingAccountingSaves());
+        assertTrue(hasOffer(storage.loadAccount(ACCOUNT), "pending-first"));
+        assertTrue(hasOffer(storage.loadAccount(ACCOUNT), "pending-second"));
+        assertEquals(16, totalQuantity(storage.loadAccount(ACCOUNT)));
+
+        plugin.recordTrade(ACCOUNT, offer("after-retry", 4));
+        finishStorageWork();
+        assertEquals(20, totalQuantity(storage.loadAccount(ACCOUNT)));
+        java.util.concurrent.CompletableFuture<String> repeated = plugin.retryAccountingStorage();
+        finishStorageWork();
+        repeated.join();
+        assertEquals("A successful retry cannot replay already committed commands", 20, totalQuantity(storage.loadAccount(ACCOUNT)));
+        assertFalse(storage.requiresFullResync());
+    }
+
+    @Test
+    public void retryKeepsOnlyCommandsAfterTheLastSuccessfulCommit() throws Exception {
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        OfferEvent enriched = offer("seed-exact", 1);
+        enriched.setCumulativeAmount(100L);
+        plugin.recordTrade(ACCOUNT, enriched);
+        finishStorageWork();
+        SqliteStorage storage = plugin.getSqliteStorage();
+        try (Statement statement = storage.getConnection().createStatement()) { statement.execute("PRAGMA query_only=ON"); }
+        plugin.recordTrade(ACCOUNT, offer("retry-one", 2));
+        plugin.recordTrade(ACCOUNT, offer("retry-two", 3));
+        plugin.recordTrade(ACCOUNT, offer("retry-three", 4));
+        finishStorageWork();
+        try (Statement statement = storage.getConnection().createStatement()) {
+            statement.execute("PRAGMA query_only=OFF");
+            statement.execute("CREATE TRIGGER fail_second_retry BEFORE INSERT ON trades WHEN NEW.uuid='retry-two' BEGIN SELECT RAISE(ABORT,'temporary second write failure'); END");
+        }
+        java.util.concurrent.CompletableFuture<String> partial = plugin.retryAccountingStorage();
+        finishStorageWork();
+        assertTrue(partial.isCompletedExceptionally());
+        assertTrue(hasOffer(storage.loadAccount(ACCOUNT), "retry-one"));
+        assertFalse(hasOffer(storage.loadAccount(ACCOUNT), "retry-two"));
+        assertFalse(hasOffer(storage.loadAccount(ACCOUNT), "retry-three"));
+        try (Statement statement = storage.getConnection().createStatement()) { statement.execute("DROP TRIGGER fail_second_retry"); }
+        java.util.concurrent.CompletableFuture<String> completed = plugin.retryAccountingStorage();
+        finishStorageWork();
+        completed.join();
+        assertFalse(plugin.hasPendingAccountingSaves());
+        assertEquals(20, totalQuantity(storage.loadAccount(ACCOUNT)));
+    }
+
     private void switchTo(DataSource source) {
         queueSwitchTo(source);
         clientThread.drain();

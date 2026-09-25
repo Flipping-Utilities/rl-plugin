@@ -59,14 +59,17 @@ public final class AccountingSchema {
                 "PRIMARY KEY(plan_id,realization_id))",
             "CREATE INDEX IF NOT EXISTS accounting_realizations_time ON accounting_realizations(plan_id,recognized_at,realization_id)",
             "CREATE INDEX IF NOT EXISTS accounting_realizations_item_time ON accounting_realizations(plan_id,item_id,recognized_at,realization_id)",
+            "CREATE INDEX IF NOT EXISTS accounting_realizations_flip ON accounting_realizations(plan_id,flip_id,recognized_at,realization_id)",
             "CREATE TABLE IF NOT EXISTS accounting_allocations (plan_id TEXT NOT NULL REFERENCES accounting_plans(plan_id) ON DELETE CASCADE, " +
                 "allocation_id INTEGER NOT NULL, realization_id TEXT NOT NULL, source_id TEXT NOT NULL, quantity INTEGER NOT NULL CHECK(quantity>0), " +
                 "cost_gp INTEGER, is_buy INTEGER NOT NULL, source_offset INTEGER NOT NULL, PRIMARY KEY(plan_id,allocation_id))",
             "CREATE INDEX IF NOT EXISTS accounting_allocations_source ON accounting_allocations(plan_id,source_id)",
+            "CREATE INDEX IF NOT EXISTS accounting_allocations_realization ON accounting_allocations(plan_id,realization_id,allocation_id)",
             "CREATE TABLE IF NOT EXISTS accounting_open_lots (plan_id TEXT NOT NULL REFERENCES accounting_plans(plan_id) ON DELETE CASCADE, " +
                 "source_id TEXT NOT NULL, item_id INTEGER NOT NULL, quantity INTEGER NOT NULL CHECK(quantity>0), cost_gp INTEGER, " +
                 "source_offset INTEGER NOT NULL, acquired_at INTEGER, available_at INTEGER, estimated INTEGER NOT NULL, " +
                 "PRIMARY KEY(plan_id,source_id))",
+            "CREATE INDEX IF NOT EXISTS accounting_open_lots_item ON accounting_open_lots(plan_id,item_id,acquired_at,source_id)",
             "CREATE TABLE IF NOT EXISTS accounting_warnings (plan_id TEXT NOT NULL REFERENCES accounting_plans(plan_id) ON DELETE CASCADE, " +
                 "ordinal INTEGER NOT NULL, entity_id TEXT, message TEXT NOT NULL, PRIMARY KEY(plan_id,ordinal))"
         );

@@ -11,9 +11,13 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 import net.runelite.api.GrandExchangeOfferState;
 import org.junit.After;
@@ -262,6 +266,119 @@ public class AccountingCoordinatorIntegrationTest
                 "", Sort.PROFIT, null, page, 1)).join();
             assertEquals(all.rows.get(page).id, slice.rows.get(0).id);
         }
+    }
+
+    @Test public void migrationPreviewComparesActualActiveMethodAcrossResolvedPeriods()
+    {
+        Instant now = Instant.now();
+        long buyTime = now.minusSeconds(48 * 3600).getEpochSecond() - START.getEpochSecond();
+        long saleTime = now.minusSeconds(3600).getEpochSecond() - START.getEpochSecond();
+        trade("A", 10, "old-buy", true, 1, 20, buyTime, "Item");
+        trade("A", 10, "recent-sale", false, 1, 23, saleTime, "Item");
+        Preview initial = coordinator.preview(request("A", Mode.RECALCULATE)).join();
+        assertEquals(Long.valueOf(3), comparison(initial, "Current", "All history").amounts.profit.completeGp);
+        assertEquals(Long.valueOf(3), comparison(initial, "Proposed", "All history").amounts.profit.completeGp);
+        assertEquals(Long.valueOf(0), comparison(initial, "Current", "Last 24 hours").amounts.profit.completeGp);
+        assertEquals(Long.valueOf(3), comparison(initial, "Proposed", "Last 24 hours").amounts.profit.completeGp);
+        assertTrue(comparison(initial, "Proposed", "Last 24 hours").periodLabel.contains("UTC"));
+        coordinator.apply(initial).join();
+        Preview revert = coordinator.preview(request("A", Mode.LEGACY)).join();
+        assertTrue(comparison(revert, "Current", "Last 24 hours").methodLabel.contains("sale-time"));
+        assertEquals(Long.valueOf(3), comparison(revert, "Current", "Last 24 hours").amounts.profit.completeGp);
+        assertEquals(Long.valueOf(0), comparison(revert, "Proposed", "Last 24 hours").amounts.profit.completeGp);
+        assertEquals(6, revert.comparisons.size());
+    }
+
+    @Test public void reviewingSavedHybridShowsItsOriginalFrozenComparison()
+    {
+        Instant cutover = Instant.now().minusSeconds(2 * 86400);
+        long before = cutover.getEpochSecond() - START.getEpochSecond();
+        OfferEvent buy = trade("A", 10, "buy", true, 1, 20, before - 7200, "Item");
+        trade("A", 10, "sale", false, 1, 23, before - 3600, "Item");
+        PlanRequest hybrid = new PlanRequest("A", Mode.HYBRID, cutover, null, ZoneOffset.UTC, Map.of(), null);
+        Preview original = coordinator.preview(hybrid).join();
+        coordinator.apply(original).join();
+        buy.setPrice(22);
+        storage.recordTrade("A", buy);
+        storage.getAccountingStore().reconcile(storage.getAccountingStore().findAccountId("A"));
+        PlanRequest recalculate = new PlanRequest("A", Mode.RECALCULATE, null, null, ZoneOffset.UTC, Map.of(), original.id);
+        Preview replacement = coordinator.preview(recalculate).join();
+        assertEquals(Long.valueOf(3), comparison(replacement, "Saved plan", "All history").amounts.profit.completeGp);
+        assertEquals(Long.valueOf(1), comparison(replacement, "Proposed", "All history").amounts.profit.completeGp);
+        assertTrue(comparison(replacement, "Saved plan", "All history").periodLabel
+            .contains(Instant.ofEpochMilli(cutover.toEpochMilli()).toString()));
+    }
+
+    @Test public void deepGlobalPageHydratesOnlyRequestedRowsAndExportYieldsToQueuedWrites() throws Exception
+    {
+        manyFlips(1200);
+        activate("A");
+        ReportQuery deep = query(List.of("A"), ReportKind.FLIPS, null, null, "", Sort.TIME, null, 59, 20);
+        ReportResult result = coordinator.queryReport(deep).join();
+        assertEquals(1200, result.totalRows);
+        assertEquals(20, result.rows.size());
+        QueueExecutor executor = new QueueExecutor();
+        AccountingCoordinator queued = new AccountingCoordinator(storage, executor, () -> true);
+        Path target = folder.newFile("interrupted.csv").toPath();
+        Files.writeString(target, "previous export");
+        CompletableFuture<Path> export = queued.exportReport(deep.atRevision(result.sourceRevision, result.projectionRevision), target);
+        executor.execute(() -> trade("A", 20, "during-export", true, 1, 10, 10000, "Another"));
+        executor.next(); // First 500-row read; it queues the continuation behind the save.
+        assertFalse(export.isDone());
+        assertEquals(2, executor.tasks.size());
+        executor.next(); // Live persistence runs before the second export read.
+        executor.next();
+        assertStale(export::join);
+        assertEquals("previous export", Files.readString(target));
+        try (java.util.stream.Stream<Path> files = Files.list(folder.getRoot().toPath())) {
+            assertFalse(files.anyMatch(path -> path.getFileName().toString().startsWith(".flipping-report-")));
+        }
+    }
+
+    @Test public void successfulExportUsesFixedChunksWithoutHoldingTheStorageMonitor() throws Exception
+    {
+        manyFlips(1100); activate("A");
+        QueueExecutor executor = new QueueExecutor();
+        AccountingCoordinator queued = new AccountingCoordinator(storage, executor, () -> true);
+        Path target = folder.newFile("complete.csv").toPath();
+        CompletableFuture<Path> exported = queued.exportReport(query(List.of("A"), ReportKind.FLIPS, null, null,
+            "", Sort.TIME, null, 0, 20), target);
+        boolean[] checkpoint = {false};
+        executor.execute(() -> checkpoint[0] = true);
+        executor.next();
+        assertFalse(exported.isDone());
+        executor.next();
+        assertTrue(checkpoint[0]);
+        executor.next();
+        assertFalse(exported.isDone());
+        executor.next();
+        assertEquals(target.toAbsolutePath(), exported.join());
+        assertEquals(1101, Files.readAllLines(target).size());
+    }
+
+    private Segment comparison(Preview preview, String method, String period)
+    {
+        return preview.comparisons.stream().filter(segment -> segment.methodLabel.startsWith(method)
+            && segment.periodLabel.startsWith(period)).findFirst().orElseThrow(AssertionError::new);
+    }
+
+    private void manyFlips(int count) throws Exception
+    {
+        storage.getConnection().setAutoCommit(false);
+        try {
+            for (int index = 0; index < count; index++) {
+                trade("A", 10, "buy-" + index, true, 1, 100, index * 2, "Item");
+                trade("A", 10, "sale-" + index, false, 1, 120, index * 2 + 1, "Item");
+            }
+            storage.getConnection().commit();
+        } finally { storage.getConnection().setAutoCommit(true); }
+    }
+
+    private static final class QueueExecutor implements Executor
+    {
+        final Deque<Runnable> tasks = new ArrayDeque<>();
+        @Override public void execute(Runnable command) { tasks.addLast(command); }
+        void next() { tasks.removeFirst().run(); }
     }
 
     private OfferEvent detached(String id, boolean buy, int item, int quantity, int price, long seconds)

@@ -10,7 +10,13 @@ import static com.flippingutilities.controller.accounting.LegacyReportingAdapter
 /** Bounded SQL reports over published facts. Reading a report never runs accounting. */
 public final class ReportingRepository {
     private final SqliteStorage storage;
+    private List<List<ReportRow>> stagedLegacyRows = Collections.emptyList();
+    private Connection legacyStageConnection;
+    private final String legacyStageTable = "accounting_report_legacy_" + UUID.randomUUID().toString().replace("-", "");
     public ReportingRepository(SqliteStorage storage) { this.storage = storage; }
+
+    /** A rolled-back read transaction can also roll back its connection-local legacy staging. */
+    public void invalidateLegacyStage() { legacyStageConnection = null; }
 
     public static final class Page {
         public final Segment segment;
@@ -72,7 +78,7 @@ public final class ReportingRepository {
                 Connection connection = storage.getConnection();
                 boolean recipe = request.kind == ReportKind.RECIPES || request.kind == ReportKind.RECIPE_FLIPS;
                 boolean detail = request.kind == ReportKind.FLIPS || request.kind == ReportKind.RECIPE_FLIPS;
-                String group = detail ? "r.flip_id" : recipe ? "c.recipe_key" : "r.item_id";
+                String group = detail ? "r.flip_id" : recipe ? "COALESCE(c.recipe_key,'')" : "r.item_id";
                 List<Object> args = new ArrayList<>(); args.add(accountId);
                 String from = " FROM accounting_state s JOIN accounting_realizations r ON r.plan_id=s.active_plan_id " +
                     "LEFT JOIN accounting_recipes c ON c.account_id=s.account_id AND c.recipe_id=r.recipe_id " +
@@ -90,7 +96,7 @@ public final class ReportingRepository {
                     String prefix = account + (recipe ? ":recipe:" : ":item:");
                     if (!request.groupKey.startsWith(prefix)) from += " AND 0";
                     else {
-                        from += recipe ? " AND c.recipe_key=?" : " AND CAST(r.item_id AS TEXT)=?";
+                        from += recipe ? " AND COALESCE(c.recipe_key,'')=?" : " AND CAST(r.item_id AS TEXT)=?";
                         args.add(request.groupKey.substring(prefix.length()));
                     }
                 }
@@ -117,7 +123,7 @@ public final class ReportingRepository {
                     bind(statement, pageArgs);
                     try (ResultSet row = statement.executeQuery()) {
                         while (row.next()) {
-                            String key = recipe ? recipeKey(account, row.getString("recipe_key")) : itemKey(account, row.getInt("item_id"));
+                            String key = recipe ? recipeKey(account, Objects.toString(row.getString("recipe_key"), "")) : itemKey(account, row.getInt("item_id"));
                             Long occurred = nullable(row, "occurred_at");
                             String description = detail ? (recipe ? "Recipe costs allocated across output sales" : "Matched at sale time") : "";
                             rows.add(new ReportRow("new:" + accountId + ":" + row.getString("group_id"), account,
@@ -130,6 +136,140 @@ public final class ReportingRepository {
                 return new Page(segment, rows, count);
             } catch (SQLException e) { throw new IllegalStateException("Could not query financial report", e); }
         }
+    }
+
+    /** Applies one global limit/offset in SQLite; Java never hydrates the preceding pages. */
+    public List<ReportRow> globalPage(Map<Long, String> newAccounts, ReportQuery request,
+                                     List<List<ReportRow>> legacyRows, int limit, int offset) {
+        if (limit < 1 || limit > 500 || offset < 0) throw new IllegalArgumentException("Invalid report page");
+        synchronized (storage) {
+            try {
+                Connection connection = storage.getConnection();
+                stageLegacy(connection, legacyRows);
+                List<String> selections = new ArrayList<>();
+                List<Object> args = new ArrayList<>();
+                if (!newAccounts.isEmpty()) {
+                    selections.add(request.kind == ReportKind.INVENTORY
+                        ? inventoryRows(newAccounts.keySet(), request, args)
+                        : financialRows(newAccounts.keySet(), request, args));
+                }
+                selections.add("SELECT * FROM temp." + legacyStageTable);
+                Sort sort = request.kind == ReportKind.INVENTORY && request.sort != Sort.QUANTITY ? Sort.TIME : request.sort;
+                String sql = "SELECT * FROM (" + String.join(" UNION ALL ", selections) + ") ORDER BY "
+                    + order(sort) + ",row_id COLLATE BINARY ASC LIMIT ? OFFSET ?";
+                args.add(limit); args.add(offset);
+                List<ReportRow> rows = new ArrayList<>();
+                try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                    bind(statement, args);
+                    try (ResultSet row = statement.executeQuery()) {
+                        while (row.next()) {
+                            String detail = row.getString("detail_kind");
+                            Long time = nullable(row, "occurred_at");
+                            rows.add(new ReportRow(row.getString("row_id"), row.getString("account_label"),
+                                row.getString("method_label"), row.getString("title"), row.getString("description"),
+                                amounts(row), row.getLong("quantity"), row.getLong("flips"),
+                                detail == null ? null : ReportKind.valueOf(detail), row.getString("detail_key"),
+                                time == null ? null : Instant.ofEpochMilli(time)));
+                        }
+                    }
+                }
+                return rows;
+            } catch (SQLException failure) {
+                legacyStageConnection = null;
+                throw new IllegalStateException("Could not page the combined report", failure);
+            } catch (RuntimeException failure) { legacyStageConnection = null; throw failure; }
+        }
+    }
+
+    private String financialRows(Set<Long> accounts, ReportQuery request, List<Object> args) {
+        boolean recipe = request.kind == ReportKind.RECIPES || request.kind == ReportKind.RECIPE_FLIPS;
+        boolean detail = request.kind == ReportKind.FLIPS || request.kind == ReportKind.RECIPE_FLIPS;
+        String group = detail ? "r.flip_id" : recipe ? "COALESCE(c.recipe_key,'')" : "r.item_id";
+        String title = recipe ? "COALESCE(json_extract(c.definition_json,'$.name'),c.recipe_key,'Unknown recipe')"
+            : "COALESCE(i.item_name,'Item '||r.item_id)";
+        String prefix = recipe ? "a.display_name||':recipe:'" : "a.display_name||':item:'";
+        String select = "SELECT 'new:'||s.account_id||':'||CAST(" + group + " AS TEXT) row_id,MIN(a.display_name) account_label,"
+            + "'Sale-time accounting' method_label,MIN(" + title + ") title,? description,? detail_kind,"
+            + (detail ? "NULL" : prefix + "||CAST(" + group + " AS TEXT)") + " detail_key,MAX(r.recognized_at) occurred_at," + totals();
+        args.add(detail ? recipe ? "Recipe costs allocated across output sales" : "Matched at sale time" : "");
+        args.add(detail ? null : recipe ? ReportKind.RECIPE_FLIPS.name() : ReportKind.FLIPS.name());
+        String from = " FROM accounting_state s JOIN accounts a ON a.id=s.account_id "
+            + "JOIN accounting_realizations r ON r.plan_id=s.active_plan_id "
+            + "LEFT JOIN accounting_recipes c ON c.account_id=s.account_id AND c.recipe_id=r.recipe_id "
+            + "LEFT JOIN accounting_items i ON i.item_id=r.item_id WHERE s.account_id IN ("
+            + String.join(",", Collections.nCopies(accounts.size(), "?")) + ") AND r.kind"
+            + (recipe ? "='RECIPE'" : "<>'RECIPE'");
+        args.addAll(accounts);
+        if (request.fromInclusive != null) { from += " AND r.recognized_at>=?"; args.add(request.fromInclusive.toEpochMilli()); }
+        if (request.toExclusive != null) { from += " AND r.recognized_at<?"; args.add(request.toExclusive.toEpochMilli()); }
+        if (request.search != null && !request.search.isEmpty()) {
+            from += " AND " + title + " LIKE ? ESCAPE '\\'"; args.add(literalSearch(request.search));
+        }
+        if (request.groupKey != null) {
+            from += " AND " + prefix + "||CAST(" + (recipe ? "COALESCE(c.recipe_key,'')" : "r.item_id") + " AS TEXT)=?";
+            args.add(request.groupKey);
+        }
+        return select + from + " GROUP BY s.account_id," + group;
+    }
+
+    private String inventoryRows(Set<Long> accounts, ReportQuery request, List<Object> args) {
+        String sql = "SELECT 'inventory:'||s.account_id||':'||l.item_id row_id,MIN(a.display_name) account_label,"
+            + "'Open tracked inventory' method_label,MIN(COALESCE(i.item_name,'Item '||l.item_id)) title,"
+            + "'Unrealized tracked purchases; quantities may include items used outside the GE.' description,"
+            + "NULL detail_kind,NULL detail_key,MAX(l.acquired_at) occurred_at,"
+            + "0 profit,1 profit_unknown,COALESCE(SUM(l.cost_gp),0) cost,COUNT(*)-COUNT(l.cost_gp) cost_unknown,"
+            + "0 adjustment,0 adjustment_unknown,0 gross,1 gross_unknown,0 tax,1 tax_unknown,0 net,1 net_unknown,"
+            + "COUNT(*)-COUNT(l.cost_gp) invested_unknown,SUM(l.quantity) quantity,0 flips,0 unknown_quantity,MAX(l.estimated) estimated"
+            + " FROM accounting_open_lots l JOIN accounting_state s ON s.active_plan_id=l.plan_id "
+            + "JOIN accounts a ON a.id=s.account_id LEFT JOIN accounting_items i ON i.item_id=l.item_id WHERE s.account_id IN ("
+            + String.join(",", Collections.nCopies(accounts.size(), "?")) + ")";
+        args.addAll(accounts);
+        if (request.search != null && !request.search.isEmpty()) {
+            sql += " AND COALESCE(i.item_name,'Item '||l.item_id) LIKE ? ESCAPE '\\'";
+            args.add(literalSearch(request.search));
+        }
+        return sql + " GROUP BY s.account_id,l.item_id";
+    }
+
+    private String literalSearch(String search) {
+        return "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+    }
+
+    private void stageLegacy(Connection connection, List<List<ReportRow>> rows) throws SQLException {
+        if (legacyStageConnection == connection && stagedLegacyRows.equals(rows)) return;
+        try (Statement ddl = connection.createStatement()) {
+            ddl.execute("CREATE TEMP TABLE IF NOT EXISTS " + legacyStageTable + " ("
+                + "row_id TEXT,account_label TEXT,method_label TEXT,title TEXT,description TEXT,detail_kind TEXT,"
+                + "detail_key TEXT,occurred_at INTEGER,profit INTEGER,profit_unknown INTEGER,cost INTEGER,cost_unknown INTEGER,"
+                + "adjustment INTEGER,adjustment_unknown INTEGER,gross INTEGER,gross_unknown INTEGER,tax INTEGER,tax_unknown INTEGER,"
+                + "net INTEGER,net_unknown INTEGER,invested_unknown INTEGER,quantity INTEGER,flips INTEGER,unknown_quantity INTEGER,estimated INTEGER)");
+            ddl.executeUpdate("DELETE FROM temp." + legacyStageTable);
+        }
+        try (PreparedStatement insert = connection.prepareStatement("INSERT INTO temp." + legacyStageTable + " VALUES ("
+            + String.join(",", Collections.nCopies(25, "?")) + ")")) {
+            int pending = 0;
+            for (List<ReportRow> segment : rows) for (ReportRow row : segment) {
+                List<Object> args = new ArrayList<>(Arrays.asList(row.id,row.accountLabel,row.methodLabel,row.title,
+                    row.description,row.detailKind == null ? null : row.detailKind.name(),row.detailKey,
+                    row.occurredAt == null ? null : row.occurredAt.toEpochMilli()));
+                stageMoney(args,row.amounts.profit); stageMoney(args,row.amounts.cost);
+                args.add(0L); args.add(0L); // Compatibility costs already include their coin adjustment.
+                stageMoney(args,row.amounts.gross); stageMoney(args,row.amounts.tax); stageMoney(args,row.amounts.net);
+                args.add(row.amounts.cost.completeGp == null ? Math.max(1,row.amounts.cost.unknownCount) : row.amounts.cost.unknownCount);
+                args.add(row.quantity); args.add(row.count); args.add(row.amounts.profit.completeGp == null ? row.quantity : 0);
+                args.add(row.amounts.profit.estimated);
+                bind(insert,args); insert.addBatch();
+                if (++pending == 500) { insert.executeBatch(); pending = 0; }
+            }
+            if (pending > 0) insert.executeBatch();
+        }
+        stagedLegacyRows = new ArrayList<>(rows);
+        legacyStageConnection = connection;
+    }
+
+    private void stageMoney(List<Object> args, Money money) {
+        args.add(money.knownSubtotalGp);
+        args.add(money.completeGp == null ? Math.max(1, money.unknownCount) : money.unknownCount);
     }
 
     public long undatedCount(long accountId) {
@@ -228,87 +368,70 @@ public final class ReportingRepository {
         }
     }
 
-    public ReportDetails details(List<Long> accounts, String rowId) {
+    public ReportDetails details(List<Long> accounts, String rowId) { return details(accounts, rowId, 0); }
+
+    /** The result and Swing component count stay bounded even for one heavily allocated flip. */
+    public ReportDetails details(List<Long> accounts, String rowId, int page) {
+        if (page < 0) throw new IllegalArgumentException("Invalid detail page");
+        int offset = Math.multiplyExact(page, 50);
         String[] identity = rowId.split(":", 3);
         if (identity.length != 3) throw new IllegalArgumentException("Invalid report row");
         long account = Long.parseLong(identity[1]);
         if (!accounts.contains(account)) throw new IllegalArgumentException("Report account changed");
         synchronized (storage) {
             List<String> lines = new ArrayList<>();
-            Set<String> recipes = new LinkedHashSet<>();
             try {
                 Connection connection = storage.getConnection();
+                String sql;
+                List<Object> args;
                 if (identity[0].equals("inventory")) {
-                    try (PreparedStatement query = connection.prepareStatement(
-                        "SELECT l.* FROM accounting_open_lots l JOIN accounting_state s ON s.active_plan_id=l.plan_id WHERE s.account_id=? AND l.item_id=? ORDER BY l.acquired_at,l.source_id")) {
-                        bind(query,Arrays.asList(account,Integer.parseInt(identity[2])));
-                        try (ResultSet row=query.executeQuery()) {
-                            while(row.next()) {
-                                Long acquired=nullable(row,"acquired_at");
-                                lines.add(row.getLong("quantity")+" units acquired "+(acquired==null?"at an unknown time":Instant.ofEpochMilli(acquired))+
-                                    "; cost "+gp(nullable(row,"cost_gp"))+"; source "+row.getString("source_id")+", offset "+row.getLong("source_offset"));
-                            }
-                        }
-                    }
-                    return new ReportDetails("Tracked purchase lots",lines);
+                    sql = "SELECT l.quantity||' units acquired '||COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ',l.acquired_at/1000.0,'unixepoch'),'at an unknown time')||" +
+                        "'; cost '||" + moneySql("l.cost_gp") + "||'; source '||l.source_id||', offset '||l.source_offset AS line " +
+                        "FROM accounting_open_lots l JOIN accounting_state s ON s.active_plan_id=l.plan_id " +
+                        "WHERE s.account_id=? AND l.item_id=? ORDER BY l.acquired_at,l.source_id LIMIT ? OFFSET ?";
+                    args = Arrays.asList(account, Integer.parseInt(identity[2]), 51, offset);
+                } else {
+                    if (!identity[0].equals("new")) throw new IllegalArgumentException("Unknown detail kind");
+                    sql = "WITH selected AS (SELECT r.* FROM accounting_realizations r JOIN accounting_state s ON s.active_plan_id=r.plan_id " +
+                        "WHERE s.account_id=? AND r.flip_id=?), recipes AS (SELECT c.* FROM accounting_recipes c WHERE c.account_id=? " +
+                        "AND c.recipe_id IN (SELECT recipe_id FROM selected)) SELECT line FROM (" +
+                        "SELECT 0 AS section,0 AS ordinal,'' AS tie,'Whole-flip details include sales outside the selected report period.' AS line WHERE EXISTS(SELECT 1 FROM selected) " +
+                        "UNION ALL SELECT 1,0,recipe_id,'Recipe '||COALESCE(json_extract(definition_json,'$.name'),recipe_key,'Unknown')||" +
+                        "'; recorded executions: '||COALESCE(CAST(execution_count AS TEXT),'unknown (legacy)') FROM recipes " +
+                        "UNION ALL SELECT 1,1,recipe_id,'Input cost and signed coin adjustment follow output-sale gross value; if all proceeds are zero, costs belong to the final sale.' FROM recipes " +
+                        "UNION ALL SELECT 1,2,recipe_id,'Recorded recipe definition: unavailable (legacy)' FROM recipes WHERE definition_json IS NULL " +
+                        "UNION ALL SELECT 2,CAST(j.key AS INTEGER),c.recipe_id||':input','Input per execution: '||json_extract(j.value,'$.quantity')||' × '||" +
+                        "COALESCE(i.item_name,'Item '||json_extract(j.value,'$.id')) FROM recipes c,json_each(c.definition_json,'$.inputs') j " +
+                        "LEFT JOIN accounting_items i ON i.item_id=json_extract(j.value,'$.id') " +
+                        "UNION ALL SELECT 3,CAST(j.key AS INTEGER),c.recipe_id||':output','Output per execution: '||json_extract(j.value,'$.quantity')||' × '||" +
+                        "COALESCE(i.item_name,'Item '||json_extract(j.value,'$.id')) FROM recipes c,json_each(c.definition_json,'$.outputs') j " +
+                        "LEFT JOIN accounting_items i ON i.item_id=json_extract(j.value,'$.id') " +
+                        "UNION ALL SELECT 4,r.recognized_at,r.realization_id,r.kind||' sale: '||r.quantity||' units at '||" +
+                        "COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ',r.recognized_at/1000.0,'unixepoch'),'unknown time')||" +
+                        "'; profit '||" + moneySql("r.profit_gp") + "||'; purchase cost '||" + moneySql("r.cost_gp") +
+                        "||'; coin adjustment '||" + moneySql("r.adjustment_gp") + "||'; gross '||" + moneySql("r.gross_gp") +
+                        "||'; tax '||" + moneySql("r.tax_gp") + "||CASE WHEN r.estimated=1 THEN ' (estimated amounts)' ELSE '' END FROM selected r " +
+                        "UNION ALL SELECT 5,a.allocation_id,a.source_id,CASE WHEN a.is_buy=1 THEN 'Purchase' ELSE 'Sale' END||' source '||a.source_id||" +
+                        "': item '||COALESCE(CAST(b.item_id AS TEXT),'unknown')||', '||a.quantity||' units from offset '||a.source_offset||', allocated amount '||" +
+                        moneySql("a.cost_gp") + "||CASE WHEN b.restricted=1 THEN '; recipe-only evidence' ELSE '' END " +
+                        "FROM selected r JOIN accounting_allocations a ON a.plan_id=r.plan_id AND a.realization_id=r.realization_id " +
+                        "LEFT JOIN accounting_sources b ON b.account_id=? AND b.source_id=a.source_id" +
+                        ") ORDER BY section,ordinal,tie LIMIT ? OFFSET ?";
+                    args = Arrays.asList(account, identity[2], account, account, 51, offset);
                 }
-                lines.add("Whole-flip details include sales outside the selected report period.");
-                try (PreparedStatement query = connection.prepareStatement(
-                    "SELECT r.*,a.display_name FROM accounting_realizations r JOIN accounting_state s ON s.active_plan_id=r.plan_id " +
-                    "JOIN accounts a ON a.id=s.account_id WHERE s.account_id=? AND r.flip_id=? ORDER BY r.recognized_at,r.realization_id")) {
-                    bind(query, Arrays.asList(account, identity[2]));
-                    try (ResultSet row = query.executeQuery()) {
-                        while (row.next()) {
-                            Long date = nullable(row, "recognized_at");
-                            lines.add(row.getString("kind") + " sale: " + row.getLong("quantity") + " units at " +
-                                (date == null ? "unknown time" : Instant.ofEpochMilli(date)) + "; profit " + gp(nullable(row,"profit_gp")) +
-                                "; purchase cost " + gp(nullable(row,"cost_gp")) + "; coin adjustment " + gp(nullable(row,"adjustment_gp")) +
-                                "; gross " + gp(nullable(row,"gross_gp")) + "; tax " + gp(nullable(row,"tax_gp")) +
-                                (row.getBoolean("estimated") ? " (estimated amounts)" : ""));
-                            if (row.getString("recipe_id") != null) recipes.add(row.getString("recipe_id"));
-                        }
-                    }
+                boolean more;
+                try (PreparedStatement query = connection.prepareStatement(sql)) {
+                    bind(query, args);
+                    try (ResultSet row = query.executeQuery()) { while (row.next()) lines.add(row.getString("line")); }
                 }
-                try (PreparedStatement query = connection.prepareStatement(
-                    "SELECT a.*,b.item_id,b.recognized_at,b.restricted,b.order_id FROM accounting_allocations a " +
-                    "JOIN accounting_state s ON s.active_plan_id=a.plan_id " +
-                    "JOIN accounting_realizations r ON r.plan_id=a.plan_id AND r.realization_id=a.realization_id " +
-                    "LEFT JOIN accounting_sources b ON b.account_id=s.account_id AND b.source_id=a.source_id " +
-                    "WHERE s.account_id=? AND r.flip_id=? ORDER BY a.allocation_id")) {
-                    bind(query, Arrays.asList(account, identity[2]));
-                    try (ResultSet row = query.executeQuery()) {
-                        while (row.next()) lines.add((row.getBoolean("is_buy") ? "Purchase" : "Sale") + " source " + row.getString("source_id") +
-                            ": item " + row.getInt("item_id") + ", " + row.getLong("quantity") + " units from offset " + row.getLong("source_offset") +
-                            ", allocated amount " + gp(nullable(row,"cost_gp")) + (row.getBoolean("restricted") ? "; recipe-only evidence" : ""));
-                    }
-                }
-                for (String recipe : recipes) {
-                    try (PreparedStatement query = connection.prepareStatement("SELECT recipe_key,definition_json,execution_count,recorded_at FROM accounting_recipes WHERE account_id=? AND recipe_id=?")) {
-                        bind(query, Arrays.asList(account, recipe));
-                        try (ResultSet row = query.executeQuery()) {
-                            if (row.next()) {
-                                Long count = nullable(row,"execution_count");
-                                lines.add("Recipe " + row.getString("recipe_key") + "; recorded executions: " + (count == null ? "unknown (legacy)" : count));
-                                String definition = row.getString("definition_json");
-                                if (definition == null) lines.add("Recorded recipe definition: unavailable (legacy)");
-                                else {
-                                    com.flippingutilities.utilities.Recipe saved = new com.google.gson.Gson().fromJson(definition, com.flippingutilities.utilities.Recipe.class);
-                                    Map<Integer, String> names = itemNames();
-                                    lines.add("Recorded recipe: " + saved.getName());
-                                    for (com.flippingutilities.utilities.RecipeItem input : saved.getInputs()) lines.add("Input per execution: " + input.getQuantity() + " × " + names.getOrDefault(input.getId(), "Item " + input.getId()));
-                                    for (com.flippingutilities.utilities.RecipeItem output : saved.getOutputs()) lines.add("Output per execution: " + output.getQuantity() + " × " + names.getOrDefault(output.getId(), "Item " + output.getId()));
-                                }
-                                lines.add("Input cost and signed coin adjustment are allocated by output-sale gross value. If all output values are zero, costs belong to the final sale.");
-                            }
-                        }
-                    }
-                }
-                if (lines.isEmpty()) throw new IllegalStateException("The selected report row is no longer available");
-                return new ReportDetails("Sources and allocations", lines);
+                more = lines.size() > 50;
+                if (more) lines.remove(50);
+                if (page == 0 && lines.isEmpty()) throw new IllegalStateException("The selected report row is no longer available");
+                return new ReportDetails(identity[0].equals("inventory") ? "Tracked purchase lots" : "Sources and allocations", lines, page, more);
             } catch (SQLException e) { throw new IllegalStateException("Could not read allocation details", e); }
         }
     }
-    private static String gp(Long value) { return value == null ? "unknown" : value + " gp"; }
+    private static String moneySql(String expression) { return "COALESCE(CAST(" + expression + " AS TEXT)||' gp','unknown')"; }
 
     private static String totals() {
         return metric("profit", "r.profit_gp") + "," + metric("cost", "r.cost_gp") + "," +

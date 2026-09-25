@@ -202,6 +202,13 @@ final class AccountingUi {
         return error;
     }
 
+    static String failureMessage(Throwable error) {
+        Throwable underlying = cause(error);
+        String message = underlying.getMessage();
+        return message == null || message.trim().isEmpty() ? "The operation failed (" + underlying.getClass().getSimpleName() + ")."
+            : message;
+    }
+
     static void status(JTextArea status, String value, boolean error) {
         status.setText(value);
         status.setForeground(error ? new Color(250, 100, 100) : ColorScheme.LIGHT_GRAY_COLOR);

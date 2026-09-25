@@ -355,6 +355,87 @@ public class AccountingPanelsTest {
         });
     }
 
+    @Test public void saveFailureRemainsVisibleUntilAnExplicitSuccessfulRetry() throws Exception {
+        AccountingReportsPanel panel = reports();
+        service.reports.get(0).completeExceptionally(new IllegalStateException("Pending saves: disk full; keep the plugin open"));
+        flush();
+        edt(() -> {
+            assertTrue(panel.recovery.isVisible());
+            assertTrue(containsText(panel, "Pending saves: disk full"));
+            panel.refresh();
+            assertTrue(panel.recovery.isVisible());
+            panel.recovery.retry.doClick();
+            panel.recovery.retry.doClick();
+            assertFalse(panel.recovery.retry.isEnabled());
+        });
+        worker.drain();
+        assertEquals(1, service.retries.size());
+        service.retries.get(0).completeExceptionally(new IllegalStateException("Still cannot save: disk full"));
+        flush();
+        edt(() -> {
+            assertTrue(containsText(panel, "Still cannot save: disk full"));
+            panel.recovery.retry.doClick();
+        });
+        worker.drain();
+        service.retries.get(1).complete("Pending saves recovered");
+        flush();
+        edt(() -> assertFalse(panel.recovery.isVisible()));
+        worker.drain();
+        assertEquals("Recovery refreshes the report", 3, service.queries.size());
+    }
+
+    @Test public void setupFailuresExposeTheReasonAndSaveRetry() throws Exception {
+        AccountingSetupPanel panel = setup();
+        edt(() -> panel.previewButton.doClick());
+        worker.drain();
+        service.previews.get(0).completeExceptionally(new IllegalStateException("Pending offers could not be saved"));
+        flush();
+        edt(() -> {
+            assertTrue(panel.recovery.isVisible());
+            assertTrue(containsText(panel, "Pending offers could not be saved"));
+            assertFalse(panel.applyButton.isEnabled());
+            panel.recovery.retry.doClick();
+        });
+        worker.drain();
+        assertEquals(1, service.retries.size());
+    }
+
+    @Test public void sourcePagesReplaceControlsAndPreserveRevisionAndPageOnRefresh() throws Exception {
+        service.pageDetails = true;
+        AccountingReportsPanel panel = reports();
+        service.reports.get(0).complete(report("Flip", "source-1", "projection-1", false));
+        flush();
+        edt(() -> named(panel, JButton.class, "reportDetails:id").doClick());
+        worker.drain();
+        List<String> lines = new ArrayList<>();
+        for (int i = 0; i < 50; ++i) lines.add("Source page zero record " + i);
+        service.pagedDetails.get(0).complete(new ReportDetails("Sources", lines, 0, true));
+        flush();
+        edt(() -> {
+            assertTrue(containsText(panel, "Source page zero record 49"));
+            assertFalse(named(panel, JButton.class, "previousSources:id").isEnabled());
+            named(panel, JButton.class, "nextSources:id").doClick();
+        });
+        worker.drain();
+        assertEquals(Arrays.asList(0, 1), service.requestedDetailPages);
+        assertEquals("source-1", service.detailsQuery.sourceRevision);
+        service.pagedDetails.get(1).complete(new ReportDetails("Sources", Collections.singletonList("Source page one record"), 1, false));
+        flush();
+        edt(() -> {
+            assertFalse(containsText(panel, "Source page zero record"));
+            assertTrue(containsText(panel, "Source page one record"));
+            assertFalse(named(panel, JButton.class, "nextSources:id").isEnabled());
+            assertTrue(named(panel, JButton.class, "previousSources:id").isEnabled());
+            panel.refresh();
+        });
+        worker.drain();
+        service.reports.get(1).complete(report("Flip", "source-2", "projection-2", false));
+        flush();
+        worker.drain();
+        assertEquals(Arrays.asList(0, 1, 1), service.requestedDetailPages);
+        assertEquals("source-2", service.detailsQuery.sourceRevision);
+    }
+
     @Test public void exportUsesDisplayedBoundsAndRevisionsAndDoesNotRecalculateMoney() throws Exception {
         AccountingReportsPanel panel = reports();
         service.reports.get(0).complete(report("zero profit", "source-7", "projection-3", false));
@@ -472,6 +553,10 @@ public class AccountingPanelsTest {
         ReportQuery detailsQuery;
         String detailsId;
         final CompletableFuture<ReportDetails> details = new CompletableFuture<>();
+        final List<CompletableFuture<String>> retries = new ArrayList<>();
+        boolean pageDetails;
+        final List<Integer> requestedDetailPages = new ArrayList<>();
+        final List<CompletableFuture<ReportDetails>> pagedDetails = new ArrayList<>();
         private void workerOnly() { assertFalse("Service calls must stay off the EDT", SwingUtilities.isEventDispatchThread()); }
         @Override public CompletableFuture<PlanHistory> loadPlans(String account) {
             workerOnly();
@@ -506,6 +591,22 @@ public class AccountingPanelsTest {
             detailsQuery = query;
             detailsId = rowId;
             return details;
+        }
+        @Override public CompletableFuture<ReportDetails> queryDetails(ReportQuery query, String rowId, int page) {
+            if (!pageDetails) return queryDetails(query, rowId);
+            workerOnly();
+            detailsQuery = query;
+            detailsId = rowId;
+            requestedDetailPages.add(page);
+            CompletableFuture<ReportDetails> future = new CompletableFuture<>();
+            pagedDetails.add(future);
+            return future;
+        }
+        @Override public CompletableFuture<String> retryStorage() {
+            workerOnly();
+            CompletableFuture<String> future = new CompletableFuture<>();
+            retries.add(future);
+            return future;
         }
     }
 }

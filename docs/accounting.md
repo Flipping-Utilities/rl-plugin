@@ -1,6 +1,6 @@
 # Accounting reports
 
-SQLite accounts keep their current calculations until a player reviews and applies a choice in **Statistics → Setup**:
+SQLite accounts keep their current calculations until a player reviews and applies a choice in **Statistics → Accounting**:
 
 - **Keep current calculations** retains the legacy period-based calculation.
 - **Recalculate all history** recognizes profit when each sale happens, using eligible earlier purchases.
@@ -17,6 +17,8 @@ Hybrid plans conservatively exclude items sold anywhere in the frozen legacy his
 
 Editing quantities requires another preview. Applying a preview checks that its source revision is still current. Bulk setup produces separate previews and Apply buttons for each account; it does not assume stock is owned.
 
+Each preview compares the active and proposed methods over all history, the last 24 hours and the last 30 days, showing exact period boundaries. Frozen legacy and sale-time results remain separate. A saved hybrid plan also shows its original frozen history for comparison.
+
 ## Reading reports
 
 Sale-time item, recipe and flip totals come from persisted financial rows. Search, sorting and pages use SQL. Earlier purchases remain eligible when a report covers only a later sale period. Inventory is a current balance of tracked purchase lots, not a bank inventory estimate.
@@ -25,9 +27,11 @@ Unknown amounts remain unknown. Reports distinguish complete amounts, known subt
 
 Recipes reserve their selected sources before ordinary matching. Input cost and signed coin adjustments are allocated across output sales in proportion to their gross proceeds. If all output proceeds are zero, the final output sale receives those costs. New recipe instances retain their definition and execution count; unavailable legacy definitions/counts remain labeled as such. **Sources and allocations** explains the underlying quantities and costs, including whole-flip activity outside the selected period.
 
+Source details show 50 lines per page. The **Trades** tab retains offer and recipe editing and the original raw-trade CSV export. Its calculations use the legacy method; use **Reports** for the selected accounting method.
+
 Raw trade activity is shown separately from matched profit and includes all items in the account and period. Account and method segments are not combined into an unlabeled total. Session rates use recorded active session duration where a single method applies.
 
-**Export CSV** exports the displayed report scope and revision. If trading changes that revision before export, refresh first. The existing raw-trade export retains its previous meaning.
+**Export CSV** exports the displayed report scope and revision in bounded chunks, allowing queued saves to run between chunks. If trading changes that revision before export finishes, refresh and export again. An incomplete export does not replace the destination file.
 
 ## Persistence and recovery
 
@@ -39,6 +43,8 @@ Canonical observations retain cumulative amounts, predecessor identity and corre
 
 A projection failure keeps canonical trades and the last published report. Reports identify stale state. Richer history and reviewed plans are protected against the underlying storage branch's JSON regeneration paths. Reapplying an accounting choice rebuilds from retained SQLite sources; it never restores an older database.
 
+If saving a trade fails, a visible warning and **Retry saves** action remain available. Failed and subsequent changes stay queued in memory in their original order. Retry resumes against the same database and removes each command only after it commits. Pending changes are not crash durable: retry successfully before closing the client.
+
 ## Validation
 
 Run `./gradlew test`. The suite includes independent financial examples, randomized incremental/replay equivalence and conservation, real SQLite restart/rollback tests, stale-preview/export checks, recipe/source conflicts, and asynchronous UI tests.
@@ -49,4 +55,4 @@ An optional scaling fixture runs with:
 FLIPPING_ACCOUNTING_BENCHMARK_SOURCES=10000 ./gradlew test --tests com.flippingutilities.db.AccountingBenchmarkTest --rerun-tasks
 ```
 
-It prints source capture, preview/publication, report, append and replay timings, and verifies the date-report index. Set the source count to `100000` for the larger fixture. Timing measurements are diagnostic and are not brittle CI thresholds.
+It prints source capture, preview/publication, summary and deep-page queries, full CSV export, append and replay timings, and verifies the date-report index. Set the source count to `100000` for the larger fixture. Timing measurements are diagnostic and are not brittle CI thresholds.

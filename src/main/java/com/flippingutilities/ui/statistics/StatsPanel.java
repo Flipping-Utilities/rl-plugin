@@ -241,7 +241,7 @@ public class StatsPanel extends JPanel
 	public void rebuildItemsDisplay(List<FlippingItem> flippingItems) {
 		SwingUtilities.invokeLater(() -> {
 			plugin.registerAccountingItemNames(flippingItems);
-			if (routeAccountingRefresh()) return;
+			if (routeAccountingRefresh() && !isTradeEditorSelected()) return;
 			List<FlippingItem> itemsToDisplay = getItemsToDisplay(flippingItems);
 			flippingItemContainerPanel.rebuild(itemsToDisplay);
 			updateCumulativeDisplays(itemsToDisplay, getRecipeFlipGroupsToDisplay(plugin.viewRecipeFlipGroupsForCurrentView()));
@@ -253,7 +253,7 @@ public class StatsPanel extends JPanel
 
 	public void rebuildRecipesDisplay(List<RecipeFlipGroup> recipeFlipGroups) {
 		SwingUtilities.invokeLater(() -> {
-			if (routeAccountingRefresh()) return;
+			if (routeAccountingRefresh() && !isTradeEditorSelected()) return;
 			List<RecipeFlipGroup> recipeFlipGroupsToDisplay = getRecipeFlipGroupsToDisplay(recipeFlipGroups);
 			recipeGroupContainerPanel.rebuild(recipeFlipGroupsToDisplay);
 			updateCumulativeDisplays(getItemsToDisplay(plugin.viewItemsForCurrentView()), recipeFlipGroupsToDisplay);
@@ -267,6 +267,10 @@ public class StatsPanel extends JPanel
 	public void refreshAccounting() {
 		if (SwingUtilities.isEventDispatchThread()) routeAccountingRefresh();
 		else SwingUtilities.invokeLater(this::routeAccountingRefresh);
+	}
+
+	private boolean isTradeEditorSelected() {
+		return accountingPanel != null && accountingPanel.isTradesSelected();
 	}
 
 	private boolean routeAccountingRefresh() {
@@ -296,7 +300,10 @@ public class StatsPanel extends JPanel
 				}
 				remove(legacyContent);
 				accountingService = current;
-				accountingPanel = new AccountingPanel(current, plugin.getAccountingExecutor());
+				accountingPanel = new AccountingPanel(current, plugin.getAccountingExecutor(), legacyContent, () -> {
+					rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+					rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
+				});
 				add(accountingPanel, BorderLayout.CENTER);
 			}
 			List<String> names = new ArrayList<>(plugin.getDataHandler().getCurrentAccounts());

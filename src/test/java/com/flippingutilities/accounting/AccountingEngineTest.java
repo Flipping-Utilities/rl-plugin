@@ -289,6 +289,23 @@ public class AccountingEngineTest
     }
 
     @Test
+    public void previewAndReloadUseTheSamePersistedMillisecondCutover()
+    {
+        AccountingPlan preview = new AccountingPlan("p", 1, Mode.FRESH_START, START.plusNanos(123456789),
+            START.minusNanos(1), Map.of());
+        assertEquals(START.plusMillis(123), preview.getCutover());
+        assertEquals(START.minusMillis(1), preview.getPurchaseCutoff());
+        AccountingSource buy = new AccountingSource("buy", "buy", 1, 10, true, 1, 20L, 0L,
+            START.plusMillis(123), 0, false, false, false);
+        AccountingSource sale = source("sale", false, 1, 23L, 0L, 1);
+        AccountingResult original = engine.calculate(preview, List.of(buy, sale), List.of());
+        AccountingPlan reloaded = new AccountingPlan("p", 1, Mode.FRESH_START,
+            Instant.ofEpochMilli(preview.getCutover().toEpochMilli()), preview.getPurchaseCutoff(), Map.of());
+        assertEquals(Long.valueOf(3), original.getRealizations().get(0).getProfitGp());
+        assertEquals(original.getRealizations(), engine.calculate(reloaded, List.of(buy, sale), List.of()).getRealizations());
+    }
+
+    @Test
     public void splittingUsesWideIntermediatesAndConservesNegativeAdjustments()
     {
         assertEquals(Long.valueOf(Long.MAX_VALUE), AccountingEngine.portion(Long.MAX_VALUE,

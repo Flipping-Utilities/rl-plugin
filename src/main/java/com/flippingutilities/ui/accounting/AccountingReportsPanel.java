@@ -16,6 +16,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.Executor;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -28,6 +30,7 @@ public final class AccountingReportsPanel extends JPanel {
     private static final int PAGE_SIZE = 20;
     private final AccountingUiService service;
     private final Executor executor;
+    final AccountingRecoveryPanel recovery;
     final JComboBox<String> period = new JComboBox<>(new String[]{"Session", "24 hours", "7 days", "30 days", "90 days", "All", "Custom"});
     final JComboBox<String> view = new JComboBox<>(new String[]{"Items", "Recipes", "Tracked inventory"});
     final JComboBox<Sort> sort = new JComboBox<>(Sort.values());
@@ -59,6 +62,7 @@ public final class AccountingReportsPanel extends JPanel {
     private ReportQuery displayedQuery;
     private final Set<String> expandedAmounts = new HashSet<>();
     private final Set<String> expandedSources = new HashSet<>();
+    private final Map<String, Integer> sourcePages = new HashMap<>();
     private boolean disposed;
     private boolean updatingFilters;
 
@@ -66,6 +70,7 @@ public final class AccountingReportsPanel extends JPanel {
         super(new BorderLayout());
         this.service = service;
         this.executor = executor;
+        recovery = new AccountingRecoveryPanel(service, executor, this::refresh);
         zone.setEditable(true);
         ZoneId initialZone = ZoneId.systemDefault();
         to.setText(AccountingUi.formatDate(Instant.now(), initialZone));
@@ -100,6 +105,7 @@ public final class AccountingReportsPanel extends JPanel {
         header.add(actions);
         header.add(backButton);
         header.add(status);
+        header.add(recovery);
         JPanel content = AccountingUi.column();
         content.add(totals);
         content.add(rows);
@@ -197,6 +203,7 @@ public final class AccountingReportsPanel extends JPanel {
         accounts = Collections.unmodifiableList(new ArrayList<>(scope));
         expandedAmounts.clear();
         expandedSources.clear();
+        sourcePages.clear();
         sessionStart = startOfSession;
         scopeLabel.setText(accounts.isEmpty() ? "No accounts" : String.join(", ", accounts));
         groupKey = null;
@@ -282,11 +289,13 @@ public final class AccountingReportsPanel extends JPanel {
             if (failure != null) {
                 AccountingUi.status(status, displayedQuery == null ? "The report could not be loaded. Try Refresh."
                     : "The report could not be refreshed. Results below are from the previous report.", true);
+                recovery.showFailure(failure);
                 return;
             }
             totalPages = Math.max(1, result.totalRows / PAGE_SIZE + (result.totalRows % PAGE_SIZE == 0 ? 0 : 1));
             if (page > totalPages) { page = (int) totalPages; refresh(); return; }
             displayedQuery = query.atRevision(result.sourceRevision, result.projectionRevision);
+            recovery.clear();
             render(result);
         });
     }
@@ -371,30 +380,56 @@ public final class AccountingReportsPanel extends JPanel {
             sources.setVisible(!sources.isVisible());
             if (sources.isVisible()) {
                 expandedSources.add(rowId);
-                loadSources(rowId, sources, card);
+                loadSources(rowId, sourcePages.getOrDefault(rowId, 0), sources, card);
             } else expandedSources.remove(rowId);
             sourceButton.setText(sources.isVisible() ? "Hide sources" : "Sources and allocations");
             card.revalidate();
         });
         card.add(sourceButton);
         card.add(sources);
-        if (sources.isVisible()) loadSources(rowId, sources, card);
+        if (sources.isVisible()) loadSources(rowId, sourcePages.getOrDefault(rowId, 0), sources, card);
     }
 
-    private void loadSources(String rowId, JPanel sources, JPanel card) {
+    private void loadSources(String rowId, int page, JPanel sources, JPanel card) {
         ReportQuery snapshot = displayedQuery;
         long ticket = generation;
         if (snapshot == null) return;
+        Object detailRequest = new Object();
+        sources.putClientProperty("detailRequest", detailRequest);
         sources.removeAll();
         sources.add(AccountingUi.text("Loading source details…"));
         sources.revalidate();
-        AccountingUi.request(executor, () -> service.queryDetails(snapshot, rowId), (result, failure) -> {
-            if (ticket != generation || !sources.isVisible()) return;
+        AccountingUi.request(executor, () -> service.queryDetails(snapshot, rowId, page), (result, failure) -> {
+            if (ticket != generation || !sources.isVisible() || sources.getClientProperty("detailRequest") != detailRequest) return;
             sources.removeAll();
-            if (failure != null) sources.add(AccountingUi.text("Details could not be loaded. Refresh and try again."));
+            if (failure != null) {
+                sources.add(AccountingUi.text("Details could not be loaded: " + AccountingUi.failureMessage(failure)));
+                recovery.showFailure(failure);
+            }
+            else if (result.lines.size() > 50) {
+                sources.add(AccountingUi.text("This source page is too large to display. Refresh the report and try again."));
+            }
             else {
+                sourcePages.put(rowId, result.page);
                 sources.add(AccountingUi.title(result.title));
                 result.lines.forEach(line -> sources.add(AccountingUi.text(line)));
+                JPanel navigation = new JPanel(new java.awt.GridLayout(1, 3, 3, 0));
+                navigation.setOpaque(false);
+                navigation.setAlignmentX(Component.LEFT_ALIGNMENT);
+                JButton previous = new JButton("‹");
+                JButton next = new JButton("›");
+                previous.setName("previousSources:" + rowId);
+                next.setName("nextSources:" + rowId);
+                previous.setEnabled(result.page > 0);
+                next.setEnabled(result.hasMore);
+                previous.addActionListener(event -> loadSources(rowId, result.page - 1, sources, card));
+                next.addActionListener(event -> loadSources(rowId, result.page + 1, sources, card));
+                JLabel currentPage = new JLabel("Page " + (result.page + 1), SwingConstants.CENTER);
+                currentPage.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+                navigation.add(previous);
+                navigation.add(currentPage);
+                navigation.add(next);
+                sources.add(navigation);
             }
             sources.revalidate();
             card.revalidate();
@@ -426,6 +461,7 @@ public final class AccountingReportsPanel extends JPanel {
             exportButton.setEnabled(true);
             AccountingUi.status(status, failure == null ? "Profit report exported."
                 : "The export could not be completed. Refresh the report before trying again.", failure != null);
+            if (failure != null) recovery.showFailure(failure);
         });
     }
 
@@ -435,5 +471,6 @@ public final class AccountingReportsPanel extends JPanel {
         searchDebounce.stop();
         displayedQuery = null;
         exportButton.setEnabled(false);
+        recovery.dispose();
     }
 }

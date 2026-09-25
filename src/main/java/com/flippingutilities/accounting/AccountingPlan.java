@@ -48,8 +48,10 @@ public final class AccountingPlan
             }
             selections.put(source, quantity);
         });
-        this.cutover = cutover;
-        this.purchaseCutoff = purchaseCutoff;
+        // Match SQLite's persisted precision before the preview runs, so reloading a plan
+        // cannot move an observation from one side of its boundary to the other.
+        this.cutover = cutover == null ? null : Instant.ofEpochMilli(cutover.toEpochMilli());
+        this.purchaseCutoff = purchaseCutoff == null ? null : Instant.ofEpochMilli(purchaseCutoff.toEpochMilli());
         this.openingQuantities = Collections.unmodifiableMap(selections);
     }
 }

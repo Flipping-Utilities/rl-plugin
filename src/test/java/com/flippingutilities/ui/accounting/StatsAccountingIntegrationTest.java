@@ -22,6 +22,10 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.swing.SwingUtilities;
+import javax.swing.JTabbedPane;
+import javax.swing.JComponent;
+import com.flippingutilities.ui.statistics.items.FlippingItemContainerPanel;
+import com.flippingutilities.ui.statistics.recipes.RecipeGroupContainerPanel;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -52,12 +56,68 @@ public class StatsAccountingIntegrationTest {
         } finally { plugin.executor.shutdownNow(); }
     }
 
+    @Test public void tradesEditorRetainsManagementAndRawExportWithoutScanningOnReports() throws Exception {
+        StubPlugin plugin = new StubPlugin();
+        StatsPanel[] panel = new StatsPanel[1];
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                panel[0] = new StatsPanel(plugin);
+                panel[0].rebuildItemsDisplay(Collections.emptyList());
+            });
+            flush();
+            flush();
+            SwingUtilities.invokeAndWait(() -> {
+                JTabbedPane tabs = find(panel[0], JTabbedPane.class);
+                assertEquals("Reports", tabs.getTitleAt(tabs.getSelectedIndex()));
+                assertEquals(0, plugin.legacySortCalls);
+                int trades = tabs.indexOfTab("Trades");
+                assertTrue(trades >= 0);
+                Container editor = (Container) tabs.getComponentAt(trades);
+                assertNotNull("Original offer panels remain reachable", find(editor, FlippingItemContainerPanel.class));
+                assertNotNull("Original recipe panels remain reachable", find(editor, RecipeGroupContainerPanel.class));
+                assertTrue("Original raw-trade export remains reachable", hasTooltip(editor, "Export to CSV"));
+                tabs.setSelectedIndex(trades);
+            });
+            flush();
+            flush();
+            SwingUtilities.invokeAndWait(() -> {
+                assertTrue("Legacy scans run only after entering the editor", plugin.legacySortCalls > 0);
+                find(panel[0], JTabbedPane.class).setSelectedIndex(0);
+                plugin.legacySortCalls = 0;
+                panel[0].rebuildItemsDisplay(Collections.emptyList());
+                panel[0].rebuildRecipesDisplay(Collections.emptyList());
+            });
+            flush();
+            flush();
+            assertEquals("Returning to Reports restores the SQL-only refresh path", 0, plugin.legacySortCalls);
+        } finally { plugin.executor.shutdownNow(); }
+    }
+
     private static void flush() throws Exception { SwingUtilities.invokeAndWait(() -> {}); }
 
     private static boolean containsAccountingPanel(Container parent) {
         for (Component component : parent.getComponents()) {
             if (component instanceof AccountingPanel) return true;
             if (component instanceof Container && containsAccountingPanel((Container) component)) return true;
+        }
+        return false;
+    }
+
+    private static <T extends Component> T find(Container parent, Class<T> type) {
+        for (Component component : parent.getComponents()) {
+            if (type.isInstance(component)) return type.cast(component);
+            if (component instanceof Container) {
+                T child = find((Container) component, type);
+                if (child != null) return child;
+            }
+        }
+        return null;
+    }
+
+    private static boolean hasTooltip(Container parent, String tooltip) {
+        for (Component component : parent.getComponents()) {
+            if (component instanceof JComponent && tooltip.equals(((JComponent) component).getToolTipText())) return true;
+            if (component instanceof Container && hasTooltip((Container) component, tooltip)) return true;
         }
         return false;
     }

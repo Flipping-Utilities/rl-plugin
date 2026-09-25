@@ -33,6 +33,7 @@ public final class AccountingSetupPanel extends JPanel {
     private final AccountingUiService service;
     private final Executor executor;
     private final Runnable onApplied;
+    final AccountingRecoveryPanel recovery;
     final JComboBox<String> account = new JComboBox<>();
     final JComboBox<Mode> mode = new JComboBox<>(Mode.values());
     final JComboBox<Cutoff> cutoff = new JComboBox<>(Cutoff.values());
@@ -74,6 +75,11 @@ public final class AccountingSetupPanel extends JPanel {
         this.service = service;
         this.executor = executor;
         this.onApplied = onApplied;
+        recovery = new AccountingRecoveryPanel(service, executor, () -> {
+            invalidate("Saves retried. Preview again before applying a choice.");
+            loadPlans();
+            onApplied.run();
+        });
         zone.setEditable(true);
         cutover.setText(AccountingUi.formatDate(Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS), ZoneId.systemDefault()));
         earliestPurchase.setText(cutover.getText());
@@ -103,6 +109,7 @@ public final class AccountingSetupPanel extends JPanel {
         content.add(candidatePanel);
         content.add(previewButton);
         content.add(status);
+        content.add(recovery);
         content.add(comparisonPanel);
         content.add(applyButton);
         content.add(bulkPreviewButton);
@@ -149,7 +156,10 @@ public final class AccountingSetupPanel extends JPanel {
         for (int i = 0; i < account.getItemCount(); i++) previousAccounts.add(account.getItemAt(i));
         String target = accounts.contains(selected) ? selected : accounts.contains(previous) ? previous
             : accounts.isEmpty() ? null : accounts.get(0);
-        if (previousAccounts.equals(accounts) && java.util.Objects.equals(previous, target)) return;
+        if (previousAccounts.equals(accounts) && java.util.Objects.equals(previous, target)) {
+            if (recovery.isVisible()) loadPlans();
+            return;
+        }
         ++generation;
         reviewed = null;
         updating = true;
@@ -182,9 +192,11 @@ public final class AccountingSetupPanel extends JPanel {
             if (ticket != accountGeneration) return;
             if (failure != null) {
                 active.setText("Current choice could not be loaded. Your reports have not changed.");
+                recovery.showFailure(failure);
                 return;
             }
             active.setText("Active: " + history.activeDescription);
+            recovery.clear();
             savedPlans.removeAllItems();
             history.plans.forEach(savedPlans::addItem);
             updateControls();
@@ -281,6 +293,7 @@ public final class AccountingSetupPanel extends JPanel {
             if (ticket != generation) return;
             if (failure != null) {
                 AccountingUi.status(status, "Could not prepare a preview. Your current choice is unchanged. Try again.", true);
+                recovery.showFailure(failure);
                 return;
             }
             reviewed = result;
@@ -316,7 +329,8 @@ public final class AccountingSetupPanel extends JPanel {
             AccountingUi.request(executor, () -> service.preview(request), (result, failure) -> {
                 if (ticket != generation) return;
                 if (failure != null) {
-                    AccountingUi.status(progress, "Preview unavailable. No changes were applied to this account.", true);
+                    AccountingUi.status(progress, "Preview unavailable. " + AccountingUi.failureMessage(failure), true);
+                    recovery.showFailure(failure);
                     return;
                 }
                 progress.setText("No previous stock selected. Existing history is retained.");
@@ -341,6 +355,7 @@ public final class AccountingSetupPanel extends JPanel {
                             : AccountingUi.cause(applyFailure) instanceof StalePreviewException
                             ? "Trading data changed. Preview this account again before applying."
                             : "This choice was not applied. Preview again before retrying.", applyFailure != null);
+                        if (applyFailure != null && !(AccountingUi.cause(applyFailure) instanceof StalePreviewException)) recovery.showFailure(applyFailure);
                         if (applyFailure == null && name.equals(account.getSelectedItem())) loadPlans();
                     });
                 });
@@ -493,6 +508,7 @@ public final class AccountingSetupPanel extends JPanel {
                 AccountingUi.status(status, AccountingUi.cause(failure) instanceof StalePreviewException
                     ? "Trading data changed since this preview. Preview again before applying."
                     : "The choice was not applied. Refresh the preview and try again.", true);
+                if (!(AccountingUi.cause(failure) instanceof StalePreviewException)) recovery.showFailure(failure);
             } else {
                 AccountingUi.status(status, message == null ? "Choice applied. Your history is retained." : message, false);
                 loadPlans();
@@ -534,6 +550,7 @@ public final class AccountingSetupPanel extends JPanel {
         ++generation;
         ++accountGeneration;
         reviewed = null;
+        recovery.dispose();
         bulkApplyButtons.forEach(button -> button.setEnabled(false));
         updateControls();
     }
