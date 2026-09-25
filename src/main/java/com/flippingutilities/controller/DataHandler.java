@@ -42,6 +42,7 @@ import java.util.*;
 public class DataHandler {
     // SQLite storage backend (optional)
     private com.flippingutilities.db.SqliteStorage sqliteStorage;
+    private boolean sqliteReadRecoveryPending;
     FlippingPlugin plugin;
     private AccountWideData accountWideData;
     private BackupCheckpoints backupCheckpoints;
@@ -56,6 +57,7 @@ public class DataHandler {
 
     public void setSqliteStorage(com.flippingutilities.db.SqliteStorage storage) {
         this.sqliteStorage = storage;
+        sqliteReadRecoveryPending = false;
     }
 
     public AccountWideData viewAccountWideData() {
@@ -268,6 +270,7 @@ public class DataHandler {
     private void handleSqliteReadFailure(Exception failure) {
         com.flippingutilities.db.SqliteStorage failed = sqliteStorage;
         sqliteStorage = null;
+        sqliteReadRecoveryPending = true;
         plugin.recoverFromStorageFailure(failed, failure);
     }
 
@@ -300,6 +303,11 @@ public class DataHandler {
             } catch (Exception e) {
                 handleSqliteReadFailure(e);
             }
+        }
+        // Preserve every cached account until queued recovery saves the live model, including
+        // subsequent reload notifications after the failed SQLite backend was detached.
+        if (sqliteReadRecoveryPending && accountSpecificData.containsKey(displayName)) {
+            return accountSpecificData.get(displayName);
         }
         try {
             AccountData accountData = plugin.tradePersister.loadAccount(displayName);
