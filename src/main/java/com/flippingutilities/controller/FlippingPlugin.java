@@ -376,6 +376,8 @@ public class FlippingPlugin extends Plugin {
             }
             java.util.concurrent.ConcurrentLinkedQueue<Consumer<SqliteStorage>> pending = pendingCommands(storage);
             try {
+                // Integrity alone cannot authorize a schema or accounting layout rejected at startup.
+                storage.initializeSchema();
                 try (java.sql.Statement check = storage.getConnection().createStatement();
                      java.sql.ResultSet health = check.executeQuery("PRAGMA quick_check")) {
                     if (!health.next() || !"ok".equalsIgnoreCase(health.getString(1))) throw new IllegalStateException("SQLite integrity check failed; the database was preserved.");
