@@ -14,6 +14,7 @@ import javax.swing.SwingUtilities;
 public final class AccountingPanel extends JPanel {
     private final AccountingSetupPanel setup;
     private final AccountingReportsPanel reports;
+    private final AccountingRecoveryPanel recovery;
     private final JTabbedPane tabs = new JTabbedPane();
     private JComponent tradesTab;
 
@@ -24,8 +25,11 @@ public final class AccountingPanel extends JPanel {
     /** Trade editing retains the original offer/recipe actions and legacy financial labels. */
     public AccountingPanel(AccountingUiService service, Executor executor, JComponent trades, Runnable onTradesSelected) {
         super(new BorderLayout());
+        setBackground(net.runelite.client.ui.ColorScheme.DARK_GRAY_COLOR);
         reports = new AccountingReportsPanel(service, executor);
         setup = new AccountingSetupPanel(service, executor, reports::refresh);
+        recovery = new AccountingRecoveryPanel(service, executor, reports::refresh);
+        add(recovery, BorderLayout.NORTH);
         tabs.addTab("Reports", reports);
         tabs.addTab("Accounting", setup);
         if (trades != null) {
@@ -53,12 +57,24 @@ public final class AccountingPanel extends JPanel {
 
     public void refreshReports() { onEdt(reports::refresh); }
 
+    /** Recovery remains reachable even when no account or report can be loaded. */
+    public void setPendingSaves(boolean pending) {
+        onEdt(() -> {
+            reports.recovery.setExternallyManaged(pending);
+            setup.recovery.setExternallyManaged(pending);
+            if (pending) recovery.showFailure(new IllegalStateException(
+                "SQLite recovery is pending. Keep the client open and retry saves before closing it."));
+            else recovery.clear();
+        });
+    }
+
     public boolean isTradesSelected() { return tradesTab != null && tabs.getSelectedComponent() == tradesTab; }
 
     public void dispose() {
         onEdt(() -> {
             setup.dispose();
             reports.dispose();
+            recovery.dispose();
         });
     }
 

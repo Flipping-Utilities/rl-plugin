@@ -308,6 +308,7 @@ public class StatsPanel extends JPanel
 			}
 			List<String> names = new ArrayList<>(plugin.getDataHandler().getCurrentAccounts());
 			Collections.sort(names);
+			accountingPanel.setPendingSaves(plugin.hasPendingAccountingSaves());
 			accountingPanel.setAccounts(names, plugin.getAccountCurrentlyViewed(), plugin.viewStartOfSessionForCurrentView());
 			revalidate();
 			repaint();

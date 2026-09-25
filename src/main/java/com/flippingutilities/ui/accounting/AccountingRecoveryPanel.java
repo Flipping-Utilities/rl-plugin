@@ -11,10 +11,13 @@ final class AccountingRecoveryPanel extends JPanel {
     final JButton retry = new JButton("Retry saves");
     private final JTextArea message = AccountingUi.text("");
     private boolean disposed;
+    private boolean failed;
+    private boolean externallyManaged;
 
     AccountingRecoveryPanel(AccountingUiService service, Executor executor, Runnable recovered) {
         super(new BorderLayout(0, 3));
         setOpaque(false);
+        retry.setName("retrySaves");
         setAlignmentX(LEFT_ALIGNMENT);
         add(message, BorderLayout.CENTER);
         add(retry, BorderLayout.SOUTH);
@@ -27,7 +30,7 @@ final class AccountingRecoveryPanel extends JPanel {
                 retry.setEnabled(true);
                 if (failure != null) showFailure(failure);
                 else {
-                    setVisible(false);
+                    clear();
                     recovered.run();
                 }
             });
@@ -37,12 +40,18 @@ final class AccountingRecoveryPanel extends JPanel {
     void showFailure(Throwable failure) {
         if (disposed) return;
         AccountingUi.status(message, AccountingUi.failureMessage(failure), true);
-        setVisible(true);
+        failed = true;
+        setVisible(!externallyManaged);
         revalidate();
         repaint();
     }
 
-    void clear() { if (!disposed) setVisible(false); }
+    void clear() { if (!disposed) { failed = false; setVisible(false); } }
+
+    void setExternallyManaged(boolean value) {
+        externallyManaged = value;
+        setVisible(failed && !value && !disposed);
+    }
 
     void dispose() { disposed = true; retry.setEnabled(false); }
 }
