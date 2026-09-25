@@ -335,7 +335,7 @@ public class MigrationLiveTradeInteractionTest {
      * offer, rolling back the WHOLE account's transaction — the account then disappeared from
      * SQLite (falling back to JSON with degraded totals) and the migration retried and failed
      * on every startup. Resolvable references must hydrate from the account's own history with
-     * their real price; dead references must persist as zero-price stubs.
+     * their real price; dead references must remain unresolved.
      */
     @Test
     public void testLegacyAndDanglingRecipeReferencesDoNotAbortMigration() throws Exception {
@@ -368,44 +368,86 @@ public class MigrationLiveTradeInteractionTest {
         RecipeFlip loadedFlip = loaded.getRecipeFlipGroups().get(0).getRecipeFlips().get(0);
         assertEquals("Resolvable reference hydrates with the real price", 50000,
             loadedFlip.getInputs().get(WHIP).get("legacy-in").getOffer().getPrice());
-        assertEquals("Dangling reference loads as a zero-price stub that still renders", 4,
-            loadedFlip.getOutputs().get(DSCIM).get("ghost-out").getOffer().getCurrentQuantityInTrade());
-        assertEquals(0, loadedFlip.getOutputs().get(DSCIM).get("ghost-out").getOffer().getPrice());
+        PartialOffer unresolved = loadedFlip.getOutputs().get(DSCIM).get("ghost-out");
+        assertNull("An unknown price must not become a zero-price offer", unresolved.getOffer());
+        assertEquals("ghost-out", unresolved.getOfferUuid());
+        assertEquals(4, unresolved.getAmountConsumed());
     }
 
-    /**
-     * Incomplete offers with filled units (cancelled partials, offers abandoned mid-fill when
-     * the client closed) are real money that the JSON backend counts. The migration used to
-     * drop them (isComplete-only filter), silently undercounting profit - e.g. a live account
-     * lost a 44,250-unit partial SELL worth ~1.4M. They must migrate, and a later completion
-     * of the same offer must UPDATE the row instead of being swallowed by the uuid dedupe.
-     */
     @Test
-    public void testStalePartialOfferMigratesAndCompletes() throws Exception {
-        OfferEvent partial = completeOffer("stale-sell", false, 100, 500, BASE_TS);
-        partial.setState(GrandExchangeOfferState.SELLING);
-        partial.setCurrentQuantityInTrade(40);
-        partial.setTotalQuantityInTrade(100);
+    public void migratedActivePartialIsReplacedByCompletionWithNewUuid() {
+        AccountData source = accountWithActivePartial();
+        migrateAccounts(Collections.singletonMap(ACCOUNT, source));
+        assertEquals(5, loadedQuantityAfterReopen());
 
-        // Buy the full eventual volume so the terminal sell pairs completely at the end;
-        // during the partial phase only 40 units can pair.
-        OfferEvent buy = completeOffer("stale-buy", true, 100, 450, BASE_TS - 1000);
-        AccountData data = accountDataWithOffers(buy, partial);
-
-        MigrationService service = new MigrationService(storage, new TradePersister(new GsonBuilder().create()));
-        service.migrate(java.util.Collections.singletonMap(ACCOUNT, data));
-
-        // The partial sell's 40 filled units count in profit, matching the JSON backend.
-        assertEquals("Partial fill must contribute its filled volume",
-            (long) (500 - 450) * 40, loadedProfit());
-
-        // The offer later completes for the full 100 units: the live terminal event must
-        // UPDATE the migrated row (INSERT OR IGNORE froze it at 40 forever).
-        OfferEvent terminal = completeOffer("stale-sell", false, 100, 500, BASE_TS + 60000);
+        OfferEvent terminal = completeOffer("completion-event", true, 10, 500, BASE_TS + 60000);
+        terminal.setSlot(3);
+        storage.upsertSlot(ACCOUNT, 3, terminal, true);
         storage.recordTrade(ACCOUNT, terminal);
 
-        assertEquals("Completion must update the row to the terminal volume",
-            (long) (500 - 450) * 100, loadedProfit());
+        assertEquals("Completion replaces the migrated partial, rather than adding to it",
+            10, loadedQuantityAfterReopen());
+        assertEquals("completion-event", storage.loadAccount(ACCOUNT).getTrades().get(0)
+            .getHistory().getCompressedOfferEvents().get(0).getUuid());
+    }
+
+    @Test
+    public void migratedActivePartialIsReplacedByNextPartialWithNewUuid() {
+        migrateAccounts(Collections.singletonMap(ACCOUNT, accountWithActivePartial()));
+        OfferEvent nextPartial = partialOffer("next-partial-event", 7, BASE_TS + 60000);
+        storage.upsertSlot(ACCOUNT, 3, nextPartial, true);
+
+        assertEquals("A new partial snapshot replaces the prior quantity", 7, loadedQuantityAfterReopen());
+        assertEquals("next-partial-event", storage.loadAccount(ACCOUNT).getLastOffers().get(3).getUuid());
+    }
+
+    @Test
+    public void migrationRetainsArchivedPartialSharingActiveItemAndSlot() {
+        AccountData source = accountWithActivePartial();
+        OfferEvent archived = partialOffer("archived-partial", 4, BASE_TS - 60000);
+        source.getTrades().get(0).getHistory().getCompressedOfferEvents().add(0, archived);
+        migrateAccounts(Collections.singletonMap(ACCOUNT, source));
+        assertEquals("An archived fill is distinct from the active offer in the same slot",
+            9, loadedQuantityAfterReopen());
+
+        OfferEvent terminal = completeOffer("completion-event", true, 10, 500, BASE_TS + 60000);
+        terminal.setSlot(3);
+        storage.upsertSlot(ACCOUNT, 3, terminal, true);
+        storage.recordTrade(ACCOUNT, terminal);
+
+        assertEquals("The archived fill survives completion of the active offer", 14, loadedQuantityAfterReopen());
+        assertTrue(storage.loadAccount(ACCOUNT).getTrades().get(0).getHistory().getCompressedOfferEvents()
+            .stream().anyMatch(offer -> "archived-partial".equals(offer.getUuid())));
+    }
+
+    @Test
+    public void sqliteLoadsDoNotRequestLegacyJsonMigration() {
+        storage.recordTrade(ACCOUNT, completeOffer("current-offer", true, 10, 500, BASE_TS));
+        AccountData loaded = storage.loadAccount(ACCOUNT);
+        assertEquals(Integer.valueOf(AccountData.CURRENT_VERSION), loaded.getVersion());
+        assertFalse("SQL reconstruction must not trigger a JSON migration rewrite", loaded.needsMigration());
+    }
+
+    private AccountData accountWithActivePartial() {
+        OfferEvent partial = partialOffer("initial-partial-event", 5, BASE_TS);
+        AccountData source = accountDataWithOffers(partial);
+        source.getLastOffers().put(3, partial);
+        return source;
+    }
+
+    private OfferEvent partialOffer(String uuid, int quantity, long timestamp) {
+        OfferEvent partial = completeOffer(uuid, true, quantity, 500, timestamp);
+        partial.setState(GrandExchangeOfferState.BUYING);
+        partial.setTotalQuantityInTrade(10);
+        partial.setSlot(3);
+        return partial;
+    }
+
+    private long loadedQuantityAfterReopen() {
+        storage.close();
+        return storage.loadAccount(ACCOUNT).getTrades().stream()
+            .flatMap(item -> item.getHistory().getCompressedOfferEvents().stream())
+            .mapToLong(OfferEvent::getCurrentQuantityInTrade).sum();
     }
 
     /**

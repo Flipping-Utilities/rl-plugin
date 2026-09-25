@@ -891,10 +891,11 @@ public class FlippingPlugin extends Plugin {
      * @param fileName name of the file which was modified.
      */
     public void onDirectoryUpdate(String fileName) {
-        if (!fileName.contains(".json") || fileName.contains(".backup.json") || fileName.contains(".special.json")) {
+        if (!fileName.endsWith(".json") || fileName.endsWith(".backup.json")
+            || fileName.endsWith(".special.json") || fileName.equalsIgnoreCase("trades.json")) {
             return;
         }
-        String displayNameOfChangedAcc = fileName.split("\\.")[0];
+        String displayNameOfChangedAcc = fileName.substring(0, fileName.length() - ".json".length());
 
         if (displayNameOfChangedAcc.equals(dataHandler.thisClientLastStored)) {
             log.debug("not reloading data for {} into the cache as this client was the last one to store it", displayNameOfChangedAcc);

@@ -153,29 +153,29 @@ public class ApiRequestHandler {
 
             @Override
             public void onResponse(Call call, Response response) {
-                if (!response.isSuccessful()) {
-                    future.completeExceptionally(new BadStatusCodeException(request, response, getResponseBody(response)));
-                }
-                else {
-                    try {
-                        String body =  response.body().string();
-                        ApiResponse<T> apiResponse = plugin.gson.fromJson(body, type.getType());
-                        if (apiResponse == null) {
-                            future.completeExceptionally(new NullDtoException(request, response, type.toString()));
-                        }
-                        else if (apiResponse.errors.size() > 0) {
-                            //TODO better exception here
-                            future.completeExceptionally(new BadStatusCodeException(request, response, body));
-                        }
-                        else {
-                            future.complete(apiResponse);
-                        }
-                        response.close();
+                try (Response ignored = response) {
+                    if (!response.isSuccessful()) {
+                        future.completeExceptionally(new BadStatusCodeException(request, response, getResponseBody(response)));
+                        return;
                     }
-                    catch (IOException e) {
-                        future.completeExceptionally(new ResponseBodyReadingException(request, response, e));
-                        response.close();
+                    if (response.body() == null) {
+                        throw new IllegalStateException("API response has no body");
                     }
+                    String body = response.body().string();
+                    ApiResponse<T> apiResponse = plugin.gson.fromJson(body, type.getType());
+                    if (apiResponse == null) {
+                        future.completeExceptionally(new NullDtoException(request, response, type.toString()));
+                    } else if (apiResponse.errors == null) {
+                        throw new IllegalStateException("API response is missing its errors list");
+                    } else if (!apiResponse.errors.isEmpty()) {
+                        future.completeExceptionally(new BadStatusCodeException(request, response, body));
+                    } else {
+                        future.complete(apiResponse);
+                    }
+                } catch (IOException e) {
+                    future.completeExceptionally(new ResponseBodyReadingException(request, response, e));
+                } catch (RuntimeException e) {
+                    future.completeExceptionally(e);
                 }
             }
         });

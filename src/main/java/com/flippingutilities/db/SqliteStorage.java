@@ -114,35 +114,11 @@ public class SqliteStorage {
         return SLOT_GSON.toJson(offer);
     }
 
-    /**
-     * Minimal stand-in for a recipe component whose backing offer no longer exists anywhere
-     * (e.g. offers destroyed by historical data-loss bugs that the recipe references still
-     * remember). Zero-price: the real price is unknowable; the point is that the component
-     * renders and the account keeps loading instead of being refused wholesale.
-     */
-    static OfferEvent synthesizeComponentStub(String uuid, int itemId, boolean buy, int qty, Instant time) {
-        OfferEvent offer = new OfferEvent();
-        offer.setUuid(uuid);
-        offer.setItemId(itemId);
-        offer.setBuy(buy);
-        int safeQty = Math.max(0, qty);
-        offer.setCurrentQuantityInTrade(safeQty);
-        offer.setTotalQuantityInTrade(safeQty);
-        offer.setPrice(0);
-        offer.setTime(time != null ? time : Instant.EPOCH);
-        offer.setState(buy
-            ? net.runelite.api.GrandExchangeOfferState.BOUGHT
-            : net.runelite.api.GrandExchangeOfferState.SOLD);
-        return offer;
-    }
-
     static String serializeRecipeOffer(PartialOffer component) throws SQLException {
-        if (component.getOffer() == null) {
-            throw new SQLException("Cannot persist recipe: missing offer " + component.getOfferUuid());
-        }
-        if (component.getOffer().getTime() == null) {
+        if (component.getOffer() != null && component.getOffer().getTime() == null) {
             throw new SQLException("Cannot persist recipe: missing offer timestamp " + component.getOfferUuid());
         }
+        // Preserve unresolved UUID references as JSON null; an unknown price is not zero.
         return serializeOffer(component.getOffer());
     }
 
@@ -513,6 +489,8 @@ public class SqliteStorage {
         restoreFavoriteOnlyItems(displayName, data);
         restoreItemVisibility(accountId, displayName, data);
 
+        // This model was reconstructed from the current schema, not a legacy JSON file.
+        data.setVersion(AccountData.CURRENT_VERSION);
         return data;
     }
 
@@ -605,15 +583,12 @@ public class SqliteStorage {
                     int itemId = rs.getInt("item_id");
                     String uuid = rs.getString("offer_uuid");
                     OfferEvent offer = SLOT_GSON.fromJson(rs.getString("offer_json"), OfferEvent.class);
-                    if (offer == null) {
-                        // Rows predating embedded snapshots (or with unreadable ones) must not
-                        // take the whole account down; render a zero-price stub instead.
-                        offer = synthesizeComponentStub(uuid, itemId, inputs, rs.getInt("amount_consumed"), null);
+                    if (offer != null) {
+                        offer.setMadeBy(displayName);
+                        offer.setItemName("Item " + itemId);
                     }
-                    offer.setMadeBy(displayName);
-                    offer.setItemName("Item " + itemId);
-                    PartialOffer component = new PartialOffer(offer, rs.getInt("amount_consumed"));
-                    component.setOfferUuid(uuid);
+                    PartialOffer component = new PartialOffer(uuid, rs.getInt("amount_consumed"));
+                    component.setOffer(offer);
                     components.computeIfAbsent(itemId, ignored -> new HashMap<>()).put(uuid, component);
                 }
             }
@@ -800,11 +775,8 @@ public class SqliteStorage {
     /** Records the original offer, preserving classification and continuity across reloads. */
     public synchronized void recordTrade(String displayName, OfferEvent offer) {
         int accountId = getOrCreateAccountId(displayName);
-        // Latest-state upsert per offer uuid: fills only grow toward the terminal state, so a
-        // later event for the same offer replaces the row. A pure INSERT OR IGNORE froze the
-        // FIRST recorded quantity - a partially-filled offer inserted by the migration (or an
-        // early partial) then never updated when the offer completed, permanently undercounting
-        // its volume. The qty guard keeps a stale/duplicate event from regressing the row.
+        // Repeated writes of the same snapshot are idempotent. Successive live GE events
+        // have different UUIDs; active partials are kept in active_slots until completion.
         String sql = "INSERT INTO trades " +
             "(account_id, item_id, uuid, timestamp, qty, price, is_buy, offer_json) " +
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +

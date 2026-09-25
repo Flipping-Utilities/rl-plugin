@@ -185,7 +185,8 @@ public class DataHandler {
             return accountWideData;
         }
         catch (Exception e) {
-            log.warn("couldn't load accountwide data, setting defaults", e);
+            plugin.tradePersister.protectAccount("accountwide");
+            log.warn("Could not prepare account-wide data; JSON saves disabled until valid data is loaded", e);
             AccountWideData accountWideData = new AccountWideData();
             accountWideData.setDefaults();
             accountWideDataChanged = true;
@@ -211,15 +212,15 @@ public class DataHandler {
                 if (accountData.needsMigration()) {
                     log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
                         displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
-                    TradePersister.createPreMigrationBackup(displayName);
+                    plugin.tradePersister.createPreMigrationBackup(displayName);
                     accountData.markMigrated();
                     plugin.tradePersister.writeToFile(displayName, accountData);
-                    TradePersister.deletePreMigrationBackup(displayName);
                     log.info("Migration complete for {}", displayName);
                 }
             }
-            catch (Exception e) {
-                log.warn("Couldn't prepare account data for {} due to {}, setting default", displayName, e);
+            catch (Exception | OutOfMemoryError e) {
+                plugin.tradePersister.protectAccount(displayName);
+                log.error("Could not prepare {}; JSON saves and backups are disabled until valid data is loaded", displayName, e);
                 AccountData newAccountData = new AccountData();
                 newAccountData.startNewSession();
                 newAccountData.prepareForUse(plugin);
@@ -304,19 +305,19 @@ public class DataHandler {
             if (accountData.needsMigration()) {
                 log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
                     displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
-                TradePersister.createPreMigrationBackup(displayName);
+                plugin.tradePersister.createPreMigrationBackup(displayName);
                 accountData.markMigrated();
                 plugin.tradePersister.writeToFile(displayName, accountData);
-                TradePersister.deletePreMigrationBackup(displayName);
                 log.info("Migration complete for {}", displayName);
             }
             
             return accountData;
         }
-        catch (Exception e)
+        catch (Exception | OutOfMemoryError e)
         {
-            log.warn("couldn't load trades for {}, e = " + e, displayName);
-            return new AccountData();
+            plugin.tradePersister.protectAccount(displayName);
+            log.error("Could not load {}; keeping cached data and disabling JSON saves until valid data is loaded", displayName, e);
+            return accountSpecificData.getOrDefault(displayName, new AccountData());
         }
     }
 

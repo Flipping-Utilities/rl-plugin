@@ -379,6 +379,7 @@ public class StatsPanel extends JPanel
 		long totalExpenses = 0;
 		long totalFlips = 0;
 		long taxPaid = 0;
+		boolean missingRecipeOffers = false;
 
 		for (FlippingItem item : tradesList)
 		{
@@ -399,6 +400,7 @@ public class StatsPanel extends JPanel
 		for (RecipeFlipGroup recipeFlipGroup : recipeFlipGroups) {
 			List<RecipeFlip> recipeFlips = recipeFlipGroup.getFlipsInInterval(startOfInterval);
 			if (recipeFlips.isEmpty()) continue;
+			missingRecipeOffers |= recipeFlips.stream().anyMatch(RecipeFlip::hasMissingOffers);
 			taxPaid += recipeFlips.stream().mapToLong(RecipeFlip::getTaxPaid).sum();
 			totalProfit += recipeFlips.stream().mapToLong(RecipeFlip::getProfit).sum();
 			totalExpenses += recipeFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
@@ -415,6 +417,13 @@ public class StatsPanel extends JPanel
 		updateRoiDisplay(totalProfit, totalExpenses);
 		updateTotalFlipsDisplay(totalFlips);
 		updateTaxPaidDisplay(taxPaid);
+		if (missingRecipeOffers) {
+			for (JLabel label : new JLabel[]{totalProfitVal, roiVal, taxPaidVal, hourlyProfitVal}) {
+				label.setText("Unknown");
+				label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+				label.setToolTipText("Original recipe offer details are missing; financial totals are unavailable.");
+			}
+		}
 		updateAutoSaveDisplay();
 	}
 
@@ -475,6 +484,7 @@ public class StatsPanel extends JPanel
 			profitString = "0";
 		}
 
+		hourlyProfitVal.setToolTipText(null);
 		hourlyProfitVal.setText(profitString + " gp/hr");
 		hourlyProfitVal.setForeground(totalProfit >= 0 ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
 		hourlyProfitPanel.setToolTipText("Hourly profit as determined by the session time");
@@ -485,6 +495,7 @@ public class StatsPanel extends JPanel
 	 */
 	private void updateRoiDisplay(long totalProfit, long totalExpenses)
 	{
+		roiVal.setToolTipText(null);
 		float roi = (float) totalProfit / totalExpenses * 100;
 
 		if (totalExpenses == 0)

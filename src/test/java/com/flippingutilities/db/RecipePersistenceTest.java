@@ -94,11 +94,10 @@ public class RecipePersistenceTest {
      * A dangling reference (offer exists nowhere: not embedded, not in history) must NOT
      * block the account's migration. Refusing the account drops ALL of its trades and flips
      * from SQLite, degrades every total that includes it, and retries (and fails) on every
-     * startup — far more destructive than the dead reference itself. The reference migrates
-     * as a zero-price stub instead, matching how the JSON backend has always rendered it.
+     * startup. Preserve the unresolved reference without inventing a backing offer or price.
      */
     @Test
-    public void danglingRecipeReferenceMigratesAsZeroPriceStubInsteadOfBlockingAccount() throws Exception {
+    public void danglingRecipeReferenceSurvivesMigrationWithoutInventedPrice() throws Exception {
         AccountData source = legacyAccount();
         source.getTrades().clear();
         PartialOffer missing = source.getRecipeFlipGroups().get(0).getPartialOffers().get(0);
@@ -118,14 +117,15 @@ public class RecipePersistenceTest {
             assertEquals("Migration completes when no account fails",
                 "true", storage.getSetting("migration_completed"));
 
-            // The nulled component ("normal") renders as a zero-price stub; components that
-            // kept their embedded snapshots load with their real prices untouched.
+            // Unknown prices remain unknown; embedded snapshots retain their real prices.
+            storage.close();
             AccountData loaded = storage.loadAccount(ACCOUNT);
             assertEquals(1, loaded.getRecipeFlipGroups().size());
             RecipeFlip flip = loaded.getRecipeFlipGroups().get(0).getRecipeFlips().get(0);
-            PartialOffer stubbed = flip.getInputs().get(4151).get("normal");
-            assertNotNull("Dangling component must still render", stubbed.getOffer());
-            assertEquals("Stub price must be zero", 0, stubbed.getOffer().getPrice());
+            PartialOffer unresolved = flip.getInputs().get(4151).get("normal");
+            assertNull("A dangling reference must not acquire a fabricated price", unresolved.getOffer());
+            assertEquals("normal", unresolved.getOfferUuid());
+            assertEquals(2, unresolved.getAmountConsumed());
             assertEquals("Embedded snapshot price preserved (input)", 250,
                 flip.getInputs().get(4587).get("detached-input").getOffer().getPreTaxPrice());
             assertEquals("Embedded snapshot price preserved (output)", 1000,
@@ -136,7 +136,7 @@ public class RecipePersistenceTest {
     }
 
     @Test
-    public void liveRecipeWritePreservesDetachedSnapshotsAndRollsBackMissingOffers() throws Exception {
+    public void liveRecipeWritePreservesDetachedAndUnresolvedOffers() throws Exception {
         AccountData source = legacyAccount();
         hydrateReferences(source);
         RecipeFlip flip = source.getRecipeFlipGroups().get(0).getRecipeFlips().get(0);
@@ -151,15 +151,39 @@ public class RecipePersistenceTest {
             RecipeFlip unresolved = flip.clone();
             unresolved.setTimeOfCreation(flip.getTimeOfCreation().plusSeconds(1));
             unresolved.getOutputs().get(11802).get("detached-output").setOffer(null);
+            storage.insertRecipeFlip(ACCOUNT, "recipe", unresolved.clone());
+            storage.close();
+            AccountData restored = storage.loadAccount(ACCOUNT);
+            List<RecipeFlip> flips = restored.getRecipeFlipGroups().get(0).getRecipeFlips();
+            assertEquals(2, flips.size());
+            assertOffer(flips.get(0).getOutputs().get(11802).get("detached-output"), 30, 1000, 1);
+            PartialOffer missing = flips.get(1).getOutputs().get(11802).get("detached-output");
+            assertNull(missing.getOffer());
+            assertEquals("detached-output", missing.getOfferUuid());
+            assertEquals(1, missing.getAmountConsumed());
+            assertOffer(flips.get(1).getInputs().get(4151).get("normal"), 10, 100, 2);
+        } finally {
+            storage.close();
+        }
+    }
+
+    @Test
+    public void liveRecipeWriteRollsBackAnOfferMissingItsTimestamp() throws Exception {
+        AccountData source = legacyAccount();
+        hydrateReferences(source);
+        RecipeFlip flip = source.getRecipeFlipGroups().get(0).getRecipeFlips().get(0);
+        flip.getOutputs().get(11802).get("detached-output").getOffer().setTime(null);
+        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("live-missing-time.db"));
+        try {
+            storage.initializeSchema();
             try {
-                storage.insertRecipeFlip(ACCOUNT, "recipe", unresolved.clone());
-                fail("Missing offer data must reject the entire recipe write");
+                storage.insertRecipeFlip(ACCOUNT, "recipe", flip);
+                fail("An existing offer without a timestamp must reject the entire recipe write");
             } catch (IllegalStateException expected) {
                 assertTrue(expected.getCause().getMessage().contains("detached-output"));
             }
             AccountData restored = storage.loadAccount(ACCOUNT);
-            assertEquals(1, restored.getRecipeFlipGroups().get(0).getRecipeFlips().size());
-            assertRecipePreserved(restored);
+            assertTrue(restored == null || restored.getRecipeFlipGroups().isEmpty());
         } finally {
             storage.close();
         }

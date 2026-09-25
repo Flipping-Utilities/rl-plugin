@@ -366,9 +366,11 @@ public class HistoryManager
 	 */
 	public static long getValueOfMatchedOffers(List<OfferEvent> tradeList, boolean isBuy)
 	{
-		return getValueOfOffersUpToLimit(
-			tradeList.stream().filter(o -> o.isBuy() == isBuy).collect(Collectors.toList()),
-			countFlipQuantity(tradeList));
+		return groupOffersByAccount(tradeList).stream()
+			.mapToLong(offers -> getValueOfOffersUpToLimit(
+				offers.stream().filter(o -> o.isBuy() == isBuy).collect(Collectors.toList()),
+				countAccountFlipQuantity(offers)))
+			.sum();
 	}
 
 	/**
@@ -383,14 +385,20 @@ public class HistoryManager
 
 	/**
 	 * Gets the amount of items in a given tradelist that have been "flipped". We take
-	 * min(itemsBought, itemsSold) bc we only want the amount of items that will actually be matched against each
-	 * other to create flips and if either buys or sells has a surplus relative to the other, that surplus won't be
-	 * matched.
+	 * min(itemsBought, itemsSold) for each account so an account's surplus cannot be matched
+	 * against another account's offers.
 	 *
 	 * @param tradeList The list of offers that the flip count is based on
 	 * @return An integer representing the total currentQuantityInTrade of items flipped in the list of offers
 	 */
 	public static int countFlipQuantity(List<OfferEvent> tradeList)
+	{
+		return groupOffersByAccount(tradeList).stream()
+			.mapToInt(HistoryManager::countAccountFlipQuantity)
+			.sum();
+	}
+
+	private static int countAccountFlipQuantity(List<OfferEvent> tradeList)
 	{
 		int numBoughtItems = 0;
 		int numSoldItems = 0;
@@ -408,6 +416,16 @@ public class HistoryManager
 		}
 
 		return Math.min(numBoughtItems, numSoldItems);
+	}
+
+	private static Collection<List<OfferEvent>> groupOffersByAccount(List<OfferEvent> offers)
+	{
+		Map<String, List<OfferEvent>> accounts = new HashMap<>();
+		for (OfferEvent offer : offers) {
+			// Legacy callers may supply unhydrated offers with no account name.
+			accounts.computeIfAbsent(offer.getMadeBy(), account -> new ArrayList<>()).add(offer);
+		}
+		return accounts.values();
 	}
 
 	/**
@@ -469,14 +487,9 @@ public class HistoryManager
 	 */
 	public static List<Flip> getFlips(List<OfferEvent> tradeList)
 	{
-		//group offers based on which account those offers belong to (this is really only relevant when getting the flips
-		//of the account wide tradelist as you don't want to match offers from diff accounts.
-
-		Map<String, List<OfferEvent>> groupedOffers = tradeList.stream().collect(Collectors.groupingBy(OfferEvent::getMadeBy));
-
-		//take each offer list and create flips out of them, then put those flips into one list.
+		// Match each account independently before combining its flips into the shared view.
 		List<Flip> flips = new ArrayList<>();
-		groupedOffers.values().forEach(offers -> flips.addAll(createFlips(offers)));
+		groupOffersByAccount(tradeList).forEach(offers -> flips.addAll(createFlips(offers)));
 
 		flips.sort(Comparator.comparing(Flip::getTime));
 
@@ -620,7 +633,7 @@ public class HistoryManager
 				continue;
 			}
 			int numBuysSeen = 0;
-			int totalRevenue = 0;
+			long totalBuyCost = 0;
 			while (buyIdx < buys.size())
 			{
 				OfferEvent buy = buys.get(buyIdx);
@@ -630,14 +643,14 @@ public class HistoryManager
 				{
 					int leftOver = numBuysSeen - sell.getCurrentQuantityInTrade();
 					int amountTaken = buy.getCurrentQuantityInTrade() - leftOver;
-					totalRevenue += amountTaken * buy.getPrice();
+					totalBuyCost += (long) amountTaken * buy.getPrice();
 					buy.setCurrentQuantityInTrade(leftOver);
-					flips.add(new Flip(totalRevenue / sell.getCurrentQuantityInTrade(), sell.getPrice(), sell.getCurrentQuantityInTrade(), sell.getTime(), false, !sell.isComplete()));
+					flips.add(new Flip((int) (totalBuyCost / sell.getCurrentQuantityInTrade()), sell.getPrice(), sell.getCurrentQuantityInTrade(), sell.getTime(), false, !sell.isComplete()));
 					break;
 				}
 				else
 				{
-					totalRevenue += buy.getCurrentQuantityInTrade() * buy.getPrice();
+					totalBuyCost += (long) buy.getCurrentQuantityInTrade() * buy.getPrice();
 					buyIdx++;
 				}
 			}
@@ -645,7 +658,7 @@ public class HistoryManager
 			//buys only partially exhausted a sell
 			if (buyIdx == buys.size() && numBuysSeen != 0)
 			{
-				flips.add(new Flip(totalRevenue / numBuysSeen, sell.getPrice(), numBuysSeen, sell.getTime(), false, true));
+				flips.add(new Flip((int) (totalBuyCost / numBuysSeen), sell.getPrice(), numBuysSeen, sell.getTime(), false, true));
 				break;
 			}
 		}

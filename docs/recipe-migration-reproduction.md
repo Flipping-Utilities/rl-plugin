@@ -29,10 +29,20 @@ An older JSON compaction path also discarded embedded offers on save, so this lo
 could happen before the SQLite import. That explains why reproducing only a database
 reload is insufficient for the report of immediate breakage.
 
+A separate JSON load failure was identified in the latest investigation: historical
+Instant encodings could make both the primary file and its backup fail to parse.
+The old loader returned an empty account, which autosave then wrote over the source.
+The parser now accepts those historical encodings. Other read or preparation failures
+also disable writes for the affected account until valid data is loaded, including
+backup writes. Pre-migration snapshots remain available for recovery.
+
 The fix persists recipe offer snapshots in JSON and SQLite, independently of ordinary
 history. UUID-only JSON still resolves against history. If neither the embedded offer
-nor the referenced history offer exists, migration rejects that account transaction
-and leaves migration incomplete instead of claiming a successful zero-price import.
+nor the referenced history offer exists, migration preserves the UUID, item ID and
+consumed quantity with a null offer snapshot. The account still migrates; the UI shows
+`Unknown` for financial values that depend on the missing offer. No zero-price offer
+is fabricated. A non-null snapshot missing its required timestamp still rejects the
+account transaction; live recipe writes reject that invalid snapshot atomically too.
 
 ## Instructions for the agent with the account JSON
 
@@ -47,15 +57,17 @@ and leaves migration incomplete instead of claiming a successful zero-price impo
 3. Run:
 
    ```sh
-   ./gradlew test --tests com.flippingutilities.db.RecipePersistenceTest --tests com.flippingutilities.db.RealDataMigrationTest --no-daemon --console=plain
+   ./gradlew test --tests com.flippingutilities.db.RecipePersistenceTest --tests com.flippingutilities.db.MigrationLiveTradeInteractionTest --tests com.flippingutilities.db.RealDataMigrationTest --no-daemon --console=plain
    ```
 
    Inspect `build/reports/tests/test/index.html` and
    `build/test-results/test/TEST-com.flippingutilities.db.RealDataMigrationTest.xml`.
    A skipped real-data test means the fixtures were not found; it is not a pass.
-   The real-data test now compares each recipe input/output, consumed and original
-   quantities, prices, state, side, timestamp (milliseconds), coin cost, expense,
-   revenue, profit and tax. It also checks normal-history profit and item counts.
+   Check each recipe input/output, UUID and consumed quantity. For resolved snapshots,
+   also compare original quantity, price, state, side and timestamp (milliseconds),
+   then compare coin cost and the financial totals supported by those snapshots.
+   Unresolved references must remain present with null snapshots after restart.
+   The tests also cover normal-history profit, item counts and live recipe writes.
 4. For each affected component, report the recipe key, creation timestamp, input or
    output, item ID, consumed amount and effective UUID. The effective UUID is
    `offerUuid`, or the embedded `offer.uuid` for older records. Check for a matching
@@ -75,6 +87,13 @@ and leaves migration incomplete instead of claiming a successful zero-price impo
    Keep a separate copy of the rewritten JSON at each stage. If the automated test
    passes but the UI still breaks immediately, capture logs and those stage snapshots
    to isolate the account preparation/save path from the SQLite reload path.
+   For an unresolved component, confirm its item and consumed quantity remain visible,
+   while affected prices and totals show `Unknown` instead of zero.
+7. Verify active partial fills using `MigrationLiveTradeInteractionTest`: migrate a
+   5/10 fill, then complete it with a new event UUID and quantity 10. After closing and
+   reopening SQLite, history must contain 10 units, not 15. A subsequent partial of
+   7 must similarly replace the 5. Archived partials with different UUIDs must survive,
+   even when they share the active offer's item and GE slot.
 
 ## Limits and recovery
 
@@ -83,6 +102,7 @@ and leaves migration incomplete instead of claiming a successful zero-price impo
   created by earlier PR builds need regeneration from an intact JSON snapshot.
 - The fix cannot reconstruct prices already missing from both JSON and its referenced
   history. Do not replace such values with zero or infer per-component prices from
-  aggregate profit. Recover an intact backup first.
+  aggregate profit. Keep the unresolved references and recover their prices from an
+  intact backup when available.
 - Keeping embedded recipe snapshots increases JSON size relative to the lossy
   UUID-only representation. This is intentional to preserve independent recipe data.
