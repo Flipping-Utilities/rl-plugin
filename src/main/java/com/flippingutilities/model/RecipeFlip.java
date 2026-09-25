@@ -3,7 +3,6 @@ package com.flippingutilities.model;
 import com.google.gson.annotations.Expose;
 import com.flippingutilities.utilities.Recipe;
 import com.flippingutilities.utilities.RecipeItem;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.time.Instant;
@@ -21,15 +20,28 @@ import java.util.stream.Collectors;
  * parent item shall own the profits, revenue, expense, etc for the recipe flip.
  */
 @Data
-@AllArgsConstructor
 public class RecipeFlip {
+    String id;
+    Recipe definitionSnapshot;
+    Integer declaredExecutionCount;
     Instant timeOfCreation;
     Map<Integer, Map<String, PartialOffer>> outputs;
     //item id to a map of offer id to offer
     Map<Integer, Map<String, PartialOffer>> inputs;
     long coinCost;
 
+    public RecipeFlip(Instant timeOfCreation, Map<Integer, Map<String, PartialOffer>> outputs,
+                      Map<Integer, Map<String, PartialOffer>> inputs, long coinCost) {
+        this.id = UUID.randomUUID().toString();
+        this.timeOfCreation = timeOfCreation;
+        this.outputs = outputs;
+        this.inputs = inputs;
+        this.coinCost = coinCost;
+    }
+
     public RecipeFlip(Recipe recipe, Map<Integer, Map<String, PartialOffer>> allPartialOffers, long coinsCost) {
+        this.id = UUID.randomUUID().toString();
+        this.definitionSnapshot = copyDefinition(recipe);
         Set<Integer> recipeInputIds = recipe.getInputIds();
         Set<Integer> recipeOutputIds = recipe.getOutputIds();
         this.coinCost = coinsCost;
@@ -38,12 +50,35 @@ public class RecipeFlip {
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         this.outputs = allPartialOffers.entrySet().stream().filter(e -> recipeOutputIds.contains(e.getKey()))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        Integer count = null;
+        for (RecipeItem output : recipe.getOutputs()) {
+            long quantity = outputs.getOrDefault(output.getId(), Collections.emptyMap()).values().stream()
+                .mapToLong(PartialOffer::getAmountConsumed).sum();
+            if (output.getQuantity() <= 0 || quantity % output.getQuantity() != 0 || quantity / output.getQuantity() > Integer.MAX_VALUE) {
+                count = null;
+                break;
+            }
+            int executions = (int) (quantity / output.getQuantity());
+            if (count != null && count != executions) { count = null; break; }
+            count = executions;
+        }
+        this.declaredExecutionCount = count;
+    }
+
+    private static Recipe copyDefinition(Recipe recipe) {
+        if (recipe == null) return null;
+        return new Recipe(recipe.getInputs().stream().map(item -> new RecipeItem(item.getId(), item.getQuantity())).collect(Collectors.toList()),
+            recipe.getOutputs().stream().map(item -> new RecipeItem(item.getId(), item.getQuantity())).collect(Collectors.toList()), recipe.getName());
     }
 
     public RecipeFlip clone() {
         Map<Integer, Map<String, PartialOffer>> clonedOutputs = cloneComponents(outputs);
         Map<Integer, Map<String, PartialOffer>> clonedInputs = cloneComponents(inputs);
-        return new RecipeFlip(timeOfCreation, clonedOutputs, clonedInputs, coinCost);
+        RecipeFlip copy = new RecipeFlip(timeOfCreation, clonedOutputs, clonedInputs, coinCost);
+        copy.id = id;
+        copy.definitionSnapshot = copyDefinition(definitionSnapshot);
+        copy.declaredExecutionCount = declaredExecutionCount;
+        return copy;
     }
 
     private Map<Integer, Map<String, PartialOffer>> cloneComponents(Map<Integer, Map<String, PartialOffer>> component) {

@@ -29,6 +29,8 @@ package com.flippingutilities.controller;
 import com.flippingutilities.DataSource;
 import com.flippingutilities.SqliteMaintenanceAction;
 import com.flippingutilities.FlippingConfig;
+import com.flippingutilities.controller.accounting.AccountingCoordinator;
+import com.flippingutilities.ui.accounting.AccountingUiService;
 import com.flippingutilities.db.MigrationService;
 import com.flippingutilities.db.SqliteStorage;
 import net.runelite.client.RuneLite;
@@ -249,7 +251,47 @@ public class FlippingPlugin extends Plugin {
 
     // SQLite storage backend (optional - used when dataSource=SQLITE)
     @Getter
-    private SqliteStorage sqliteStorage;
+    private volatile SqliteStorage sqliteStorage;
+
+    private volatile AccountingUiService accountingUiService;
+    private final Map<Integer, String> accountingItemNames = new ConcurrentHashMap<>();
+    private final Set<SqliteStorage> authoritativeStorages = ConcurrentHashMap.newKeySet();
+
+    public AccountingUiService getAccountingUiService() { return accountingUiService; }
+    public java.util.concurrent.Executor getAccountingExecutor() { return getStorageExecutor(); }
+
+    public void registerAccountingItemNames(List<FlippingItem> items) {
+        if (accountingUiService == null) return;
+        Map<Integer, String> changed = new HashMap<>();
+        for (FlippingItem item : items) {
+            String name = item.getItemName();
+            if (name == null || name.equals("Item " + item.getItemId())) continue;
+            if (!name.equals(accountingItemNames.put(item.getItemId(), name))) changed.put(item.getItemId(), name);
+        }
+        if (!changed.isEmpty()) submitStorageTask(storage -> new com.flippingutilities.db.ReportingRepository(storage).saveItemNames(changed));
+    }
+
+    private void attachAccounting(SqliteStorage storage) {
+        if (sqliteStorage != storage || failedStorages.contains(storage)) return;
+        accountingUiService = new AccountingCoordinator(storage, getStorageExecutor(),
+            () -> sqliteStorage == storage && !failedStorages.contains(storage));
+        if (statPanel != null) statPanel.refreshAccounting();
+    }
+
+    private boolean hasProtectedAccounting(SqliteStorage storage) {
+        if (authoritativeStorages.contains(storage)) return true;
+        try {
+            if (storage.getAccountingStore().hasRetainedHistory()) {
+                authoritativeStorages.add(storage);
+                return true;
+            }
+            return false;
+        } catch (Exception unreadable) {
+            // An unreadable ledger must never be replaced with an older, less expressive snapshot.
+            log.warn("Cannot verify retained accounting history; preserving SQLite", unreadable);
+            return true;
+        }
+    }
 
     private final Set<SqliteStorage> failedStorages = ConcurrentHashMap.newKeySet();
 
@@ -274,6 +316,14 @@ public class FlippingPlugin extends Plugin {
                 }
                 try {
                     task.accept(storage);
+                    if (storage.getAccountingStore().hasRetainedHistory()) authoritativeStorages.add(storage);
+                    try {
+                        storage.getAccountingStore().reconcileAll();
+                    } catch (Exception projectionFailure) {
+                        // The source committed successfully. Keep the previous projection marked stale.
+                        log.warn("Accounting reconciliation failed; retained trades are safe", projectionFailure);
+                    }
+                    if (statPanel != null) statPanel.refreshAccounting();
                 } catch (Exception e) {
                     recoverFromStorageFailure(storage, e);
                 }
@@ -288,6 +338,11 @@ public class FlippingPlugin extends Plugin {
     /** Keep a durable recovery marker outside the database, which may itself be read-only. */
     void recoverFromStorageFailure(SqliteStorage storage, Exception failure) {
         if (!failedStorages.add(storage)) {
+            return;
+        }
+        if (hasProtectedAccounting(storage)) {
+            log.error("SQLite persistence failed. Retaining the database and its accounting history for recovery", failure);
+            if (statPanel != null) statPanel.refreshAccounting();
             return;
         }
         log.warn("SQLite persistence failed; saving JSON and rebuilding SQLite on next startup", failure);
@@ -384,6 +439,7 @@ public class FlippingPlugin extends Plugin {
                 TradePersister.setupFlippingFolder();
                 sqliteStorage = createSqliteStorage();
                 sqliteStorage.initializeSchema();
+                if (sqliteStorage.getAccountingStore().hasRetainedHistory()) authoritativeStorages.add(sqliteStorage);
                 if ("true".equalsIgnoreCase(sqliteStorage.getSetting("migration_completed"))
                         && !sqliteStorage.requiresFullResync()) {
                     dataHandler.setSqliteStorage(sqliteStorage);
@@ -406,6 +462,15 @@ public class FlippingPlugin extends Plugin {
     private void switchStorageBackend() {
         clientThread.invokeLater(() -> {
             synchronized (this) {
+                if (sqliteStorage != null && hasProtectedAccounting(sqliteStorage)) {
+                    if (!config.dataSource().isSqlite()) {
+                        configManager.setConfiguration(CONFIG_GROUP, "dataSource", DataSource.SQLITE);
+                        javax.swing.SwingUtilities.invokeLater(() -> javax.swing.JOptionPane.showMessageDialog(masterPanel,
+                            "This database contains accounting history that JSON cannot preserve. SQLite remains selected.",
+                            "Accounting storage", javax.swing.JOptionPane.INFORMATION_MESSAGE));
+                    }
+                    return;
+                }
                 dataHandler.getAllAccountData();
                 if (!dataHandler.storeData() && config.dataSource().isSqlite()) {
                     log.warn("Cannot switch to SQLite until the JSON snapshot is saved");
@@ -436,10 +501,14 @@ public class FlippingPlugin extends Plugin {
     private synchronized Future<?> closeStorage() {
         SqliteStorage oldStorage = sqliteStorage;
         sqliteStorage = null;
+        accountingUiService = null;
+        accountingItemNames.clear();
+        if (statPanel != null) statPanel.refreshAccounting();
         dataHandler.setSqliteStorage(null);
         return oldStorage == null ? null : getStorageExecutor().submit(() -> {
             oldStorage.close();
             failedStorages.remove(oldStorage);
+            authoritativeStorages.remove(oldStorage);
         });
     }
 
@@ -473,6 +542,7 @@ public class FlippingPlugin extends Plugin {
                 return;
             }
             dataHandler.setSqliteStorage(storage);
+            attachAccounting(storage);
             if (masterPanel != null) {
                 masterPanel.updateSqliteIndicator();
             }
@@ -483,6 +553,15 @@ public class FlippingPlugin extends Plugin {
     private boolean runMigrationIfNeeded(SqliteStorage storage, boolean fullResync) {
         try {
             storage.initializeSchema();
+            if (storage.getAccountingStore().hasRetainedHistory()) {
+                authoritativeStorages.add(storage);
+                // A JSON snapshot cannot reconstruct retained observations, plans or cost allocations.
+                storage.getAccountingStore().importLegacySources();
+                storage.getAccountingStore().reconcileAll();
+                storage.clearSetting("migration_pending");
+                storage.markSynchronized();
+                return true;
+            }
             boolean rebuild = fullResync || storage.requiresFullResync();
             if (rebuild || "true".equalsIgnoreCase(storage.getSetting("migration_pending"))
                     || !"true".equalsIgnoreCase(storage.getSetting("migration_completed"))) {
@@ -502,6 +581,9 @@ public class FlippingPlugin extends Plugin {
             if (completed) {
                 storage.clearSetting("migration_pending");
                 storage.markSynchronized();
+                storage.getAccountingStore().importLegacySources();
+                if (storage.getAccountingStore().hasRetainedHistory()) authoritativeStorages.add(storage);
+                storage.getAccountingStore().reconcileAll();
             }
             return completed;
         } catch (Exception e) {
@@ -523,6 +605,13 @@ public class FlippingPlugin extends Plugin {
             return;
         }
 
+        if (hasProtectedAccounting(sqliteStorage)) {
+            javax.swing.JOptionPane.showMessageDialog(masterPanel,
+                "This database contains retained accounting history. Use Accounting setup to rebuild or change calculations; JSON regeneration cannot preserve it.",
+                "SQLite maintenance", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            resetSqliteMaintenanceConfig();
+            return;
+        }
         String msg = action == SqliteMaintenanceAction.DELETE
             ? "Delete all SQLite database files? This clears stored trades. Your JSON files are not affected."
             : "Regenerate the SQLite database from JSON? This deletes the current database and rebuilds it from your JSON files.";
@@ -551,6 +640,9 @@ public class FlippingPlugin extends Plugin {
      */
     private void doSqliteMaintenance(SqliteStorage storage, SqliteMaintenanceAction action) {
         try {
+            if (storage.getAccountingStore().hasRetainedHistory()) {
+                throw new IllegalStateException("Cannot replace retained accounting history from JSON");
+            }
             // Close the connection so the files can be deleted (Windows won't delete open files).
             storage.close();
             deleteSqliteFiles(storage);
@@ -1161,8 +1253,8 @@ public class FlippingPlugin extends Plugin {
             return;
         }
         final String key = recipeKey;
-        final Instant created = flip.getTimeOfCreation();
-        submitStorageTask(storage -> storage.deleteRecipeFlip(account, key, created));
+        final RecipeFlip snapshot = flip.clone();
+        submitStorageTask(storage -> storage.deleteRecipeFlip(account, key, snapshot));
     }
 
     /**
@@ -1515,7 +1607,20 @@ public class FlippingPlugin extends Plugin {
             final String accountName = accountCurrentlyViewed;
             final String recipeKey = RecipeHandler.createRecipeKey(recipe);
             final RecipeFlip snapshot = recipeFlip.clone();
-            submitStorageTask(storage -> storage.insertRecipeFlip(accountName, recipeKey, snapshot));
+            submitStorageTask(storage -> {
+                try {
+                    storage.insertRecipeFlip(accountName, recipeKey, snapshot);
+                } catch (com.flippingutilities.db.accounting.AccountingValidationException rejected) {
+                    clientThread.invokeLater(() -> {
+                        account.getRecipeFlipGroups().forEach(group -> group.getRecipeFlips().removeIf(flip -> Objects.equals(flip.getId(), snapshot.getId())));
+                        updateSinceLastRecipeFlipGroupAccountWideBuild = true;
+                        dataHandler.markDataAsHavingChanged(accountName);
+                        if (statPanel != null) statPanel.refreshAccounting();
+                        if (masterPanel != null) SwingUtilities.invokeLater(() -> javax.swing.JOptionPane.showMessageDialog(masterPanel,
+                            rejected.getMessage(), "Recipe was not saved", javax.swing.JOptionPane.WARNING_MESSAGE));
+                    });
+                }
+            });
         }
     }
 

@@ -63,6 +63,7 @@ public class NewOfferEventPipelineHandler {
         // Screening replaces lastOffers; retain the known predecessor for history updates.
         OfferEvent previousOffer = plugin.getDataHandler().getAccountData(currentlyLoggedInAccount)
             .getLastOffers().get(newOfferEvent.getSlot());
+        assignOrderIdentity(newOfferEvent, previousOffer);
         Optional<OfferEvent> screenedOfferEvent = screenOfferEvent(newOfferEvent);
 
         if (!screenedOfferEvent.isPresent()) {
@@ -80,14 +81,35 @@ public class NewOfferEventPipelineHandler {
         // Persist exactly the history replacement made above, including late cancellation
         // corrections. Slot state, replacement, and the new snapshot commit together.
         OfferEvent snapshot = finalizedOfferEvent.clone();
-        plugin.submitStorageTask(storage -> storage.recordOfferUpdate(currentlyLoggedInAccount, snapshot, replacedUuids));
-
-        // Keep the persisted GE limit state in sync (only buys change it)
-        persistGeLimitState(currentlyLoggedInAccount, finalizedOfferEvent);
+        Optional<FlippingItem> limitItem = currentlyLoggedInAccountsTrades.stream()
+            .filter(item -> item.getItemId() == snapshot.getItemId()).findFirst();
+        if (snapshot.isBuy() && limitItem.isPresent() && limitItem.get().getGeLimitResetTime() != null) {
+            java.time.Instant reset = limitItem.get().getGeLimitResetTime();
+            int bought = limitItem.get().getItemsBoughtThisLimitWindow();
+            int complete = limitItem.get().getHistory().getItemsBoughtThroughCompleteOffers();
+            plugin.submitStorageTask(storage -> storage.recordOfferUpdate(currentlyLoggedInAccount, snapshot, replacedUuids, reset, bought, complete));
+        } else {
+            plugin.submitStorageTask(storage -> storage.recordOfferUpdate(currentlyLoggedInAccount, snapshot, replacedUuids));
+        }
 
         plugin.setUpdateSinceLastItemAccountWideBuild(true);
 
         rebuildDisplayAfterOfferEvent(finalizedOfferEvent);
+    }
+
+    private static void assignOrderIdentity(OfferEvent observation, OfferEvent previous) {
+        boolean continues = previous != null
+            && previous.getItemId() == observation.getItemId()
+            && previous.isBuy() == observation.isBuy()
+            && previous.getTotalQuantityInTrade() == observation.getTotalQuantityInTrade()
+            && (!previous.isComplete() || observation.isUpdateForCancelled(previous));
+        if (continues) {
+            observation.setOrderId(previous.getOrderId() == null ? previous.getUuid() : previous.getOrderId());
+            observation.setPredecessorUuid(previous.getUuid());
+        } else {
+            observation.setOrderId(observation.getUuid());
+            observation.setPredecessorUuid(null);
+        }
     }
 
     /**
@@ -207,6 +229,7 @@ public class NewOfferEventPipelineHandler {
         OfferEvent offer = OfferEvent.fromGrandExchangeEvent(newOfferEvent);
         offer.setTickArrivedAt(plugin.getClient().getTickCount());
         offer.setMadeBy(plugin.getCurrentlyLoggedInAccount());
+        if (offer.getItemId() > 0) offer.setItemName(plugin.getItemManager().getItemComposition(offer.getItemId()).getName());
         return offer;
     }
 
@@ -272,42 +295,4 @@ public class NewOfferEventPipelineHandler {
         plugin.submitStorageTask(storage -> storage.upsertSlot(account, slotIndex, snapshot, historyVisible));
     }
 
-    /**
-     * Persists the GE limit state for the offer's item to SQLite when enabled. Only buys change
-     * GE limit state, so sells are skipped. The state is read from memory on the client thread
-     * and only the DB write is queued on the executor. Best-effort.
-     */
-    private void persistGeLimitState(String account, OfferEvent offer) {
-        try {
-            if (account == null || plugin.getSqliteStorage() == null || !offer.isBuy()) {
-                return;
-            }
-            java.time.Instant resetTime = null;
-            int itemsBought = 0;
-            int itemsBoughtThroughComplete = 0;
-            int itemId = -1;
-            java.util.Optional<com.flippingutilities.model.FlippingItem> item = plugin.getDataHandler().getAccountData(account).getTrades().stream()
-                .filter(tradeItem -> tradeItem.getItemId() == offer.getItemId())
-                .findFirst();
-            if (item.isPresent()) {
-                resetTime = item.get().getGeLimitResetTime();
-                itemsBought = item.get().getItemsBoughtThisLimitWindow();
-                itemsBoughtThroughComplete = item.get().getHistory().getItemsBoughtThroughCompleteOffers();
-                itemId = item.get().getItemId();
-            }
-            if (resetTime == null || itemId < 0) {
-                return;
-            }
-
-            final String accountName = account;
-            final int finalItemId = itemId;
-            final java.time.Instant finalResetTime = resetTime;
-            final int finalItemsBought = itemsBought;
-            final int finalItemsBoughtThroughComplete = itemsBoughtThroughComplete;
-            plugin.submitStorageTask(storage -> storage.upsertGeLimitState(
-                accountName, finalItemId, finalResetTime, finalItemsBought, finalItemsBoughtThroughComplete));
-        } catch (Exception e) {
-            log.debug("Failed to queue GE limit state persistence (best-effort): {}", e.getMessage());
-        }
-    }
 }
