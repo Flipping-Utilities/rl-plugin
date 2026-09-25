@@ -329,10 +329,11 @@ public class FlippingPlugin extends Plugin {
     /**
      * Initialize the appropriate FlipRepository based on config.
      * If SQLite mode is enabled, creates SqliteStorage and SqliteFlipRepository.
-     * Also schedules async migration if needed.
+     * Also schedules async migration if needed (returning the pending migration so callers
+     * that must not race it, like the backend switch, can wait for it).
      * Otherwise, uses JsonFlipRepository which wraps the in-memory data.
      */
-    private void initializeRepository() {
+    private java.util.concurrent.Future<?> initializeRepository() {
         if (config.dataSource().isSqlite()) {
             try {
                 File dbFile = new File(RuneLite.RUNELITE_DIR, "flipping/flipping.db");
@@ -347,7 +348,7 @@ public class FlippingPlugin extends Plugin {
                 log.info("Initialized SQLite repository at {}", dbFile.getAbsolutePath());
 
                 // Run migration asynchronously to avoid blocking client launch
-                executor.submit(this::runMigrationIfNeeded);
+                return executor.submit(this::runMigrationIfNeeded);
             } catch (Exception e) {
                 log.warn("Failed to initialize SQLite repository, falling back to JSON", e);
                 if (sqliteStorage != null) {
@@ -361,6 +362,7 @@ public class FlippingPlugin extends Plugin {
             flipRepository = new JsonFlipRepository(this);
             log.debug("Using JSON repository");
         }
+        return null;
     }
 
     /**
@@ -417,15 +419,33 @@ public class FlippingPlugin extends Plugin {
                     }
 
                     // --- re-initialize for the new backend (schedules migration async when switching to SQLite) ---
+                    java.util.concurrent.Future<?> migration = null;
                     if (config.dataSource().isSqlite()) {
                         // Trades recorded while in JSON mode only exist in memory/JSON; force a
                         // full idempotent re-migration so the SQLite-backed stats totals see them.
                         forceFullResync = true;
                     }
-                    initializeRepository();
+                    migration = initializeRepository();
 
                     // --- reload data from the new backend ---
                     if (config.dataSource().isSqlite()) {
+                        // The wipe + JSON re-import must FINISH before the reload: reloading
+                        // mid-import reads the pre-wipe database (accounts deleted in JSON
+                        // mode still present), and the post-reload carry-over then keeps them
+                        // in the view forever. Waiting here also keeps the switched view
+                        // consistent with what actually got imported.
+                        if (migration != null) {
+                            try {
+                                migration.get(120, TimeUnit.SECONDS);
+                            } catch (InterruptedException ie) {
+                                Thread.currentThread().interrupt();
+                                log.warn("Interrupted while waiting for the switch-back import");
+                            } catch (java.util.concurrent.TimeoutException te) {
+                                log.warn("Switch-back import still running after 120s; reloading anyway");
+                            } catch (java.util.concurrent.ExecutionException ee) {
+                                log.warn("Switch-back import failed", ee.getCause());
+                            }
+                        }
                         dataHandler.reloadFromSqlite();
                     } else {
                         dataHandler.loadData();
@@ -1213,21 +1233,22 @@ public class FlippingPlugin extends Plugin {
     }
 
     /**
-     * Persist the interval-reset deletion of recipe flips (recipe group panel reset) to
-     * SQLite. No-op in JSON mode. Best-effort.
+     * Persist the interval-reset deletion of one recipe group's flips (recipe group panel
+     * reset) to SQLite, scoped to that group's recipe key. No-op in JSON mode. Best-effort.
      */
-    public void deleteRecipeFlipsSinceFromStorage(Instant since) {
+    public void deleteRecipeFlipsSinceFromStorage(String recipeKey, Instant since) {
         if (sqliteStorage == null || !config.dataSource().isSqlite()) {
             return;
         }
         final String account = pluginAccountForRecipeWrites();
-        if (account == null) {
+        if (account == null || recipeKey == null) {
             return;
         }
+        final String key = recipeKey;
         final Instant start = since;
         executor.submit(() -> {
             try {
-                sqliteStorage.deleteRecipeFlipsSince(account, start);
+                sqliteStorage.deleteRecipeFlipsSince(account, key, start);
             } catch (Exception e) {
                 log.warn("Failed to delete recipe flips from SQLite (best-effort): {}", e.getMessage());
             }

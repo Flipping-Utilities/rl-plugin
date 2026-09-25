@@ -417,29 +417,46 @@ public class MigrationLiveTradeInteractionTest {
     }
 
     /**
-     * The interval-reset deletion on a recipe group must delete only flips created after the
-     * interval start (strictly after, mirroring RecipeFlipGroup.deleteFlips).
+     * The interval-reset deletion on a recipe group must delete ONLY that group's flips in
+     * the interval (scoped by recipe key) and only flips created strictly after the interval
+     * start. A previous version deleted every group's recipe flips in the window: the other
+     * groups stayed visible in memory, then vanished after a restart.
      */
     @Test
-    public void testDeleteRecipeFlipsSinceRemovesOnlyLaterFlips() throws Exception {
+    public void testDeleteRecipeFlipsSinceIsScopedToGroupAndInterval() throws Exception {
         repository.recordTrade(ACCOUNT, WHIP, "r-in-1", BASE_TS, 10, 50000, true, 0);
         repository.recordTrade(ACCOUNT, WHIP, "r-in-2", BASE_TS + 700000, 10, 50000, true, 0);
+        repository.recordTrade(ACCOUNT, WHIP, "r-in-3", BASE_TS + 710000, 10, 50000, true, 0);
 
-        for (String uuid : Arrays.asList("r-in-1", "r-in-2")) {
-            OfferEvent buyOffer = completeOffer(uuid, true, 10, 50000, BASE_TS);
+        Map<String, Long> flipTimes = new HashMap<>();
+        String[][] specs = {
+            {"r-in-1", "whip:crush", String.valueOf(BASE_TS + 120000)},      // early, target group
+            {"r-in-2", "whip:crush", String.valueOf(BASE_TS + 800000)},      // late, target group
+            {"r-in-3", "whip:dismantle", String.valueOf(BASE_TS + 810000)},  // late, OTHER group
+        };
+        for (String[] spec : specs) {
+            OfferEvent buyOffer = completeOffer(spec[0], true, 10, 50000, BASE_TS);
             Map<Integer, Map<String, PartialOffer>> inputs = new HashMap<>();
-            inputs.put(WHIP, new HashMap<>(Map.of(uuid, new PartialOffer(buyOffer, 10))));
-            RecipeFlip flip = new RecipeFlip(
-                Instant.ofEpochMilli("r-in-1".equals(uuid) ? BASE_TS + 120000 : BASE_TS + 800000),
+            inputs.put(WHIP, new HashMap<>(Map.of(spec[0], new PartialOffer(buyOffer, 10))));
+            RecipeFlip flip = new RecipeFlip(Instant.ofEpochMilli(Long.parseLong(spec[2])),
                 new HashMap<>(), inputs, 0L);
-            storage.insertRecipeFlip(ACCOUNT, "whip:crush", flip);
+            storage.insertRecipeFlip(ACCOUNT, spec[1], flip);
+            flipTimes.put(spec[1] + ":" + spec[0], Long.parseLong(spec[2]));
         }
-        assertEquals(2L, count("SELECT COUNT(*) FROM events WHERE type = 'recipe'"));
+        assertEquals(3L, count("SELECT COUNT(*) FROM events WHERE type = 'recipe'"));
 
-        storage.deleteRecipeFlipsSince(ACCOUNT, Instant.ofEpochMilli(BASE_TS + 300000));
+        // Reset the "whip:crush" group to the interval starting between its two flips.
+        storage.deleteRecipeFlipsSince(ACCOUNT, "whip:crush", Instant.ofEpochMilli(BASE_TS + 300000));
 
-        assertEquals("Only the later flip is deleted", 1L, count("SELECT COUNT(*) FROM events WHERE type = 'recipe'"));
-        assertEquals("The early flip's consumption survives", 1L, count("SELECT COUNT(*) FROM consumed_trade"));
+        assertEquals("Only the later flip of the target group is deleted", 0L,
+            count("SELECT COUNT(*) FROM events WHERE type = 'recipe' AND timestamp > " + (BASE_TS + 300000) +
+                " AND id IN (SELECT event_id FROM recipe_flips WHERE recipe_key = 'whip:crush')"));
+        assertEquals("The early flip of the target group survives", 1L,
+            count("SELECT COUNT(*) FROM events e JOIN recipe_flips rf ON rf.event_id = e.id " +
+                "WHERE e.type = 'recipe' AND rf.recipe_key = 'whip:crush' AND e.timestamp <= " + (BASE_TS + 300000)));
+        assertEquals("The other group's flip in the same interval is untouched", 1L,
+            count("SELECT COUNT(*) FROM events e JOIN recipe_flips rf ON rf.event_id = e.id " +
+                "WHERE e.type = 'recipe' AND rf.recipe_key = 'whip:dismantle'"));
     }
 
     /**

@@ -561,7 +561,7 @@ public class StatsPanel extends JPanel
 
 	public void deleteRecipeFlipGroupPanel(RecipeFlipGroupPanel recipeFlipGroupPanel) {
 		recipeFlipGroupPanel.getRecipeFlipGroup().deleteFlips(startOfInterval);
-		plugin.deleteRecipeFlipsSinceFromStorage(startOfInterval);
+		plugin.deleteRecipeFlipsSinceFromStorage(recipeFlipGroupPanel.getRecipeFlipGroup().getRecipeKey(), startOfInterval);
 		plugin.setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
 		plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());

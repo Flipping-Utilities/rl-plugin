@@ -435,10 +435,17 @@ public class DataHandler {
             reloadedAccounts.put(displayName, fetchAccountData(displayName));
         }
 
-        // Carry over in-memory accounts that don't exist in SQLite (e.g. JSON-only accounts
-        // after a partially-failed migration); replacing the map wholesale would drop them.
-        for (Map.Entry<String, AccountData> entry : accountSpecificData.entrySet()) {
-            reloadedAccounts.putIfAbsent(entry.getKey(), entry.getValue());
+        // Carry over in-memory accounts ONLY while their migration has not actually
+        // completed. Once migration_completed is set, SQLite reflects the authoritative
+        // import; carrying over in-memory accounts then (e.g. one read from the pre-wipe
+        // database during a backend switch) would resurrect accounts the user deleted.
+        boolean migrationCompleted = "true".equalsIgnoreCase(sqliteStorage.getSetting("migration_completed"));
+        if (!migrationCompleted) {
+            for (Map.Entry<String, AccountData> entry : accountSpecificData.entrySet()) {
+                if (sqliteStorage.getSetting("migrated_" + entry.getKey()) == null) {
+                    reloadedAccounts.putIfAbsent(entry.getKey(), entry.getValue());
+                }
+            }
         }
 
         accountSpecificData = reloadedAccounts;
