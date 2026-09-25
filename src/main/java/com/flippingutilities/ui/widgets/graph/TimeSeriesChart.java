@@ -85,7 +85,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
         List<TimeseriesPoint> dataPoints = timeseries.getData();
         if (dataPoints.isEmpty()) {
-            dimension.setSize(config.getWidth(), config.getHeight());
+            dimension.setSize(mutableWidth, mutableHeight);
             return dimension;
         }
 
@@ -107,7 +107,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         drawOfferLine(g2d, bounds, priceRange);
         drawHorizontalPriceLine(g2d, bounds, priceRange);
 
-        dimension.setSize(config.getWidth(), config.getHeight());
+        dimension.setSize(mutableWidth, mutableHeight);
         return dimension;
     }
 
@@ -546,7 +546,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         g2d.setFont(config.getLabelFont());
         FontMetrics fm = g2d.getFontMetrics();
 
-        int bottomY = position.y + config.getHeight() - LABEL_PADDING;
+        int bottomY = position.y + mutableHeight - LABEL_PADDING;
         long currentTimeSeconds = System.currentTimeMillis() / 1000;
         String[] timeLabels = TimeLabelGenerator.generate(timestep, currentTimeSeconds);
         int divisions = timestep.getLabelCount() - 1;

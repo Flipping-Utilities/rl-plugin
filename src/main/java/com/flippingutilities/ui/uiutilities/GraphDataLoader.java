@@ -23,10 +23,20 @@ public final class GraphDataLoader {
     }
 
     public void load(int itemId, Timestep timestep, Consumer<TimeseriesResponse> onData) {
+        load(itemId, timestep, onData, failure -> { });
+    }
+
+    public void load(int itemId, Timestep timestep, Consumer<TimeseriesResponse> onData,
+                     Consumer<Throwable> onFailure) {
         long requestGeneration = generation.incrementAndGet();
-        fetcher.fetch(itemId, timestep, response -> clientThread.invokeLater(() -> {
-            if (generation.get() == requestGeneration) {
+        fetcher.fetch(itemId, timestep).whenComplete((response, failure) -> clientThread.invokeLater(() -> {
+            if (generation.get() != requestGeneration) {
+                return;
+            }
+            if (failure == null) {
                 onData.accept(response);
+            } else {
+                onFailure.accept(failure);
             }
         }));
     }

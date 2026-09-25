@@ -57,10 +57,31 @@ public class SlotStateDrawerTest {
         assertEquals("5m", fixture.http.calls.get(2).request().url().queryParameter("timestep"));
     }
 
+    @Test
+    public void failedQuickLookCanRetryFromTheMagnifierWithoutLeavingTheSlot() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.slot.child.mouseOver.run(null);
+        fixture.drawer.onBeforeRender(new BeforeRender());
+        fixture.http.calls.get(0).fail();
+        QuickLookTooltip tooltip = (QuickLookTooltip) fixture.tooltips.getTooltips().get(0).getComponent();
+        assertTrue(tooltip.canRetryGraph());
+        fixture.slot.child.click.run(null);
+        assertFalse(tooltip.canRetryGraph());
+        fixture.tooltips.clear();
+        fixture.drawer.onBeforeRender(new BeforeRender());
+        assertEquals(2, fixture.http.calls.size());
+        fixture.http.calls.get(1).respond(200, "{\"data\":[]}");
+        QuickLookTooltip retried = (QuickLookTooltip) fixture.tooltips.getTooltips().get(0).getComponent();
+        assertFalse(retried.canRetryGraph());
+        fixture.drawer.onBeforeRender(new BeforeRender());
+        assertEquals("An empty history must not retry on every frame", 2, fixture.http.calls.size());
+    }
+
     private static class Fixture {
         int itemId = 4151;
         Timestep timestep = Timestep.ONE_HOUR;
         final ManualClient http = new ManualClient();
+        final TooltipManager tooltips = new TooltipManager();
         final WidgetBoundary slot = new WidgetBoundary(null);
         final WidgetBoundary geWindow = new WidgetBoundary(null);
         final SlotStateDrawer drawer;
@@ -102,7 +123,7 @@ public class SlotStateDrawerTest {
                 }
                 return defaultValue(method.getReturnType());
             });
-            drawer = new SlotStateDrawer(plugin, new TooltipManager(), client, new TimeseriesFetcher(http, plugin));
+            drawer = new SlotStateDrawer(plugin, tooltips, client, new TimeseriesFetcher(http, plugin));
             WikiRequest wiki = new WikiRequest();
             Map<Integer, WikiItemMargins> margins = new HashMap<>();
             margins.put(4151, new WikiItemMargins());
@@ -118,6 +139,7 @@ public class SlotStateDrawerTest {
         final Widget widget;
         WidgetBoundary child;
         JavaScriptCallback mouseOver;
+        JavaScriptCallback click;
         WidgetBoundary(WidgetBoundary parent) {
             widget = proxy(Widget.class, (proxy, method, args) -> {
                 switch (method.getName()) {
@@ -127,6 +149,9 @@ public class SlotStateDrawerTest {
                     case "createChild":
                         child = new WidgetBoundary(this);
                         return child.widget;
+                    case "setOnClickListener":
+                        click = (JavaScriptCallback) ((Object[]) args[0])[0];
+                        return null;
                     case "setOnMouseOverListener":
                         mouseOver = (JavaScriptCallback) ((Object[]) args[0])[0];
                         return null;
