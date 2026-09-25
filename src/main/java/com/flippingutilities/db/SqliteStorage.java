@@ -526,6 +526,7 @@ public class SqliteStorage {
      */
     private List<RecipeFlipGroup> loadRecipeFlipGroups(int accountId, String displayName) {
         List<RecipeFlipGroup> groups = new ArrayList<>();
+        Map<Long, RecipeFlip> flipsById = new HashMap<>();
 
         String groupSql = "SELECT id, recipe_key, coin_cost, timestamp FROM recipe_flips " +
             "WHERE account_id = ? ORDER BY recipe_key, timestamp";
@@ -546,18 +547,13 @@ public class SqliteStorage {
                         // Get or create the group
                         RecipeFlipGroup group = groupMap.computeIfAbsent(recipeKey, RecipeFlipGroup::new);
 
-                        // Load inputs and outputs for this recipe flip
-                        Map<Integer, Map<String, PartialOffer>> inputs = loadRecipeFlipComponents(recipeFlipId, displayName, true);
-                        Map<Integer, Map<String, PartialOffer>> outputs = loadRecipeFlipComponents(recipeFlipId, displayName, false);
-
-                        // Create RecipeFlip
                         RecipeFlip flip = new RecipeFlip(
                             Instant.ofEpochMilli(timestamp),
-                            outputs,
-                            inputs,
+                            new HashMap<>(),
+                            new HashMap<>(),
                             coinCost
                         );
-
+                        flipsById.put(recipeFlipId, flip);
                         group.getRecipeFlips().add(flip);
                     }
 
@@ -568,19 +564,31 @@ public class SqliteStorage {
             throw new IllegalStateException("Error loading recipe flip groups", e);
         }
 
+        // Each side is read once for the account, rather than opening two queries per
+        // flip. Populate the existing maps so components never need a second copy.
+        if (!flipsById.isEmpty()) {
+            loadRecipeFlipComponents(accountId, displayName, flipsById, true);
+            loadRecipeFlipComponents(accountId, displayName, flipsById, false);
+        }
         return groups;
     }
 
     /** Recipe snapshots remain valid even after their source trade leaves item history. */
-    private Map<Integer, Map<String, PartialOffer>> loadRecipeFlipComponents(long recipeFlipId,
-                                                                           String displayName, boolean inputs) {
-        Map<Integer, Map<String, PartialOffer>> components = new HashMap<>();
+    private void loadRecipeFlipComponents(int accountId, String displayName,
+                                          Map<Long, RecipeFlip> flipsById, boolean inputs) {
         String table = inputs ? "recipe_flip_inputs" : "recipe_flip_outputs";
-        String sql = "SELECT item_id, offer_uuid, amount_consumed, offer_json FROM " + table + " WHERE recipe_flip_id = ?";
+        String sql = "SELECT c.recipe_flip_id, c.item_id, c.offer_uuid, c.amount_consumed, c.offer_json " +
+            "FROM recipe_flips f JOIN " + table + " c ON c.recipe_flip_id = f.id WHERE f.account_id = ?";
         try (PreparedStatement ps = getConnection().prepareStatement(sql)) {
-            ps.setLong(1, recipeFlipId);
+            ps.setInt(1, accountId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    RecipeFlip flip = flipsById.get(rs.getLong("recipe_flip_id"));
+                    if (flip == null) {
+                        // Another connection may have inserted a flip since metadata was read.
+                        continue;
+                    }
+                    Map<Integer, Map<String, PartialOffer>> components = inputs ? flip.getInputs() : flip.getOutputs();
                     int itemId = rs.getInt("item_id");
                     String uuid = rs.getString("offer_uuid");
                     OfferEvent offer = SLOT_GSON.fromJson(rs.getString("offer_json"), OfferEvent.class);
@@ -596,7 +604,6 @@ public class SqliteStorage {
         } catch (SQLException e) {
             throw new IllegalStateException("Error loading recipe components", e);
         }
-        return components;
     }
 
     /**
