@@ -64,8 +64,10 @@ and leaves migration incomplete instead of claiming a successful zero-price impo
    (state), `t` (time), `id` (item ID) and `b` (buy/sell). Compare backups if any
    reference is unresolved. Redact account names when sharing results.
 5. To demonstrate the pre-fix failure with real data, create a separate worktree at
-   `5d1feb32dddec12d80f0a5e90388ddb32901059c`. Copy the updated
-   `RealDataMigrationTest.java` and fixture copies there, then run that test. The new
+   `5d1feb32dddec12d80f0a5e90388ddb32901059c`. Copy
+   `RealDataMigrationTest.java` from commit `e9fcdd6` and fixture copies there, then
+   run that test. That test version matches the earlier schema; later versions use
+   the simplified recipe tables. The component
    component parity assertions should identify the first lost value. This operation
    belongs only in the separate reproduction worktree; do not alter the fixed branch.
 6. For the actual UI path, use a disposable RuneLite profile with copies of the data.

@@ -31,8 +31,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 
@@ -96,6 +98,9 @@ public class SqliteStorage {
     static String serializeRecipeOffer(PartialOffer component) throws SQLException {
         if (component.getOffer() == null) {
             throw new SQLException("Cannot persist recipe: missing offer " + component.getOfferUuid());
+        }
+        if (component.getOffer().getTime() == null) {
+            throw new SQLException("Cannot persist recipe: missing offer timestamp " + component.getOfferUuid());
         }
         return serializeOffer(component.getOffer());
     }
@@ -502,13 +507,8 @@ public class SqliteStorage {
     private List<RecipeFlipGroup> loadRecipeFlipGroups(int accountId, String displayName) {
         List<RecipeFlipGroup> groups = new ArrayList<>();
 
-        // Get all recipe flip events for this account, grouped by recipe_key
-        String groupSql = "SELECT rf.recipe_key, rf.id as recipe_flip_id, rf.coin_cost, " +
-            "e.id as event_id, e.timestamp, e.profit, e.cost " +
-            "FROM recipe_flips rf " +
-            "JOIN events e ON rf.event_id = e.id " +
-            "WHERE e.account_id = ? " +
-            "ORDER BY rf.recipe_key, e.timestamp";
+        String groupSql = "SELECT id, recipe_key, coin_cost, timestamp FROM recipe_flips " +
+            "WHERE account_id = ? ORDER BY recipe_key, timestamp";
 
         try {
             Connection conn = getConnection();
@@ -519,9 +519,9 @@ public class SqliteStorage {
 
                     while (rs.next()) {
                         String recipeKey = rs.getString("recipe_key");
-                        long eventTimestamp = rs.getLong("timestamp");
+                        long timestamp = rs.getLong("timestamp");
                         long coinCost = rs.getLong("coin_cost");
-                        long recipeFlipId = rs.getLong("recipe_flip_id");
+                        long recipeFlipId = rs.getLong("id");
 
                         // Get or create the group
                         RecipeFlipGroup group = groupMap.computeIfAbsent(recipeKey, RecipeFlipGroup::new);
@@ -532,7 +532,7 @@ public class SqliteStorage {
 
                         // Create RecipeFlip
                         RecipeFlip flip = new RecipeFlip(
-                            Instant.ofEpochMilli(eventTimestamp),
+                            Instant.ofEpochMilli(timestamp),
                             outputs,
                             inputs,
                             coinCost
@@ -586,11 +586,8 @@ public class SqliteStorage {
     private List<FlippingItem> loadTradeItems(int accountId, String displayName, Map<Integer, OfferEvent> slots) {
         Map<Integer, List<OfferEvent>> offersByItem = new HashMap<>();
 
-        // Load all trades for this account, grouped by item. NOTE: qty-0 rows (trades fully
-        // consumed by recipe flips) are included on purpose — they are legitimate history and
-        // recipe PartialOffers hydrate from them. Excluding them here made reloadFromSqlite
-        // shrink the in-memory history, and the next storeData() then overwrote the JSON with
-        // the degraded state, permanently destroying those offers in both backends.
+        // Load original offers, including those fully consumed by recipes. Recipe
+        // consumption is applied by the account model without removing stored history.
         String sql = "SELECT item_id, offer_json FROM trades WHERE account_id = ? ORDER BY item_id, timestamp, id";
         try {
             Connection conn = getConnection();
@@ -760,11 +757,9 @@ public class SqliteStorage {
     /** Records the original offer, preserving classification and continuity across reloads. */
     public synchronized void recordTrade(String displayName, OfferEvent offer) {
         int accountId = getOrCreateAccountId(displayName);
-        long tax = offer.isBuy() || offer.getTime() == null ? 0L
-            : (long) offer.getTaxPaidPerItem() * offer.getCurrentQuantityInTrade();
         String sql = "INSERT OR IGNORE INTO trades " +
-            "(account_id, item_id, uuid, timestamp, qty, price, is_buy, tax, offer_json) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            "(account_id, item_id, uuid, timestamp, qty, price, is_buy, offer_json) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement statement = getConnection().prepareStatement(sql)) {
             statement.setInt(1, accountId);
             statement.setInt(2, offer.getItemId());
@@ -773,8 +768,7 @@ public class SqliteStorage {
             statement.setInt(5, offer.getCurrentQuantityInTrade());
             statement.setInt(6, offer.getPreTaxPrice());
             statement.setInt(7, offer.isBuy() ? 1 : 0);
-            statement.setLong(8, tax);
-            statement.setString(9, serializeOffer(offer));
+            statement.setString(8, serializeOffer(offer));
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to record trade for " + displayName, e);
@@ -794,38 +788,18 @@ public class SqliteStorage {
         }
         int accountId = getOrCreateAccountId(displayName);
 
-        final String sql = "INSERT OR REPLACE INTO active_slots (" +
-            "id, account_id, slot_index, offer_uuid, item_id, is_buy, price, qty, total_qty, state, time, trade_started_at, offer_json, history_visible" +
-            ") VALUES ((SELECT id FROM active_slots WHERE account_id = ? AND slot_index = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        final String sql = "INSERT OR REPLACE INTO active_slots " +
+            "(account_id, slot_index, offer_uuid, offer_json, history_visible) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement ps = getConnection().prepareStatement(sql)) {
             ps.setInt(1, accountId);
             ps.setInt(2, slotIndex);
-            ps.setInt(3, accountId);
-            ps.setInt(4, slotIndex);
-            ps.setString(5, offer.getUuid());
-            ps.setInt(6, offer.getItemId());
-            ps.setBoolean(7, offer.isBuy());
-            ps.setInt(8, offer.getPreTaxPrice());
-            ps.setInt(9, offer.getCurrentQuantityInTrade());
-            ps.setInt(10, offer.getTotalQuantityInTrade());
-            ps.setString(11, offer.getState().name());
-            ps.setObject(12, offer.getTime() == null ? null : offer.getTime().toEpochMilli());
-            ps.setObject(13, offer.getTradeStartedAt() == null ? null : offer.getTradeStartedAt().toEpochMilli());
-            ps.setString(14, serializeOffer(offer));
-            ps.setBoolean(15, historyVisible);
+            ps.setString(3, offer.getUuid());
+            ps.setString(4, serializeOffer(offer));
+            ps.setBoolean(5, historyVisible);
             ps.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Could not persist active slot for " + displayName, e);
         }
-    }
-
-    /**
-     * Load all active slots for an account.
-     * @param displayName Account display name
-     * @return Map of slot index to OfferEvent (empty slots excluded)
-     */
-    public synchronized Map<Integer, OfferEvent> loadAllSlots(String displayName) {
-        return loadAllSlots(displayName, null);
     }
 
     private Map<Integer, OfferEvent> loadAllSlots(String displayName, Map<Integer, OfferEvent> partialHistory) {
@@ -845,16 +819,12 @@ public class SqliteStorage {
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         int idx = rs.getInt("slot_index");
-                        if (rs.wasNull()) {
-                            continue;
-                        }
-
                         OfferEvent offer = SLOT_GSON.fromJson(rs.getString("offer_json"), OfferEvent.class);
                         offer.setMadeBy(displayName);
 
                         if (!offer.isComplete() && !offer.isCausedByEmptySlot()) {
                             slots.put(idx, offer);
-                            if (partialHistory != null && rs.getBoolean("history_visible")) {
+                            if (rs.getBoolean("history_visible")) {
                                 partialHistory.put(idx, offer);
                             }
                         }
@@ -928,42 +898,6 @@ public class SqliteStorage {
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Error upserting ge_limit_state", e);
-        }
-    }
-
-/**
-     * Load GE limit state for an item.
-     * @param displayName Account display name
-     * @param itemId Item ID
-     * @return Map with nextRefresh and itemsBought, or null if not found
-     */
-    public synchronized Map<String, Object> loadGeLimitState(String displayName, int itemId) {
-        Integer accountId = getAccountId(displayName);
-        if (accountId == null) {
-            return null;
-        }
-
-        final String sql = "SELECT next_refresh, items_bought, items_bought_complete FROM ge_limit_state WHERE account_id = ? AND item_id = ?";
-        try {
-            Connection conn = getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
-                ps.setInt(2, itemId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (!rs.next()) {
-                        return null;
-                    }
-                    long nextRefreshMillis = rs.getLong("next_refresh");
-                    int itemsBought = rs.getInt("items_bought");
-                    Map<String, Object> result = new HashMap<>();
-                    result.put("nextRefresh", Instant.ofEpochMilli(nextRefreshMillis));
-                    result.put("itemsBought", itemsBought);
-                    result.put("itemsBoughtThroughCompleteOffers", rs.getInt("items_bought_complete"));
-                    return result;
-                }
-            }
-        } catch (SQLException e) {
-            throw new IllegalStateException("Error loading ge_limit_state", e);
         }
     }
 
@@ -1054,35 +988,6 @@ public class SqliteStorage {
     }
 
     /**
-     * Load favorite status for a specific item.
-     * @return Map with "isFavorite" (boolean) and "favoriteCode" (String), or null
-     */
-    public synchronized Map<String, Object> loadFavorite(String displayName, int itemId) {
-        Integer accountId = getAccountId(displayName);
-        if (accountId == null) return null;
-
-        String sql = "SELECT is_favorite, favorite_code FROM item_favorites WHERE account_id = ? AND item_id = ?";
-        try {
-            Connection conn = getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
-                ps.setInt(2, itemId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        Map<String, Object> result = new HashMap<>(2);
-                        result.put("isFavorite", rs.getInt("is_favorite") == 1);
-                        result.put("favoriteCode", rs.getString("favorite_code"));
-                        return result;
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            throw new IllegalStateException("Error loading favorite", e);
-        }
-        return null;
-    }
-
-    /**
      * Load all favorites for an account.
      * @return Map of itemId -> Map with "isFavorite" and "favoriteCode"
      */
@@ -1115,7 +1020,7 @@ public class SqliteStorage {
     // --- Deletion paths (SQLite mode must support the same deletions as the JSON mode) ---
 
     /**
-     * Delete ALL data for an account (trades, events, consumption, recipe flips, slots,
+     * Delete ALL data for an account (trades, recipe flips, slots,
      * favorites, GE limit state, session time, and the migrated_ flag). Mirrors
      * TradePersister.deleteFile for the JSON backend.
      */
@@ -1130,13 +1035,10 @@ public class SqliteStorage {
             conn.setAutoCommit(false);
             try {
                 execDelete(conn, "DELETE FROM recipe_flip_inputs WHERE recipe_flip_id IN " +
-                    "(SELECT rf.id FROM recipe_flips rf JOIN events e ON rf.event_id = e.id WHERE e.account_id = ?)", accountId);
+                    "(SELECT id FROM recipe_flips WHERE account_id = ?)", accountId);
                 execDelete(conn, "DELETE FROM recipe_flip_outputs WHERE recipe_flip_id IN " +
-                    "(SELECT rf.id FROM recipe_flips rf JOIN events e ON rf.event_id = e.id WHERE e.account_id = ?)", accountId);
-                execDelete(conn, "DELETE FROM recipe_flips WHERE event_id IN (SELECT id FROM events WHERE account_id = ?)", accountId);
-                execDelete(conn, "DELETE FROM consumed_trade WHERE event_id IN (SELECT id FROM events WHERE account_id = ?)", accountId);
-                execDelete(conn, "DELETE FROM consumed_trade WHERE trade_id IN (SELECT id FROM trades WHERE account_id = ?)", accountId);
-                execDelete(conn, "DELETE FROM events WHERE account_id = ?", accountId);
+                    "(SELECT id FROM recipe_flips WHERE account_id = ?)", accountId);
+                execDelete(conn, "DELETE FROM recipe_flips WHERE account_id = ?", accountId);
                 execDelete(conn, "DELETE FROM trades WHERE account_id = ?", accountId);
                 execDelete(conn, "DELETE FROM ge_limit_state WHERE account_id = ?", accountId);
                 execDelete(conn, "DELETE FROM active_slots WHERE account_id = ?", accountId);
@@ -1161,10 +1063,7 @@ public class SqliteStorage {
         }
     }
 
-    /**
-     * Delete specific trades by their offer uuid (the per-item offer-deletion flow), together
-     * with the events they back and their consumption rows.
-     */
+    /** Deletes offers and every recipe that references them, scoped to one account. */
     public synchronized void deleteTradesByUuid(String displayName, List<String> uuids) {
         if (uuids == null || uuids.isEmpty()) {
             return;
@@ -1178,69 +1077,38 @@ public class SqliteStorage {
             boolean wasAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             try {
-                List<Long> tradeIds = new ArrayList<>();
                 for (int i = 0; i < uuids.size(); i += 500) {
                     List<String> chunk = uuids.subList(i, Math.min(i + 500, uuids.size()));
                     String placeholders = String.join(",", Collections.nCopies(chunk.size(), "?"));
-                    // A deleted partial fill still belongs to the live slot for offer
-                    // continuity, but must not reappear in history after restarting.
+                    // Preserve active-slot continuity while hiding the deleted partial fill.
                     try (PreparedStatement ps = conn.prepareStatement(
                         "UPDATE active_slots SET history_visible = 0 WHERE account_id = ? AND offer_uuid IN (" + placeholders + ")")) {
-                        ps.setInt(1, accountId);
-                        int idx = 2;
-                        for (String uuid : chunk) {
-                            ps.setString(idx++, uuid);
-                        }
+                        bindAccountUuids(ps, accountId, chunk);
                         ps.executeUpdate();
                     }
-                    try (PreparedStatement ps = conn.prepareStatement(
-                        "SELECT id FROM trades WHERE account_id = ? AND uuid IN (" + placeholders + ")")) {
-                        ps.setInt(1, accountId);
-                        int idx = 2;
-                        for (String uuid : chunk) {
-                            ps.setString(idx++, uuid);
-                        }
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                tradeIds.add(rs.getLong(1));
+                    Set<Long> recipeIds = new HashSet<>();
+                    for (String table : new String[]{"recipe_flip_inputs", "recipe_flip_outputs"}) {
+                        try (PreparedStatement ps = conn.prepareStatement(
+                            "SELECT DISTINCT c.recipe_flip_id FROM " + table + " c " +
+                            "JOIN recipe_flips rf ON rf.id = c.recipe_flip_id " +
+                            "WHERE rf.account_id = ? AND c.offer_uuid IN (" + placeholders + ")")) {
+                            bindAccountUuids(ps, accountId, chunk);
+                            try (ResultSet rs = ps.executeQuery()) {
+                                while (rs.next()) {
+                                    recipeIds.add(rs.getLong(1));
+                                }
                             }
                         }
                     }
-                }
-                if (tradeIds.isEmpty()) {
-                    conn.commit();
-                    return;
-                }
-
-                List<Long> eventIds = new ArrayList<>();
-                for (int i = 0; i < tradeIds.size(); i += 500) {
-                    List<Long> chunk = tradeIds.subList(i, Math.min(i + 500, tradeIds.size()));
-                    String placeholders = String.join(",", Collections.nCopies(chunk.size(), "?"));
+                    deleteRecipeFlipsById(conn, new ArrayList<>(recipeIds));
                     try (PreparedStatement ps = conn.prepareStatement(
-                        "SELECT DISTINCT event_id FROM consumed_trade WHERE event_id IS NOT NULL AND trade_id IN (" + placeholders + ")")) {
-                        int idx = 1;
-                        for (Long tradeId : chunk) {
-                            ps.setLong(idx++, tradeId);
-                        }
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                eventIds.add(rs.getLong(1));
-                            }
-                        }
+                        "DELETE FROM trades WHERE account_id = ? AND uuid IN (" + placeholders + ")")) {
+                        bindAccountUuids(ps, accountId, chunk);
+                        ps.executeUpdate();
                     }
-                }
-                if (!eventIds.isEmpty()) {
-                    deleteEventsById(conn, eventIds);
-                }
-
-                for (int i = 0; i < tradeIds.size(); i += 500) {
-                    List<Long> chunk = tradeIds.subList(i, Math.min(i + 500, tradeIds.size()));
-                    String placeholders = String.join(",", Collections.nCopies(chunk.size(), "?"));
-                    execDeleteByLongs(conn, "DELETE FROM consumed_trade WHERE trade_id IN (" + placeholders + ")", chunk);
-                    execDeleteByLongs(conn, "DELETE FROM trades WHERE id IN (" + placeholders + ")", chunk);
                 }
                 conn.commit();
-                logger.info("Deleted {} SQLite trades by uuid for {}", tradeIds.size(), displayName);
+                logger.info("Deleted SQLite offers by uuid for {}", displayName);
             } catch (SQLException e) {
                 conn.rollback();
                 throw e;
@@ -1252,9 +1120,16 @@ public class SqliteStorage {
         }
     }
 
+    private void bindAccountUuids(PreparedStatement statement, int accountId, List<String> uuids) throws SQLException {
+        statement.setInt(1, accountId);
+        for (int i = 0; i < uuids.size(); i++) {
+            statement.setString(i + 2, uuids.get(i));
+        }
+    }
+
     /**
      * Delete a single recipe flip (the per-flip delete button in the recipe panel) together
-     * with its components and consumption rows. Identified by the same natural key that both
+     * with its components. Identified by the same natural key that both
      * the migration and insertRecipeFlip use, so migrated and live-created flips are covered.
      */
     public synchronized void deleteRecipeFlip(String displayName, String recipeKey, Instant timeOfCreation) {
@@ -1268,24 +1143,24 @@ public class SqliteStorage {
         String naturalKey = "recipe:" + accountId + ":" + recipeKey + ":" + timeOfCreation.toEpochMilli();
         try {
             Connection conn = getConnection();
-            Long eventId = null;
+            Long recipeId = null;
             try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT id FROM events WHERE account_id = ? AND natural_key = ?")) {
+                "SELECT id FROM recipe_flips WHERE account_id = ? AND natural_key = ?")) {
                 ps.setInt(1, accountId);
                 ps.setString(2, naturalKey);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
-                        eventId = rs.getLong(1);
+                        recipeId = rs.getLong(1);
                     }
                 }
             }
-            if (eventId == null) {
+            if (recipeId == null) {
                 return;
             }
             boolean wasAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             try {
-                deleteEventsById(conn, Collections.singletonList(eventId));
+                deleteRecipeFlipsById(conn, Collections.singletonList(recipeId));
                 conn.commit();
                 logger.info("Deleted SQLite recipe flip {} for {}", naturalKey, displayName);
             } catch (SQLException e) {
@@ -1316,28 +1191,27 @@ public class SqliteStorage {
         long sinceMillis = since != null ? since.toEpochMilli() : 0L;
         try {
             Connection conn = getConnection();
-            List<Long> eventIds = new ArrayList<>();
+            List<Long> recipeIds = new ArrayList<>();
             try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT e.id FROM events e JOIN recipe_flips rf ON rf.event_id = e.id " +
-                "WHERE e.account_id = ? AND e.type = 'recipe' AND rf.recipe_key = ? AND e.timestamp > ?")) {
+                "SELECT id FROM recipe_flips WHERE account_id = ? AND recipe_key = ? AND timestamp > ?")) {
                 ps.setInt(1, accountId);
                 ps.setString(2, recipeKey);
                 ps.setLong(3, sinceMillis);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
-                        eventIds.add(rs.getLong(1));
+                        recipeIds.add(rs.getLong(1));
                     }
                 }
             }
-            if (eventIds.isEmpty()) {
+            if (recipeIds.isEmpty()) {
                 return;
             }
             boolean wasAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             try {
-                deleteEventsById(conn, eventIds);
+                deleteRecipeFlipsById(conn, recipeIds);
                 conn.commit();
-                logger.info("Deleted {} SQLite recipe flips for {} [{}] since {}", eventIds.size(), displayName, recipeKey, since);
+                logger.info("Deleted {} SQLite recipe flips for {} [{}] since {}", recipeIds.size(), displayName, recipeKey, since);
             } catch (SQLException e) {
                 conn.rollback();
                 throw e;
@@ -1349,20 +1223,13 @@ public class SqliteStorage {
         }
     }
 
-    /**
-     * Delete events plus everything hanging off them (recipe components, consumption rows).
-     */
-    private void deleteEventsById(Connection conn, List<Long> eventIds) throws SQLException {
-        for (int i = 0; i < eventIds.size(); i += 500) {
-            List<Long> chunk = eventIds.subList(i, Math.min(i + 500, eventIds.size()));
+    private void deleteRecipeFlipsById(Connection conn, List<Long> recipeIds) throws SQLException {
+        for (int i = 0; i < recipeIds.size(); i += 500) {
+            List<Long> chunk = recipeIds.subList(i, Math.min(i + 500, recipeIds.size()));
             String placeholders = String.join(",", Collections.nCopies(chunk.size(), "?"));
-            execDeleteByLongs(conn, "DELETE FROM recipe_flip_inputs WHERE recipe_flip_id IN " +
-                "(SELECT id FROM recipe_flips WHERE event_id IN (" + placeholders + "))", chunk);
-            execDeleteByLongs(conn, "DELETE FROM recipe_flip_outputs WHERE recipe_flip_id IN " +
-                "(SELECT id FROM recipe_flips WHERE event_id IN (" + placeholders + "))", chunk);
-            execDeleteByLongs(conn, "DELETE FROM recipe_flips WHERE event_id IN (" + placeholders + ")", chunk);
-            execDeleteByLongs(conn, "DELETE FROM consumed_trade WHERE event_id IN (" + placeholders + ")", chunk);
-            execDeleteByLongs(conn, "DELETE FROM events WHERE id IN (" + placeholders + ")", chunk);
+            execDeleteByLongs(conn, "DELETE FROM recipe_flip_inputs WHERE recipe_flip_id IN (" + placeholders + ")", chunk);
+            execDeleteByLongs(conn, "DELETE FROM recipe_flip_outputs WHERE recipe_flip_id IN (" + placeholders + ")", chunk);
+            execDeleteByLongs(conn, "DELETE FROM recipe_flips WHERE id IN (" + placeholders + ")", chunk);
         }
     }
 
@@ -1383,69 +1250,19 @@ public class SqliteStorage {
         }
     }
 
-    // --- Live recipe flip persistence ---
-
-    /**
-     * Persist a recipe flip created at runtime (so it survives restarts in SQLite mode).
-     * Idempotent via the same natural-key scheme the migration uses.
-     */
+    /** Persists a live recipe atomically, using the same writer as migration. */
     public synchronized void insertRecipeFlip(String displayName, String recipeKey, RecipeFlip flip) {
         if (flip == null || flip.getTimeOfCreation() == null) {
             return;
         }
         int accountId = getOrCreateAccountId(displayName);
-        long timestamp = flip.getTimeOfCreation().toEpochMilli();
-        String naturalKey = "recipe:" + accountId + ":" + recipeKey + ":" + timestamp;
         try {
             Connection conn = getConnection();
             boolean wasAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             try {
-                long eventId;
-                // Detect the OR IGNORE skip via the update count; getGeneratedKeys() after an
-                // ignored insert returns a stale rowid.
-                try (PreparedStatement ps = conn.prepareStatement(
-                    "INSERT OR IGNORE INTO events (account_id, timestamp, type, cost, profit, note, natural_key) VALUES (?, ?, 'recipe', ?, ?, NULL, ?)",
-                    Statement.RETURN_GENERATED_KEYS)) {
-                    ps.setInt(1, accountId);
-                    ps.setLong(2, timestamp);
-                    ps.setLong(3, flip.getExpense());
-                    ps.setLong(4, flip.getProfit());
-                    ps.setString(5, naturalKey);
-                    if (ps.executeUpdate() == 0) {
-                        conn.commit();
-                        return; // already persisted (e.g. re-run)
-                    }
-                    try (ResultSet rs = ps.getGeneratedKeys()) {
-                        if (!rs.next()) {
-                            conn.commit();
-                            return;
-                        }
-                        eventId = rs.getLong(1);
-                    }
-                }
-
-                long recipeFlipId;
-                try (PreparedStatement ps = conn.prepareStatement(
-                    "INSERT INTO recipe_flips (event_id, recipe_key, coin_cost) VALUES (?, ?, ?)",
-                    Statement.RETURN_GENERATED_KEYS)) {
-                    ps.setLong(1, eventId);
-                    ps.setString(2, recipeKey);
-                    ps.setLong(3, flip.getCoinCost());
-                    ps.executeUpdate();
-                    try (ResultSet rs = ps.getGeneratedKeys()) {
-                        if (!rs.next()) {
-                            conn.commit();
-                            return;
-                        }
-                        recipeFlipId = rs.getLong(1);
-                    }
-                }
-
-                insertRecipeFlipComponents(conn, accountId, eventId, recipeFlipId, flip.getInputs(), true);
-                insertRecipeFlipComponents(conn, accountId, eventId, recipeFlipId, flip.getOutputs(), false);
+                insertRecipeFlip(conn, accountId, recipeKey, flip);
                 conn.commit();
-                logger.debug("Persisted recipe flip to SQLite for account={}, recipeKey={}", displayName, recipeKey);
             } catch (SQLException e) {
                 conn.rollback();
                 throw e;
@@ -1457,58 +1274,58 @@ public class SqliteStorage {
         }
     }
 
-    private void insertRecipeFlipComponents(Connection conn, int accountId, long eventId, long recipeFlipId,
-                                            Map<Integer, Map<String, PartialOffer>> components, boolean isInput) throws SQLException {
+    /** Caller owns the transaction; returns false when this flip was already persisted. */
+    static boolean insertRecipeFlip(Connection conn, int accountId, String recipeKey, RecipeFlip flip) throws SQLException {
+        if (flip == null || flip.getTimeOfCreation() == null) {
+            return false;
+        }
+        long timestamp = flip.getTimeOfCreation().toEpochMilli();
+        String naturalKey = "recipe:" + accountId + ":" + recipeKey + ":" + timestamp;
+        long recipeId;
+        try (PreparedStatement ps = conn.prepareStatement(
+            "INSERT INTO recipe_flips (account_id, timestamp, recipe_key, coin_cost, natural_key) " +
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT(natural_key) DO NOTHING", Statement.RETURN_GENERATED_KEYS)) {
+            ps.setInt(1, accountId);
+            ps.setLong(2, timestamp);
+            ps.setString(3, recipeKey);
+            ps.setLong(4, flip.getCoinCost());
+            ps.setString(5, naturalKey);
+            // An ignored insert leaves a stale rowid in sqlite-jdbc's generated keys.
+            if (ps.executeUpdate() == 0) {
+                return false;
+            }
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (!rs.next()) {
+                    throw new SQLException("Missing generated recipe id");
+                }
+                recipeId = rs.getLong(1);
+            }
+        }
+        insertRecipeFlipComponents(conn, recipeId, flip.getInputs(), true);
+        insertRecipeFlipComponents(conn, recipeId, flip.getOutputs(), false);
+        return true;
+    }
+
+    private static void insertRecipeFlipComponents(Connection conn, long recipeId,
+                                                   Map<Integer, Map<String, PartialOffer>> components, boolean inputs) throws SQLException {
         if (components == null) {
             return;
         }
-        String componentSql = isInput
-            ? "INSERT INTO recipe_flip_inputs (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)"
-            : "INSERT INTO recipe_flip_outputs (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement componentPs = conn.prepareStatement(componentSql);
-             // Clamps consumption to the trade's remaining quantity so recipe data referencing
-             // more than the trade holds (legacy/duplicate records) cannot over-consume it.
-             PreparedStatement consumedPs = conn.prepareStatement(
-                 "INSERT OR IGNORE INTO consumed_trade (trade_id, event_id, qty) " +
-                 "SELECT ?, ?, MIN(?, t.qty - COALESCE((SELECT SUM(qty) FROM consumed_trade ct2 WHERE ct2.trade_id = t.id), 0)) " +
-                 "FROM trades t " +
-                 "WHERE t.id = ? " +
-                 "AND t.qty - COALESCE((SELECT SUM(qty) FROM consumed_trade ct2 WHERE ct2.trade_id = t.id), 0) > 0")) {
+        String table = inputs ? "recipe_flip_inputs" : "recipe_flip_outputs";
+        try (PreparedStatement ps = conn.prepareStatement("INSERT INTO " + table +
+            " (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)")) {
             for (Map.Entry<Integer, Map<String, PartialOffer>> entry : components.entrySet()) {
-                int itemId = entry.getKey();
-                for (PartialOffer po : entry.getValue().values()) {
-                    if (po == null || po.getAmountConsumed() <= 0) {
-                        continue;
-                    }
-                    componentPs.setLong(1, recipeFlipId);
-                    componentPs.setInt(2, itemId);
-                    if (po.getOfferUuid() == null) {
-                        componentPs.setNull(3, Types.VARCHAR);
-                    } else {
-                        componentPs.setString(3, po.getOfferUuid());
-                    }
-                    componentPs.setInt(4, po.getAmountConsumed());
-                    componentPs.setString(5, serializeRecipeOffer(po));
-                    componentPs.executeUpdate();
-
-                    if (po.getOfferUuid() != null) {
-                        try (PreparedStatement lookup = conn.prepareStatement("SELECT id FROM trades WHERE account_id = ? AND uuid = ?")) {
-                            lookup.setInt(1, accountId);
-                            lookup.setString(2, po.getOfferUuid());
-                            try (ResultSet rs = lookup.executeQuery()) {
-                                if (rs.next()) {
-                                    long tradeId = rs.getLong(1);
-                                    consumedPs.setLong(1, tradeId);
-                                    consumedPs.setLong(2, eventId);
-                                    consumedPs.setInt(3, po.getAmountConsumed());
-                                    consumedPs.setLong(4, tradeId);
-                                    consumedPs.executeUpdate();
-                                }
-                            }
-                        }
-                    }
+                for (PartialOffer component : entry.getValue().values()) {
+                    if (component == null || component.getAmountConsumed() <= 0) continue;
+                    ps.setLong(1, recipeId);
+                    ps.setInt(2, entry.getKey());
+                    ps.setString(3, component.getOfferUuid());
+                    ps.setInt(4, component.getAmountConsumed());
+                    ps.setString(5, serializeRecipeOffer(component));
+                    ps.addBatch();
                 }
             }
+            ps.executeBatch();
         }
     }
 }

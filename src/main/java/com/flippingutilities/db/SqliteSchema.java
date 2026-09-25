@@ -27,20 +27,12 @@ public final class SqliteSchema {
 
     public static final String CREATE_TABLE_ACTIVE_SLOTS =
         "CREATE TABLE IF NOT EXISTS active_slots (" +
-        "  id INTEGER PRIMARY KEY," +
         "  account_id INTEGER NOT NULL," +
         "  slot_index INTEGER NOT NULL," +
         "  offer_uuid TEXT," +
-        "  item_id INTEGER," +
-        "  is_buy INTEGER," +
-        "  price INTEGER," +
-        "  qty INTEGER," +
-        "  total_qty INTEGER," +
-        "  state TEXT," +
-        "  time INTEGER," +
-        "  trade_started_at INTEGER," +
         "  offer_json TEXT NOT NULL," +
         "  history_visible INTEGER NOT NULL DEFAULT 0," +
+        "  PRIMARY KEY(account_id, slot_index)," +
         "  FOREIGN KEY(account_id) REFERENCES accounts(id)" +
         ");";
 
@@ -54,44 +46,20 @@ public final class SqliteSchema {
         "  qty INTEGER NOT NULL," +
         "  price INTEGER NOT NULL," +
         "  is_buy INTEGER NOT NULL," +
-        "  tax INTEGER DEFAULT 0," +
         "  offer_json TEXT NOT NULL," +
         "  FOREIGN KEY(account_id) REFERENCES accounts(id)," +
         "  UNIQUE(account_id, uuid)" +
         ");";
 
-    public static final String CREATE_TABLE_EVENTS =
-        "CREATE TABLE IF NOT EXISTS events (" +
-        "  id INTEGER PRIMARY KEY," +
-        "  account_id INTEGER NOT NULL," +
-        "  timestamp INTEGER NOT NULL," +
-        "  type TEXT NOT NULL," +
-        "  cost INTEGER," +
-        "  profit INTEGER," +
-        "  note TEXT," +
-        "  natural_key TEXT," +
-        "  FOREIGN KEY(account_id) REFERENCES accounts(id)" +
-        ");";
-
-    // event_id is nullable: a row with event_id=NULL represents a "voided" trade
-    // (consumed by the user themselves, not by any flip/recipe event).
-    public static final String CREATE_TABLE_CONSUMED_TRADE =
-        "CREATE TABLE IF NOT EXISTS consumed_trade (" +
-        "  trade_id INTEGER NOT NULL," +
-        "  event_id INTEGER," +
-        "  qty INTEGER NOT NULL," +
-        "  PRIMARY KEY (trade_id, event_id)," +
-        "  FOREIGN KEY(trade_id) REFERENCES trades(id)," +
-        "  FOREIGN KEY(event_id) REFERENCES events(id)" +
-        ");";
-
     public static final String CREATE_TABLE_RECIPE_FLIPS =
         "CREATE TABLE IF NOT EXISTS recipe_flips (" +
         "  id INTEGER PRIMARY KEY," +
-        "  event_id INTEGER," +
+        "  account_id INTEGER NOT NULL," +
+        "  timestamp INTEGER NOT NULL," +
         "  recipe_key TEXT," +
         "  coin_cost INTEGER," +
-        "  FOREIGN KEY(event_id) REFERENCES events(id)" +
+        "  natural_key TEXT NOT NULL UNIQUE," +
+        "  FOREIGN KEY(account_id) REFERENCES accounts(id)" +
         ");";
 
     public static final String CREATE_TABLE_RECIPE_FLIP_INPUTS =
@@ -154,35 +122,11 @@ public final class SqliteSchema {
         ");";
 
     // INDEX statements for common query patterns
-    public static final String INDEX_ACTIVE_SLOTS_ACCOUNT_TIME =
-        "CREATE INDEX IF NOT EXISTS idx_active_slots_account_time ON active_slots (account_id, time)";
-
-    public static final String INDEX_TRADES_ACCOUNT_TIMESTAMP =
-        "CREATE INDEX IF NOT EXISTS idx_trades_account_timestamp ON trades (account_id, timestamp)";
-
-    public static final String INDEX_TRADES_ITEM_TIMESTAMP =
-        "CREATE INDEX IF NOT EXISTS idx_trades_item_timestamp ON trades (item_id, timestamp)";
-
     public static final String INDEX_TRADES_ACCOUNT_ITEM_TIMESTAMP =
         "CREATE INDEX IF NOT EXISTS idx_trades_account_item_timestamp ON trades (account_id, item_id, timestamp)";
 
-    public static final String INDEX_CONSUMED_TRADE_TRADE_ID =
-        "CREATE INDEX IF NOT EXISTS idx_consumed_trade_trade_id ON consumed_trade (trade_id)";
-
-    public static final String INDEX_CONSUMED_TRADE_EVENT_ID =
-        "CREATE INDEX IF NOT EXISTS idx_consumed_trade_event_id ON consumed_trade (event_id)";
-
-    public static final String INDEX_EVENTS_ACCOUNT_TIMESTAMP =
-        "CREATE INDEX IF NOT EXISTS idx_events_account_timestamp ON events (account_id, timestamp)";
-
-    public static final String INDEX_TRADES_UUID =
-        "CREATE INDEX IF NOT EXISTS idx_trades_uuid ON trades (uuid)";
-
-    public static final String INDEX_ITEM_FAVORITES_ACCOUNT_ITEM =
-        "CREATE INDEX IF NOT EXISTS idx_item_favorites_account_item ON item_favorites (account_id, item_id)";
-
-    public static final String INDEX_RECIPE_FLIPS_RECIPE_KEY =
-        "CREATE INDEX IF NOT EXISTS idx_recipe_flips_recipe_key ON recipe_flips (recipe_key)";
+    public static final String INDEX_RECIPE_FLIPS_ACCOUNT_KEY_TIMESTAMP =
+        "CREATE INDEX IF NOT EXISTS idx_recipe_flips_account_key_timestamp ON recipe_flips (account_id, recipe_key, timestamp)";
 
     public static final String INDEX_RECIPE_FLIP_INPUTS_FLIP =
         "CREATE INDEX IF NOT EXISTS idx_recipe_flip_inputs_flip ON recipe_flip_inputs (recipe_flip_id)";
@@ -190,21 +134,17 @@ public final class SqliteSchema {
     public static final String INDEX_RECIPE_FLIP_OUTPUTS_FLIP =
         "CREATE INDEX IF NOT EXISTS idx_recipe_flip_outputs_flip ON recipe_flip_outputs (recipe_flip_id)";
 
-    // Partial unique index: at most one void (event_id IS NULL) per trade.
-    public static final String INDEX_CONSUMED_TRADE_VOID =
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_consumed_trade_void ON consumed_trade (trade_id) WHERE event_id IS NULL";
+    public static final String INDEX_RECIPE_FLIP_INPUTS_OFFER_UUID =
+        "CREATE INDEX IF NOT EXISTS idx_recipe_flip_inputs_offer_uuid ON recipe_flip_inputs (offer_uuid)";
 
-    // Partial unique index on events.natural_key for idempotent migration inserts.
-    public static final String INDEX_EVENTS_NATURAL_KEY =
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_natural_key ON events (natural_key) WHERE natural_key IS NOT NULL";
+    public static final String INDEX_RECIPE_FLIP_OUTPUTS_OFFER_UUID =
+        "CREATE INDEX IF NOT EXISTS idx_recipe_flip_outputs_offer_uuid ON recipe_flip_outputs (offer_uuid)";
 
     public static final List<String> getCreateStatementsInOrder() {
         return Arrays.asList(
             CREATE_TABLE_ACCOUNTS,
             CREATE_TABLE_ACTIVE_SLOTS,
             CREATE_TABLE_TRADES,
-            CREATE_TABLE_EVENTS,
-            CREATE_TABLE_CONSUMED_TRADE,
             CREATE_TABLE_RECIPE_FLIPS,
             CREATE_TABLE_RECIPE_FLIP_INPUTS,
             CREATE_TABLE_RECIPE_FLIP_OUTPUTS,
@@ -217,20 +157,12 @@ public final class SqliteSchema {
 
     public static final List<String> getIndexStatements() {
         return Arrays.asList(
-            INDEX_ACTIVE_SLOTS_ACCOUNT_TIME,
-            INDEX_TRADES_ACCOUNT_TIMESTAMP,
-            INDEX_TRADES_ITEM_TIMESTAMP,
             INDEX_TRADES_ACCOUNT_ITEM_TIMESTAMP,
-            INDEX_TRADES_UUID,
-            INDEX_RECIPE_FLIPS_RECIPE_KEY,
+            INDEX_RECIPE_FLIPS_ACCOUNT_KEY_TIMESTAMP,
             INDEX_RECIPE_FLIP_INPUTS_FLIP,
             INDEX_RECIPE_FLIP_OUTPUTS_FLIP,
-            INDEX_CONSUMED_TRADE_TRADE_ID,
-            INDEX_CONSUMED_TRADE_EVENT_ID,
-            INDEX_EVENTS_ACCOUNT_TIMESTAMP,
-            INDEX_ITEM_FAVORITES_ACCOUNT_ITEM,
-            INDEX_CONSUMED_TRADE_VOID,
-            INDEX_EVENTS_NATURAL_KEY
+            INDEX_RECIPE_FLIP_INPUTS_OFFER_UUID,
+            INDEX_RECIPE_FLIP_OUTPUTS_OFFER_UUID
         );
     }
 

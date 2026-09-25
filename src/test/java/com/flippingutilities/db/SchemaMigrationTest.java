@@ -18,8 +18,7 @@ import static org.junit.Assert.*;
 import static com.flippingutilities.db.StorageTestOffers.complete;
 
 /**
- * Verifies that the schema initializes at the expected version and that key constraints
- * (UNIQUE on trades.uuid, nullable consumed_trade.event_id) are present.
+ * Verifies the initial schema's version, lookup indexes, and data integrity constraints.
  */
 public class SchemaMigrationTest {
 
@@ -63,22 +62,25 @@ public class SchemaMigrationTest {
     private void assertRecipeComponentLookupsAreIndexed() throws Exception {
         for (String direction : new String[]{"inputs", "outputs"}) {
             String table = "recipe_flip_" + direction;
-            String query = "SELECT item_id, offer_uuid, amount_consumed, offer_json FROM " + table + " WHERE recipe_flip_id = ?";
-            boolean indexed = false;
-            StringBuilder plan = new StringBuilder();
-            try (PreparedStatement statement = storage.getConnection().prepareStatement("EXPLAIN QUERY PLAN " + query)) {
-                statement.setLong(1, 1L);
-                try (ResultSet results = statement.executeQuery()) {
-                    while (results.next()) {
-                        String detail = results.getString("detail");
-                        plan.append(detail).append('\n');
-                        if (detail.startsWith("SEARCH " + table + " ") && detail.contains("recipe_flip_id=?")) {
-                            indexed = true;
+            for (String lookupColumn : new String[]{"recipe_flip_id", "offer_uuid"}) {
+                String query = "SELECT item_id, offer_uuid, amount_consumed, offer_json FROM " + table +
+                    " WHERE " + lookupColumn + " = ?";
+                boolean indexed = false;
+                StringBuilder plan = new StringBuilder();
+                try (PreparedStatement statement = storage.getConnection().prepareStatement("EXPLAIN QUERY PLAN " + query)) {
+                    statement.setString(1, "1");
+                    try (ResultSet results = statement.executeQuery()) {
+                        while (results.next()) {
+                            String detail = results.getString("detail");
+                            plan.append(detail).append('\n');
+                            if (detail.startsWith("SEARCH " + table + " ") && detail.contains(lookupColumn + "=?")) {
+                                indexed = true;
+                            }
                         }
                     }
                 }
+                assertTrue("Recipe " + direction + " lookup by " + lookupColumn + " must use an index:\n" + plan, indexed);
             }
-            assertTrue("Loading each recipe must search its " + direction + " by flip ID:\n" + plan, indexed);
         }
     }
 
@@ -88,15 +90,11 @@ public class SchemaMigrationTest {
         storage.upsertAccount("GeAcct", null);
         storage.upsertGeLimitState("GeAcct", 4151, java.time.Instant.ofEpochMilli(1789500000000L), 110, 100);
 
-        java.util.Map<String, Object> state = storage.loadGeLimitState("GeAcct", 4151);
+        java.util.Map<String, Object> state = storage.loadAllGeLimitStates("GeAcct").get(4151);
         assertNotNull("GE limit state should be restored", state);
         assertEquals("items_bought must round-trip", 110, state.get("itemsBought"));
         assertEquals("items_bought_complete must round-trip",
             100, state.get("itemsBoughtThroughCompleteOffers"));
-
-        // The account-level load must restore BOTH counters onto the FlippingItem's history.
-        java.util.Map<Integer, java.util.Map<String, Object>> all = storage.loadAllGeLimitStates("GeAcct");
-        assertEquals(100, all.get(4151).get("itemsBoughtThroughCompleteOffers"));
     }
 
     @Test
@@ -119,6 +117,10 @@ public class SchemaMigrationTest {
                 "SELECT id, 4151, 1700000000000, 1, 100, 1 FROM accounts WHERE display_name = 'Acct'");
             assertInsertRejected(statement, "INSERT INTO active_slots (account_id, slot_index) " +
                 "SELECT id, 0 FROM accounts WHERE display_name = 'Acct'");
+            for (String direction : new String[]{"inputs", "outputs"}) {
+                assertInsertRejected(statement, "INSERT INTO recipe_flip_" + direction + " (item_id, amount_consumed) " +
+                    "VALUES (4151, 1)");
+            }
         }
     }
 
@@ -128,6 +130,8 @@ public class SchemaMigrationTest {
         try (Statement statement = storage.getConnection().createStatement()) {
             assertInsertRejected(statement,
                 "INSERT INTO item_visibility (account_id, item_id, is_visible) VALUES (999, 4151, 1)");
+            assertInsertRejected(statement,
+                "INSERT INTO recipe_flips (account_id, timestamp, natural_key) VALUES (999, 1700000000000, 'orphan')");
             try (ResultSet violations = statement.executeQuery("PRAGMA foreign_key_check")) {
                 assertFalse(violations.next());
             }
@@ -158,34 +162,30 @@ public class SchemaMigrationTest {
     }
 
     @Test
-    public void testConsumedTradeEventIdNullable() throws Exception {
+    public void testActiveSlotsAreUniquePerAccountAndSlot() throws Exception {
         storage.initializeSchema();
         storage.upsertAccount("Acct", null);
-        storage.recordTrade("Acct", complete("Acct", 4151, "void-uuid", 1700000000000L, 1, 100, false));
+        storage.upsertAccount("OtherAcct", null);
         try (Statement statement = storage.getConnection().createStatement()) {
-            assertEquals(1, statement.executeUpdate("INSERT INTO consumed_trade (trade_id, qty, event_id) " +
-                "SELECT id, 1, NULL FROM trades WHERE uuid = 'void-uuid'"));
+            assertEquals(2, statement.executeUpdate("INSERT INTO active_slots (account_id, slot_index, offer_json) " +
+                "SELECT id, 0, '{}' FROM accounts"));
+            assertInsertRejected(statement, "INSERT INTO active_slots (account_id, slot_index, offer_json) " +
+                "SELECT id, 0, '{}' FROM accounts WHERE display_name = 'Acct'");
         }
     }
 
     @Test
-    public void testEventsNaturalKeyUnique() throws Exception {
+    public void testRecipeNaturalKeyIsRequiredAndUnique() throws Exception {
         storage.initializeSchema();
-        // Verify the partial unique index exists by checking that two events with the same
-        // natural_key cannot both be inserted.
         Connection conn = storage.getConnection();
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("INSERT INTO accounts (display_name) VALUES ('NKTest')");
-            stmt.execute("INSERT INTO events (account_id, timestamp, type, cost, profit, natural_key) " +
-                "VALUES (1, 1700000000000, 'flip', 100, 50, 'nk-1')");
-            // Second insert with same natural_key should fail (caught by partial unique index).
-            try {
-                stmt.execute("INSERT INTO events (account_id, timestamp, type, cost, profit, natural_key) " +
-                    "VALUES (1, 1700000000001, 'flip', 200, 75, 'nk-1')");
-                fail("Duplicate natural_key insert should have been rejected");
-            } catch (Exception expected) {
-                // Good: the unique index rejected the duplicate
-            }
+            stmt.execute("INSERT INTO recipe_flips (account_id, timestamp, recipe_key, coin_cost, natural_key) " +
+                "VALUES (1, 1700000000000, 'recipe', 100, 'nk-1')");
+            assertInsertRejected(stmt, "INSERT INTO recipe_flips (account_id, timestamp, recipe_key, coin_cost, natural_key) " +
+                "VALUES (1, 1700000000001, 'recipe', 200, 'nk-1')");
+            assertInsertRejected(stmt, "INSERT INTO recipe_flips (account_id, timestamp, recipe_key, coin_cost) " +
+                "VALUES (1, 1700000000001, 'recipe', 200)");
         }
     }
 
