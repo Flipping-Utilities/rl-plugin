@@ -53,7 +53,7 @@ import static org.junit.Assume.assumeTrue;
  * account file, then verified:
  * - migration completes and flags every account,
  * - one trade row per complete offer (uuid dedupe must not lose real rows),
- * - flip-event profit exactly matches the JSON path's flip computation,
+ * - restored flip profit exactly matches the JSON path's flip computation,
  * - recipe-flip and favorite counts match the source data,
  * - no dangling / negative consumption rows,
  * - loadAccount round-trips every account,
@@ -200,9 +200,7 @@ public class RealDataMigrationTest {
     }
 
     /**
-     * Mirrors MigrationService.migrateFlipsBatched's computation (recipe-adjusted quantities,
-     * madeBy set, HistoryManager.getFlips) so the sum can be compared 1:1 with the profit of
-     * the flip events the migration actually inserted.
+     * Computes displayed flip profit from recipe-adjusted offers using HistoryManager.
      */
     private static long expectedFlipProfit(AccountData data) {
         Map<String, Integer> consumption = recipeConsumptionByUuid(data);
@@ -348,8 +346,10 @@ public class RealDataMigrationTest {
             long tradeRows = q("SELECT COUNT(*) FROM trades t JOIN accounts a ON a.id = t.account_id WHERE a.display_name = ?", name);
             assertEquals("trade rows must match complete offers for " + name, expectedTradeRows(data), tradeRows);
 
-            long flipProfit = q("SELECT COALESCE(SUM(e.profit), 0) FROM events e JOIN accounts a ON a.id = e.account_id WHERE a.display_name = ? AND e.type = 'flip'", name);
-            assertEquals("flip-event profit must match the JSON flip computation for " + name,
+            AccountData loaded = storage.loadAccount(name);
+            assertNotNull("loadAccount must return data for " + name, loaded);
+            long flipProfit = expectedFlipProfit(loaded);
+            assertEquals("Restored flip profit must match the JSON flip computation for " + name,
                 expectedFlipProfit(data), flipProfit);
 
             long recipeEvents = q("SELECT COUNT(*) FROM events e JOIN accounts a ON a.id = e.account_id WHERE a.display_name = ? AND e.type = 'recipe'", name);
@@ -358,8 +358,6 @@ public class RealDataMigrationTest {
             long favoriteRows = q("SELECT COUNT(*) FROM item_favorites f JOIN accounts a ON a.id = f.account_id WHERE a.display_name = ?", name);
             assertEquals("favorites must be migrated for " + name, expectedFavoriteRows(data), favoriteRows);
 
-            AccountData loaded = storage.loadAccount(name);
-            assertNotNull("loadAccount must return data for " + name, loaded);
             assertEquals("loadAccount item count for " + name, expectedLoadedItemCount(data), loaded.getTrades().size());
 
             System.out.println("[RealData] verified " + name + ": " + tradeRows + " trades, flip profit "

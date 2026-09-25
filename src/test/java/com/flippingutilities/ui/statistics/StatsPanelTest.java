@@ -3,8 +3,6 @@ package com.flippingutilities.ui.statistics;
 import com.flippingutilities.DataSource;
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.db.FlipRepository;
-import com.flippingutilities.db.JsonFlipRepository;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.RecipeFlipGroup;
 import com.flippingutilities.utilities.SORT;
@@ -91,7 +89,6 @@ public class StatsPanelTest {
 
         @Override public FlippingConfig getConfig() { return config; }
         @Override public ScheduledExecutorService getExecutor() { return executor; }
-        @Override public FlipRepository getFlipRepository() { return new JsonFlipRepository(this); }
         @Override public String getAccountCurrentlyViewed() { return ACCOUNT_WIDE; }
         @Override public Instant viewStartOfSessionForCurrentView() { return Instant.EPOCH; }
         @Override public Duration viewAccumulatedTimeForCurrentView() { return Duration.ofHours(1); }

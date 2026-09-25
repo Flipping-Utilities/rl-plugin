@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +36,7 @@ import static org.junit.Assert.*;
  * the SQLite maintenance/delete paths.
  *
  * 1. Migrating an account whose trades were already recorded live must not duplicate trades,
- *    duplicate flip events, or mis-link consumed_trade rows (the stale getGeneratedKeys hazard).
+ *    or change the restored history.
  * 2. Account deletion, interval deletion, uuid deletion, favorite round-trip, and live recipe
  *    flip persistence must all round-trip.
  * 3. A partially-failed migration keeps successful accounts committed, leaves
@@ -51,7 +52,6 @@ public class MigrationLiveTradeInteractionTest {
 
     private Path tempDir;
     private SqliteStorage storage;
-    private SqliteFlipRepository repository;
 
     @Before
     public void setUp() throws Exception {
@@ -60,7 +60,6 @@ public class MigrationLiveTradeInteractionTest {
         storage = new SqliteStorage(dbFile);
         storage.initializeSchema();
         storage.upsertAccount(ACCOUNT, null);
-        repository = new SqliteFlipRepository(storage, null);
     }
 
     @After
@@ -98,6 +97,18 @@ public class MigrationLiveTradeInteractionTest {
         return offer;
     }
 
+    private void recordTrade(int itemId, String uuid, long time, int quantity, int price, boolean buy) {
+        OfferEvent offer = completeOffer(uuid, buy, quantity, price, time);
+        offer.setItemId(itemId);
+        storage.recordTrade(ACCOUNT, offer);
+    }
+
+    private long loadedProfit() {
+        return storage.loadAccount(ACCOUNT).getTrades().stream()
+            .mapToLong(item -> FlippingItem.getProfit(item.getHistory().getCompressedOfferEvents()))
+            .sum();
+    }
+
     private static AccountData accountDataWithOffers(OfferEvent... offers) {
         AccountData data = new AccountData();
         FlippingItem item = new FlippingItem(WHIP, "Abyssal whip", 70, ACCOUNT);
@@ -110,16 +121,11 @@ public class MigrationLiveTradeInteractionTest {
         return data;
     }
 
-    /**
-     * Live trades recorded first (with uuids), then the same data migrated from JSON. The
-     * trade inserts dedupe on (account_id, uuid); the flip event insert dedupes on
-     * natural_key. Previously the ignored event insert returned a stale generated key and
-     * inserted bogus consumed_trade rows; it must instead be skipped via the update count.
-     */
+    /** Live-recorded offers and the same JSON migration must share their UUID identity. */
     @Test
-    public void testMigrationAfterLiveReconcileDoesNotDuplicateOrMislink() throws Exception {
-        repository.recordTrade(ACCOUNT, WHIP, "u-buy", BASE_TS, 10, 50000, true, 0);
-        repository.recordTrade(ACCOUNT, WHIP, "u-sell", BASE_TS + 60000, 10, 55000, false, 0);
+    public void testMigrationAfterLiveWritesDoesNotDuplicateTrades() throws Exception {
+        recordTrade(WHIP, "u-buy", BASE_TS, 10, 50000, true);
+        recordTrade(WHIP, "u-sell", BASE_TS + 60000, 10, 55000, false);
 
         // Same offers as JSON data; run the (per-account) migration over them.
         AccountData data = accountDataWithOffers(
@@ -138,22 +144,13 @@ public class MigrationLiveTradeInteractionTest {
 
         assertEquals("Trades must dedupe on (account_id, uuid)", 2L,
             count("SELECT COUNT(*) FROM trades"));
-        assertEquals("Exactly one flip event", 1L,
-            count("SELECT COUNT(*) FROM events WHERE type = 'flip'"));
-        assertEquals("Exactly two consumed_trade rows", 2L,
-            count("SELECT COUNT(*) FROM consumed_trade"));
-        assertEquals("No consumed_trade row may reference a missing event", 0L,
-            count("SELECT COUNT(*) FROM consumed_trade ct LEFT JOIN events e ON e.id = ct.event_id WHERE e.id IS NULL"));
-        assertEquals("Both trades must be fully consumed", 0L,
-            count("SELECT COUNT(*) FROM trades t LEFT JOIN (SELECT trade_id, SUM(qty) AS c FROM consumed_trade GROUP BY trade_id) ct " +
-                "ON ct.trade_id = t.id WHERE t.qty - COALESCE(ct.c, 0) > 0"));
         assertEquals("Profit must stay 10 * 5000", 50000L,
-            repository.getAggregateStats(ACCOUNT, Instant.EPOCH).totalProfit);
+            loadedProfit());
     }
 
     @Test
     public void testDeleteAccountDataRemovesEverythingAndAllowsReCreation() throws Exception {
-        repository.recordTrade(ACCOUNT, WHIP, "d-buy", BASE_TS, 10, 50000, true, 0);
+        recordTrade(WHIP, "d-buy", BASE_TS, 10, 50000, true);
         storage.upsertFavorite(ACCOUNT, WHIP, true, "7");
         storage.setSetting("migrated_" + ACCOUNT, Instant.now().toString());
 
@@ -166,48 +163,43 @@ public class MigrationLiveTradeInteractionTest {
         assertTrue(storage.listAccounts().isEmpty());
 
         // Account can be re-created and trades recorded again (account-id cache was invalidated).
-        repository.recordTrade(ACCOUNT, WHIP, "d-buy2", BASE_TS, 5, 50000, true, 0);
+        recordTrade(WHIP, "d-buy2", BASE_TS, 5, 50000, true);
         assertEquals(1L, count("SELECT COUNT(*) FROM trades"));
     }
 
     @Test
-    public void testDeleteOffersSinceOnlyRemovesWindow() throws Exception {
+    public void testDeletingSelectedOffersPreservesEarlierHistory() throws Exception {
         // Flip 1: old (kept). Flip 2: in the window (deleted).
-        repository.recordTrade(ACCOUNT, WHIP, "k-buy", BASE_TS, 10, 50000, true, 0);
-        repository.recordTrade(ACCOUNT, WHIP, "k-sell", BASE_TS + 60000, 10, 55000, false, 0);
-        repository.recordTrade(ACCOUNT, WHIP, "w-buy", BASE_TS + 600000, 5, 51000, true, 0);
-        repository.recordTrade(ACCOUNT, WHIP, "w-sell", BASE_TS + 660000, 5, 56000, false, 0);
-        assertEquals(2L, count("SELECT COUNT(*) FROM events WHERE type = 'flip'"));
+        recordTrade(WHIP, "k-buy", BASE_TS, 10, 50000, true);
+        recordTrade(WHIP, "k-sell", BASE_TS + 60000, 10, 55000, false);
+        recordTrade(WHIP, "w-buy", BASE_TS + 600000, 5, 51000, true);
+        recordTrade(WHIP, "w-sell", BASE_TS + 660000, 5, 56000, false);
 
-        storage.deleteOffersSince(ACCOUNT, Instant.ofEpochMilli(BASE_TS + 300000));
+        storage.deleteTradesByUuid(ACCOUNT, Arrays.asList("w-buy", "w-sell"));
 
         assertEquals("Only the old trades remain", 2L, count("SELECT COUNT(*) FROM trades"));
-        assertEquals("Only the old flip event remains", 1L, count("SELECT COUNT(*) FROM events WHERE type = 'flip'"));
-        assertEquals("Old flip's consumption rows remain", 2L, count("SELECT COUNT(*) FROM consumed_trade"));
         assertEquals("Old flip profit intact", 50000L,
-            repository.getAggregateStats(ACCOUNT, Instant.EPOCH).totalProfit);
+            loadedProfit());
     }
 
     @Test
-    public void testDeleteTradesByUuidRemovesTradesAndTheirEvents() throws Exception {
-        repository.recordTrade(ACCOUNT, WHIP, "keep-buy", BASE_TS, 10, 50000, true, 0);
-        repository.recordTrade(ACCOUNT, WHIP, "keep-sell", BASE_TS + 60000, 10, 55000, false, 0);
-        repository.recordTrade(ACCOUNT, DSCIM, "drop-buy", BASE_TS + 120000, 4, 60000, true, 0);
-        repository.recordTrade(ACCOUNT, DSCIM, "drop-sell", BASE_TS + 180000, 4, 65000, false, 0);
-        assertEquals(2L, count("SELECT COUNT(*) FROM events WHERE type = 'flip'"));
+    public void testDeleteTradesByUuidPreservesOtherItemHistory() throws Exception {
+        recordTrade(WHIP, "keep-buy", BASE_TS, 10, 50000, true);
+        recordTrade(WHIP, "keep-sell", BASE_TS + 60000, 10, 55000, false);
+        recordTrade(DSCIM, "drop-buy", BASE_TS + 120000, 4, 60000, true);
+        recordTrade(DSCIM, "drop-sell", BASE_TS + 180000, 4, 65000, false);
 
         storage.deleteTradesByUuid(ACCOUNT, Arrays.asList("drop-buy", "drop-sell"));
 
         assertEquals(2L, count("SELECT COUNT(*) FROM trades"));
-        assertEquals(1L, count("SELECT COUNT(*) FROM events WHERE type = 'flip'"));
         assertEquals(0L, count("SELECT COUNT(*) FROM trades WHERE item_id = " + DSCIM));
         assertEquals("Whip flip profit intact", 50000L,
-            repository.getAggregateStats(ACCOUNT, Instant.EPOCH).totalProfit);
+            loadedProfit());
     }
 
     @Test
     public void testFavoritesRoundTripOnLoadAccount() throws Exception {
-        repository.recordTrade(ACCOUNT, WHIP, "f-buy", BASE_TS, 10, 50000, true, 0);
+        recordTrade(WHIP, "f-buy", BASE_TS, 10, 50000, true);
         storage.upsertFavorite(ACCOUNT, WHIP, true, "77");
 
         AccountData data = storage.loadAccount(ACCOUNT);
@@ -257,7 +249,7 @@ public class MigrationLiveTradeInteractionTest {
     @Test
     public void testInsertRecipeFlipPersistsAndIsIdempotent() throws Exception {
         // Underlying trade for the input component.
-        repository.recordTrade(ACCOUNT, WHIP, "r-in", BASE_TS, 10, 50000, true, 0);
+        recordTrade(WHIP, "r-in", BASE_TS, 10, 50000, true);
 
         OfferEvent buyOffer = completeOffer("r-in", true, 10, 50000, BASE_TS);
         OfferEvent sellOffer = completeOffer("r-out", false, 6, 90000, BASE_TS + 60000);
@@ -330,6 +322,39 @@ public class MigrationLiveTradeInteractionTest {
             "true".equalsIgnoreCase(storage.getSetting("migration_completed")));
         assertEquals("Good account's trades are durable", 1L,
             count("SELECT COUNT(*) FROM trades WHERE uuid = 'g-buy'"));
+    }
+
+    @Test
+    public void rolledBackAccountIdCannotRouteLaterWritesToAnotherAccount() throws Exception {
+        String failedAccount = "Failed import";
+        AccountData source = accountDataWithOffers(completeOffer("reject-import", true, 5, 100, BASE_TS));
+        try (Statement statement = storage.getConnection().createStatement()) {
+            statement.execute("CREATE TRIGGER reject_import BEFORE INSERT ON trades " +
+                "WHEN NEW.uuid = 'reject-import' BEGIN SELECT RAISE(ABORT, 'injected failure'); END");
+        }
+        TradePersister persister = new TradePersister(new Gson()) {
+            @Override
+            public Map<String, AccountData> loadAllAccounts() {
+                return Collections.singletonMap(failedAccount, source);
+            }
+
+            @Override
+            public AccountWideData loadAccountWideData() {
+                return new AccountWideData();
+            }
+        };
+        assertEquals(0, new MigrationService(storage, persister).migrate());
+        assertFalse(storage.listAccounts().contains(failedAccount));
+
+        // SQLite can reuse the rolled-back row ID for the next account.
+        storage.upsertAccount("Other account", null);
+        storage.recordTrade(failedAccount, completeOffer("new-live-trade", true, 3, 200, BASE_TS + 1000));
+
+        assertTrue(storage.listAccounts().contains(failedAccount));
+        assertTrue(storage.loadAccount("Other account").getTrades().isEmpty());
+        AccountData recovered = storage.loadAccount(failedAccount);
+        assertEquals("new-live-trade", recovered.getTrades().get(0).getHistory()
+            .getCompressedOfferEvents().get(0).getUuid());
     }
 
     @Test
@@ -462,7 +487,7 @@ public class MigrationLiveTradeInteractionTest {
      */
     @Test
     public void testDeleteRecipeFlipRemovesEventComponentsAndConsumption() throws Exception {
-        repository.recordTrade(ACCOUNT, WHIP, "r-in", BASE_TS, 10, 50000, true, 0);
+        recordTrade(WHIP, "r-in", BASE_TS, 10, 50000, true);
 
         OfferEvent buyOffer = completeOffer("r-in", true, 10, 50000, BASE_TS);
         OfferEvent sellOffer = completeOffer("r-out", false, 6, 90000, BASE_TS + 60000);
@@ -495,9 +520,9 @@ public class MigrationLiveTradeInteractionTest {
      */
     @Test
     public void testDeleteRecipeFlipsSinceIsScopedToGroupAndInterval() throws Exception {
-        repository.recordTrade(ACCOUNT, WHIP, "r-in-1", BASE_TS, 10, 50000, true, 0);
-        repository.recordTrade(ACCOUNT, WHIP, "r-in-2", BASE_TS + 700000, 10, 50000, true, 0);
-        repository.recordTrade(ACCOUNT, WHIP, "r-in-3", BASE_TS + 710000, 10, 50000, true, 0);
+        recordTrade(WHIP, "r-in-1", BASE_TS, 10, 50000, true);
+        recordTrade(WHIP, "r-in-2", BASE_TS + 700000, 10, 50000, true);
+        recordTrade(WHIP, "r-in-3", BASE_TS + 710000, 10, 50000, true);
 
         Map<String, Long> flipTimes = new HashMap<>();
         String[][] specs = {
@@ -582,7 +607,7 @@ public class MigrationLiveTradeInteractionTest {
      */
     @Test
     public void testGeLimitCountersRestoreOntoHistory() throws Exception {
-        repository.recordTrade(ACCOUNT, WHIP, "ge-uuid", BASE_TS, 10, 50000, true, 0);
+        recordTrade(WHIP, "ge-uuid", BASE_TS, 10, 50000, true);
         storage.upsertGeLimitState(ACCOUNT, WHIP, Instant.ofEpochMilli(BASE_TS + 14400000), 110, 100);
 
         AccountData loaded = storage.loadAccount(ACCOUNT);

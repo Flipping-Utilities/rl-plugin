@@ -2,7 +2,6 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.DataSource;
 import com.flippingutilities.FlippingConfig;
-import com.flippingutilities.db.JsonFlipRepository;
 import com.flippingutilities.db.SqliteStorage;
 import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.model.AccountData;
@@ -24,6 +23,7 @@ import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -35,6 +35,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 
 import static java.util.Collections.singletonList;
@@ -69,6 +70,7 @@ public class StorageBackendSwitchTest {
         setField(plugin, "executor", executor);
         setField(plugin, "storageExecutor", executor);
         setField(plugin, "clientThread", clientThread);
+        setField(plugin, "flippingItemHandler", new FlippingItemHandler(plugin));
         setField(plugin, "accountCurrentlyViewed", ACCOUNT);
         plugin.setCurrentlyLoggedInAccount(ACCOUNT);
         plugin.tradePersister = persister;
@@ -147,7 +149,6 @@ public class StorageBackendSwitchTest {
         finishStorageWork();
 
         assertNull(plugin.getSqliteStorage());
-        assertTrue(plugin.getFlipRepository() instanceof JsonFlipRepository);
         assertEquals("json-edit-after-switch", item.getFavoriteCode());
         assertLiveStateUnchanged();
         plugin.getDataHandler().storeData();
@@ -182,9 +183,151 @@ public class StorageBackendSwitchTest {
         finishStorageWork();
 
         assertNull(plugin.getSqliteStorage());
-        assertTrue(plugin.getFlipRepository() instanceof JsonFlipRepository);
         assertEquals("unsaved-edit", item.getFavoriteCode());
         assertLiveStateUnchanged();
+    }
+
+    @Test
+    public void bulkHiddenItemsStayHiddenAfterReload() {
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+
+        plugin.setAllFlippingItemsAsHidden();
+        finishStorageWork();
+
+        assertFalse(item.getValidFlippingPanelItem());
+        assertEquals("Reset visibility must survive a SQLite reload", Boolean.FALSE,
+            plugin.getSqliteStorage().loadAccount(ACCOUNT).getTrades().get(0).getValidFlippingPanelItem());
+
+        plugin.addSelectedGeTabOffers(singletonList(offer("new-trade-after-hide", 7)));
+        finishStorageWork();
+
+        assertTrue(item.getValidFlippingPanelItem());
+        assertEquals("A newly imported trade makes its item visible again", Boolean.TRUE,
+            plugin.getSqliteStorage().loadAccount(ACCOUNT).getTrades().get(0).getValidFlippingPanelItem());
+    }
+
+    @Test
+    public void individualVisibilityChangesSurviveReload() {
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+
+        plugin.setItemVisible(item, false);
+        finishStorageWork();
+
+        assertFalse(item.getValidFlippingPanelItem());
+        assertEquals(Boolean.FALSE,
+            plugin.getSqliteStorage().loadAccount(ACCOUNT).getTrades().get(0).getValidFlippingPanelItem());
+
+        plugin.setItemVisible(item, true);
+        finishStorageWork();
+
+        assertTrue(item.getValidFlippingPanelItem());
+        assertEquals(Boolean.TRUE,
+            plugin.getSqliteStorage().loadAccount(ACCOUNT).getTrades().get(0).getValidFlippingPanelItem());
+    }
+
+    @Test
+    public void failedLiveWritePreservesUnsavedHistoryInJson() throws Exception {
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        SqliteStorage failedStorage = plugin.getSqliteStorage();
+        try (Statement statement = failedStorage.getConnection().createStatement()) {
+            statement.execute("PRAGMA query_only=ON");
+        }
+
+        plugin.addSelectedGeTabOffers(singletonList(offer("write-failed", 7)));
+        AtomicBoolean laterTaskRan = new AtomicBoolean();
+        plugin.submitStorageTask(storage -> laterTaskRan.set(true));
+        executor.drain();
+
+        assertSame("Client fallback has not run yet", failedStorage, plugin.getSqliteStorage());
+        assertFalse("A failed backend must reject subsequent queued writes", laterTaskRan.get());
+        SqliteStorage reopened = new SqliteStorage(database);
+        try {
+            assertEquals("true", reopened.getSetting("migration_completed"));
+            assertTrue("A separate storage instance must detect the failed write", reopened.requiresFullResync());
+            assertFalse("The database is still stale until its JSON rebuild",
+                hasOffer(reopened.loadAccount(ACCOUNT), "write-failed"));
+        } finally {
+            reopened.close();
+        }
+
+        finishStorageWork();
+
+        assertNull("A failed backend must stop serving authoritative account data", plugin.getSqliteStorage());
+        assertLiveStateUnchanged();
+        assertTrue("Fallback saves changes made since the last JSON snapshot",
+            hasOffer(persister.loadAllAccounts().get(ACCOUNT), "write-failed"));
+
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+
+        assertFalse("Only a successful rebuild clears recovery state", plugin.getSqliteStorage().requiresFullResync());
+        assertTrue(hasOffer(plugin.getSqliteStorage().loadAccount(ACCOUNT), "write-failed"));
+        assertLiveStateUnchanged();
+    }
+
+    @Test
+    public void failedAccountReadUsesJsonAndMarksDatabaseForRebuild() throws Exception {
+        account.getTrades().clear();
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        SqliteStorage failedStorage = plugin.getSqliteStorage();
+        try (Statement statement = failedStorage.getConnection().createStatement()) {
+            statement.execute("DROP TABLE item_favorites");
+        }
+
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+
+        assertTrue("Read failures must prevent the damaged database from being authoritative next startup",
+            failedStorage.requiresFullResync());
+        assertTrue(plugin.getDataHandler().viewAccountData(ACCOUNT).getTrades().isEmpty());
+        assertEquals(123456L, plugin.getDataHandler().viewAccountData(ACCOUNT).getAccumulatedSessionTimeMillis());
+
+        finishStorageWork();
+
+        assertNull(plugin.getSqliteStorage());
+        assertEquals(123456L, persister.loadAccount(ACCOUNT).getAccumulatedSessionTimeMillis());
+    }
+
+    @Test
+    public void failedJsonSnapshotAbortsSwitchAndRemainsDirtyForRetry() {
+        SqliteStorage oldStorage = new SqliteStorage(database);
+        try {
+            oldStorage.initializeSchema();
+            oldStorage.setSetting("migration_completed", "true");
+        } finally {
+            oldStorage.close();
+        }
+        item.setFavorite(true);
+        item.setFavoriteCode("not-yet-saved");
+        persister.failWrites = true;
+
+        switchTo(DataSource.SQLITE);
+
+        assertNull("Import cannot start without a current JSON snapshot", plugin.getSqliteStorage());
+        assertFalse(executor.hasTasks());
+        assertEquals(0, persister.loads);
+        assertLiveStateUnchanged();
+        SqliteStorage reopened = new SqliteStorage(database);
+        try {
+            assertTrue("Restart must prefer the JSON snapshot after its eventual retry",
+                reopened.requiresFullResync());
+        } finally {
+            reopened.close();
+        }
+
+        persister.failWrites = false;
+        assertTrue(plugin.getDataHandler().storeData());
+        assertEquals("A failed snapshot remains dirty for the next autosave", "not-yet-saved",
+            persister.loadAllAccounts().get(ACCOUNT).getTrades().get(0).getFavoriteCode());
+
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+
+        assertEquals("not-yet-saved", plugin.getSqliteStorage().loadAccount(ACCOUNT)
+            .getTrades().get(0).getFavoriteCode());
     }
 
     @Test
@@ -252,6 +395,11 @@ public class StorageBackendSwitchTest {
         return offer;
     }
 
+    private static boolean hasOffer(AccountData account, String uuid) {
+        return account.getTrades().stream().flatMap(item -> item.getHistory().getCompressedOfferEvents().stream())
+            .anyMatch(offer -> uuid.equals(offer.getUuid()));
+    }
+
     private static void setField(Object target, String name, Object value) throws Exception {
         Class<?> type = target instanceof FlippingPlugin ? FlippingPlugin.class : target.getClass();
         Field field = type.getDeclaredField(name);
@@ -264,15 +412,17 @@ public class StorageBackendSwitchTest {
         @Override public DataSource dataSource() { return source; }
     }
 
-    // Replace only disk IO; the real DataHandler, migration and repositories remain in use.
+    // Replace only JSON disk IO; the real DataHandler, migration and SQLite storage remain in use.
     private static final class MemoryTradePersister extends TradePersister {
         private final Gson gson = new Gson();
         private final Map<String, String> accounts = new HashMap<>();
         private int loads;
         private boolean failLoads;
+        private boolean failWrites;
 
         MemoryTradePersister() { super(new Gson()); }
         @Override public void writeToFile(String name, Object data) {
+            if (failWrites) throw new IllegalStateException("Account file is read-only");
             if (data instanceof AccountData) accounts.put(name, gson.toJson(data));
         }
         @Override public Map<String, AccountData> loadAllAccounts() {
@@ -281,6 +431,9 @@ public class StorageBackendSwitchTest {
             Map<String, AccountData> result = new HashMap<>();
             accounts.forEach((name, json) -> result.put(name, gson.fromJson(json, AccountData.class)));
             return result;
+        }
+        @Override public AccountData loadAccount(String name) {
+            return gson.fromJson(accounts.get(name), AccountData.class);
         }
         @Override public AccountWideData loadAccountWideData() { return new AccountWideData(); }
     }

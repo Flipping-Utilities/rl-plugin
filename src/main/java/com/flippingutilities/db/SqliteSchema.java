@@ -9,7 +9,7 @@ import java.util.List;
 public final class SqliteSchema {
 
     // Schema version for migration tracking
-    public static final int SCHEMA_VERSION = 7;
+    public static final int SCHEMA_VERSION = 8;
 
     // PRAGMA for reading current version and for migrating to the current version
     public static final String PRAGMA_GET_USER_VERSION = "PRAGMA user_version";
@@ -41,6 +41,8 @@ public final class SqliteSchema {
         "  state TEXT," +
         "  time INTEGER," +
         "  trade_started_at INTEGER," +
+        "  offer_json TEXT," +
+        "  history_visible INTEGER NOT NULL DEFAULT 0," +
         "  FOREIGN KEY(account_id) REFERENCES accounts(id)" +
         ");";
 
@@ -55,6 +57,7 @@ public final class SqliteSchema {
         "  price INTEGER NOT NULL," +
         "  is_buy INTEGER NOT NULL," +
         "  tax INTEGER DEFAULT 0," +
+        "  offer_json TEXT," +
         "  FOREIGN KEY(account_id) REFERENCES accounts(id)," +
         "  UNIQUE(account_id, uuid)" +
         ");";
@@ -159,6 +162,15 @@ public final class SqliteSchema {
         "  UNIQUE(account_id, item_id)" +
         ");";
 
+    public static final String CREATE_TABLE_ITEM_VISIBILITY =
+        "CREATE TABLE IF NOT EXISTS item_visibility (" +
+        "  account_id INTEGER NOT NULL," +
+        "  item_id INTEGER NOT NULL," +
+        "  is_visible INTEGER NOT NULL," +
+        "  PRIMARY KEY(account_id, item_id)," +
+        "  FOREIGN KEY(account_id) REFERENCES accounts(id)" +
+        ");";
+
     // INDEX statements for common query patterns
     public static final String INDEX_ACTIVE_SLOTS_ACCOUNT_TIME =
         "CREATE INDEX IF NOT EXISTS idx_active_slots_account_time ON active_slots (account_id, time)";
@@ -218,7 +230,8 @@ public final class SqliteSchema {
             CREATE_TABLE_SETTINGS,
             CREATE_TABLE_GE_LIMIT_STATE,
             CREATE_TABLE_SLOT_TIMERS,
-            CREATE_TABLE_ITEM_FAVORITES
+            CREATE_TABLE_ITEM_FAVORITES,
+            CREATE_TABLE_ITEM_VISIBILITY
         );
     }
 
@@ -245,7 +258,7 @@ public final class SqliteSchema {
      * Returns DDL statements to upgrade the schema from the given version to the current version.
      *
      * The SQLite backend has never shipped, so the only databases that can exist below the
-     * current version are development databases (v5 or v6). Fresh installs create the full
+     * current version are development databases. Fresh installs create the full
      * schema directly. Version 6 persists {@code itemsBoughtThroughCompleteOffers} so GE
      * limit counts survive restarts; version 7 indexes recipe components for account loading.
      */
@@ -257,6 +270,16 @@ public final class SqliteSchema {
         if (fromVersion < 7) {
             stmts.add(INDEX_RECIPE_FLIP_INPUTS_FLIP);
             stmts.add(INDEX_RECIPE_FLIP_OUTPUTS_FLIP);
+        }
+        if (fromVersion < 8) {
+            stmts.add("ALTER TABLE trades ADD COLUMN offer_json TEXT;");
+            stmts.add("ALTER TABLE active_slots ADD COLUMN offer_json TEXT;");
+            stmts.add("ALTER TABLE active_slots ADD COLUMN history_visible INTEGER NOT NULL DEFAULT 0;");
+            stmts.add(CREATE_TABLE_ITEM_VISIBILITY);
+            // Earlier versions discarded classification and visibility metadata. The JSON
+            // copy must be imported before this database can be authoritative again.
+            stmts.add("INSERT OR REPLACE INTO settings (key, value) VALUES ('migration_pending', 'true');");
+            stmts.add("INSERT OR REPLACE INTO settings (key, value) VALUES ('full_resync_required', 'true');");
         }
         return stmts;
     }

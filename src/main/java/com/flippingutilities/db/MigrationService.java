@@ -2,14 +2,10 @@ package com.flippingutilities.db;
 
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.FlippingItem;
-import com.flippingutilities.model.Flip;
-import com.flippingutilities.model.HistoryManager;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.model.RecipeFlip;
 import com.flippingutilities.model.RecipeFlipGroup;
-import com.flippingutilities.utilities.Recipe;
-import com.google.gson.Gson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +17,6 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Service to migrate data from JSON-based storage to SQLite.
@@ -50,7 +45,7 @@ public class MigrationService {
      * UNIQUE constraints (trades.uuid, events.natural_key) so a retried account is a no-op.
      *
      * <p>Each account migrates inside its OWN transaction (not one giant one): the shared
-     * cached connection is used by live trade recording and repository queries, and a
+     * cached connection is used by live trade recording and account loading, and a
      * whole-run transaction would either swallow concurrent live writes in a rollback or be
      * committed prematurely by them. Per-account transactions let live traffic interleave
      * safely between accounts.
@@ -86,7 +81,6 @@ public class MigrationService {
         int accountsSkipped = 0;
         int accountsFailed = 0;
         int totalTrades = 0;
-        int totalFlips = 0;
         int totalRecipeFlips = 0;
 
         for (Map.Entry<String, AccountData> entry : accounts.entrySet()) {
@@ -105,33 +99,10 @@ public class MigrationService {
             if (counts != null) {
                 accountsMigrated++;
                 totalTrades += counts[0];
-                totalFlips += counts[1];
-                totalRecipeFlips += counts[2];
+                totalRecipeFlips += counts[1];
             } else {
                 accountsFailed++;
             }
-        }
-
-        // Migrate local recipes (stored in AccountWideData). Best-effort, outside the account
-        // transactions (INSERT OR REPLACE keyed on recipe_key is idempotent by itself).
-        try {
-            com.flippingutilities.model.AccountWideData accountWideData = tradePersister.loadAccountWideData();
-            if (accountWideData != null && accountWideData.getLocalRecipes() != null && !accountWideData.getLocalRecipes().isEmpty()) {
-                int localRecipesCount = migrateLocalRecipes(accountWideData.getLocalRecipes());
-                log.info("Migrated {} local recipes", localRecipesCount);
-            }
-        } catch (Exception e) {
-            log.warn("Could not migrate local recipes", e);
-        }
-
-        // Migrate favorites. Best-effort (upserts are idempotent).
-        try {
-            int favoritesMigrated = migrateFavorites();
-            if (favoritesMigrated > 0) {
-                log.info("Migrated {} item favorites", favoritesMigrated);
-            }
-        } catch (Exception e) {
-            log.warn("Could not migrate favorites", e);
         }
 
         // Only mark completion when every account is either migrated (now) or was already
@@ -146,8 +117,8 @@ public class MigrationService {
         }
 
         long elapsed = System.currentTimeMillis() - startTime;
-        log.info("Migration complete. Accounts: {} ({} failed), Trades: {}, Flips: {}, Recipe Flips: {}, Time: {}ms",
-            accountsMigrated, accountsFailed, totalTrades, totalFlips, totalRecipeFlips, elapsed);
+        log.info("Migration complete. Accounts: {} ({} failed), Trades: {}, Recipe Flips: {}, Time: {}ms",
+            accountsMigrated, accountsFailed, totalTrades, totalRecipeFlips, elapsed);
         return accountsMigrated;
     }
 
@@ -157,7 +128,7 @@ public class MigrationService {
      * plugin executor) cannot join the open transaction; between accounts the lock is
      * released so normal traffic proceeds.
      *
-     * @return int[3] counts on success ({trades, flips, recipe flips}), or null on failure
+     * @return int[2] counts on success ({trades, recipe flips}), or null on failure
      */
     private int[] migrateAccountInTransaction(String displayName, AccountData accountData) {
         synchronized (storage) {
@@ -169,8 +140,8 @@ public class MigrationService {
                 try {
                     int[] counts = migrateAccountBatched(conn, displayName, accountData);
                     conn.commit();
-                    log.info("Migrated account: {} ({} trades, {} flips, {} recipe flips)",
-                        displayName, counts[0], counts[1], counts[2]);
+                    log.info("Migrated account: {} ({} trades, {} recipe flips)",
+                        displayName, counts[0], counts[1]);
                     return counts;
                 } catch (Exception e) {
                     log.error("Failed to migrate account: {}", displayName, e);
@@ -179,6 +150,7 @@ public class MigrationService {
                     } catch (SQLException re) {
                         log.warn("Rollback failed for account {}", displayName, re);
                     }
+                    storage.invalidateAccountCache();
                     return null;
                 } finally {
                     try {
@@ -214,16 +186,15 @@ public class MigrationService {
 
     /**
      * Migrate a single account using batched operations.
-     * @return int[3] where [0] = trades count, [1] = flips count, [2] = recipe flips count
+     * @return int[2] where [0] = trade count and [1] = recipe flip count
      */
     int[] migrateAccountBatched(Connection conn, String displayName, AccountData accountData) throws SQLException {
         int tradesCount = 0;
-        int flipsCount = 0;
         int recipeFlipsCount = 0;
 
         if (accountData == null) {
             log.warn("Account data is null for: {}", displayName);
-            return new int[]{0, 0, 0};
+            return new int[]{0, 0};
         }
 
         List<FlippingItem> tradeItems = accountData.getTrades();
@@ -238,54 +209,28 @@ public class MigrationService {
         // initializes accumulated_time to 0; update it from the source AccountData).
         updateAccountSessionTime(conn, accountId, accountData.getAccumulatedSessionTimeMillis(), accountData.getSessionStartTime());
 
-        // Build map of offer UUID -> totalAmountConsumed from recipe flip PartialOffers.
-        // This prevents double-counting: trades consumed by recipe flips must not also
-        // generate regular flip profit.
-        Map<String, Integer> recipeConsumptionByUuid = new HashMap<>();
         List<RecipeFlipGroup> recipeFlipGroups = accountData.getRecipeFlipGroups();
-        if (recipeFlipGroups != null) {
-            for (RecipeFlipGroup group : recipeFlipGroups) {
-                for (RecipeFlip flip : group.getRecipeFlips()) {
-                    if (flip.getInputs() != null) {
-                        for (Map.Entry<Integer, Map<String, PartialOffer>> entry : flip.getInputs().entrySet()) {
-                            for (PartialOffer po : entry.getValue().values()) {
-                                recipeConsumptionByUuid.merge(po.getOfferUuid(), po.getAmountConsumed(), Integer::sum);
-                            }
-                        }
-                    }
-                    if (flip.getOutputs() != null) {
-                        for (Map.Entry<Integer, Map<String, PartialOffer>> entry : flip.getOutputs().entrySet()) {
-                            for (PartialOffer po : entry.getValue().values()) {
-                                recipeConsumptionByUuid.merge(po.getOfferUuid(), po.getAmountConsumed(), Integer::sum);
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         // Collect all trades for batch insert
         List<TradeRecord> tradesToInsert = new ArrayList<>();
-        Map<Integer, List<OfferEvent>> offersByItem = new HashMap<>();
+        Set<String> historyOfferUuids = new HashSet<>();
 
         for (FlippingItem item : tradeItems) {
+            storage.upsertItemVisibility(displayName, item.getItemId(), !Boolean.FALSE.equals(item.getValidFlippingPanelItem()));
             if (item.getHistory() == null) continue;
 
             List<OfferEvent> offers = item.getHistory().getCompressedOfferEvents();
             if (offers == null) continue;
 
-            List<OfferEvent> validOffers = new ArrayList<>();
             for (OfferEvent offer : offers) {
+                if (offer != null && offer.getUuid() != null) {
+                    historyOfferUuids.add(offer.getUuid());
+                }
                 if (offer == null || !offer.isComplete() || offer.isCausedByEmptySlot()) continue;
 
                 long timestamp = offer.getTime() != null ? offer.getTime().toEpochMilli() : Instant.now().toEpochMilli();
-                // Trades always store the ORIGINAL quantity; recipe consumption is recorded
-                // in consumed_trade and subtracted at read time (reconcileFlipsForItem, the
-                // recipe input/output loaders). Reducing the trade row here as well would
-                // double-subtract and corrupt remaining-quantity displays and re-saved JSON.
+                // Recipe components retain consumption separately from the original trade.
                 int qty = offer.getCurrentQuantityInTrade();
-                Integer consumed = recipeConsumptionByUuid.get(offer.getUuid());
-                int remaining = consumed != null ? Math.max(0, qty - consumed) : qty;
                 int price = offer.getPreTaxPrice();
                 boolean isBuy = offer.isBuy();
                 // Preserve the real per-item tax from the OfferEvent. Buy-side trades pay no
@@ -293,36 +238,16 @@ public class MigrationService {
                 // tax them at 0.
                 long tax = isBuy || offer.getTime() == null ? 0L : (long) offer.getTaxPaidPerItem() * qty;
 
-                tradesToInsert.add(new TradeRecord(accountId, item.getItemId(), offer.getUuid(), timestamp, qty, price, isBuy, tax));
+                tradesToInsert.add(new TradeRecord(accountId, item.getItemId(), offer.getUuid(), timestamp, qty, price, isBuy, tax, SqliteStorage.serializeOffer(offer)));
 
-                // Only include offers with unconsumed units for regular flip computation,
-                // adjusted down by recipe consumption so consumed units don't pair into flips.
-                if (remaining > 0) {
-                    if (consumed != null && consumed > 0) {
-                        OfferEvent adjusted = offer.clone();
-                        adjusted.setCurrentQuantityInTrade(remaining);
-                        validOffers.add(adjusted);
-                    } else {
-                        validOffers.add(offer);
-                    }
-                }
                 tradesCount++;
             }
 
-            if (!validOffers.isEmpty()) {
-                offersByItem.put(item.getItemId(), validOffers);
-            }
-
-            // Migrate GE limit state
-            try {
-                Instant resetTime = item.getGeLimitResetTime();
-                if (resetTime != null && resetTime != Instant.EPOCH) {
-                    upsertGeLimitStateBatched(conn, accountId, item.getItemId(), resetTime,
-                        item.getItemsBoughtThisLimitWindow(),
-                        item.getHistory().getItemsBoughtThroughCompleteOffers());
-                }
-            } catch (Exception e) {
-                log.debug("Could not migrate GE limit for item {}: {}", item.getItemId(), e.getMessage());
+            Instant resetTime = item.getGeLimitResetTime();
+            if (resetTime != null && !Instant.EPOCH.equals(resetTime)) {
+                upsertGeLimitStateBatched(conn, accountId, item.getItemId(), resetTime,
+                    item.getItemsBoughtThisLimitWindow(),
+                    item.getHistory().getItemsBoughtThroughCompleteOffers());
             }
         }
 
@@ -333,9 +258,6 @@ public class MigrationService {
 
         // Build UUID -> trade ID map for recipe flip consumed_trade linking
         Map<String, Long> offerUuidToTradeId = buildUuidToTradeIdMap(conn, accountId);
-
-        // Migrate flips with consumed trades
-        flipsCount = migrateFlipsBatched(conn, accountId, offersByItem);
 
         // Migrate recipe flips (hydrate PartialOffers first so profit/expense are correct)
         if (recipeFlipGroups != null && !recipeFlipGroups.isEmpty()) {
@@ -350,15 +272,19 @@ public class MigrationService {
                 int slotIndex = slotEntry.getKey();
                 OfferEvent offer = slotEntry.getValue();
                 if (offer != null && !offer.isComplete() && !offer.isCausedByEmptySlot()) {
-                    storage.upsertSlot(displayName, slotIndex, offer);
+                    storage.upsertSlot(displayName, slotIndex, offer, historyOfferUuids.contains(offer.getUuid()));
                 }
             }
         }
 
+        // Favorites participate in the account transaction, so a failed write cannot mark
+        // this account complete and silently lose them on the next reload.
+        migrateFavoritesForAccount(displayName, accountData);
+
         // Store migration metadata
         storage.setSetting("migrated_" + displayName, Instant.now().toString());
 
-        return new int[]{tradesCount, flipsCount, recipeFlipsCount};
+        return new int[]{tradesCount, recipeFlipsCount};
     }
 
     private int getOrCreateAccountId(Connection conn, String displayName) throws SQLException {
@@ -409,7 +335,7 @@ public class MigrationService {
     private void batchInsertTrades(Connection conn, List<TradeRecord> trades) throws SQLException {
         // INSERT OR IGNORE against UNIQUE(account_id, uuid) makes re-runs idempotent: a trade
         // whose uuid already exists for this account is silently skipped instead of duplicated.
-        String sql = "INSERT OR IGNORE INTO trades (account_id, item_id, uuid, timestamp, qty, price, is_buy, tax) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT OR IGNORE INTO trades (account_id, item_id, uuid, timestamp, qty, price, is_buy, tax, offer_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             int count = 0;
             for (TradeRecord trade : trades) {
@@ -425,6 +351,7 @@ public class MigrationService {
                 ps.setInt(6, trade.price);
                 ps.setInt(7, trade.isBuy ? 1 : 0);
                 ps.setLong(8, trade.tax);
+                ps.setString(9, trade.offerJson);
                 ps.addBatch();
                 count++;
 
@@ -434,214 +361,6 @@ public class MigrationService {
             }
             if (count % BATCH_SIZE != 0) {
                 ps.executeBatch();
-            }
-        }
-    }
-
-    private int migrateFlipsBatched(Connection conn, int accountId, Map<Integer, List<OfferEvent>> offersByItem) throws SQLException {
-        int flipsCount = 0;
-
-        List<FlipRecord> flipsToInsert = new ArrayList<>();
-
-        for (Map.Entry<Integer, List<OfferEvent>> entry : offersByItem.entrySet()) {
-            int itemId = entry.getKey();
-            List<OfferEvent> offers = entry.getValue();
-
-            List<OfferEvent> validOffers = offers.stream()
-                .filter(o -> o != null)
-                .collect(Collectors.toList());
-
-            log.debug("Item {}: {} offers total", itemId, validOffers.size());
-            if (validOffers.isEmpty()) continue;
-
-            List<OfferEvent> clonedOffers = validOffers.stream()
-                .map(OfferEvent::clone)
-                .collect(Collectors.toList());
-            clonedOffers.forEach(o -> o.setMadeBy("migrated"));
-
-            List<Flip> flips = HistoryManager.getFlips(clonedOffers);
-            log.debug("Item {}: getFlips returned {} flips", itemId, flips == null ? 0 : flips.size());
-            if (flips == null || flips.isEmpty()) continue;
-
-            Map<Long, Map<String, Object>> tradesById = loadTradesByItemAsMap(conn, accountId, itemId);
-
-            List<Map<String, Object>> sortedTrades = new ArrayList<>(tradesById.values());
-            sortedTrades.sort(Comparator.comparingLong(t -> (Long) t.get("timestamp")));
-
-            LinkedList<long[]> buyQueue = new LinkedList<>();
-            LinkedList<long[]> sellQueue = new LinkedList<>();
-            for (Map<String, Object> trade : sortedTrades) {
-                Long tradeId = (Long) trade.get("id");
-                int qty = (Integer) trade.get("qty");
-                boolean isBuy = (Integer) trade.get("isBuy") == 1;
-                if (isBuy) {
-                    buyQueue.add(new long[]{tradeId, qty});
-                } else {
-                    sellQueue.add(new long[]{tradeId, qty});
-                }
-            }
-
-            for (Flip flip : flips) {
-                if (flip == null || flip.getTime() == null) continue;
-
-                int flipQty = flip.getQuantity();
-                int buyPrice = flip.getBuyPrice();
-                int sellPrice = flip.getSellPrice();
-
-                List<long[]> consumedTrades = new ArrayList<>();
-                Long firstBuyTradeId = null;
-                Long firstSellTradeId = null;
-
-                int qtyNeeded = flipQty;
-                while (qtyNeeded > 0 && !buyQueue.isEmpty()) {
-                    long[] buyEntry = buyQueue.peekFirst();
-                    if (buyEntry == null) break;
-
-                    long tradeId = buyEntry[0];
-                    int remaining = (int) buyEntry[1];
-
-                    if (remaining <= 0) {
-                        buyQueue.pollFirst();
-                        continue;
-                    }
-
-                    if (firstBuyTradeId == null) {
-                        firstBuyTradeId = tradeId;
-                    }
-                    int consume = Math.min(qtyNeeded, remaining);
-                    consumedTrades.add(new long[]{tradeId, consume});
-                    buyEntry[1] = remaining - consume;
-                    qtyNeeded -= consume;
-
-                    if (buyEntry[1] <= 0) {
-                        buyQueue.pollFirst();
-                    }
-                }
-
-                qtyNeeded = flipQty;
-                while (qtyNeeded > 0 && !sellQueue.isEmpty()) {
-                    long[] sellEntry = sellQueue.peekFirst();
-                    if (sellEntry == null) break;
-
-                    long tradeId = sellEntry[0];
-                    int remaining = (int) sellEntry[1];
-
-                    if (remaining <= 0) {
-                        sellQueue.pollFirst();
-                        continue;
-                    }
-
-                    if (firstSellTradeId == null) {
-                        firstSellTradeId = tradeId;
-                    }
-                    int consume = Math.min(qtyNeeded, remaining);
-                    consumedTrades.add(new long[]{tradeId, consume});
-                    sellEntry[1] = remaining - consume;
-                    qtyNeeded -= consume;
-
-                    if (sellEntry[1] <= 0) {
-                        sellQueue.pollFirst();
-                    }
-                }
-
-                long profit = (long) (sellPrice - buyPrice) * flipQty;
-                long cost = (long) buyPrice * flipQty;
-                long timestamp = flip.getTime().toEpochMilli();
-                String note = flip.isMarginCheck() ? "margin_check" : null;
-                // First consumed buy/sell trade ids are part of the key so that two identical
-                // same-millisecond partial fills backed by different trades produce distinct
-                // events. Must match the format used by SqliteStorage.insertReconciledFlips.
-                String naturalKey = "flip:" + accountId + ":" + itemId + ":" + timestamp + ":" + buyPrice + ":" + sellPrice + ":" + flipQty
-                    + ":" + (firstBuyTradeId == null ? -1 : firstBuyTradeId)
-                    + ":" + (firstSellTradeId == null ? -1 : firstSellTradeId);
-
-                flipsToInsert.add(new FlipRecord(accountId, timestamp, cost, profit, note, naturalKey, consumedTrades));
-                flipsCount++;
-            }
-        }
-
-        if (!flipsToInsert.isEmpty()) {
-            batchInsertFlipsAndConsumed(conn, flipsToInsert);
-        }
-
-        return flipsCount;
-    }
-
-    private Map<Long, Map<String, Object>> loadTradesByItemAsMap(Connection conn, int accountId, int itemId) throws SQLException {
-        Map<Long, Map<String, Object>> result = new HashMap<>();
-        String sql = "SELECT id, timestamp, qty, price, is_buy FROM trades WHERE account_id = ? AND item_id = ? ORDER BY timestamp";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, accountId);
-            ps.setInt(2, itemId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    Map<String, Object> trade = new HashMap<>();
-                    Long id = rs.getLong("id");
-                    trade.put("id", id);
-                    trade.put("timestamp", rs.getLong("timestamp"));
-                    trade.put("qty", rs.getInt("qty"));
-                    trade.put("price", rs.getInt("price"));
-                    trade.put("isBuy", rs.getInt("is_buy"));
-                    result.put(id, trade);
-                }
-            }
-        }
-        return result;
-    }
-
-    private void batchInsertFlipsAndConsumed(Connection conn, List<FlipRecord> flips) throws SQLException {
-        // INSERT OR IGNORE against the partial unique index on events.natural_key makes re-runs
-        // idempotent at the event level too.
-        String eventSql = "INSERT OR IGNORE INTO events (account_id, timestamp, type, cost, profit, note, natural_key) VALUES (?, ?, 'flip', ?, ?, ?, ?)";
-        String consumedSql = "INSERT OR IGNORE INTO consumed_trade (trade_id, event_id, qty) VALUES (?, ?, ?)";
-
-        try (PreparedStatement eventPs = conn.prepareStatement(eventSql, Statement.RETURN_GENERATED_KEYS);
-             PreparedStatement consumedPs = conn.prepareStatement(consumedSql)) {
-
-            int consumedCount = 0;
-            for (FlipRecord flip : flips) {
-                eventPs.setInt(1, flip.accountId);
-                eventPs.setLong(2, flip.timestamp);
-                eventPs.setLong(3, flip.cost);
-                eventPs.setLong(4, flip.profit);
-                if (flip.note == null) {
-                    eventPs.setNull(5, Types.VARCHAR);
-                } else {
-                    eventPs.setString(5, flip.note);
-                }
-                eventPs.setString(6, flip.naturalKey);
-                // Detect the OR IGNORE skip via the update count; getGeneratedKeys() after an
-                // ignored insert returns a stale rowid in sqlite-jdbc, which would mis-link the
-                // consumed_trade rows below to an unrelated row.
-                if (eventPs.executeUpdate() == 0) {
-                    // natural_key already present from a prior run; its consumption rows exist too.
-                    continue;
-                }
-
-                long eventId;
-                try (ResultSet rs = eventPs.getGeneratedKeys()) {
-                    if (!rs.next()) {
-                        continue;
-                    }
-                    eventId = rs.getLong(1);
-                }
-
-                if (flip.consumedTrades != null) {
-                    for (long[] consumed : flip.consumedTrades) {
-                        consumedPs.setLong(1, consumed[0]);
-                        consumedPs.setLong(2, eventId);
-                        consumedPs.setInt(3, (int) consumed[1]);
-                        consumedPs.addBatch();
-                        consumedCount++;
-
-                        if (consumedCount % BATCH_SIZE == 0) {
-                            consumedPs.executeBatch();
-                        }
-                    }
-                }
-            }
-            if (consumedCount % BATCH_SIZE != 0) {
-                consumedPs.executeBatch();
             }
         }
     }
@@ -690,7 +409,6 @@ public class MigrationService {
         }
 
         int totalRecipeFlips = 0;
-        Gson gson = new Gson();
 
         String eventSql = "INSERT OR IGNORE INTO events (account_id, timestamp, type, cost, profit, note, natural_key) VALUES (?, ?, 'recipe', ?, ?, ?, ?)";
         String recipeFlipSql = "INSERT INTO recipe_flips (event_id, recipe_key, coin_cost) VALUES (?, ?, ?)";
@@ -849,46 +567,6 @@ public class MigrationService {
     }
 
     /**
-     * Migrate local recipes to the recipes table.
-     */
-    public int migrateLocalRecipes(List<Recipe> localRecipes) {
-        if (localRecipes == null || localRecipes.isEmpty()) {
-            log.info("No local recipes to migrate.");
-            return 0;
-        }
-
-        Gson gson = new Gson();
-        int count = 0;
-
-        try {
-            String sql = "INSERT OR REPLACE INTO recipes (recipe_key, name, inputs_json, outputs_json) VALUES (?, ?, ?, ?)";
-            try (PreparedStatement ps = storage.getConnection().prepareStatement(sql)) {
-                for (Recipe recipe : localRecipes) {
-                    if (recipe == null) continue;
-
-                    String recipeKey = com.flippingutilities.controller.RecipeHandler.createRecipeKey(recipe);
-                    String name = recipe.getName();
-                    String inputsJson = gson.toJson(recipe.getInputs());
-                    String outputsJson = gson.toJson(recipe.getOutputs());
-
-                    ps.setString(1, recipeKey);
-                    ps.setString(2, name);
-                    ps.setString(3, inputsJson);
-                    ps.setString(4, outputsJson);
-                    ps.addBatch();
-                    count++;
-                }
-                ps.executeBatch();
-            }
-        } catch (SQLException e) {
-            log.error("Error migrating local recipes", e);
-        }
-
-        log.info("Migrated {} local recipes", count);
-        return count;
-    }
-
-    /**
      * Hydrate PartialOffers in recipe flips by linking them to their corresponding OfferEvents.
      * This is necessary because RecipeFlip.getProfit()/getExpense() depend on
      * po.getOffer() being non-null to compute correct values.
@@ -915,20 +593,6 @@ public class MigrationService {
                 }
             }
         }
-    }
-
-    /**
-     * Migrate favorites from JSON FlippingItem objects to the item_favorites table.
-     */
-    private int migrateFavorites() {
-        Map<String, AccountData> accounts = tradePersister.loadAllAccounts();
-        if (accounts == null || accounts.isEmpty()) return 0;
-
-        int count = 0;
-        for (Map.Entry<String, AccountData> entry : accounts.entrySet()) {
-            count += migrateFavoritesForAccount(entry.getKey(), entry.getValue());
-        }
-        return count;
     }
 
     /**
@@ -964,8 +628,9 @@ public class MigrationService {
         final int price;
         final boolean isBuy;
         final long tax;
+        final String offerJson;
 
-        TradeRecord(int accountId, int itemId, String uuid, long timestamp, int qty, int price, boolean isBuy, long tax) {
+        TradeRecord(int accountId, int itemId, String uuid, long timestamp, int qty, int price, boolean isBuy, long tax, String offerJson) {
             this.accountId = accountId;
             this.itemId = itemId;
             this.uuid = uuid;
@@ -973,30 +638,10 @@ public class MigrationService {
             this.qty = qty;
             this.price = price;
             this.isBuy = isBuy;
-            // Preserve the caller-supplied tax (the actual amount recorded on the OfferEvent)
-            // rather than recomputing via TaxCalculator, which can diverge if the formula or
-            // historical brackets change.
             this.tax = tax;
+            this.offerJson = offerJson;
         }
     }
 
-    private static class FlipRecord {
-        final int accountId;
-        final long timestamp;
-        final long cost;
-        final long profit;
-        final String note;
-        final String naturalKey;
-        final List<long[]> consumedTrades;
 
-        FlipRecord(int accountId, long timestamp, long cost, long profit, String note, String naturalKey, List<long[]> consumedTrades) {
-            this.accountId = accountId;
-            this.timestamp = timestamp;
-            this.cost = cost;
-            this.profit = profit;
-            this.note = note;
-            this.naturalKey = naturalKey;
-            this.consumedTrades = consumedTrades;
-        }
-    }
 }
