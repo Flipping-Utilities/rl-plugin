@@ -2528,10 +2528,15 @@ public class SqliteStorage {
     }
 
     /**
-     * Delete all recipe flips created after a timestamp (the interval-reset flow on a recipe
-     * group panel). Strictly after, mirroring RecipeFlipGroup.deleteFlips' isAfter check.
+     * Delete a single group's recipe flips created after a timestamp (the interval-reset flow
+     * on a recipe group panel). Scoped to the recipe key: deleting one group must not touch
+     * other groups' flips in the same interval. Strictly after, mirroring
+     * RecipeFlipGroup.deleteFlips' isAfter check.
      */
-    public synchronized void deleteRecipeFlipsSince(String displayName, Instant since) {
+    public synchronized void deleteRecipeFlipsSince(String displayName, String recipeKey, Instant since) {
+        if (recipeKey == null) {
+            return;
+        }
         Integer accountId = getAccountId(displayName);
         if (accountId == null) {
             return;
@@ -2541,9 +2546,11 @@ public class SqliteStorage {
             Connection conn = getConnection();
             List<Long> eventIds = new ArrayList<>();
             try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT id FROM events WHERE account_id = ? AND type = 'recipe' AND timestamp > ?")) {
+                "SELECT e.id FROM events e JOIN recipe_flips rf ON rf.event_id = e.id " +
+                "WHERE e.account_id = ? AND e.type = 'recipe' AND rf.recipe_key = ? AND e.timestamp > ?")) {
                 ps.setInt(1, accountId);
-                ps.setLong(2, sinceMillis);
+                ps.setString(2, recipeKey);
+                ps.setLong(3, sinceMillis);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         eventIds.add(rs.getLong(1));
@@ -2558,7 +2565,7 @@ public class SqliteStorage {
             try {
                 deleteEventsById(conn, eventIds);
                 conn.commit();
-                logger.info("Deleted {} SQLite recipe flips for {} since {}", eventIds.size(), displayName, since);
+                logger.info("Deleted {} SQLite recipe flips for {} [{}] since {}", eventIds.size(), displayName, recipeKey, since);
             } catch (SQLException e) {
                 conn.rollback();
                 throw e;
