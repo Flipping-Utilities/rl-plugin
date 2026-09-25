@@ -109,6 +109,97 @@ public class RecipeAccountLoadTest {
         }
     }
 
+    @Test
+    public void deletionAfterMetadataReadKeepsCompleteRecipeSnapshot() throws Exception {
+        assertConcurrentDeletionKeepsSnapshot("recipe_flip_inputs");
+    }
+
+    @Test
+    public void deletionAfterInputsReadKeepsCompleteRecipeSnapshot() throws Exception {
+        assertConcurrentDeletionKeepsSnapshot("recipe_flip_outputs");
+    }
+
+    private void assertConcurrentDeletionKeepsSnapshot(String beforeTable) throws Exception {
+        File file = temporaryFolder.newFile("concurrent-deletion.db");
+        CountingStorage reader = new CountingStorage(file);
+        SqliteStorage writer = new SqliteStorage(file);
+        try {
+            reader.initializeSchema();
+            reader.insertRecipeFlip(ACCOUNT, "recipe", recipe(ACCOUNT, TIME, 100));
+            reader.beforeTable = beforeTable;
+            reader.beforeRead = () -> writer.deleteRecipeFlip(ACCOUNT, "recipe", TIME);
+
+            RecipeFlip restored = reader.loadAccount(ACCOUNT).getRecipeFlipGroups().get(0).getRecipeFlips().get(0);
+            assertEquals(12, restored.getCoinCost());
+            assertEquals(1, restored.getInputs().size());
+            assertEquals(1, restored.getOutputs().size());
+            assertComponent(restored.getInputs().get(4151).get("shared"), 100, 2, true, ACCOUNT);
+            assertComponent(restored.getOutputs().get(4151).get("shared"), 150, 1, false, ACCOUNT);
+            assertNull("The deletion must run between read batches", reader.beforeRead);
+            assertTrue(reader.getConnection().getAutoCommit());
+            assertTrue("The next load must observe the committed deletion", reader.loadAccount(ACCOUNT).getRecipeFlipGroups().isEmpty());
+        } finally {
+            reader.close();
+            writer.close();
+        }
+    }
+
+    @Test
+    public void loadDoesNotCommitOrCloseACallerTransaction() throws Exception {
+        File file = temporaryFolder.newFile("caller-transaction.db");
+        SqliteStorage storage = new SqliteStorage(file);
+        SqliteStorage observer = new SqliteStorage(file);
+        try {
+            storage.initializeSchema();
+            storage.insertRecipeFlip(ACCOUNT, "recipe", recipe(ACCOUNT, TIME, 100));
+            Connection connection = storage.getConnection();
+            connection.setAutoCommit(false);
+            storage.setSetting("pending-caller-write", "uncommitted");
+
+            assertEquals(1, storage.loadAccount(ACCOUNT).getRecipeFlipGroups().size());
+            assertFalse(connection.getAutoCommit());
+            assertEquals("uncommitted", storage.getSetting("pending-caller-write"));
+            assertNull("Loading must not commit the caller's pending writes", observer.getSetting("pending-caller-write"));
+            connection.rollback();
+            connection.setAutoCommit(true);
+            assertNull(storage.getSetting("pending-caller-write"));
+        } finally {
+            storage.close();
+            observer.close();
+        }
+    }
+
+    @Test
+    public void malformedSnapshotReleasesOwnedReadTransaction() throws Exception {
+        File file = temporaryFolder.newFile("invalid-snapshot.db");
+        SqliteStorage storage = new SqliteStorage(file);
+        SqliteStorage writer = new SqliteStorage(file);
+        try {
+            storage.initializeSchema();
+            storage.insertRecipeFlip(ACCOUNT, "recipe", recipe(ACCOUNT, TIME, 100));
+            try (PreparedStatement corrupt = writer.getConnection().prepareStatement("UPDATE recipe_flip_inputs SET offer_json = ?")) {
+                corrupt.setString(1, "{");
+                corrupt.executeUpdate();
+            }
+            try {
+                storage.loadAccount(ACCOUNT);
+                fail("A malformed offer snapshot must fail the load");
+            } catch (com.google.gson.JsonSyntaxException expected) {
+                assertTrue(storage.getConnection().getAutoCommit());
+            }
+            try (PreparedStatement repair = writer.getConnection().prepareStatement("UPDATE recipe_flip_inputs SET offer_json = ?")) {
+                repair.setString(1, "null");
+                repair.executeUpdate();
+            }
+            RecipeFlip restored = storage.loadAccount(ACCOUNT).getRecipeFlipGroups().get(0).getRecipeFlips().get(0);
+            assertNull(restored.getInputs().get(4151).get("shared").getOffer());
+            assertComponent(restored.getOutputs().get(4151).get("shared"), 150, 1, false, ACCOUNT);
+        } finally {
+            storage.close();
+            writer.close();
+        }
+    }
+
     private static RecipeFlip recipe(String account, Instant time, int price) {
         OfferEvent input = complete(account, 4151, "shared", time.toEpochMilli(), 10, price, true);
         OfferEvent output = complete(account, 4151, "shared", time.toEpochMilli(), 10, price + 50, false);
@@ -132,6 +223,8 @@ public class RecipeAccountLoadTest {
     /** Counts executed JDBC reads while delegating all storage work to a real SQLite database. */
     private static final class CountingStorage extends SqliteStorage {
         private int recipeQueries;
+        private String beforeTable;
+        private Runnable beforeRead;
 
         private CountingStorage(File file) {
             super(file);
@@ -144,11 +237,17 @@ public class RecipeAccountLoadTest {
                 (proxy, method, arguments) -> {
                     Object result = invoke(delegate, method, arguments);
                     if (method.getName().equals("prepareStatement") && ((String) arguments[0]).contains("recipe_flip")) {
+                        String sql = (String) arguments[0];
                         PreparedStatement statement = (PreparedStatement) result;
                         return Proxy.newProxyInstance(PreparedStatement.class.getClassLoader(), new Class<?>[] {PreparedStatement.class},
                             (statementProxy, statementMethod, statementArguments) -> {
                                 if (statementMethod.getName().equals("executeQuery")) {
                                     recipeQueries++;
+                                    if (beforeRead != null && sql.contains(beforeTable)) {
+                                        Runnable action = beforeRead;
+                                        beforeRead = null;
+                                        action.run();
+                                    }
                                 }
                                 return invoke(statement, statementMethod, statementArguments);
                             });
