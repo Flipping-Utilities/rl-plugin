@@ -1,6 +1,7 @@
 package com.flippingutilities.db;
 
 import com.flippingutilities.model.AccountData;
+import com.flippingutilities.model.AccountWideData;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.RecipeFlip;
@@ -329,6 +330,76 @@ public class MigrationLiveTradeInteractionTest {
             "true".equalsIgnoreCase(storage.getSetting("migration_completed")));
         assertEquals("Good account's trades are durable", 1L,
             count("SELECT COUNT(*) FROM trades WHERE uuid = 'g-buy'"));
+    }
+
+    @Test
+    public void testMigrationPreservesFirstUnfilledOfferWithoutTradeHistory() {
+        String newAccount = "FirstOfferPlayer";
+        AccountData data = new AccountData();
+        data.setSessionStartTime(Instant.ofEpochMilli(BASE_TS));
+        data.setAccumulatedSessionTimeMillis(123456L);
+        OfferEvent firstOffer = completeOffer("first-offer", true, 0, 50000, BASE_TS + 1000);
+        firstOffer.setMadeBy(newAccount);
+        firstOffer.setState(GrandExchangeOfferState.BUYING);
+        firstOffer.setTotalQuantityInTrade(10);
+        firstOffer.setSlot(2);
+        firstOffer.setTradeStartedAt(firstOffer.getTime());
+        data.getLastOffers().put(2, firstOffer);
+
+        AccountData active = accountDataWithOffers(completeOffer("active-buy", true, 1, 50000, BASE_TS));
+        assertEquals(2, migrateAccounts(Map.of(newAccount, data, ACCOUNT, active)));
+
+        AccountData reloaded = storage.loadAccount(newAccount);
+        assertNotNull("Accounts with only a first unfilled offer must survive migration", reloaded);
+        assertEquals(data.getSessionStartTime(), reloaded.getSessionStartTime());
+        assertEquals(data.getAccumulatedSessionTimeMillis(), reloaded.getAccumulatedSessionTimeMillis());
+        assertTrue(reloaded.getTrades().isEmpty());
+        OfferEvent loadedOffer = reloaded.getLastOffers().get(2);
+        assertNotNull("The active GE slot must survive migration", loadedOffer);
+        assertEquals(firstOffer.getUuid(), loadedOffer.getUuid());
+        assertEquals(GrandExchangeOfferState.BUYING, loadedOffer.getState());
+        assertEquals(0, loadedOffer.getCurrentQuantityInTrade());
+        assertEquals(10, loadedOffer.getTotalQuantityInTrade());
+        assertEquals(firstOffer.getTradeStartedAt(), loadedOffer.getTradeStartedAt());
+        assertNotNull(storage.getSetting("migrated_" + newAccount));
+        assertEquals("true", storage.getSetting("migration_completed"));
+        assertEquals(1, storage.loadAccount(ACCOUNT).getTrades().size());
+    }
+
+    @Test
+    public void testMigrationPreservesRecipeOnlyAccountSessionAndMarker() {
+        String recipeAccount = "RecipeOnlyPlayer";
+        AccountData data = new AccountData();
+        data.setTrades(null);
+        data.setSessionStartTime(Instant.ofEpochMilli(BASE_TS));
+        data.setAccumulatedSessionTimeMillis(654321L);
+        OfferEvent input = completeOffer("recipe-only-input", true, 10, 100, BASE_TS);
+        RecipeFlip flip = new RecipeFlip(Instant.ofEpochMilli(BASE_TS + 1000), new HashMap<>(),
+            Map.of(WHIP, Map.of(input.getUuid(), new PartialOffer(input, 4))), 25L);
+        RecipeFlipGroup group = new RecipeFlipGroup("4151:4587");
+        group.addRecipeFlip(flip);
+        data.getRecipeFlipGroups().add(group);
+
+        assertEquals(1, migrateAccounts(Map.of(recipeAccount, data)));
+
+        AccountData reloaded = storage.loadAccount(recipeAccount);
+        assertNotNull(reloaded);
+        assertEquals(data.getSessionStartTime(), reloaded.getSessionStartTime());
+        assertEquals(data.getAccumulatedSessionTimeMillis(), reloaded.getAccumulatedSessionTimeMillis());
+        assertEquals(1, reloaded.getRecipeFlipGroups().size());
+        RecipeFlip loadedFlip = reloaded.getRecipeFlipGroups().get(0).getRecipeFlips().get(0);
+        assertEquals(flip.getTimeOfCreation(), loadedFlip.getTimeOfCreation());
+        assertEquals(4, loadedFlip.getInputs().get(WHIP).get(input.getUuid()).getAmountConsumed());
+        assertNotNull(storage.getSetting("migrated_" + recipeAccount));
+        assertEquals("true", storage.getSetting("migration_completed"));
+    }
+
+    private int migrateAccounts(Map<String, AccountData> accounts) {
+        TradePersister persister = new TradePersister(new Gson()) {
+            @Override public Map<String, AccountData> loadAllAccounts() { return accounts; }
+            @Override public AccountWideData loadAccountWideData() { return new AccountWideData(); }
+        };
+        return new MigrationService(storage, persister).migrate();
     }
 
     /**

@@ -227,15 +227,8 @@ public class MigrationService {
         }
 
         List<FlippingItem> tradeItems = accountData.getTrades();
-        if (tradeItems == null || tradeItems.isEmpty()) {
-            log.debug("No trades to migrate for: {}", displayName);
-            // Still try to migrate recipe flips even if no regular trades
-            List<RecipeFlipGroup> recipeFlipGroups = accountData.getRecipeFlipGroups();
-            if (recipeFlipGroups != null && !recipeFlipGroups.isEmpty()) {
-                int accountId = getOrCreateAccountId(conn, displayName);
-                recipeFlipsCount = migrateRecipeFlipsBatched(conn, accountId, recipeFlipGroups, Collections.emptyMap());
-            }
-            return new int[]{0, 0, recipeFlipsCount};
+        if (tradeItems == null) {
+            tradeItems = Collections.emptyList();
         }
 
         // Get or create account ID
