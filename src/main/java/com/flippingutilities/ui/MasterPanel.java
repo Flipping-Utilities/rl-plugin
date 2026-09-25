@@ -257,7 +257,7 @@ public class MasterPanel extends PluginPanel
 		{
 			return;
 		}
-		boolean sqlite = plugin != null && plugin.getConfig() != null && plugin.getConfig().dataSource().isSqlite();
+		boolean sqlite = plugin != null && plugin.getSqliteStorage() != null;
 		statisticsTab.setIcon(sqlite ? Icons.DATABASE_ICON : null);
 		statisticsTab.setToolTipText(sqlite ? "stats (SQLite storage active)" : null);
 		tabGroup.revalidate();

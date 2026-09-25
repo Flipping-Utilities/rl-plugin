@@ -1,17 +1,15 @@
 package com.flippingutilities.db;
 
-import com.flippingutilities.db.FlipRepository.AggregateStats;
 import com.flippingutilities.model.*;
 import com.flippingutilities.utilities.Constants;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.stream.JsonReader;
+import net.runelite.api.GrandExchangeOfferState;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
-import java.io.FileReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -24,7 +22,7 @@ import java.util.stream.Collectors;
 import static org.junit.Assert.*;
 
 /**
- * Loads the real Test.json file, migrates it to SQLite via MigrationService,
+ * Builds account fixtures, migrates them to SQLite via MigrationService,
  * and verifies that both backends report identical data for:
  *   - trade counts per item
  *   - total expense / revenue
@@ -32,8 +30,6 @@ import static org.junit.Assert.*;
  *   - favorites
  *   - session time
  *   - GE limit state
- *
- * The Test.json file is NEVER modified — it is read directly from src/test.
  */
 public class TestMigrationParityTest {
 
@@ -99,6 +95,8 @@ public class TestMigrationParityTest {
         whip.setFavorite(true);
 
         OfferEvent whipBuy = new OfferEvent();
+        whipBuy.setUuid(UUID.randomUUID().toString());
+        whipBuy.setState(GrandExchangeOfferState.BOUGHT);
         whipBuy.setItemId(4151);
         whipBuy.setBuy(true);
         whipBuy.setCurrentQuantityInTrade(10);
@@ -108,6 +106,8 @@ public class TestMigrationParityTest {
         whip.updateHistory(whipBuy);
 
         OfferEvent whipSell = new OfferEvent();
+        whipSell.setUuid(UUID.randomUUID().toString());
+        whipSell.setState(GrandExchangeOfferState.SOLD);
         whipSell.setItemId(4151);
         whipSell.setBuy(false);
         whipSell.setCurrentQuantityInTrade(10);
@@ -122,6 +122,8 @@ public class TestMigrationParityTest {
         dscim.setValidFlippingPanelItem(true);
 
         OfferEvent dscimBuy = new OfferEvent();
+        dscimBuy.setUuid(UUID.randomUUID().toString());
+        dscimBuy.setState(GrandExchangeOfferState.BOUGHT);
         dscimBuy.setItemId(4587);
         dscimBuy.setBuy(true);
         dscimBuy.setCurrentQuantityInTrade(5);
@@ -131,6 +133,8 @@ public class TestMigrationParityTest {
         dscim.updateHistory(dscimBuy);
 
         OfferEvent dscimSell = new OfferEvent();
+        dscimSell.setUuid(UUID.randomUUID().toString());
+        dscimSell.setState(GrandExchangeOfferState.SOLD);
         dscimSell.setItemId(4587);
         dscimSell.setBuy(false);
         dscimSell.setCurrentQuantityInTrade(5);
@@ -514,65 +518,78 @@ public class TestMigrationParityTest {
     // --- Per-recipe profit parity ---
 
     /**
-     * Verify that per-recipe profit in SQLite (via cached stats / events table)
-     * matches the JSON side computed from hydrated RecipeFlips.
-     * This ensures the elysian spirit shield recipe shows the correct profit.
+     * Recipe displays calculate profit from the loaded components, so verify those
+     * components preserve prices, consumed quantities, and coin costs after migration.
      */
     @Test
-    public void testPerRecipeProfitParity() {
-        // Hydrate PartialOffers (same as migration)
-        Map<String, OfferEvent> offersByUuid = new HashMap<>();
-        for (FlippingItem item : jsonAccountData.getTrades()) {
-            if (item.getHistory() == null) continue;
-            for (OfferEvent offer : item.getHistory().getCompressedOfferEvents()) {
-                if (offer != null) offersByUuid.put(offer.getUuid(), offer);
-            }
+    public void testPerRecipeProfitParity() throws Exception {
+        AccountData recipeData = createTestAccountData();
+        OfferEvent input = recipeData.getTrades().get(0).getHistory().getCompressedOfferEvents().stream()
+            .filter(OfferEvent::isBuy).findFirst().get();
+        OfferEvent output = recipeData.getTrades().get(1).getHistory().getCompressedOfferEvents().stream()
+            .filter(offer -> !offer.isBuy()).findFirst().get();
+        RecipeFlipGroup group = new RecipeFlipGroup("4151:1|4587:1");
+        for (int quantity = 1; quantity <= 2; quantity++) {
+            group.getRecipeFlips().add(new RecipeFlip(
+                Instant.now().minusSeconds(quantity),
+                Collections.singletonMap(output.getItemId(),
+                    Collections.singletonMap(output.getUuid(), new PartialOffer(output, quantity))),
+                Collections.singletonMap(input.getItemId(),
+                    Collections.singletonMap(input.getUuid(), new PartialOffer(input, quantity))),
+                quantity * 100L));
         }
-        for (RecipeFlipGroup group : jsonAccountData.getRecipeFlipGroups()) {
-            for (RecipeFlip flip : group.getRecipeFlips()) {
-                for (PartialOffer po : flip.getPartialOffers()) {
-                    po.hydrateOffer(offersByUuid);
-                }
-            }
-        }
+        recipeData.setRecipeFlipGroups(Collections.singletonList(group));
 
-        // Build per-recipe profit from JSON
-        Map<String, Long> jsonProfitByKey = new HashMap<>();
-        for (RecipeFlipGroup group : jsonAccountData.getRecipeFlipGroups()) {
-            long groupProfit = 0;
-            for (RecipeFlip flip : group.getRecipeFlips()) {
-                groupProfit += flip.getProfit();
-            }
-            jsonProfitByKey.put(group.getRecipeKey(), groupProfit);
-        }
+        String recipeAccount = "Recipe Test";
+        MigrationService migration = new MigrationService(storage, new TradePersister(new Gson()));
+        int[] counts = migration.migrateAccountBatched(storage.getConnection(), recipeAccount, recipeData);
+        assertEquals("Both recipe flips should migrate", 2, counts[2]);
 
-        // Build per-recipe profit from SQLite via loadRecipeFlipGroups (which sets cached stats)
-        AccountData sqliteData = storage.loadAccount(ACCOUNT_NAME);
-        Map<String, Long> sqliteProfitByKey = new HashMap<>();
-        for (RecipeFlipGroup group : sqliteData.getRecipeFlipGroups()) {
-            assertTrue("RecipeFlipGroup should have cached stats", group.isHasCachedStats());
-            sqliteProfitByKey.put(group.getRecipeKey(), group.getCachedTotalProfit());
-        }
+        AccountData loaded = storage.loadAccount(recipeAccount);
+        assertEquals(1, loaded.getRecipeFlipGroups().size());
+        RecipeFlipGroup loadedGroup = loaded.getRecipeFlipGroups().get(0);
+        assertEquals(group.getRecipeKey(), loadedGroup.getRecipeKey());
+        assertEquals(2, loadedGroup.getRecipeFlips().size());
+        long expectedProfit = group.getRecipeFlips().stream().mapToLong(RecipeFlip::getProfit).sum();
+        assertEquals("The fixture should include consumed quantities, sell tax, and coin costs", 40_800L, expectedProfit);
+        assertEquals("Loaded recipe components should produce the same displayed profit",
+            expectedProfit, loadedGroup.getRecipeFlips().stream().mapToLong(RecipeFlip::getProfit).sum());
+    }
 
-        // Compare
-        assertEquals("Per-recipe profit key count should match", jsonProfitByKey.size(), sqliteProfitByKey.size());
-        for (Map.Entry<String, Long> entry : jsonProfitByKey.entrySet()) {
-            String key = entry.getKey();
-            assertTrue("Recipe key " + key + " should exist in SQLite", sqliteProfitByKey.containsKey(key));
-            assertEquals("Per-recipe profit for " + key + " should match",
-                entry.getValue(), sqliteProfitByKey.get(key));
-        }
+    @Test
+    public void testRecipeSnapshotCanBeDeletedAtOriginalCreationTime() {
+        OfferEvent input = jsonAccountData.getTrades().get(0).getHistory().getCompressedOfferEvents().stream()
+            .filter(OfferEvent::isBuy).findFirst().get();
+        OfferEvent output = jsonAccountData.getTrades().get(1).getHistory().getCompressedOfferEvents().stream()
+            .filter(offer -> !offer.isBuy()).findFirst().get();
+        RecipeFlip original = new RecipeFlip(
+            Instant.parse("2026-09-25T12:34:56.789Z"),
+            Collections.singletonMap(output.getItemId(),
+                Collections.singletonMap(output.getUuid(), new PartialOffer(output, 1))),
+            Collections.singletonMap(input.getItemId(),
+                Collections.singletonMap(input.getUuid(), new PartialOffer(input, 1))),
+            100L);
+        String recipeKey = "4151:1|4587:1";
 
-        // Verify best recipe matches
-        String jsonBestRecipe = jsonProfitByKey.entrySet().stream()
-            .max(Map.Entry.comparingByValue())
-            .map(Map.Entry::getKey).orElse(null);
-        String sqliteBestRecipe = sqliteProfitByKey.entrySet().stream()
-            .max(Map.Entry.comparingByValue())
-            .map(Map.Entry::getKey).orElse(null);
-        System.out.println("[Test] Best recipe: JSON=" + jsonBestRecipe + " (profit=" + jsonProfitByKey.get(jsonBestRecipe) + ")" +
-            ", SQLite=" + sqliteBestRecipe + " (profit=" + sqliteProfitByKey.get(sqliteBestRecipe) + ")");
-        assertEquals("Best recipe (highest profit) should match", jsonBestRecipe, sqliteBestRecipe);
+        // Queued writes persist a snapshot, while a later UI delete uses the original flip.
+        storage.insertRecipeFlip(ACCOUNT_NAME, recipeKey, original.clone());
+        assertEquals(1, storage.loadAccount(ACCOUNT_NAME).getRecipeFlipGroups().size());
+        storage.deleteRecipeFlip(ACCOUNT_NAME, recipeKey, original.getTimeOfCreation());
+        assertTrue("Deleting by the original timestamp should remove the persisted snapshot",
+            storage.loadAccount(ACCOUNT_NAME).getRecipeFlipGroups().isEmpty());
+    }
+
+    @Test
+    public void testFavoriteBeforeFirstTradeCreatesAnAccount() {
+        storage.upsertFavorite("New Account", 4151, true, "w");
+
+        AccountData loaded = storage.loadAccount("New Account");
+        assertNotNull("A favorite should persist before the account has completed any trades", loaded);
+        assertEquals(1, loaded.getTrades().size());
+        FlippingItem item = loaded.getTrades().get(0);
+        assertEquals(4151, item.getItemId());
+        assertTrue(item.isFavorite());
+        assertEquals("w", item.getFavoriteCode());
     }
 
     // --- Helper methods ---

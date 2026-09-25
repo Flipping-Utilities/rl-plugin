@@ -32,17 +32,6 @@ public class RecipeFlipGroup implements Searchable {
     
     private List<RecipeFlip> recipeFlips = new ArrayList<>();
 
-    // Cached stats from the events table (set by SqliteStorage when loading from DB).
-    // transient + @Expose ensures they are never serialized to JSON regardless of Gson config.
-    @Expose(serialize = false, deserialize = false)
-    private transient long cachedTotalProfit;
-    @Expose(serialize = false, deserialize = false)
-    private transient long cachedTotalExpense;
-    @Expose(serialize = false, deserialize = false)
-    private transient int cachedFlipCount;
-    @Expose(serialize = false, deserialize = false)
-    private transient boolean hasCachedStats;
-
     public RecipeFlipGroup(Recipe recipe) {
         this.recipe = recipe;
         this.recipeKey = RecipeHandler.createRecipeKey(recipe);
