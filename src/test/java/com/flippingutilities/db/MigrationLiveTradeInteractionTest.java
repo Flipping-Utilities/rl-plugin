@@ -409,6 +409,45 @@ public class MigrationLiveTradeInteractionTest {
     }
 
     /**
+     * Historical files serialize Instant reflectively as {"seconds":X,"nanos":Y} (written by
+     * builds whose Gson had no Instant adapter). The adapter-bearing Gson threw on that form;
+     * the lenient loader then fell back to the equally-old backup, returned an EMPTY account,
+     * and the next save overwrote years of data with the empty state - users lost 30%+ of
+     * files this way. All historical encodings must parse, and the account must migrate.
+     */
+    @Test
+    public void testLegacyObjectInstantsParseAndMigrate() throws Exception {
+        Path accountsDir = Files.createTempDirectory("legacy_instant_");
+        File accountFile = new File(accountsDir.toFile(), ACCOUNT + ".json");
+        String legacy = "{\"lastOffers\":{\"1\":{\"b\":true,\"id\":4151,\"cQIT\":5,\"p\":100,"
+            + "\"t\":{\"seconds\":1600000000,\"nanos\":123000000},\"s\":1,\"tQIT\":5}},"
+            + "\"trades\":[{\"id\":4151,\"name\":\"Whip\",\"tGL\":70,\"h\":{\"sO\":[{\"b\":true,\"id\":4151,\"cQIT\":5,\"p\":100,"
+            + "\"t\":{\"seconds\":1600000000,\"nanos\":0},\"s\":1,\"st\":\"BOUGHT\",\"tQIT\":5}]}}]}";
+        Files.write(accountFile.toPath(), legacy.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        TradePersister persister = new TradePersister(new GsonBuilder().create(), accountsDir.toFile());
+        Map<String, AccountData> accounts = persister.loadAllAccountsForMigration();
+        assertEquals(1, accounts.size());
+        AccountData data = accounts.get(ACCOUNT);
+        assertEquals(1, data.getTrades().size());
+        OfferEvent historyOffer = data.getTrades().get(0).getHistory().getCompressedOfferEvents().get(0);
+        assertEquals(Instant.ofEpochSecond(1600000000), historyOffer.getTime());
+        assertEquals(Instant.ofEpochSecond(1600000000, 123000000),
+            data.getLastOffers().get(1).getTime());
+
+        SqliteStorage storage = new SqliteStorage(new File(accountsDir.toFile(), "legacy.db"));
+        try {
+            assertEquals(1, new MigrationService(storage, persister).migrate(accounts));
+            AccountData loaded = storage.loadAccount(ACCOUNT);
+            assertEquals(1, loaded.getTrades().size());
+            assertEquals(Instant.ofEpochSecond(1600000000),
+                loaded.getTrades().get(0).getHistory().getCompressedOfferEvents().get(0).getTime());
+        } finally {
+            storage.close();
+        }
+    }
+
+    /**
      * A partially-failed migration must keep successfully-migrated accounts committed (their
      * migrated_ flags durable) while leaving migration_completed unset so the next startup
      * retries the failed account.
