@@ -525,62 +525,84 @@ public class SqliteStorage {
      * Load recipe flip groups from SQLite for an account.
      */
     private List<RecipeFlipGroup> loadRecipeFlipGroups(int accountId, String displayName) {
-        List<RecipeFlipGroup> groups = new ArrayList<>();
-
-        String groupSql = "SELECT id, recipe_key, coin_cost, timestamp FROM recipe_flips " +
-            "WHERE account_id = ? ORDER BY recipe_key, timestamp";
-
         try {
             Connection conn = getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(groupSql)) {
-                ps.setInt(1, accountId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    Map<String, RecipeFlipGroup> groupMap = new HashMap<>();
-
-                    while (rs.next()) {
-                        String recipeKey = rs.getString("recipe_key");
-                        long timestamp = rs.getLong("timestamp");
-                        long coinCost = rs.getLong("coin_cost");
-                        long recipeFlipId = rs.getLong("id");
-
-                        // Get or create the group
-                        RecipeFlipGroup group = groupMap.computeIfAbsent(recipeKey, RecipeFlipGroup::new);
-
-                        // Load inputs and outputs for this recipe flip
-                        Map<Integer, Map<String, PartialOffer>> inputs = loadRecipeFlipComponents(recipeFlipId, displayName, true);
-                        Map<Integer, Map<String, PartialOffer>> outputs = loadRecipeFlipComponents(recipeFlipId, displayName, false);
-
-                        // Create RecipeFlip
-                        RecipeFlip flip = new RecipeFlip(
-                            Instant.ofEpochMilli(timestamp),
-                            outputs,
-                            inputs,
-                            coinCost
-                        );
-
-                        group.getRecipeFlips().add(flip);
-                    }
-
-                    groups.addAll(groupMap.values());
+            boolean ownsTransaction = conn.getAutoCommit();
+            if (ownsTransaction) {
+                conn.setAutoCommit(false);
+            }
+            try {
+                // Another client may delete recipes while this account is loading.
+                // Keep metadata and both component batches in the same read snapshot.
+                return readRecipeFlipGroups(conn, accountId, displayName);
+            } finally {
+                if (ownsTransaction) {
+                    // This transaction only reads; restoring autocommit releases its
+                    // snapshot on both success and failure. Caller transactions stay open.
+                    conn.setAutoCommit(true);
                 }
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Error loading recipe flip groups", e);
         }
+    }
 
+    private List<RecipeFlipGroup> readRecipeFlipGroups(Connection conn, int accountId, String displayName) throws SQLException {
+        List<RecipeFlipGroup> groups = new ArrayList<>();
+        Map<Long, RecipeFlip> flipsById = new HashMap<>();
+
+        String groupSql = "SELECT id, recipe_key, coin_cost, timestamp FROM recipe_flips " +
+            "WHERE account_id = ? ORDER BY recipe_key, timestamp";
+
+        try (PreparedStatement ps = conn.prepareStatement(groupSql)) {
+            ps.setInt(1, accountId);
+            try (ResultSet rs = ps.executeQuery()) {
+                Map<String, RecipeFlipGroup> groupMap = new HashMap<>();
+
+                while (rs.next()) {
+                    String recipeKey = rs.getString("recipe_key");
+                    long timestamp = rs.getLong("timestamp");
+                    long coinCost = rs.getLong("coin_cost");
+                    long recipeFlipId = rs.getLong("id");
+
+                    // Get or create the group
+                    RecipeFlipGroup group = groupMap.computeIfAbsent(recipeKey, RecipeFlipGroup::new);
+
+                    RecipeFlip flip = new RecipeFlip(
+                        Instant.ofEpochMilli(timestamp),
+                        new HashMap<>(),
+                        new HashMap<>(),
+                        coinCost
+                    );
+                    flipsById.put(recipeFlipId, flip);
+                    group.getRecipeFlips().add(flip);
+                }
+
+                groups.addAll(groupMap.values());
+            }
+        }
+
+        // Each side is read once for the account, rather than opening two queries per
+        // flip. Populate the existing maps so components never need a second copy.
+        if (!flipsById.isEmpty()) {
+            loadRecipeFlipComponents(conn, accountId, displayName, flipsById, true);
+            loadRecipeFlipComponents(conn, accountId, displayName, flipsById, false);
+        }
         return groups;
     }
 
     /** Recipe snapshots remain valid even after their source trade leaves item history. */
-    private Map<Integer, Map<String, PartialOffer>> loadRecipeFlipComponents(long recipeFlipId,
-                                                                           String displayName, boolean inputs) {
-        Map<Integer, Map<String, PartialOffer>> components = new HashMap<>();
+    private void loadRecipeFlipComponents(Connection conn, int accountId, String displayName,
+                                          Map<Long, RecipeFlip> flipsById, boolean inputs) throws SQLException {
         String table = inputs ? "recipe_flip_inputs" : "recipe_flip_outputs";
-        String sql = "SELECT item_id, offer_uuid, amount_consumed, offer_json FROM " + table + " WHERE recipe_flip_id = ?";
-        try (PreparedStatement ps = getConnection().prepareStatement(sql)) {
-            ps.setLong(1, recipeFlipId);
+        String sql = "SELECT c.recipe_flip_id, c.item_id, c.offer_uuid, c.amount_consumed, c.offer_json " +
+            "FROM recipe_flips f JOIN " + table + " c ON c.recipe_flip_id = f.id WHERE f.account_id = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, accountId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    RecipeFlip flip = flipsById.get(rs.getLong("recipe_flip_id"));
+                    Map<Integer, Map<String, PartialOffer>> components = inputs ? flip.getInputs() : flip.getOutputs();
                     int itemId = rs.getInt("item_id");
                     String uuid = rs.getString("offer_uuid");
                     OfferEvent offer = SLOT_GSON.fromJson(rs.getString("offer_json"), OfferEvent.class);
@@ -593,10 +615,7 @@ public class SqliteStorage {
                     components.computeIfAbsent(itemId, ignored -> new HashMap<>()).put(uuid, component);
                 }
             }
-        } catch (SQLException e) {
-            throw new IllegalStateException("Error loading recipe components", e);
         }
-        return components;
     }
 
     /**
