@@ -266,7 +266,15 @@ public class MigrationService {
 
         // Resolve UUID-only recipes before persisting their independent offer snapshots.
         if (recipeFlipGroups != null && !recipeFlipGroups.isEmpty()) {
-            hydrateRecipeFlipOffers(recipeFlipGroups, tradeItems);
+            int dangling = hydrateRecipeFlipOffers(recipeFlipGroups, tradeItems);
+            if (dangling > 0) {
+                // One summary line instead of one WARN per component: real accounts carry
+                // hundreds of references to offers destroyed by historical data-loss bugs,
+                // and the per-component spam buried actually-useful log output.
+                log.warn("{} recipe component(s) in account {} reference offers that no longer "
+                    + "exist anywhere; they were stored as zero-price snapshots so the account "
+                    + "can migrate", dangling, displayName);
+            }
             recipeFlipsCount = migrateRecipeFlips(conn, accountId, recipeFlipGroups);
         }
 
@@ -400,7 +408,8 @@ public class MigrationService {
      * Older UUID-only files need the history lookup; embedded legacy offers also
      * normalize their UUID here. Neither source may be discarded before snapshotting.
      */
-    private void hydrateRecipeFlipOffers(List<RecipeFlipGroup> recipeFlipGroups, List<FlippingItem> tradeItems) {
+    /** @return the number of components whose offers exist nowhere (stored as zero-price stubs). */
+    private int hydrateRecipeFlipOffers(List<RecipeFlipGroup> recipeFlipGroups, List<FlippingItem> tradeItems) {
         // Build UUID -> OfferEvent lookup map from all trade items
         Map<String, OfferEvent> offersByUuid = new HashMap<>();
         for (FlippingItem item : tradeItems) {
@@ -420,36 +429,42 @@ public class MigrationService {
         // the account's whole migration — that drops every trade of the account from
         // SQLite and wrecks its totals. Synthesize a zero-price snapshot instead: the
         // component renders as 0 gp, everything else stays intact.
+        int dangling = 0;
         for (RecipeFlipGroup group : recipeFlipGroups) {
             for (RecipeFlip flip : group.getRecipeFlips()) {
-                hydrateComponents(flip.getInputs(), offersByUuid, true, flip.getTimeOfCreation());
-                hydrateComponents(flip.getOutputs(), offersByUuid, false, flip.getTimeOfCreation());
+                dangling += hydrateComponents(flip.getInputs(), offersByUuid, true, flip.getTimeOfCreation());
+                dangling += hydrateComponents(flip.getOutputs(), offersByUuid, false, flip.getTimeOfCreation());
             }
         }
+        return dangling;
     }
 
-    private void hydrateComponents(Map<Integer, Map<String, PartialOffer>> components,
-                                   Map<String, OfferEvent> offersByUuid, boolean inputs, Instant timeOfCreation) {
+    /** @return the number of components whose offers exist nowhere (stored as zero-price stubs). */
+    private int hydrateComponents(Map<Integer, Map<String, PartialOffer>> components,
+                                  Map<String, OfferEvent> offersByUuid, boolean inputs, Instant timeOfCreation) {
         if (components == null) {
-            return;
+            return 0;
         }
-        components.forEach((itemId, offerMap) -> {
+        int dangling = 0;
+        for (Map.Entry<Integer, Map<String, PartialOffer>> entry : components.entrySet()) {
+            int itemId = entry.getKey();
+            Map<String, PartialOffer> offerMap = entry.getValue();
             if (offerMap == null) {
-                return;
+                continue;
             }
-            offerMap.values().forEach(po -> {
+            for (PartialOffer po : offerMap.values()) {
                 if (po == null) {
-                    return;
+                    continue;
                 }
                 po.hydrateOffer(offersByUuid);
                 if (po.getOffer() == null) {
-                    log.warn("Recipe component {} (item {}) references an offer that no longer exists; "
-                        + "storing a zero-price snapshot so the account can migrate", po.getOfferUuid(), itemId);
                     po.setOffer(SqliteStorage.synthesizeComponentStub(
                         po.getOfferUuid(), itemId, inputs, po.getAmountConsumed(), timeOfCreation));
+                    dangling++;
                 }
-            });
-        });
+            }
+        }
+        return dangling;
     }
 
     /**

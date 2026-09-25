@@ -177,31 +177,44 @@ public class AccountData {
     }
 
     private void hydratePartialOffers(Map<String, OfferEvent> hydratedOffers, ItemManager itemManager) {
+        int missing = 0;
         for (RecipeFlipGroup rfg : recipeFlipGroups) {
             for (RecipeFlip flip : rfg.getRecipeFlips()) {
-                hydrateComponentOffers(flip.getInputs(), hydratedOffers, itemManager);
-                hydrateComponentOffers(flip.getOutputs(), hydratedOffers, itemManager);
+                missing += hydrateComponentOffers(flip.getInputs(), hydratedOffers, itemManager);
+                missing += hydrateComponentOffers(flip.getOutputs(), hydratedOffers, itemManager);
             }
+        }
+        if (missing > 0) {
+            // One summary line instead of one WARN per component: accounts with historical
+            // data-loss damage carry hundreds of dead references, and the per-component
+            // spam buried actually-useful log output.
+            log.warn("{} recipe component(s) reference offers that no longer exist; "
+                + "they will render without prices", missing);
         }
     }
 
-    private void hydrateComponentOffers(Map<Integer, Map<String, PartialOffer>> components,
+    /** @return the number of components left unresolved. */
+    private int hydrateComponentOffers(Map<Integer, Map<String, PartialOffer>> components,
                                         Map<String, OfferEvent> hydratedOffers, ItemManager itemManager) {
         if (components == null) {
-            return;
+            return 0;
         }
-        components.forEach((itemId, offerMap) -> {
+        int missing = 0;
+        for (Map.Entry<Integer, Map<String, PartialOffer>> componentEntry : components.entrySet()) {
+            int itemId = componentEntry.getKey();
+            Map<String, PartialOffer> offerMap = componentEntry.getValue();
             if (offerMap == null) {
-                return;
+                continue;
             }
-            offerMap.values().forEach(po -> {
+            for (PartialOffer po : offerMap.values()) {
                 po.hydrateOffer(hydratedOffers);
                 if (po.getOffer() == null) {
                     // Preserve an unresolved reference so persistence can detect missing data.
                     // A fabricated zero-price offer would be saved as if it were the real trade.
-                    log.warn("Recipe references missing offer uuid={} for item {}",
+                    log.debug("Recipe references missing offer uuid={} for item {}",
                         po.getOfferUuid(), itemId);
-                    return;
+                    missing++;
+                    continue;
                 }
                 OfferEvent o = hydratedOffers.get(po.getOfferUuid());
                 if (o != null) {
@@ -209,8 +222,9 @@ public class AccountData {
                 } else {
                     po.getOffer().setItemName(resolveItemName(itemManager, itemId));
                 }
-            });
-        });
+            }
+        }
+        return missing;
     }
 
     private String resolveItemName(ItemManager itemManager, int itemId) {
