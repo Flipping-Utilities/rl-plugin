@@ -192,7 +192,11 @@ public class RealDataMigrationTest {
         for (FlippingItem item : data.getTrades()) {
             if (item == null || item.getHistory() == null) continue;
             for (OfferEvent offer : item.getHistory().getCompressedOfferEvents()) {
-                if (offer == null || !offer.isComplete() || offer.isCausedByEmptySlot()) continue;
+                if (offer == null || offer.isCausedByEmptySlot()) continue;
+                // Complete offers, plus incomplete offers with filled units (cancelled
+                // partials / offers abandoned mid-fill): their filled volume is real money
+                // the JSON backend counts, so they migrate as trades too.
+                if (!offer.isComplete() && offer.getCurrentQuantityInTrade() <= 0) continue;
                 rows++;
             }
         }
@@ -380,7 +384,7 @@ public class RealDataMigrationTest {
             assertNotNull("migrated_ flag missing for " + name, storage.getSetting("migrated_" + name));
 
             long tradeRows = q("SELECT COUNT(*) FROM trades t JOIN accounts a ON a.id = t.account_id WHERE a.display_name = ?", name);
-            assertEquals("trade rows must match complete offers for " + name, expectedTradeRows(data), tradeRows);
+            assertEquals("trade rows must match complete + filled partial offers for " + name, expectedTradeRows(data), tradeRows);
 
             AccountData loaded = storage.loadAccount(name);
             assertNotNull("loadAccount must return data for " + name, loaded);
