@@ -1332,7 +1332,7 @@ public class FlippingPlugin extends Plugin {
         updateSinceLastRecipeFlipGroupAccountWideBuild = true;
 
         // Mirror the deletion into SQLite off-thread. The offer uuids identify
-        // the exact trade rows; events backed by those trades are deleted with them.
+        // the exact trade rows; recipes referencing those offers are deleted with them.
         if (sqliteStorage != null) {
             List<String> uuids = offers.stream()
                 .map(OfferEvent::getUuid)

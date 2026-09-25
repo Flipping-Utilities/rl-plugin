@@ -55,7 +55,7 @@ import static org.junit.Assume.assumeTrue;
  * - one trade row per complete offer (uuid dedupe must not lose real rows),
  * - restored flip profit exactly matches the JSON path's flip computation,
  * - recipe-flip and favorite counts match the source data,
- * - no dangling / negative consumption rows,
+ * - no dangling components or invalid consumed quantities,
  * - loadAccount round-trips every account,
  * - a forced re-run (flags cleared, i.e. the partial-failure retry path) inserts nothing new,
  * - the source JSON files are never modified.
@@ -239,7 +239,7 @@ public class RealDataMigrationTest {
         return sum;
     }
 
-    private static long expectedRecipeEvents(AccountData data) {
+    private static long expectedRecipeFlips(AccountData data) {
         long count = 0;
         if (data.getRecipeFlipGroups() == null) return 0;
         for (RecipeFlipGroup group : data.getRecipeFlipGroups()) {
@@ -389,8 +389,8 @@ public class RealDataMigrationTest {
             assertEquals("Restored flip profit must match the JSON flip computation for " + name,
                 expectedFlipProfit(data), flipProfit);
 
-            long recipeEvents = q("SELECT COUNT(*) FROM events e JOIN accounts a ON a.id = e.account_id WHERE a.display_name = ? AND e.type = 'recipe'", name);
-            assertEquals("recipe events must match source recipe flips for " + name, expectedRecipeEvents(data), recipeEvents);
+            long recipeFlips = q("SELECT COUNT(*) FROM recipe_flips rf JOIN accounts a ON a.id = rf.account_id WHERE a.display_name = ?", name);
+            assertEquals("recipe flips must match source for " + name, expectedRecipeFlips(data), recipeFlips);
 
             long favoriteRows = q("SELECT COUNT(*) FROM item_favorites f JOIN accounts a ON a.id = f.account_id WHERE a.display_name = ?", name);
             assertEquals("favorites must be migrated for " + name, expectedFavoriteRows(data), favoriteRows);
@@ -398,24 +398,23 @@ public class RealDataMigrationTest {
             assertEquals("loadAccount item count for " + name, expectedLoadedItemCount(data), loaded.getTrades().size());
 
             System.out.println("[RealData] verified " + name + ": " + tradeRows + " trades, flip profit "
-                + flipProfit + ", " + recipeEvents + " recipe events, " + loaded.getTrades().size() + " loaded items");
+                + flipProfit + ", " + recipeFlips + " recipe flips, " + loaded.getTrades().size() + " loaded items");
         }
 
-        // --- referential / consumption integrity across all accounts ---
-        assertEquals("no consumed_trade row may reference a missing event", 0L,
-            q("SELECT COUNT(*) FROM consumed_trade ct LEFT JOIN events e ON e.id = ct.event_id WHERE e.id IS NULL"));
-        assertEquals("no consumed_trade row may reference a missing trade", 0L,
-            q("SELECT COUNT(*) FROM consumed_trade ct LEFT JOIN trades t ON t.id = ct.trade_id WHERE t.id IS NULL"));
-        assertEquals("no trade may be over-consumed", 0L,
-            q("SELECT COUNT(*) FROM trades t LEFT JOIN (SELECT trade_id, SUM(qty) AS c FROM consumed_trade GROUP BY trade_id) ct " +
-                "ON ct.trade_id = t.id WHERE t.qty - COALESCE(ct.c, 0) < 0"));
-        assertEquals("consumed quantities must be positive", 0L,
-            q("SELECT COUNT(*) FROM consumed_trade WHERE qty <= 0"));
+        // Components are self-contained: their source offer need not remain in trade history.
+        for (String table : Arrays.asList("recipe_flip_inputs", "recipe_flip_outputs")) {
+            assertEquals("no component may reference a missing recipe flip in " + table, 0L,
+                q("SELECT COUNT(*) FROM " + table + " component LEFT JOIN recipe_flips rf " +
+                    "ON rf.id = component.recipe_flip_id WHERE rf.id IS NULL"));
+            assertEquals("consumed quantities must be positive in " + table, 0L,
+                q("SELECT COUNT(*) FROM " + table + " WHERE amount_consumed <= 0"));
+        }
 
         // --- forced re-run (retry path: flags cleared) must be a complete no-op ---
         long tradesBefore = q("SELECT COUNT(*) FROM trades");
-        long eventsBefore = q("SELECT COUNT(*) FROM events");
-        long consumedBefore = q("SELECT COUNT(*) FROM consumed_trade");
+        long recipesBefore = q("SELECT COUNT(*) FROM recipe_flips");
+        long inputsBefore = q("SELECT COUNT(*) FROM recipe_flip_inputs");
+        long outputsBefore = q("SELECT COUNT(*) FROM recipe_flip_outputs");
         for (String name : accounts.keySet()) {
             storage.clearSetting("migrated_" + name);
         }
@@ -423,8 +422,12 @@ public class RealDataMigrationTest {
         storage.clearSetting("migration_completed_at");
         new MigrationService(storage, stub).migrate();
         assertEquals("re-run must not add trades", tradesBefore, q("SELECT COUNT(*) FROM trades"));
-        assertEquals("re-run must not add events", eventsBefore, q("SELECT COUNT(*) FROM events"));
-        assertEquals("re-run must not add consumption rows", consumedBefore, q("SELECT COUNT(*) FROM consumed_trade"));
+        assertEquals("re-run must not add recipe flips", recipesBefore, q("SELECT COUNT(*) FROM recipe_flips"));
+        assertEquals("re-run must not add recipe inputs", inputsBefore, q("SELECT COUNT(*) FROM recipe_flip_inputs"));
+        assertEquals("re-run must not add recipe outputs", outputsBefore, q("SELECT COUNT(*) FROM recipe_flip_outputs"));
+        for (Map.Entry<String, AccountData> account : accounts.entrySet()) {
+            assertRecipeParity(account.getKey(), account.getValue(), storage.loadAccount(account.getKey()));
+        }
 
         // --- source files untouched ---
         for (Map.Entry<String, String> entry : checksumsBefore.entrySet()) {

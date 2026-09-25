@@ -10,8 +10,6 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
-import java.sql.ResultSet;
-import java.sql.Statement;
 import java.time.Instant;
 import java.util.List;
 
@@ -106,12 +104,6 @@ public class LiveTradePersistenceTest {
         assertEquals(1, loadedOffers().size());
         assertEquals(200L, sale.getTaxPaid());
         assertEquals(sale.getTaxPaid(), loadedOffers().get(0).getTaxPaid());
-        try (Statement statement = storage.getConnection().createStatement();
-             ResultSet result = statement.executeQuery("SELECT tax FROM trades")) {
-            assertTrue(result.next());
-            assertEquals(sale.getTaxPaid(), result.getLong(1));
-            assertFalse(result.next());
-        }
     }
 
     @Test

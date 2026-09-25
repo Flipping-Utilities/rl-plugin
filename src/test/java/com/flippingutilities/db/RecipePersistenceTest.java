@@ -169,6 +169,21 @@ public class RecipePersistenceTest {
         }
     }
 
+    @Test
+    public void migrationRejectsRecipeOffersWithoutTime() throws Exception {
+        AccountData source = legacyAccount();
+        source.getRecipeFlipGroups().get(0).getPartialOffers().get(0).getOffer().setTime(null);
+        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("missing-time.db"));
+        try {
+            assertEquals("An offer without a timestamp cannot be used to calculate recipe prices", 0,
+                new MigrationService(storage, new TradePersister(gson)).migrate(Collections.singletonMap(ACCOUNT, source)));
+            assertNull(storage.getSetting("migration_completed"));
+            assertTrue(storage.listAccounts().isEmpty());
+        } finally {
+            storage.close();
+        }
+    }
+
     private void assertRecipePreserved(AccountData account) {
         assertNotNull(account);
         assertEquals("Recipe-only trades must not reappear in ordinary history", 1, account.getTrades().size());

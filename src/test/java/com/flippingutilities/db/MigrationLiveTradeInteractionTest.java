@@ -198,6 +198,53 @@ public class MigrationLiveTradeInteractionTest {
     }
 
     @Test
+    public void deletingTradeUuidsRemovesEveryReferencingRecipeOnlyForItsAccount() {
+        OfferEvent input = completeOffer("shared-input", true, 1, 100, BASE_TS);
+        OfferEvent output = completeOffer("shared-output", false, 1, 200, BASE_TS + 1000);
+        output.setItemId(DSCIM);
+        String otherAccount = "Other recipe account";
+
+        for (String account : Arrays.asList(ACCOUNT, otherAccount)) {
+            storage.recordTrade(account, input);
+            storage.recordTrade(account, output);
+            for (int index = 0; index < 2; index++) {
+                // The second recipe exceeds the source quantity. Older storage omitted its
+                // consumption link once the first recipe had exhausted the trade.
+                int consumed = index + 1;
+                storage.insertRecipeFlip(account, "input-recipe", new RecipeFlip(
+                    Instant.ofEpochMilli(BASE_TS + 2000 + index), Collections.emptyMap(),
+                    Map.of(WHIP, Map.of(input.getUuid(), new PartialOffer(input, consumed))), 0L));
+                storage.insertRecipeFlip(account, "output-recipe", new RecipeFlip(
+                    Instant.ofEpochMilli(BASE_TS + 4000 + index),
+                    Map.of(DSCIM, Map.of(output.getUuid(), new PartialOffer(output, consumed))),
+                    Collections.emptyMap(), 0L));
+            }
+        }
+
+        OfferEvent unrelated = completeOffer("unrelated-input", true, 5, 300, BASE_TS);
+        storage.recordTrade(ACCOUNT, unrelated);
+        storage.insertRecipeFlip(ACCOUNT, "unrelated-recipe", new RecipeFlip(
+            Instant.ofEpochMilli(BASE_TS + 6000), Collections.emptyMap(),
+            Map.of(WHIP, Map.of(unrelated.getUuid(), new PartialOffer(unrelated, 1))), 0L));
+
+        storage.deleteTradesByUuid(ACCOUNT, Arrays.asList(input.getUuid(), output.getUuid()));
+
+        AccountData loaded = storage.loadAccount(ACCOUNT);
+        assertEquals("Every referencing recipe is removed, including over-consumed recipes", 1,
+            loaded.getRecipeFlipGroups().size());
+        assertEquals("Unrelated recipe survives", "unrelated-recipe",
+            loaded.getRecipeFlipGroups().get(0).getRecipeKey());
+        assertEquals("Only the unrelated trade survives", 1, loaded.getTrades().stream()
+            .mapToInt(item -> item.getHistory().getCompressedOfferEvents().size()).sum());
+
+        AccountData other = storage.loadAccount(otherAccount);
+        assertEquals("Matching UUIDs in another account keep all their recipes", 4,
+            other.getRecipeFlipGroups().stream().mapToInt(group -> group.getRecipeFlips().size()).sum());
+        assertEquals("Matching UUIDs in another account keep both trades", 2,
+            other.getTrades().stream().mapToInt(item -> item.getHistory().getCompressedOfferEvents().size()).sum());
+    }
+
+    @Test
     public void testFavoritesRoundTripOnLoadAccount() throws Exception {
         recordTrade(WHIP, "f-buy", BASE_TS, 10, 50000, true);
         storage.upsertFavorite(ACCOUNT, WHIP, true, "77");
@@ -265,19 +312,20 @@ public class MigrationLiveTradeInteractionTest {
         storage.insertRecipeFlip(ACCOUNT, "whip:crush", flip);
         storage.insertRecipeFlip(ACCOUNT, "whip:crush", flip); // natural key dedupes
 
-        assertEquals("Exactly one recipe event", 1L,
-            count("SELECT COUNT(*) FROM events WHERE type = 'recipe'"));
         assertEquals("Exactly one recipe_flip row", 1L,
             count("SELECT COUNT(*) FROM recipe_flips"));
         assertEquals("Input + output component rows", 2L,
             count("SELECT COUNT(*) FROM recipe_flip_inputs") + count("SELECT COUNT(*) FROM recipe_flip_outputs"));
-        assertEquals("Input trade consumed by the recipe event", 1L,
-            count("SELECT COUNT(*) FROM consumed_trade ct JOIN events e ON e.id = ct.event_id WHERE e.type = 'recipe'"));
-
         // And it round-trips through loadAccount.
         AccountData data = storage.loadAccount(ACCOUNT);
         assertEquals(1, data.getRecipeFlipGroups().size());
         assertEquals(1, data.getRecipeFlipGroups().get(0).getRecipeFlips().size());
+        RecipeFlip loaded = data.getRecipeFlipGroups().get(0).getRecipeFlips().get(0);
+        assertEquals(flip.getTimeOfCreation(), loaded.getTimeOfCreation());
+        assertEquals(flip.getExpense(), loaded.getExpense());
+        assertEquals(flip.getRevenue(), loaded.getRevenue());
+        assertEquals(10, loaded.getInputs().get(WHIP).get("r-in").getAmountConsumed());
+        assertEquals(6, loaded.getOutputs().get(DSCIM).get("r-out").getAmountConsumed());
     }
 
     /**
@@ -428,11 +476,8 @@ public class MigrationLiveTradeInteractionTest {
     }
 
     /**
-     * Finding 2 regression: trades must migrate with their ORIGINAL quantity; recipe
-     * consumption lives only in consumed_trade. The old migration reduced the trade row by
-     * the consumed amount AND subtracted consumed_trade at read time (double subtraction),
-     * and the recipe loaders built backing offers with qty = amountConsumed, so a 100-qty
-     * trade with 40 consumed displayed 0 remaining instead of 60 everywhere.
+     * Trades retain their original quantity; recipe components record consumption separately.
+     * A 100-quantity trade with 40 consumed must display 60 remaining after migration.
      */
     @Test
     public void testMigrationKeepsOriginalQtyWithRecipeConsumption() throws Exception {
@@ -464,10 +509,6 @@ public class MigrationLiveTradeInteractionTest {
         // The trade row keeps the ORIGINAL quantity...
         assertEquals("Trade must store the original 100 qty", 100L,
             count("SELECT qty FROM trades WHERE uuid = 'm-buy'"));
-        // ...and consumption is recorded separately, once.
-        assertEquals("Consumption recorded once with the consumed amount", 40L,
-            count("SELECT qty FROM consumed_trade ct JOIN events e ON e.id = ct.event_id WHERE e.type = 'recipe'"));
-
         // The loaded recipe's backing offer carries the original qty, so remaining displays
         // as 100 - 40 = 60 rather than amountConsumed - amountConsumed = 0.
         AccountData loaded = storage.loadAccount(ACCOUNT);
@@ -481,12 +522,10 @@ public class MigrationLiveTradeInteractionTest {
     }
 
     /**
-     * Finding 1 regression: deleting a recipe flip from the UI must delete it from SQLite
-     * too (event, components, consumption) and free the consumed units back into regular
-     * flip computation.
+     * Deleting a recipe flip also removes its components while preserving the backing trade.
      */
     @Test
-    public void testDeleteRecipeFlipRemovesEventComponentsAndConsumption() throws Exception {
+    public void testDeleteRecipeFlipRemovesComponentsAndPreservesTrade() throws Exception {
         recordTrade(WHIP, "r-in", BASE_TS, 10, 50000, true);
 
         OfferEvent buyOffer = completeOffer("r-in", true, 10, 50000, BASE_TS);
@@ -499,15 +538,14 @@ public class MigrationLiveTradeInteractionTest {
         RecipeFlip flip = new RecipeFlip(Instant.ofEpochMilli(BASE_TS + 120000), outputs, inputs, 0L);
 
         storage.insertRecipeFlip(ACCOUNT, "whip:crush", flip);
-        assertEquals(1L, count("SELECT COUNT(*) FROM events WHERE type = 'recipe'"));
+        assertEquals(1, storage.loadAccount(ACCOUNT).getRecipeFlipGroups().size());
 
         storage.deleteRecipeFlip(ACCOUNT, "whip:crush", flip.getTimeOfCreation());
 
-        assertEquals("Recipe event deleted", 0L, count("SELECT COUNT(*) FROM events WHERE type = 'recipe'"));
+        assertTrue("Recipe disappears on reload", storage.loadAccount(ACCOUNT).getRecipeFlipGroups().isEmpty());
         assertEquals("Recipe flip row deleted", 0L, count("SELECT COUNT(*) FROM recipe_flips"));
         assertEquals("Component rows deleted", 0L,
             count("SELECT COUNT(*) FROM recipe_flip_inputs") + count("SELECT COUNT(*) FROM recipe_flip_outputs"));
-        assertEquals("Consumption rows deleted", 0L, count("SELECT COUNT(*) FROM consumed_trade"));
         assertEquals("The backing trade itself survives", 1L,
             count("SELECT COUNT(*) FROM trades WHERE uuid = 'r-in'"));
     }
@@ -524,7 +562,6 @@ public class MigrationLiveTradeInteractionTest {
         recordTrade(WHIP, "r-in-2", BASE_TS + 700000, 10, 50000, true);
         recordTrade(WHIP, "r-in-3", BASE_TS + 710000, 10, 50000, true);
 
-        Map<String, Long> flipTimes = new HashMap<>();
         String[][] specs = {
             {"r-in-1", "whip:crush", String.valueOf(BASE_TS + 120000)},      // early, target group
             {"r-in-2", "whip:crush", String.valueOf(BASE_TS + 800000)},      // late, target group
@@ -537,22 +574,20 @@ public class MigrationLiveTradeInteractionTest {
             RecipeFlip flip = new RecipeFlip(Instant.ofEpochMilli(Long.parseLong(spec[2])),
                 new HashMap<>(), inputs, 0L);
             storage.insertRecipeFlip(ACCOUNT, spec[1], flip);
-            flipTimes.put(spec[1] + ":" + spec[0], Long.parseLong(spec[2]));
         }
-        assertEquals(3L, count("SELECT COUNT(*) FROM events WHERE type = 'recipe'"));
+        assertEquals(3L, count("SELECT COUNT(*) FROM recipe_flips"));
 
         // Reset the "whip:crush" group to the interval starting between its two flips.
         storage.deleteRecipeFlipsSince(ACCOUNT, "whip:crush", Instant.ofEpochMilli(BASE_TS + 300000));
 
         assertEquals("Only the later flip of the target group is deleted", 0L,
-            count("SELECT COUNT(*) FROM events WHERE type = 'recipe' AND timestamp > " + (BASE_TS + 300000) +
-                " AND id IN (SELECT event_id FROM recipe_flips WHERE recipe_key = 'whip:crush')"));
+            count("SELECT COUNT(*) FROM recipe_flips WHERE timestamp > " + (BASE_TS + 300000) +
+                " AND recipe_key = 'whip:crush'"));
         assertEquals("The early flip of the target group survives", 1L,
-            count("SELECT COUNT(*) FROM events e JOIN recipe_flips rf ON rf.event_id = e.id " +
-                "WHERE e.type = 'recipe' AND rf.recipe_key = 'whip:crush' AND e.timestamp <= " + (BASE_TS + 300000)));
+            count("SELECT COUNT(*) FROM recipe_flips WHERE recipe_key = 'whip:crush' " +
+                "AND timestamp <= " + (BASE_TS + 300000)));
         assertEquals("The other group's flip in the same interval is untouched", 1L,
-            count("SELECT COUNT(*) FROM events e JOIN recipe_flips rf ON rf.event_id = e.id " +
-                "WHERE e.type = 'recipe' AND rf.recipe_key = 'whip:dismantle'"));
+            count("SELECT COUNT(*) FROM recipe_flips WHERE recipe_key = 'whip:dismantle'"));
     }
 
     /**

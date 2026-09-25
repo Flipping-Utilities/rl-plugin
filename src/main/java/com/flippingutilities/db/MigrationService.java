@@ -42,7 +42,7 @@ public class MigrationService {
      * Idempotency: bails out immediately if {@code migration_completed=true} is already set.
      * On partial failure, successful accounts are committed but flagged via
      * {@code migrated_<displayName>} so a retry skips them. All INSERTs use OR IGNORE against
-     * UNIQUE constraints (trades.uuid, events.natural_key) so a retried account is a no-op.
+     * UNIQUE constraints on trade UUIDs and recipe natural keys make retries idempotent.
      *
      * <p>Each account migrates inside its OWN transaction (not one giant one): the shared
      * cached connection is used by live trade recording and account loading, and a
@@ -240,12 +240,7 @@ public class MigrationService {
                 int qty = offer.getCurrentQuantityInTrade();
                 int price = offer.getPreTaxPrice();
                 boolean isBuy = offer.isBuy();
-                // Preserve the real per-item tax from the OfferEvent. Buy-side trades pay no
-                // tax. Null-time offers are legacy pre-tax-era records (getPrice() would NPE);
-                // tax them at 0.
-                long tax = isBuy || offer.getTime() == null ? 0L : (long) offer.getTaxPaidPerItem() * qty;
-
-                tradesToInsert.add(new TradeRecord(accountId, item.getItemId(), offer.getUuid(), timestamp, qty, price, isBuy, tax, SqliteStorage.serializeOffer(offer)));
+                tradesToInsert.add(new TradeRecord(accountId, item.getItemId(), offer.getUuid(), timestamp, qty, price, isBuy, SqliteStorage.serializeOffer(offer)));
 
                 tradesCount++;
             }
@@ -263,13 +258,10 @@ public class MigrationService {
             batchInsertTrades(conn, tradesToInsert);
         }
 
-        // Build UUID -> trade ID map for recipe flip consumed_trade linking
-        Map<String, Long> offerUuidToTradeId = buildUuidToTradeIdMap(conn, accountId);
-
-        // Migrate recipe flips (hydrate PartialOffers first so profit/expense are correct)
+        // Resolve UUID-only recipes before persisting their independent offer snapshots.
         if (recipeFlipGroups != null && !recipeFlipGroups.isEmpty()) {
             hydrateRecipeFlipOffers(recipeFlipGroups, tradeItems);
-            recipeFlipsCount = migrateRecipeFlipsBatched(conn, accountId, recipeFlipGroups, offerUuidToTradeId);
+            recipeFlipsCount = migrateRecipeFlips(conn, accountId, recipeFlipGroups);
         }
 
         // Migrate last offers (active slots) - skip for batch, use storage method
@@ -342,7 +334,7 @@ public class MigrationService {
     private void batchInsertTrades(Connection conn, List<TradeRecord> trades) throws SQLException {
         // INSERT OR IGNORE against UNIQUE(account_id, uuid) makes re-runs idempotent: a trade
         // whose uuid already exists for this account is silently skipped instead of duplicated.
-        String sql = "INSERT OR IGNORE INTO trades (account_id, item_id, uuid, timestamp, qty, price, is_buy, tax, offer_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT OR IGNORE INTO trades (account_id, item_id, uuid, timestamp, qty, price, is_buy, offer_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             int count = 0;
             for (TradeRecord trade : trades) {
@@ -357,8 +349,7 @@ public class MigrationService {
                 ps.setInt(5, trade.qty);
                 ps.setInt(6, trade.price);
                 ps.setInt(7, trade.isBuy ? 1 : 0);
-                ps.setLong(8, trade.tax);
-                ps.setString(9, trade.offerJson);
+                ps.setString(8, trade.offerJson);
                 ps.addBatch();
                 count++;
 
@@ -385,200 +376,23 @@ public class MigrationService {
         }
     }
 
-    /**
-     * Build a map from offer UUID to trade row ID for consumed_trade linking.
-     */
-    private Map<String, Long> buildUuidToTradeIdMap(Connection conn, int accountId) throws SQLException {
-        Map<String, Long> map = new HashMap<>();
-        String sql = "SELECT id, uuid FROM trades WHERE account_id = ? AND uuid IS NOT NULL";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, accountId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    String uuid = rs.getString("uuid");
-                    long id = rs.getLong("id");
-                    if (uuid != null) {
-                        map.put(uuid, id);
-                    }
+    private int migrateRecipeFlips(Connection conn, int accountId, List<RecipeFlipGroup> groups) throws SQLException {
+        int count = 0;
+        for (RecipeFlipGroup group : groups) {
+            if (group == null || group.getRecipeFlips() == null) continue;
+            for (RecipeFlip flip : group.getRecipeFlips()) {
+                if (SqliteStorage.insertRecipeFlip(conn, accountId, group.getRecipeKey(), flip)) {
+                    count++;
                 }
             }
         }
-        return map;
-    }
-
-    /**
-     * Migrate recipe flip groups for an account.
-     */
-    private int migrateRecipeFlipsBatched(Connection conn, int accountId, List<RecipeFlipGroup> recipeFlipGroups,
-                                          Map<String, Long> offerUuidToTradeId) throws SQLException {
-        if (recipeFlipGroups == null || recipeFlipGroups.isEmpty()) {
-            return 0;
-        }
-
-        int totalRecipeFlips = 0;
-
-        String eventSql = "INSERT OR IGNORE INTO events (account_id, timestamp, type, cost, profit, note, natural_key) VALUES (?, ?, 'recipe', ?, ?, ?, ?)";
-        String recipeFlipSql = "INSERT INTO recipe_flips (event_id, recipe_key, coin_cost) VALUES (?, ?, ?)";
-        String inputSql = "INSERT INTO recipe_flip_inputs (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)";
-        String outputSql = "INSERT INTO recipe_flip_outputs (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)";
-        // Guards against over-consumption: real recipe data can reference more consumption than
-        // the underlying trade row holds (e.g. offers deleted after the recipe flip was made,
-        // or duplicate legacy records). The trade's remaining qty is recomputed per row so
-        // rows inserted earlier in this same transaction are respected.
-        String consumedSql =
-            "INSERT OR IGNORE INTO consumed_trade (trade_id, event_id, qty) " +
-            "SELECT ?, ?, MIN(?, t.qty - COALESCE((SELECT SUM(qty) FROM consumed_trade ct2 WHERE ct2.trade_id = t.id), 0)) " +
-            "FROM trades t " +
-            "WHERE t.id = ? " +
-            "AND t.qty - COALESCE((SELECT SUM(qty) FROM consumed_trade ct2 WHERE ct2.trade_id = t.id), 0) > 0";
-
-        try (PreparedStatement eventPs = conn.prepareStatement(eventSql, Statement.RETURN_GENERATED_KEYS);
-             PreparedStatement recipeFlipPs = conn.prepareStatement(recipeFlipSql, Statement.RETURN_GENERATED_KEYS);
-             PreparedStatement inputPs = conn.prepareStatement(inputSql);
-             PreparedStatement outputPs = conn.prepareStatement(outputSql);
-             PreparedStatement consumedPs = conn.prepareStatement(consumedSql)) {
-
-            for (RecipeFlipGroup group : recipeFlipGroups) {
-                if (group == null || group.getRecipeFlips() == null) continue;
-
-                String recipeKey = group.getRecipeKey();
-
-                for (RecipeFlip flip : group.getRecipeFlips()) {
-                    if (flip == null || flip.getTimeOfCreation() == null) continue;
-
-                    // Calculate cost and profit
-                    long cost = flip.getExpense();
-                    long profit = flip.getProfit();
-                    long timestamp = flip.getTimeOfCreation().toEpochMilli();
-                    String naturalKey = "recipe:" + accountId + ":" + recipeKey + ":" + timestamp;
-
-                    // Insert event
-                    eventPs.setInt(1, accountId);
-                    eventPs.setLong(2, timestamp);
-                    eventPs.setLong(3, cost);
-                    eventPs.setLong(4, profit);
-                    eventPs.setNull(5, Types.VARCHAR);
-                    eventPs.setString(6, naturalKey);
-                    // Detect the OR IGNORE skip via the update count; getGeneratedKeys() after
-                    // an ignored insert returns a stale rowid in sqlite-jdbc. A skipped event
-                    // means this recipe flip was already persisted (its components exist too).
-                    if (eventPs.executeUpdate() == 0) {
-                        continue;
-                    }
-
-                    long eventId;
-                    try (ResultSet rs = eventPs.getGeneratedKeys()) {
-                        if (!rs.next()) {
-                            continue;
-                        }
-                        eventId = rs.getLong(1);
-                    }
-
-                    // Insert recipe_flip
-                    recipeFlipPs.setLong(1, eventId);
-                    recipeFlipPs.setString(2, recipeKey);
-                    recipeFlipPs.setLong(3, flip.getCoinCost());
-                    recipeFlipPs.executeUpdate();
-
-                    long recipeFlipId;
-                    try (ResultSet rs = recipeFlipPs.getGeneratedKeys()) {
-                        if (rs.next()) {
-                            recipeFlipId = rs.getLong(1);
-                        } else {
-                            continue;
-                        }
-                    }
-
-                    // Insert inputs
-                    if (flip.getInputs() != null) {
-                        for (Map.Entry<Integer, Map<String, PartialOffer>> entry : flip.getInputs().entrySet()) {
-                            int itemId = entry.getKey();
-                            for (Map.Entry<String, PartialOffer> offerEntry : entry.getValue().entrySet()) {
-                                PartialOffer po = offerEntry.getValue();
-                                if (po != null && po.getAmountConsumed() > 0) {
-                                    inputPs.setLong(1, recipeFlipId);
-                                    inputPs.setInt(2, itemId);
-                                    inputPs.setString(3, po.getOfferUuid());
-                                    inputPs.setInt(4, po.getAmountConsumed());
-                                    inputPs.setString(5, SqliteStorage.serializeRecipeOffer(po));
-                                    inputPs.addBatch();
-                                }
-                            }
-                        }
-                    }
-
-                    // Insert outputs
-                    if (flip.getOutputs() != null) {
-                        for (Map.Entry<Integer, Map<String, PartialOffer>> entry : flip.getOutputs().entrySet()) {
-                            int itemId = entry.getKey();
-                            for (Map.Entry<String, PartialOffer> offerEntry : entry.getValue().entrySet()) {
-                                PartialOffer po = offerEntry.getValue();
-                                if (po != null && po.getAmountConsumed() > 0) {
-                                    outputPs.setLong(1, recipeFlipId);
-                                    outputPs.setInt(2, itemId);
-                                    outputPs.setString(3, po.getOfferUuid());
-                                    outputPs.setInt(4, po.getAmountConsumed());
-                                    outputPs.setString(5, SqliteStorage.serializeRecipeOffer(po));
-                                    outputPs.addBatch();
-                                }
-                            }
-                        }
-                    }
-
-                    // Insert consumed_trade entries linking this recipe event to the underlying
-                    // trades (clamped to each trade's remaining quantity by the guarded SQL).
-                    if (flip.getInputs() != null) {
-                        for (Map.Entry<Integer, Map<String, PartialOffer>> entry : flip.getInputs().entrySet()) {
-                            for (Map.Entry<String, PartialOffer> offerEntry : entry.getValue().entrySet()) {
-                                PartialOffer po = offerEntry.getValue();
-                                if (po != null && po.getAmountConsumed() > 0 && po.getOfferUuid() != null) {
-                                    Long tradeId = offerUuidToTradeId.get(po.getOfferUuid());
-                                    if (tradeId != null) {
-                                        consumedPs.setLong(1, tradeId);
-                                        consumedPs.setLong(2, eventId);
-                                        consumedPs.setInt(3, po.getAmountConsumed());
-                                        consumedPs.setLong(4, tradeId);
-                                        consumedPs.addBatch();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (flip.getOutputs() != null) {
-                        for (Map.Entry<Integer, Map<String, PartialOffer>> entry : flip.getOutputs().entrySet()) {
-                            for (Map.Entry<String, PartialOffer> offerEntry : entry.getValue().entrySet()) {
-                                PartialOffer po = offerEntry.getValue();
-                                if (po != null && po.getAmountConsumed() > 0 && po.getOfferUuid() != null) {
-                                    Long tradeId = offerUuidToTradeId.get(po.getOfferUuid());
-                                    if (tradeId != null) {
-                                        consumedPs.setLong(1, tradeId);
-                                        consumedPs.setLong(2, eventId);
-                                        consumedPs.setInt(3, po.getAmountConsumed());
-                                        consumedPs.setLong(4, tradeId);
-                                        consumedPs.addBatch();
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    totalRecipeFlips++;
-                }
-            }
-
-            // Execute batches
-            inputPs.executeBatch();
-            outputPs.executeBatch();
-            consumedPs.executeBatch();
-        }
-
-        return totalRecipeFlips;
+        return count;
     }
 
     /**
      * Hydrate PartialOffers in recipe flips by linking them to their corresponding OfferEvents.
-     * This is necessary because RecipeFlip.getProfit()/getExpense() depend on
-     * po.getOffer() being non-null to compute correct values.
+     * Older UUID-only files need the history lookup; embedded legacy offers also
+     * normalize their UUID here. Neither source may be discarded before snapshotting.
      */
     private void hydrateRecipeFlipOffers(List<RecipeFlipGroup> recipeFlipGroups, List<FlippingItem> tradeItems) {
         // Build UUID -> OfferEvent lookup map from all trade items
@@ -636,10 +450,9 @@ public class MigrationService {
         final int qty;
         final int price;
         final boolean isBuy;
-        final long tax;
         final String offerJson;
 
-        TradeRecord(int accountId, int itemId, String uuid, long timestamp, int qty, int price, boolean isBuy, long tax, String offerJson) {
+        TradeRecord(int accountId, int itemId, String uuid, long timestamp, int qty, int price, boolean isBuy, String offerJson) {
             this.accountId = accountId;
             this.itemId = itemId;
             this.uuid = uuid;
@@ -647,7 +460,6 @@ public class MigrationService {
             this.qty = qty;
             this.price = price;
             this.isBuy = isBuy;
-            this.tax = tax;
             this.offerJson = offerJson;
         }
     }

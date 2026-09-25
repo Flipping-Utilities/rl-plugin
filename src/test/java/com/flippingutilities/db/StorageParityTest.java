@@ -83,16 +83,21 @@ public class StorageParityTest {
         storage.upsertAccount(displayName, "pid-gelimit");
         
         int itemId = 4151;
-        Instant nextRefresh = Instant.now().plusSeconds(3600);
+        Instant nextRefresh = Instant.ofEpochMilli(System.currentTimeMillis() + 3600000);
         int itemsBought = 50;
         int itemsBoughtThroughComplete = 40;
 
         storage.upsertGeLimitState(displayName, itemId, nextRefresh, itemsBought, itemsBoughtThroughComplete);
 
-        Map<String, Object> state = storage.loadGeLimitState(displayName, itemId);
+        Map<String, Object> state = storage.loadAllGeLimitStates(displayName).get(itemId);
         assertNotNull("State should not be null", state);
+        assertEquals("Refresh time should match", nextRefresh, state.get("nextRefresh"));
         assertEquals("Items bought should match", itemsBought, state.get("itemsBought"));
         assertEquals("Complete-offer base should match", itemsBoughtThroughComplete, state.get("itemsBoughtThroughCompleteOffers"));
+
+        storage.upsertGeLimitState(displayName, itemId, null, 0, 0);
+        assertNull("An unset refresh must stay unset",
+            storage.loadAllGeLimitStates(displayName).get(itemId).get("nextRefresh"));
     }
     
 }
