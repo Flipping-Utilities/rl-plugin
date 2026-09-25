@@ -202,7 +202,7 @@ public class MasterPanel extends PluginPanel
 		//which the title case renderer can't render, so painting the panel while it is empty crashes the client.
 		viewSelectorDropdown.setVisible(false);
 		viewSelectorDropdown.setBackground(CustomColors.DARK_GRAY_LIGHTER);
-		viewSelectorDropdown.setFocusable(false);
+		viewSelectorDropdown.getAccessibleContext().setAccessibleName("Account");
 		viewSelectorDropdown.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
 		//TitleCaseListCellRenderer calls value.toString() and so throws on a null selection
 		TitleCaseListCellRenderer titleCaseRenderer = new TitleCaseListCellRenderer();
