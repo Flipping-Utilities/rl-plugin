@@ -488,6 +488,7 @@ public class SqliteStorage {
         // silently disappear (along with their favorite) on every SQLite reload.
         restoreFavoriteOnlyItems(displayName, data);
         restoreItemVisibility(accountId, displayName, data);
+        restoreGeLimitStates(displayName, data);
 
         // This model was reconstructed from the current schema, not a legacy JSON file.
         data.setVersion(AccountData.CURRENT_VERSION);
@@ -637,8 +638,7 @@ public class SqliteStorage {
             }
         }
 
-        // Convert to FlippingItem objects, restoring GE limit state where present
-        Map<Integer, Map<String, Object>> geLimitStates = loadAllGeLimitStates(displayName);
+        // Convert to FlippingItem objects, restoring favorites where present.
         Map<Integer, Map<String, Object>> favorites = loadAllFavorites(displayName);
         List<FlippingItem> items = new ArrayList<>();
         for (Map.Entry<Integer, List<OfferEvent>> entry : offersByItem.entrySet()) {
@@ -647,16 +647,6 @@ public class SqliteStorage {
             offers.sort(Comparator.comparing(OfferEvent::getTime, Comparator.nullsFirst(Comparator.naturalOrder())));
 
             FlippingItem item = new FlippingItem(itemId, "Item " + itemId, 70, displayName);
-            Map<String, Object> geState = geLimitStates.get(itemId);
-            if (geState != null) {
-                item.getHistory().setNextGeLimitRefresh((Instant) geState.get("nextRefresh"));
-                item.getHistory().setItemsBoughtThisLimitWindow(geState.get("itemsBought") instanceof Integer ? (Integer) geState.get("itemsBought") : 0);
-                // Restore the complete-offer base too: it is what the window is recalculated
-                // from when the next partial buy arrives (buy 100, restart, buy 10 -> 110,
-                // not 10).
-                Object throughComplete = geState.get("itemsBoughtThroughCompleteOffers");
-                item.getHistory().setItemsBoughtThroughCompleteOffers(throughComplete instanceof Integer ? (Integer) throughComplete : 0);
-            }
             // Restore persisted favorite state (M4: favorites round-trip across reloads)
             Map<String, Object> fav = favorites.get(itemId);
             if (fav != null) {
@@ -711,6 +701,26 @@ public class SqliteStorage {
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Could not load item visibility for " + displayName, e);
+        }
+    }
+
+    /** Deleting offer history does not reset an item's active GE limit window. */
+    private void restoreGeLimitStates(String displayName, AccountData data) {
+        Map<Integer, FlippingItem> items = new HashMap<>();
+        for (FlippingItem item : data.getTrades()) {
+            items.put(item.getItemId(), item);
+        }
+        for (Map.Entry<Integer, Map<String, Object>> entry : loadAllGeLimitStates(displayName).entrySet()) {
+            int itemId = entry.getKey();
+            FlippingItem item = items.get(itemId);
+            if (item == null) {
+                item = new FlippingItem(itemId, "Item " + itemId, 70, displayName);
+                data.getTrades().add(item);
+            }
+            Map<String, Object> state = entry.getValue();
+            item.getHistory().setNextGeLimitRefresh((Instant) state.get("nextRefresh"));
+            item.getHistory().setItemsBoughtThisLimitWindow((Integer) state.get("itemsBought"));
+            item.getHistory().setItemsBoughtThroughCompleteOffers((Integer) state.get("itemsBoughtThroughCompleteOffers"));
         }
     }
 
@@ -776,7 +786,7 @@ public class SqliteStorage {
     public synchronized void recordTrade(String displayName, OfferEvent offer) {
         int accountId = getOrCreateAccountId(displayName);
         // Repeated writes of the same snapshot are idempotent. Successive live GE events
-        // have different UUIDs; active partials are kept in active_slots until completion.
+        // have different UUIDs; recordOfferUpdate removes their exact replaced snapshots.
         String sql = "INSERT INTO trades " +
             "(account_id, item_id, uuid, timestamp, qty, price, is_buy, offer_json) " +
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
@@ -1084,6 +1094,56 @@ public class SqliteStorage {
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Error deleting account data", e);
+        }
+    }
+
+    /** Applies the live model's exact history replacement without deleting recipe snapshots. */
+    public synchronized void recordOfferUpdate(String displayName, OfferEvent offer, List<String> replacedUuids) {
+        persistOfferHistory(displayName, offer, replacedUuids, null);
+    }
+
+    /** Retains a collected fill even when the last event was a partial cancellation correction. */
+    public synchronized void archiveOfferAndClearSlot(String displayName, int slotIndex, OfferEvent archived) {
+        persistOfferHistory(displayName, archived, Collections.emptyList(), slotIndex);
+    }
+
+    private void persistOfferHistory(String displayName, OfferEvent offer, List<String> replacedUuids,
+                                     Integer clearedSlot) {
+        int accountId = getOrCreateAccountId(displayName);
+        try {
+            Connection conn = getConnection();
+            boolean wasAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            try {
+                for (int i = 0; i < replacedUuids.size(); i += 500) {
+                    List<String> chunk = replacedUuids.subList(i, Math.min(i + 500, replacedUuids.size()));
+                    String placeholders = String.join(",", Collections.nCopies(chunk.size(), "?"));
+                    try (PreparedStatement ps = conn.prepareStatement(
+                        "DELETE FROM trades WHERE account_id = ? AND uuid IN (" + placeholders + ")")) {
+                        bindAccountUuids(ps, accountId, chunk);
+                        ps.executeUpdate();
+                    }
+                }
+                if (offer != null && offer.getCurrentQuantityInTrade() > 0) {
+                    // Accepted partials also retain a history snapshot. Future events remove
+                    // their exact predecessors; clearing a slot must not erase filled units.
+                    recordTrade(displayName, offer);
+                }
+                if (clearedSlot != null) {
+                    clearSlot(displayName, clearedSlot);
+                } else {
+                    upsertSlot(displayName, offer.getSlot(), offer, true);
+                    upsertItemVisibility(displayName, offer.getItemId(), true);
+                }
+                conn.commit();
+            } catch (SQLException | RuntimeException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(wasAutoCommit);
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Error persisting offer history", e);
         }
     }
 

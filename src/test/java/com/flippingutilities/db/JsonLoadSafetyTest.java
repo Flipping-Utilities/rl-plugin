@@ -2,11 +2,17 @@ package com.flippingutilities.db;
 
 import com.flippingutilities.controller.DataHandler;
 import com.flippingutilities.controller.FlippingPlugin;
+import com.flippingutilities.controller.RecipeHandler;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonDeserializer;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -17,6 +23,7 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Map;
+import java.util.Collections;
 
 import static org.junit.Assert.*;
 
@@ -39,8 +46,12 @@ public class JsonLoadSafetyTest {
 
         // Recovery uses the same persister instance; saves resume after a valid restore is loaded.
         write("Broken.json", "{\"version\":1,\"accumulatedSessionTimeMillis\":99}");
-        AccountData restored = persister.loadAccount("Broken");
-        assertEquals(99L, restored.getAccumulatedSessionTimeMillis());
+        AccountData parsed = persister.loadAccount("Broken");
+        assertEquals(99L, parsed.getAccumulatedSessionTimeMillis());
+        assertTrue("Parsing alone must not release protection", persister.isAccountProtected("Broken"));
+        DataHandler handler = handler(persister);
+        handler.loadAccountData("Broken");
+        AccountData restored = handler.viewAccountData("Broken");
         persister.writeToFile("Broken", restored);
         assertEquals(99L, persister.loadAccount("Broken").getAccumulatedSessionTimeMillis());
     }
@@ -81,6 +92,38 @@ public class JsonLoadSafetyTest {
         handler.loadAccountData("Player");
         assertTrue(handler.storeData());
         assertEquals(99L, persister.loadAccount("Player").getAccumulatedSessionTimeMillis());
+    }
+
+    @Test
+    public void migrationCannotUnprotectAnAccountThatFailedPreparation() throws Exception {
+        String invalid = "{\"trades\":null,\"accumulatedSessionTimeMillis\":42}";
+        write("Player.json", invalid);
+        write("Player.backup.json", invalid);
+        TradePersister persister = persister(new Gson());
+        DataHandler handler = handler(persister);
+        handler.loadAccountData("Player");
+        handler.markDataAsHavingChanged("Player");
+        SqliteStorage storage = new SqliteStorage(new File(folder.getRoot(), "protected.db"));
+        try {
+            try {
+                new MigrationService(storage, persister).migrate();
+                fail("Preparation failure must stop migration until a valid account is loaded");
+            } catch (IllegalStateException expected) {
+                assertTrue(expected.getMessage().contains("Player"));
+            }
+            assertNull(storage.getSetting("migration_completed"));
+            assertFalse(handler.storeData());
+            assertEquals(invalid, read("Player.json"));
+            assertWriteBlocked(persister, "Player.backup", invalid);
+
+            write("Player.json", "{\"version\":1,\"accumulatedSessionTimeMillis\":99}");
+            handler.loadAccountData("Player");
+            assertTrue(handler.storeData());
+            assertEquals(1, new MigrationService(storage, persister).migrate());
+            assertEquals(99L, storage.loadAccount("Player").getAccumulatedSessionTimeMillis());
+        } finally {
+            storage.close();
+        }
     }
 
     @Test
@@ -136,8 +179,40 @@ public class JsonLoadSafetyTest {
         write("accountwide.json", "{}");
         AccountWideData restored = persister.loadAccountWideData();
         restored.setDefaults();
+        persister.accountPrepared("accountwide");
         persister.writeToFile("accountwide", restored);
         assertFalse(persister.loadAccountWideData().getOptions().isEmpty());
+    }
+
+    @Test
+    public void accountWidePreparationFailureRemainsProtectedUntilRecoveryIsAdopted() throws Exception {
+        OkHttpClient client = new OkHttpClient.Builder().addInterceptor(chain ->
+            new Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK").body(ResponseBody.create(
+                    MediaType.get("application/json"), "[]")).build()).build();
+        try {
+            RecipeHandler recipes = new RecipeHandler(
+                new Gson(), client, Collections.emptyList());
+            FlippingPlugin plugin = new FlippingPlugin() {
+                @Override public RecipeHandler getRecipeHandler() { return recipes; }
+            };
+            TradePersister persister = persister(new Gson());
+            DataHandler handler = handler(persister, plugin);
+            String invalid = "{\"options\":null}";
+            write("accountwide.json", invalid);
+            handler.loadAccountWideData();
+            assertFalse(handler.storeData());
+            assertEquals(invalid, read("accountwide.json"));
+            persister.loadAccountWideData();
+            assertFalse("A read without preparation must not release the guard", handler.storeData());
+            write("accountwide.json", "{}");
+            handler.loadAccountWideData();
+            assertTrue(handler.storeData());
+            assertFalse(persister.loadAccountWideData().getOptions().isEmpty());
+        } finally {
+            client.dispatcher().executorService().shutdownNow();
+            client.connectionPool().evictAll();
+        }
     }
 
     @Test
@@ -157,7 +232,10 @@ public class JsonLoadSafetyTest {
     }
 
     private DataHandler handler(TradePersister persister) throws Exception {
-        FlippingPlugin plugin = new FlippingPlugin();
+        return handler(persister, new FlippingPlugin());
+    }
+
+    private DataHandler handler(TradePersister persister, FlippingPlugin plugin) throws Exception {
         Field field = FlippingPlugin.class.getDeclaredField("tradePersister");
         field.setAccessible(true);
         field.set(plugin, persister);
