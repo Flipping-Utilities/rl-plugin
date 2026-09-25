@@ -316,7 +316,8 @@ public class DataHandler {
 
     private AccountData fetchAccountData(String displayName)
     {
-        // A write can fail before its queued client-thread recovery callback runs.
+        // A write can fail before its client callback, or replay can finish before the
+        // reader reattaches. Both states must keep cached accounts authoritative.
         if (plugin.isStorageFailed(sqliteStorage) || plugin.isStorageFailed(plugin.getSqliteStorage())) {
             preserveAccountsForRecovery();
             setSqliteStorage(null);

@@ -6,6 +6,9 @@ import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.model.RecipeFlip;
 import com.flippingutilities.model.RecipeFlipGroup;
+import com.flippingutilities.db.accounting.AccountingSchema;
+import com.flippingutilities.db.accounting.SqliteAccountingStore;
+import com.flippingutilities.utilities.Recipe;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.TypeAdapter;
@@ -110,9 +113,13 @@ public class SqliteStorage {
         })
         .create();
 
-    static String serializeOffer(OfferEvent offer) {
+    public static String serializeOffer(OfferEvent offer) {
         return SLOT_GSON.toJson(offer);
     }
+
+    public static OfferEvent deserializeOffer(String payload) { return SLOT_GSON.fromJson(payload, OfferEvent.class); }
+    public static String serializeAccount(AccountData account) { return SLOT_GSON.toJson(account); }
+    public static AccountData deserializeAccount(String payload) { return SLOT_GSON.fromJson(payload, AccountData.class); }
 
     static String serializeRecipeOffer(PartialOffer component) throws SQLException {
         if (component.getOffer() != null && component.getOffer().getTime() == null) {
@@ -123,6 +130,7 @@ public class SqliteStorage {
     }
 
     private final File dbFile;
+    private final SqliteAccountingStore accountingStore = new SqliteAccountingStore(this);
     private Connection connection;
     private boolean schemaInitAttempted;
     // Cache of display_name -> account_id to avoid a SELECT per repository call.
@@ -145,6 +153,8 @@ public class SqliteStorage {
     public File getDbFile() {
         return dbFile;
     }
+
+    public SqliteAccountingStore getAccountingStore() { return accountingStore; }
 
     private Path recoveryMarker() {
         return new File(dbFile.getAbsolutePath() + ".needs-resync").toPath();
@@ -347,17 +357,30 @@ public class SqliteStorage {
                 }
             }
 
-            if (currentVersion == SqliteSchema.SCHEMA_VERSION) {
-                logger.debug("Schema already at version {}, nothing to do", currentVersion);
-                return;
-            }
-
-            if (currentVersion != 0) {
+            if (currentVersion != 0 && currentVersion != SqliteSchema.SCHEMA_VERSION) {
                 throw new IllegalStateException("Unsupported SQLite schema version: " + currentVersion);
             }
 
-            // Create the complete initial schema and its version stamp atomically. There
-            // are no historical database versions to upgrade before the first release.
+            if (currentVersion == SqliteSchema.SCHEMA_VERSION) {
+                String layout;
+                try (PreparedStatement query = conn.prepareStatement("SELECT value FROM settings WHERE key='accounting_layout'"); ResultSet row = query.executeQuery()) {
+                    layout = row.next() ? row.getString(1) : null;
+                }
+                if (layout != null) {
+                    if (!AccountingSchema.LAYOUT.equals(layout)) throw new SQLException("Unsupported accounting layout: " + layout);
+                    validateColumns(conn, SqliteSchema.getCreateStatementsInOrder(), false);
+                } else {
+                    validateColumns(conn, SqliteSchema.getCreateStatementsInOrder(), true);
+                    String backup = dbFile.getAbsolutePath() + ".pre-accounting-" + java.util.UUID.randomUUID() + ".db";
+                    try (PreparedStatement vacuum = conn.prepareStatement("VACUUM INTO ?")) {
+                        vacuum.setString(1, backup);
+                        vacuum.execute();
+                    }
+                }
+            }
+
+            // Additive extension of the unreleased v1 layout. Existing source tables are
+            // preserved, and a separate layout stamp rejects incompatible development builds.
             boolean wasAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             try {
@@ -365,10 +388,18 @@ public class SqliteStorage {
                     for (String sql : SqliteSchema.getCreateStatementsInOrder()) {
                         stmt.execute(sql);
                     }
+                    addColumnIfAbsent(conn, "recipe_flips", "definition_json", "TEXT");
+                    addColumnIfAbsent(conn, "recipe_flips", "execution_count", "INTEGER");
                     for (String sql : SqliteSchema.getIndexStatements()) {
                         stmt.execute(sql);
                     }
                     stmt.execute(SqliteSchema.getMigrationStatement());
+                    String layout = getSetting("accounting_layout");
+                    if (layout != null && !AccountingSchema.LAYOUT.equals(layout)) {
+                        throw new SQLException("Unsupported accounting layout: " + layout);
+                    }
+                    setSetting("accounting_layout", AccountingSchema.LAYOUT);
+                    validateColumns(conn, SqliteSchema.getCreateStatementsInOrder(), false);
                     try (ResultSet violations = stmt.executeQuery("PRAGMA foreign_key_check")) {
                         if (violations.next()) {
                             throw new SQLException("Foreign key violation while initializing SQLite schema");
@@ -376,7 +407,7 @@ public class SqliteStorage {
                     }
                 }
                 conn.commit();
-            } catch (SQLException e) {
+            } catch (SQLException | RuntimeException e) {
                 conn.rollback();
                 throw e;
             } finally {
@@ -395,6 +426,34 @@ public class SqliteStorage {
         }
     }
 
+    private static void addColumnIfAbsent(Connection conn, String table, String column, String type) throws SQLException {
+        try (Statement statement = conn.createStatement(); ResultSet rows = statement.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rows.next()) if (column.equals(rows.getString("name"))) return;
+        }
+        try (Statement statement = conn.createStatement()) { statement.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type); }
+    }
+
+    private static void validateColumns(Connection conn, List<String> definitions, boolean legacy) throws SQLException {
+        java.util.regex.Pattern tablePattern = java.util.regex.Pattern.compile("CREATE TABLE IF NOT EXISTS ([a-z_]+) ");
+        java.util.regex.Pattern columnPattern = java.util.regex.Pattern.compile("(?:^|,)\\s*([a-z_]+)\\s+(INTEGER|TEXT)");
+        for (String definition : definitions) {
+            java.util.regex.Matcher tableMatch = tablePattern.matcher(definition);
+            if (!tableMatch.find()) continue;
+            String table = tableMatch.group(1);
+            if (legacy && table.startsWith("accounting_")) continue;
+            Map<String, String> actual = new HashMap<>();
+            try (Statement statement = conn.createStatement(); ResultSet rows = statement.executeQuery("PRAGMA table_info(" + table + ")")) {
+                while (rows.next()) actual.put(rows.getString("name"), rows.getString("type"));
+            }
+            java.util.regex.Matcher columns = columnPattern.matcher(definition.substring(definition.indexOf('(') + 1));
+            while (columns.find()) {
+                String column = columns.group(1);
+                if (legacy && table.equals("recipe_flips") && (column.equals("definition_json") || column.equals("execution_count"))) continue;
+                if (!columns.group(2).equalsIgnoreCase(actual.get(column))) throw new SQLException("Incompatible SQLite layout: " + table + "." + column);
+            }
+        }
+    }
+
     /**
      * Upsert an account record. Creates new or updates existing.
      * @param displayName Account display name
@@ -403,14 +462,8 @@ public class SqliteStorage {
     public synchronized void upsertAccount(String displayName, String playerId) {
         // player_id is preserved on update (COALESCE) so a re-upsert with a null playerId
         // (the common case, since OfferEvents don't carry it) doesn't wipe a known value.
-        final String sql = "INSERT OR REPLACE INTO accounts (id, display_name, player_id, session_start, accumulated_time) " +
-                "VALUES (" +
-                "  (SELECT id FROM accounts WHERE display_name = ?)," +
-                "  ?," +
-                "  COALESCE((SELECT player_id FROM accounts WHERE display_name = ?), ?)," +
-                "  COALESCE((SELECT session_start FROM accounts WHERE display_name = ?), ?)," +
-                "  COALESCE((SELECT accumulated_time FROM accounts WHERE display_name = ?), ?)" +
-                ")";
+        final String sql = "INSERT INTO accounts (display_name, player_id, session_start, accumulated_time) VALUES (?,?,?,?) " +
+            "ON CONFLICT(display_name) DO UPDATE SET player_id=COALESCE(excluded.player_id,accounts.player_id)";
 
         long nowMillis = Instant.now().toEpochMilli();
 
@@ -418,17 +471,13 @@ public class SqliteStorage {
             Connection conn = getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, displayName);
-                ps.setString(2, displayName);
-                ps.setString(3, displayName);
                 if (playerId == null) {
-                    ps.setNull(4, Types.VARCHAR);
+                    ps.setNull(2, Types.VARCHAR);
                 } else {
-                    ps.setString(4, playerId);
+                    ps.setString(2, playerId);
                 }
-                ps.setString(5, displayName);
-                ps.setLong(6, nowMillis);
-                ps.setString(7, displayName);
-                ps.setLong(8, 0L);
+                ps.setLong(3, nowMillis);
+                ps.setLong(4, 0L);
                 ps.executeUpdate();
             }
             // Invalidate cache; next getAccountId() will repopulate with the upserted row.
@@ -527,7 +576,7 @@ public class SqliteStorage {
     private List<RecipeFlipGroup> loadRecipeFlipGroups(int accountId, String displayName) {
         List<RecipeFlipGroup> groups = new ArrayList<>();
 
-        String groupSql = "SELECT id, recipe_key, coin_cost, timestamp FROM recipe_flips " +
+        String groupSql = "SELECT id, recipe_key, coin_cost, timestamp, natural_key,definition_json,execution_count FROM recipe_flips " +
             "WHERE account_id = ? ORDER BY recipe_key, timestamp";
 
         try {
@@ -557,6 +606,12 @@ public class SqliteStorage {
                             inputs,
                             coinCost
                         );
+                        String keyPrefix = "recipe-id:" + accountId + ":";
+                        String storedKey = rs.getString("natural_key");
+                        flip.setId(storedKey.startsWith(keyPrefix) ? storedKey.substring(keyPrefix.length()) : null);
+                        flip.setDefinitionSnapshot(SLOT_GSON.fromJson(rs.getString("definition_json"), Recipe.class));
+                        int executions = rs.getInt("execution_count");
+                        flip.setDeclaredExecutionCount(rs.wasNull() ? null : executions);
 
                         group.getRecipeFlips().add(flip);
                     }
@@ -784,7 +839,6 @@ public class SqliteStorage {
     }
     /** Records the original offer, preserving classification and continuity across reloads. */
     public synchronized void recordTrade(String displayName, OfferEvent offer) {
-        int accountId = getOrCreateAccountId(displayName);
         // Repeated writes of the same snapshot are idempotent. Successive live GE events
         // have different UUIDs; recordOfferUpdate removes their exact replaced snapshots.
         String sql = "INSERT INTO trades " +
@@ -794,16 +848,31 @@ public class SqliteStorage {
             "timestamp = excluded.timestamp, qty = excluded.qty, price = excluded.price, " +
             "offer_json = excluded.offer_json " +
             "WHERE excluded.qty >= trades.qty";
-        try (PreparedStatement statement = getConnection().prepareStatement(sql)) {
-            statement.setInt(1, accountId);
-            statement.setInt(2, offer.getItemId());
-            statement.setString(3, offer.getUuid());
-            statement.setLong(4, offer.getTime() == null ? 0L : offer.getTime().toEpochMilli());
-            statement.setInt(5, offer.getCurrentQuantityInTrade());
-            statement.setInt(6, offer.getPreTaxPrice());
-            statement.setInt(7, offer.isBuy() ? 1 : 0);
-            statement.setString(8, serializeOffer(offer));
-            statement.executeUpdate();
+        try {
+            Connection conn = getConnection();
+            boolean ownTransaction = conn.getAutoCommit();
+            if (ownTransaction) conn.setAutoCommit(false);
+            try {
+                int accountId = getOrCreateAccountId(displayName);
+                accountingStore.captureOffer(conn, accountId, offer, Collections.emptyList(), true);
+                try (PreparedStatement statement = conn.prepareStatement(sql)) {
+                    statement.setInt(1, accountId);
+                    statement.setInt(2, offer.getItemId());
+                    statement.setString(3, offer.getUuid());
+                    statement.setLong(4, offer.getTime() == null ? 0L : offer.getTime().toEpochMilli());
+                    statement.setInt(5, offer.getCurrentQuantityInTrade());
+                    statement.setInt(6, offer.getPreTaxPrice());
+                    statement.setInt(7, offer.isBuy() ? 1 : 0);
+                    statement.setString(8, serializeOffer(offer));
+                    statement.executeUpdate();
+                }
+                if (ownTransaction) conn.commit();
+            } catch (SQLException | RuntimeException e) {
+                if (ownTransaction) { conn.rollback(); accountIdCache.remove(displayName); }
+                throw e;
+            } finally {
+                if (ownTransaction) conn.setAutoCommit(true);
+            }
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to record trade for " + displayName, e);
         }
@@ -816,23 +885,35 @@ public class SqliteStorage {
      * @param offer The offer event to store (cleared if null/complete)
      */
     public synchronized void upsertSlot(String displayName, int slotIndex, OfferEvent offer, boolean historyVisible) {
-        if (offer == null || offer.isComplete() || offer.isCausedByEmptySlot()) {
-            clearSlot(displayName, slotIndex);
-            return;
-        }
-        int accountId = getOrCreateAccountId(displayName);
-
-        final String sql = "INSERT OR REPLACE INTO active_slots " +
-            "(account_id, slot_index, offer_uuid, offer_json, history_visible) VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement ps = getConnection().prepareStatement(sql)) {
-            ps.setInt(1, accountId);
-            ps.setInt(2, slotIndex);
-            ps.setString(3, offer.getUuid());
-            ps.setString(4, serializeOffer(offer));
-            ps.setBoolean(5, historyVisible);
-            ps.executeUpdate();
+        try {
+            Connection conn = getConnection();
+            boolean ownTransaction = conn.getAutoCommit();
+            if (ownTransaction) conn.setAutoCommit(false);
+            try {
+                int accountId = getOrCreateAccountId(displayName);
+                accountingStore.captureOffer(conn, accountId, offer, Collections.emptyList(), historyVisible);
+                if (offer == null || offer.isComplete() || offer.isCausedByEmptySlot()) {
+                    clearSlot(displayName, slotIndex);
+                } else {
+                    try (PreparedStatement ps = conn.prepareStatement(
+                        "INSERT OR REPLACE INTO active_slots(account_id,slot_index,offer_uuid,offer_json,history_visible) VALUES (?,?,?,?,?)")) {
+                        ps.setInt(1, accountId);
+                        ps.setInt(2, slotIndex);
+                        ps.setString(3, offer.getUuid());
+                        ps.setString(4, serializeOffer(offer));
+                        ps.setBoolean(5, historyVisible);
+                        ps.executeUpdate();
+                    }
+                }
+                if (ownTransaction) conn.commit();
+            } catch (SQLException | RuntimeException e) {
+                if (ownTransaction) { conn.rollback(); accountIdCache.remove(displayName); }
+                throw e;
+            } finally {
+                if (ownTransaction) conn.setAutoCommit(true);
+            }
         } catch (SQLException e) {
-            throw new IllegalStateException("Could not persist active slot for " + displayName, e);
+            throw new IllegalStateException("Could not persist active slot", e);
         }
     }
 
@@ -1086,7 +1167,7 @@ public class SqliteStorage {
                 conn.commit();
                 accountIdCache.remove(displayName);
                 logger.info("Deleted all SQLite data for account {}", displayName);
-            } catch (SQLException e) {
+            } catch (SQLException | RuntimeException e) {
                 conn.rollback();
                 throw e;
             } finally {
@@ -1102,6 +1183,11 @@ public class SqliteStorage {
         persistOfferHistory(displayName, offer, replacedUuids, null);
     }
 
+    public synchronized void recordOfferUpdate(String displayName, OfferEvent offer, List<String> replacedUuids,
+                                               Instant nextRefresh, int itemsBought, int completedItemsBought) {
+        persistOfferHistory(displayName, offer, replacedUuids, null, nextRefresh, itemsBought, completedItemsBought);
+    }
+
     /** Retains a collected fill even when the last event was a partial cancellation correction. */
     public synchronized void archiveOfferAndClearSlot(String displayName, int slotIndex, OfferEvent archived) {
         persistOfferHistory(displayName, archived, Collections.emptyList(), slotIndex);
@@ -1109,12 +1195,18 @@ public class SqliteStorage {
 
     private void persistOfferHistory(String displayName, OfferEvent offer, List<String> replacedUuids,
                                      Integer clearedSlot) {
+        persistOfferHistory(displayName, offer, replacedUuids, clearedSlot, null, 0, 0);
+    }
+
+    private void persistOfferHistory(String displayName, OfferEvent offer, List<String> replacedUuids,
+                                     Integer clearedSlot, Instant nextRefresh, int itemsBought, int completedItemsBought) {
         int accountId = getOrCreateAccountId(displayName);
         try {
             Connection conn = getConnection();
             boolean wasAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             try {
+                accountingStore.captureOffer(conn, accountId, offer, replacedUuids, true);
                 for (int i = 0; i < replacedUuids.size(); i += 500) {
                     List<String> chunk = replacedUuids.subList(i, Math.min(i + 500, replacedUuids.size()));
                     String placeholders = String.join(",", Collections.nCopies(chunk.size(), "?"));
@@ -1134,6 +1226,9 @@ public class SqliteStorage {
                 } else {
                     upsertSlot(displayName, offer.getSlot(), offer, true);
                     upsertItemVisibility(displayName, offer.getItemId(), true);
+                }
+                if (nextRefresh != null && offer != null) {
+                    upsertGeLimitState(displayName, offer.getItemId(), nextRefresh, itemsBought, completedItemsBought);
                 }
                 conn.commit();
             } catch (SQLException | RuntimeException e) {
@@ -1161,6 +1256,7 @@ public class SqliteStorage {
             boolean wasAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             try {
+                accountingStore.suppressOffers(conn, accountId, uuids);
                 for (int i = 0; i < uuids.size(); i += 500) {
                     List<String> chunk = uuids.subList(i, Math.min(i + 500, uuids.size()));
                     String placeholders = String.join(",", Collections.nCopies(chunk.size(), "?"));
@@ -1191,9 +1287,10 @@ public class SqliteStorage {
                         ps.executeUpdate();
                     }
                 }
+                accountingStore.recipesChanged(conn, accountId);
                 conn.commit();
                 logger.info("Deleted SQLite offers by uuid for {}", displayName);
-            } catch (SQLException e) {
+            } catch (SQLException | RuntimeException e) {
                 conn.rollback();
                 throw e;
             } finally {
@@ -1229,12 +1326,15 @@ public class SqliteStorage {
             Connection conn = getConnection();
             Long recipeId = null;
             try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT id FROM recipe_flips WHERE account_id = ? AND natural_key = ?")) {
+                "SELECT id FROM recipe_flips WHERE account_id = ? AND (natural_key = ? OR (recipe_key = ? AND timestamp = ?))")) {
                 ps.setInt(1, accountId);
                 ps.setString(2, naturalKey);
+                ps.setString(3, recipeKey);
+                ps.setLong(4, timeOfCreation.toEpochMilli());
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         recipeId = rs.getLong(1);
+                        if (rs.next()) throw new SQLException("Recipe timestamp is ambiguous; delete by instance identity");
                     }
                 }
             }
@@ -1245,9 +1345,10 @@ public class SqliteStorage {
             conn.setAutoCommit(false);
             try {
                 deleteRecipeFlipsById(conn, Collections.singletonList(recipeId));
+                accountingStore.recipesChanged(conn, accountId);
                 conn.commit();
                 logger.info("Deleted SQLite recipe flip {} for {}", naturalKey, displayName);
-            } catch (SQLException e) {
+            } catch (SQLException | RuntimeException e) {
                 conn.rollback();
                 throw e;
             } finally {
@@ -1256,6 +1357,34 @@ public class SqliteStorage {
         } catch (SQLException e) {
             throw new IllegalStateException("Error deleting recipe flip ", e);
         }
+    }
+
+    /** Stable instance identity distinguishes recipes recorded in the same millisecond. */
+    public synchronized void deleteRecipeFlip(String displayName, String recipeKey, RecipeFlip flip) {
+        if (flip == null) return;
+        if (flip.getId() == null) {
+            deleteRecipeFlip(displayName, recipeKey, flip.getTimeOfCreation());
+            return;
+        }
+        Integer accountId = getAccountId(displayName);
+        if (accountId == null) return;
+        try {
+            Connection conn = getConnection();
+            boolean autoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            try {
+                List<Long> ids = new ArrayList<>();
+                try (PreparedStatement query = conn.prepareStatement("SELECT id FROM recipe_flips WHERE account_id=? AND natural_key=?")) {
+                    query.setInt(1, accountId);
+                    query.setString(2, "recipe-id:" + accountId + ":" + flip.getId());
+                    try (ResultSet row = query.executeQuery()) { while (row.next()) ids.add(row.getLong(1)); }
+                }
+                deleteRecipeFlipsById(conn, ids);
+                accountingStore.recipesChanged(conn, accountId);
+                conn.commit();
+            } catch (SQLException | RuntimeException e) { conn.rollback(); throw e; }
+            finally { conn.setAutoCommit(autoCommit); }
+        } catch (SQLException e) { throw new IllegalStateException("Could not delete recipe instance", e); }
     }
 
     /**
@@ -1294,9 +1423,10 @@ public class SqliteStorage {
             conn.setAutoCommit(false);
             try {
                 deleteRecipeFlipsById(conn, recipeIds);
+                accountingStore.recipesChanged(conn, accountId);
                 conn.commit();
                 logger.info("Deleted {} SQLite recipe flips for {} [{}] since {}", recipeIds.size(), displayName, recipeKey, since);
-            } catch (SQLException e) {
+            } catch (SQLException | RuntimeException e) {
                 conn.rollback();
                 throw e;
             } finally {
@@ -1346,8 +1476,12 @@ public class SqliteStorage {
             conn.setAutoCommit(false);
             try {
                 insertRecipeFlip(conn, accountId, recipeKey, flip);
+                accountingStore.recipesChanged(conn, accountId);
+                String identity = flip.getId() == null ? "recipe:" + accountId + ":" + recipeKey + ":" + flip.getTimeOfCreation().toEpochMilli()
+                    : "recipe-id:" + accountId + ":" + flip.getId();
+                accountingStore.validateRecipeAddition(conn, accountId, identity);
                 conn.commit();
-            } catch (SQLException e) {
+            } catch (SQLException | RuntimeException e) {
                 conn.rollback();
                 throw e;
             } finally {
@@ -1364,16 +1498,19 @@ public class SqliteStorage {
             return false;
         }
         long timestamp = flip.getTimeOfCreation().toEpochMilli();
-        String naturalKey = "recipe:" + accountId + ":" + recipeKey + ":" + timestamp;
+        String naturalKey = flip.getId() == null ? "recipe:" + accountId + ":" + recipeKey + ":" + timestamp
+            : "recipe-id:" + accountId + ":" + flip.getId();
         long recipeId;
         try (PreparedStatement ps = conn.prepareStatement(
-            "INSERT INTO recipe_flips (account_id, timestamp, recipe_key, coin_cost, natural_key) " +
-            "VALUES (?, ?, ?, ?, ?) ON CONFLICT(natural_key) DO NOTHING", Statement.RETURN_GENERATED_KEYS)) {
+            "INSERT INTO recipe_flips (account_id, timestamp, recipe_key, coin_cost, natural_key,definition_json,execution_count) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(natural_key) DO NOTHING", Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, accountId);
             ps.setLong(2, timestamp);
             ps.setString(3, recipeKey);
             ps.setLong(4, flip.getCoinCost());
             ps.setString(5, naturalKey);
+            ps.setString(6, flip.getDefinitionSnapshot() == null ? null : SLOT_GSON.toJson(flip.getDefinitionSnapshot()));
+            ps.setObject(7, flip.getDeclaredExecutionCount());
             // An ignored insert leaves a stale rowid in sqlite-jdbc's generated keys.
             if (ps.executeUpdate() == 0) {
                 return false;

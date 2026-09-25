@@ -30,7 +30,6 @@ package com.flippingutilities.model;
 import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.GeTax;
 import com.google.gson.annotations.SerializedName;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -41,6 +40,7 @@ import net.runelite.api.events.GrandExchangeOfferChanged;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -49,7 +49,6 @@ import java.util.UUID;
  * belonging to the same trade as it.
  */
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
 public class OfferEvent
 {
@@ -96,6 +95,36 @@ public class OfferEvent
 	//used in the live slot view to show what price something was listed at
 	private transient int listedPrice;
 	private transient int spent;
+
+	// Retain the client observation before the compatibility price is rounded or saturated.
+	private Long cumulativeAmount;
+	private Instant observedAt;
+	private String orderId;
+	private String predecessorUuid;
+
+	public OfferEvent(String uuid, boolean buy, int itemId, int currentQuantityInTrade, int price,
+			Instant time, int slot, GrandExchangeOfferState state, int tickArrivedAt,
+			int ticksSinceFirstOffer, int totalQuantityInTrade, Instant tradeStartedAt,
+			boolean beforeLogin, String madeBy, String itemName, int listedPrice, int spent)
+	{
+		this.uuid = uuid;
+		this.buy = buy;
+		this.itemId = itemId;
+		this.currentQuantityInTrade = currentQuantityInTrade;
+		this.price = price;
+		this.time = time;
+		this.slot = slot;
+		this.state = state;
+		this.tickArrivedAt = tickArrivedAt;
+		this.ticksSinceFirstOffer = ticksSinceFirstOffer;
+		this.totalQuantityInTrade = totalQuantityInTrade;
+		this.tradeStartedAt = tradeStartedAt;
+		this.beforeLogin = beforeLogin;
+		this.madeBy = madeBy;
+		this.itemName = itemName;
+		this.listedPrice = listedPrice;
+		this.spent = spent;
+	}
 
 	/**
 	 * @return post tax values
@@ -203,7 +232,7 @@ public class OfferEvent
 
 	public OfferEvent clone()
 	{
-		return new OfferEvent(
+		OfferEvent copy = new OfferEvent(
 				uuid,
 				buy,
 				itemId,
@@ -222,6 +251,11 @@ public class OfferEvent
 				listedPrice,
 				spent
 		);
+		copy.cumulativeAmount = cumulativeAmount;
+		copy.observedAt = observedAt;
+		copy.orderId = orderId;
+		copy.predecessorUuid = predecessorUuid;
+		return copy;
 	}
 
 	public boolean equals(Object other)
@@ -260,7 +294,8 @@ public class OfferEvent
 			&& currentQuantityInTrade == other.getCurrentQuantityInTrade()
 			&& slot == other.getSlot()
 			&& totalQuantityInTrade == other.getTotalQuantityInTrade() && itemId == other.getItemId()
-			&& getPrice() == other.getPrice();
+			&& getPrice() == other.getPrice()
+			&& Objects.equals(cumulativeAmount, other.cumulativeAmount);
 	}
 
 	public boolean isUpdateForCancelled(OfferEvent other) {
@@ -279,18 +314,19 @@ public class OfferEvent
 	public static OfferEvent fromGrandExchangeEvent(GrandExchangeOfferChanged event)
 	{
 		GrandExchangeOffer offer = event.getOffer();
+		Instant observed = Instant.now();
 
 		boolean isBuy = offer.getState() == GrandExchangeOfferState.BOUGHT
 			|| offer.getState() == GrandExchangeOfferState.CANCELLED_BUY
 			|| offer.getState() == GrandExchangeOfferState.BUYING;
 
-		return new OfferEvent(
+		OfferEvent observation = new OfferEvent(
 			UUID.randomUUID().toString(),
 			isBuy,
 			offer.getItemId(),
 			offer.getQuantitySold(),
 			offer.getQuantitySold() == 0 ? 0 : saturatePrice(offer.getSpent() / offer.getQuantitySold()),
-			Instant.now().truncatedTo(ChronoUnit.SECONDS),
+			observed.truncatedTo(ChronoUnit.SECONDS),
 			event.getSlot(),
 			offer.getState(),
 			0,
@@ -302,6 +338,10 @@ public class OfferEvent
 			null,
 			saturatePrice(offer.getPrice()),
 			saturatePrice(offer.getSpent()));
+		observation.setCumulativeAmount((long) offer.getSpent());
+		observation.setObservedAt(observed);
+		observation.setOrderId(observation.getUuid());
+		return observation;
 	}
 
 	/**
@@ -351,4 +391,3 @@ public class OfferEvent
 				0);
 	}
 }
-
