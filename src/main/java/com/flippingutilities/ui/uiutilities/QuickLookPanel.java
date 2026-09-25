@@ -89,19 +89,21 @@ public class QuickLookPanel extends JPanel {
             return;
         }
         Map<Integer, JLabel> wikiMarginToLabel = new HashMap<>();
-        wikiMarginToLabel.put(wikiItemInfo.getHigh(), wikiInstaBuy);
-        wikiMarginToLabel.put(wikiItemInfo.getLow(), wikiInstaSell);
+        wikiMarginToLabel.put(wikiItemInfo.getHighCapped(), wikiInstaBuy);
+        wikiMarginToLabel.put(wikiItemInfo.getLowCapped(), wikiInstaSell);
 
-        wikiInstaBuyAge.setText(wikiItemInfo.getHighTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getHighTime())));
-        wikiInstaSellAge.setText(wikiItemInfo.getLowTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getLowTime())));
-        wikiInstaBuy.setText(wikiItemInfo.getHigh() == 0 ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
-        wikiInstaSell.setText(wikiItemInfo.getLow() == 0 ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
+        wikiInstaBuyAge.setText(wikiItemInfo.getHighTime() == null || wikiItemInfo.getHighTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getHighTime())));
+        wikiInstaSellAge.setText(wikiItemInfo.getLowTime() == null || wikiItemInfo.getLowTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getLowTime())));
+        wikiInstaBuy.setText(!wikiItemInfo.hasHigh() ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
+        wikiInstaSell.setText(!wikiItemInfo.hasLow() ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
 
         toMakeOfferCompetitiveTest.setText("");
         offerCompetitivenessText.setText("");
 
-        int max = Math.max(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
-        int min = Math.min(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
+        // Competitiveness compares against the offer price, which cannot exceed max cash;
+        // capped wiki values keep the comparison and label lookups consistent.
+        int max = Math.max(wikiItemInfo.getHighCapped(), wikiItemInfo.getLowCapped());
+        int min = Math.min(wikiItemInfo.getHighCapped(), wikiItemInfo.getLowCapped());
 
         if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(max), ColorScheme.GRAND_EXCHANGE_PRICE);

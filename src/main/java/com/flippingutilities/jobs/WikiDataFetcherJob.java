@@ -27,7 +27,10 @@ import java.util.function.BiConsumer;
 @Slf4j
 public class WikiDataFetcherJob {
     public static int requestInterval = 60; //seconds
-    static final String API = "https://prices.runescape.wiki/api/v1/osrs/latest";
+    // v2 of the osrs endpoints: prices may exceed 32 bit integers and unseen sides are null
+    // (WikiItemMargins handles both). Deadman has no v2 route (404 as of this change), so it
+    // stays on v1.
+    static final String API = "https://prices.runescape.wiki/api/v2/osrs/latest";
     static final String DEADMAN_API = "https://prices.runescape.wiki/api/v1/dmm/latest";
     FlippingPlugin plugin;
     ScheduledExecutorService executor;

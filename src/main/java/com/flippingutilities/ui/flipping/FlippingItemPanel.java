@@ -897,21 +897,24 @@ public class FlippingItemPanel extends JPanel
 			wikiSellVal.setText("N/A");
 			return;
 		}
-		wikiBuyVal.setText(wikiItemInfo.getHigh()==0? "No data":QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
-		wikiSellVal.setText(wikiItemInfo.getLow()==0? "No data":QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
+		wikiBuyVal.setText(!wikiItemInfo.hasHigh() ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
+		wikiSellVal.setText(!wikiItemInfo.hasLow() ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
 
-		if (wikiItemInfo.getHigh() != 0 && wikiItemInfo.getLow() != 0) {
-			int profitEach = GeTax.getPostTaxPrice(wikiItemInfo.getHigh()) - wikiItemInfo.getLow();
-			wikiProfitEachVal.setText(QuantityFormatter.quantityToRSDecimalStack(profitEach) + " gp");
+		if (wikiItemInfo.hasHigh() && wikiItemInfo.hasLow()) {
+			// Tax is capped per unit well below max cash; saturating the wiki price into an
+			// int for the tax call only affects over-max-cash items, where the profit shown
+			// is dominated by the price itself. The arithmetic itself stays in longs.
+			long profitEach = GeTax.getPostTaxPrice(wikiItemInfo.getHighCapped()) - wikiItemInfo.getLow();
+			wikiProfitEachVal.setText(PriceFormatter.quantityToRSDecimalStack(profitEach) + " gp");
 
-			float roi = ((float)profitEach/ wikiItemInfo.getLow()) * 100;
+			float roi = (profitEach / (float) wikiItemInfo.getLow()) * 100;
 			wikiRoiLabelVal.setText(String.format("%.2f", roi) + "%");
 			//Color gradient red-yellow-green depending on ROI.
 			wikiRoiLabelVal.setForeground(UIUtilities.gradiatePercentage(roi, plugin.getConfig().roiGradientMax()));
 			int geLimit = plugin.getConfig().geLimitProfit()? flippingItem.getRemainingGeLimit() : flippingItem.getTotalGELimit();
 			if (flippingItem.getTotalGELimit() > 0) {
-				int potentialProfit = profitEach * geLimit;
-				wikiPotentialProfitVal.setText(QuantityFormatter.quantityToRSDecimalStack(potentialProfit) + " gp");
+				long potentialProfit = profitEach * geLimit;
+				wikiPotentialProfitVal.setText(PriceFormatter.quantityToRSDecimalStack(potentialProfit) + " gp");
 			}
 		}
 		updateWikiTimeLabels();

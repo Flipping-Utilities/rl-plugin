@@ -110,8 +110,9 @@ public class GameUiChangesHandler {
                     if (selectedItem.isPresent() && selectedItem.get().getLatestInstaSell().isPresent()) {
                         instaSellPrice = selectedItem.get().getLatestInstaSell().get().getPreTaxPrice();
                     }
-                    if (wikiRequest != null && wikiRequest.getData().containsKey(highlightedItemId) && wikiRequest.getData().get(highlightedItemId).getLow() != 0) {
-                        wikiInstaSellPrice = wikiRequest.getData().get(highlightedItemId).getLow();
+                    if (wikiRequest != null && wikiRequest.getData().containsKey(highlightedItemId)
+                        && wikiRequest.getData().get(highlightedItemId).hasLow()) {
+                        wikiInstaSellPrice = wikiRequest.getData().get(highlightedItemId).getLowCapped();
                     }
                     flippingWidget.showInstaSellPrices(instaSellPrice, wikiInstaSellPrice);
                 } else if (offerText.equals("Sell offer")) {
@@ -121,8 +122,9 @@ public class GameUiChangesHandler {
                         instaBuyPrice = selectedItem.get().getLatestInstaBuy().get().getPrice();
                     }
 
-                    if (wikiRequest != null && wikiRequest.getData().containsKey(highlightedItemId) && wikiRequest.getData().get(highlightedItemId).getHigh() != 0) {
-                        wikiInstaBuyPrice = wikiRequest.getData().get(highlightedItemId).getHigh();
+                    if (wikiRequest != null && wikiRequest.getData().containsKey(highlightedItemId)
+                        && wikiRequest.getData().get(highlightedItemId).hasHigh()) {
+                        wikiInstaBuyPrice = wikiRequest.getData().get(highlightedItemId).getHighCapped();
                     }
                     flippingWidget.showInstaBuyPrices(instaBuyPrice, wikiInstaBuyPrice);
                 }

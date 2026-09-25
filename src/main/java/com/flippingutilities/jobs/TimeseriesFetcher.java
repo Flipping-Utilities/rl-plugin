@@ -27,8 +27,10 @@ import java.util.function.Consumer;
 @Slf4j
 @Singleton
 public class TimeseriesFetcher {
-    private static final String TIMESERIES_API_URL = "https://prices.runescape.wiki/api/v1/osrs/timeseries";
-    private static final String QUERY_PARAM_TIMESTEP = "timestep";
+    // v2 replaced the granularity ("timestep") parameter with required lookback periods;
+    // the point spacing is decided by the API and reported in the response.
+    private static final String TIMESERIES_API_URL = "https://prices.runescape.wiki/api/v2/osrs/timeseries";
+    private static final String QUERY_PARAM_LOOKBACK = "lookback";
     private static final String QUERY_PARAM_ID = "id";
     private static final String USER_AGENT_HEADER = "User-Agent";
     private static final String USER_AGENT_VALUE = "FlippingUtilities - discord.gg/flipping";
@@ -57,7 +59,7 @@ public class TimeseriesFetcher {
         HttpUrl url = HttpUrl
                 .parse(TIMESERIES_API_URL)
                 .newBuilder()
-                .addQueryParameter(QUERY_PARAM_TIMESTEP, timestep.getApiValue())
+                .addQueryParameter(QUERY_PARAM_LOOKBACK, timestep.getApiValue())
                 .addQueryParameter(QUERY_PARAM_ID, String.valueOf(itemId))
                 .build();
 

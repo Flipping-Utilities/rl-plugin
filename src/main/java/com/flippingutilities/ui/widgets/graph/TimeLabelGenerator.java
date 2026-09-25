@@ -34,13 +34,14 @@ public final class TimeLabelGenerator {
         ZoneId zoneId = ZoneId.systemDefault();
 
         switch (timestep) {
-            case FIVE_MINUTES:
-                return HOUR_FORMATTER.format(instant.atZone(zoneId));
-            case ONE_HOUR:
-                return DAY_FORMATTER.format(instant.atZone(zoneId));
             case SIX_HOURS:
-                return DAY_FORMATTER.format(instant.atZone(zoneId));
             case TWENTY_FOUR_HOURS:
+                return HOUR_FORMATTER.format(instant.atZone(zoneId));
+            case SEVEN_DAYS:
+            case THIRTY_DAYS:
+                return DAY_FORMATTER.format(instant.atZone(zoneId));
+            case SIX_MONTHS:
+            case ONE_YEAR:
                 int timestampYear = instant.atZone(zoneId).getYear();
                 int currentYear = Instant.now().atZone(zoneId).getYear();
                 if (timestampYear == currentYear) {

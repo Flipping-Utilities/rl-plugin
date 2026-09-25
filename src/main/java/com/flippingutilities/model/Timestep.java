@@ -3,23 +3,29 @@ package com.flippingutilities.model;
 import lombok.Getter;
 
 /**
- * represents different time intervals for fetching and displaying timeseries data.
- * each timestep defines the granularity of data points, the display period, and chart configuration.
+ * Lookback window for the wiki v2 timeseries endpoint (/osrs/timeseries?lookback=...).
+ *
+ * v2 replaced v1's granularity parameter ("timestep=5m") with lookback periods; the API
+ * now decides the point spacing and reports it in the response. intervalSeconds holds the
+ * spacing the API currently returns for each lookback (used for cache expiry and axis
+ * labels until the response's authoritative timestep is read).
  */
 @Getter
 public enum Timestep {
-    FIVE_MINUTES("5m", "Last 24 Hours", 5 * 60, 24 * 60 * 60, 8),
-    ONE_HOUR("1h", "Last 7 Days", 60 * 60, 7 * 24 * 60 * 60, 7),
-    SIX_HOURS("6h", "Last 1 Month", 6 * 60 * 60, 30 * 24 * 60 * 60, 4),
-    TWENTY_FOUR_HOURS("24h", "Last Year", 24 * 60 * 60, 365 * 24 * 60 * 60, 6);
+    SIX_HOURS("6h", "Last 6 Hours", 5 * 60, 6 * 60 * 60, 7),
+    TWENTY_FOUR_HOURS("24h", "Last 24 Hours", 5 * 60, 24 * 60 * 60, 8),
+    SEVEN_DAYS("7d", "Last 7 Days", 60 * 60, 7 * 24 * 60 * 60, 7),
+    THIRTY_DAYS("30d", "Last 30 Days", 6 * 60 * 60, 30 * 24 * 60 * 60, 6),
+    SIX_MONTHS("6m", "Last 6 Months", 24 * 60 * 60, 182 * 24 * 60 * 60, 6),
+    ONE_YEAR("1y", "Last Year", 24 * 60 * 60, 365 * 24 * 60 * 60, 6);
 
-    /** api parameter value for this timestep (e.g., "5m", "1h") */
+    /** api lookback parameter value (e.g., "6h", "7d") */
     private final String apiValue;
-    /** display name shown to user (e.g., "Last 24 Hours") */
+    /** display name shown to user (e.g., "Last 6 Hours") */
     private final String displayName;
-    /** time interval between data points in seconds */
+    /** point spacing the API currently returns for this lookback, in seconds */
     private final long intervalSeconds;
-    /** maximum time range covered by this timestep in seconds */
+    /** lookback span in seconds */
     private final long maxTimeRangeSeconds;
     /** number of labels to display on chart axis */
     private final int labelCount;
