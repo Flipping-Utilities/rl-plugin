@@ -281,6 +281,10 @@ public class FlippingPlugin extends Plugin {
         }
     }
 
+    boolean isStorageFailed(SqliteStorage storage) {
+        return storage != null && failedStorages.contains(storage);
+    }
+
     /** Keep a durable recovery marker outside the database, which may itself be read-only. */
     void recoverFromStorageFailure(SqliteStorage storage, Exception failure) {
         if (!failedStorages.add(storage)) {
@@ -297,8 +301,8 @@ public class FlippingPlugin extends Plugin {
             if (sqliteStorage != storage) {
                 return;
             }
+            dataHandler.preserveAccountsForRecovery();
             closeStorage();
-            dataHandler.getAllAccountData(); // Save the entire authoritative model for recovery.
             dataHandler.storeData();
             if (masterPanel != null) {
                 masterPanel.updateSqliteIndicator();
