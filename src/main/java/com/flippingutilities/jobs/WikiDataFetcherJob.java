@@ -122,16 +122,28 @@ public class WikiDataFetcherJob {
         });
     }
 
-    private synchronized void completeRequest(long generation, WikiDataSource source, WikiRequest result) {
-        // A world switch or forced refresh may have started a newer request.
-        if (generation != requestGeneration) {
-            return;
+    private void completeRequest(long generation, WikiDataSource source, WikiRequest result) {
+        // Notify subscribers OUTSIDE the job monitor: subscribers (e.g. the plugin's
+        // onWikiFetch) run arbitrary work on this OkHttp callback thread, and holding the
+        // monitor meanwhile blocks the scheduler thread and world-switch fetch attempts
+        // that also need it (up to deadlock if a subscriber takes a lock held while
+        // attempting a fetch).
+        List<BiConsumer<WikiRequestWrapper, Instant>> toNotify;
+        Instant completedAt;
+        synchronized (this) {
+            // A world switch or forced refresh may have started a newer request.
+            if (generation != requestGeneration) {
+                return;
+            }
+            completedAt = Instant.now();
+            timeOfLastRequestCompletion = completedAt;
+            inFlightRequest = false;
+            if (result == null) {
+                return;
+            }
+            toNotify = new ArrayList<>(subscribers);
         }
-        timeOfLastRequestCompletion = Instant.now();
-        inFlightRequest = false;
-        if (result != null) {
-            WikiRequestWrapper wrapper = new WikiRequestWrapper(result, source);
-            subscribers.forEach(subscriber -> subscriber.accept(wrapper, timeOfLastRequestCompletion));
-        }
+        WikiRequestWrapper wrapper = new WikiRequestWrapper(result, source);
+        toNotify.forEach(subscriber -> subscriber.accept(wrapper, completedAt));
     }
 }
