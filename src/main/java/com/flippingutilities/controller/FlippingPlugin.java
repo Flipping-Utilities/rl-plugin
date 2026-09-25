@@ -271,11 +271,20 @@ public class FlippingPlugin extends Plugin {
         if (!changed.isEmpty()) submitStorageTask(storage -> new com.flippingutilities.db.ReportingRepository(storage).saveItemNames(changed));
     }
 
-    private void attachAccounting(SqliteStorage storage) {
-        if (sqliteStorage != storage || failedStorages.contains(storage)) return;
-        accountingUiService = new AccountingCoordinator(storage, getStorageExecutor(),
-            () -> sqliteStorage == storage && !failedStorages.contains(storage), this::retryAccountingStorage);
+    private synchronized void attachAccounting(SqliteStorage storage) {
+        if (sqliteStorage != storage) return;
+        // Recovery must be reachable even when a write failed before migration attached the UI.
+        // The coordinator rejects reads while failed, but its retry action remains available.
+        if (accountingUiService == null) {
+            accountingUiService = new AccountingCoordinator(storage, getStorageExecutor(),
+                () -> sqliteStorage == storage && !isStorageFailed(storage), this::retryAccountingStorage);
+        }
+        refreshAccountingStorageUi();
+    }
+
+    private void refreshAccountingStorageUi() {
         if (statPanel != null) statPanel.refreshAccounting();
+        if (masterPanel != null) SwingUtilities.invokeLater(masterPanel::updateSqliteIndicator);
     }
 
     private boolean hasProtectedAccounting(SqliteStorage storage) {
@@ -294,6 +303,9 @@ public class FlippingPlugin extends Plugin {
     }
 
     private final Set<SqliteStorage> failedStorages = ConcurrentHashMap.newKeySet();
+    // Writes can resume after replay, but readers must retain cached accounts until the
+    // client thread has reattached the canonical database to DataHandler.
+    private final Set<SqliteStorage> storageAwaitingReattachment = ConcurrentHashMap.newKeySet();
     private final Map<SqliteStorage, java.util.concurrent.ConcurrentLinkedQueue<Consumer<SqliteStorage>>> pendingStorageCommands = new ConcurrentHashMap<>();
     private java.util.concurrent.CompletableFuture<String> storageRetry;
 
@@ -339,7 +351,7 @@ public class FlippingPlugin extends Plugin {
     }
 
     boolean isStorageFailed(SqliteStorage storage) {
-        return storage != null && failedStorages.contains(storage);
+        return storage != null && (failedStorages.contains(storage) || storageAwaitingReattachment.contains(storage));
     }
 
     public boolean hasPendingAccountingSaves() { return isStorageFailed(sqliteStorage); }
@@ -355,8 +367,10 @@ public class FlippingPlugin extends Plugin {
         if (storage == null) return java.util.concurrent.CompletableFuture.failedFuture(new IllegalStateException("SQLite is no longer active."));
         java.util.concurrent.CompletableFuture<String> result = new java.util.concurrent.CompletableFuture<>();
         storageRetry = result;
-        getStorageExecutor().execute(() -> {
+        storageAwaitingReattachment.add(storage);
+        try { getStorageExecutor().execute(() -> {
             if (sqliteStorage != storage) {
+                storageAwaitingReattachment.remove(storage);
                 result.completeExceptionally(new IllegalStateException("The active database changed. Reopen Accounting."));
                 return;
             }
@@ -375,22 +389,60 @@ public class FlippingPlugin extends Plugin {
                 pendingStorageCommands.remove(storage);
             } catch (Exception failure) {
                 failedStorages.add(storage);
+                storageAwaitingReattachment.remove(storage);
                 result.completeExceptionally(new IllegalStateException("SQLite saves still failed. " + pending.size()
                     + " changes remain pending in memory. Keep the client open and retry after fixing storage.", failure));
                 return;
             } finally {
-                if (statPanel != null) statPanel.refreshAccounting();
-                if (masterPanel != null) SwingUtilities.invokeLater(masterPanel::updateSqliteIndicator);
+                refreshAccountingStorageUi();
             }
+            Exception projectionFailure = null;
             try {
                 storage.getAccountingStore().reconcileAll();
-                if (statPanel != null) statPanel.refreshAccounting();
-                result.complete("Pending changes saved; accounting refreshed.");
-            } catch (Exception projectionFailure) {
-                result.completeExceptionally(new IllegalStateException("Trades were saved, but reports still need reconciliation. Retry saves to rebuild them.", projectionFailure));
+            } catch (Exception failure) {
+                projectionFailure = failure;
             }
-        });
+            completeStorageRetry(storage, result, projectionFailure);
+        }); } catch (RuntimeException rejected) {
+            storageAwaitingReattachment.remove(storage);
+            result.completeExceptionally(new IllegalStateException("Could not schedule save recovery. Retry saves before closing the client.", rejected));
+        }
         return result;
+    }
+
+    private void completeStorageRetry(SqliteStorage storage, java.util.concurrent.CompletableFuture<String> result,
+                                      Exception projectionFailure) {
+        try {
+            clientThread.invokeLater(() -> {
+                synchronized (this) {
+                    if (storageRetry != result) return;
+                    if (sqliteStorage != storage || result.isDone()) {
+                        storageAwaitingReattachment.remove(storage);
+                        result.completeExceptionally(new IllegalStateException("The active database changed before recovery completed."));
+                        return;
+                    }
+                    if (failedStorages.contains(storage)) {
+                        storageAwaitingReattachment.remove(storage);
+                        result.completeExceptionally(new IllegalStateException("Another save failed during recovery. Pending changes remain in memory; retry saves again."));
+                        return;
+                    }
+                    // Set only the reader pointer. Replacing live accounts or clearing recovery
+                    // snapshot guards here would discard changes made while the writer recovered.
+                    dataHandler.setSqliteStorage(storage);
+                    storageAwaitingReattachment.remove(storage);
+                    attachAccounting(storage);
+                    if (projectionFailure == null) result.complete("Pending changes saved; accounting refreshed.");
+                    else result.completeExceptionally(new IllegalStateException("Trades were saved, but reports still need reconciliation. Retry saves to rebuild them.", projectionFailure));
+                }
+            });
+        } catch (RuntimeException rejected) {
+            // Keep readers on their cached state and leave a reachable retry if the client
+            // callback cannot be accepted. Already committed commands stay removed.
+            if (sqliteStorage == storage) failedStorages.add(storage);
+            storageAwaitingReattachment.remove(storage);
+            result.completeExceptionally(new IllegalStateException("Trades were saved, but the client could not reconnect to SQLite. Retry saves before closing it.", rejected));
+            refreshAccountingStorageUi();
+        }
     }
 
     /** Keep a durable recovery marker outside the database, which may itself be read-only. */
@@ -401,7 +453,7 @@ public class FlippingPlugin extends Plugin {
         if (hasProtectedAccounting(storage)) {
             authoritativeStorages.add(storage);
             log.error("SQLite persistence failed. Retaining the database and its accounting history for recovery", failure);
-            if (statPanel != null) statPanel.refreshAccounting();
+            attachAccounting(storage);
             if (masterPanel != null) SwingUtilities.invokeLater(() -> {
                 masterPanel.updateSqliteIndicator();
                 javax.swing.JOptionPane.showMessageDialog(masterPanel,
@@ -455,6 +507,9 @@ public class FlippingPlugin extends Plugin {
 
         masterPanel = new MasterPanel(this, flippingPanel, statPanel, slotsPanel, loginPanel);
         masterPanel.addView(geHistoryTabPanel, "ge history");
+        // Initialization may already have exposed a recovery-only accounting service,
+        // before these panels existed and before any accounts could be loaded.
+        refreshAccountingStorageUi();
         navButton = NavigationButton.builder()
                 .tooltip("Flipping Utilities")
                 .icon(ImageUtil.loadImageResource(getClass(), "/graph_icon_green.png"))
@@ -570,6 +625,10 @@ public class FlippingPlugin extends Plugin {
         accountingItemNames.clear();
         if (statPanel != null) statPanel.refreshAccounting();
         dataHandler.setSqliteStorage(null);
+        if (oldStorage != null) storageAwaitingReattachment.remove(oldStorage);
+        if (storageRetry != null && !storageRetry.isDone()) {
+            storageRetry.completeExceptionally(new IllegalStateException("Storage closed before recovery completed."));
+        }
         return oldStorage == null ? null : getStorageExecutor().submit(() -> {
             oldStorage.close();
             failedStorages.remove(oldStorage);
@@ -603,14 +662,11 @@ public class FlippingPlugin extends Plugin {
         }
         clientThread.invokeLater(() -> {
             // A later switch, failed write or shutdown owns the active backend now.
-            if (sqliteStorage != storage || failedStorages.contains(storage)) {
+            if (sqliteStorage != storage) {
                 return;
             }
-            dataHandler.setSqliteStorage(storage);
+            if (!isStorageFailed(storage)) dataHandler.setSqliteStorage(storage);
             attachAccounting(storage);
-            if (masterPanel != null) {
-                masterPanel.updateSqliteIndicator();
-            }
         });
     }
 

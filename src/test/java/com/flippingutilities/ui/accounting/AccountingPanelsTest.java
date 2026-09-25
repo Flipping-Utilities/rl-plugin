@@ -384,6 +384,26 @@ public class AccountingPanelsTest {
         assertEquals("Recovery refreshes the report", 3, service.queries.size());
     }
 
+    @Test public void saveRecoveryIsReachableBeforeAnyAccountOrReportLoads() throws Exception {
+        AccountingPanel[] panel = new AccountingPanel[1];
+        edt(() -> {
+            panel[0] = new AccountingPanel(service, worker);
+            panel[0].setAccounts(Collections.emptyList(), "Account wide", START);
+            panel[0].setPendingSaves(true);
+            JButton retry = named(panel[0], JButton.class, "retrySaves");
+            assertTrue(retry.getParent().isVisible());
+            assertTrue(containsText(panel[0], "SQLite recovery is pending"));
+            retry.doClick();
+        });
+        worker.drain();
+        assertEquals(1, service.retries.size());
+        assertTrue(service.queries.isEmpty());
+        edt(() -> {
+            panel[0].setPendingSaves(false);
+            assertFalse(named(panel[0], JButton.class, "retrySaves").getParent().isVisible());
+        });
+    }
+
     @Test public void setupFailuresExposeTheReasonAndSaveRetry() throws Exception {
         AccountingSetupPanel panel = setup();
         edt(() -> panel.previewButton.doClick());

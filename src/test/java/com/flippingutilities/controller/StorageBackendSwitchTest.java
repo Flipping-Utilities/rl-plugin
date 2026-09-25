@@ -64,7 +64,12 @@ public class StorageBackendSwitchTest {
         plugin = new FlippingPlugin() {
             @Override
             protected SqliteStorage createSqliteStorage() {
-                return new SqliteStorage(database);
+                return new SqliteStorage(database) {
+                    @Override public synchronized AccountData loadAccount(String name) {
+                        AccountData loaded = super.loadAccount(name);
+                        return persister.skipItemHydration ? withoutItemHydration(loaded) : loaded;
+                    }
+                };
             }
         };
         setField(plugin, "config", config);
@@ -780,6 +785,220 @@ public class StorageBackendSwitchTest {
         assertEquals(20, totalQuantity(storage.loadAccount(ACCOUNT)));
     }
 
+    @Test
+    public void failureBeforeAttachmentStillExposesAccountingRecovery() throws Exception {
+        SqliteStorage existing = new SqliteStorage(database);
+        try {
+            existing.initializeSchema();
+            OfferEvent retained = offer("retained-before-startup", 1);
+            retained.setCumulativeAmount(100L);
+            existing.recordTrade(ACCOUNT, retained);
+            existing.setSetting("migration_completed", "true");
+        } finally { existing.close(); }
+        switchTo(DataSource.SQLITE);
+        executor.drain(); // Migration finishes while its client attachment is still queued.
+        assertNull(plugin.getAccountingUiService());
+        SqliteStorage storage = plugin.getSqliteStorage();
+        setReadOnly(storage, true);
+        plugin.recordTrade(ACCOUNT, offer("failure-before-attachment", 2));
+        executor.drain();
+        assertTrue(plugin.hasPendingAccountingSaves());
+        assertNotNull("Failed startup must expose recovery without a successful attachment", plugin.getAccountingUiService());
+        com.flippingutilities.ui.accounting.AccountingUiService recovery = plugin.getAccountingUiService();
+        clientThread.drain();
+        assertNull("A failed reader must not attach yet", handlerStorage());
+        setReadOnly(storage, false);
+        java.util.concurrent.CompletableFuture<String> retry = recovery.retryStorage();
+        executor.drain();
+        assertFalse("Recovery is not complete until the client reader reconnects", retry.isDone());
+        clientThread.drain();
+        retry.join();
+        assertSame(storage, handlerStorage());
+        assertSame("Keep the existing UI service throughout recovery", recovery, plugin.getAccountingUiService());
+        assertTrue(hasOffer(storage.loadAccount(ACCOUNT), "failure-before-attachment"));
+        assertLiveStateUnchanged();
+    }
+
+    @Test
+    public void retryRestoresDataHandlerSqliteReadsWithoutReplacingLiveState() throws Exception {
+        SqliteStorage storage = failProtectedStorage();
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        assertSame(account, plugin.getDataHandler().viewAccountData(ACCOUNT));
+        assertNull(handlerStorage());
+        setReadOnly(storage, false);
+        java.util.concurrent.CompletableFuture<String> retry = plugin.retryAccountingStorage();
+        executor.drain();
+        assertFalse(retry.isDone());
+        assertTrue(plugin.hasPendingAccountingSaves());
+        assertTrue(plugin.getDataHandler().storeData()); // Clear the temporary JSON guard during handoff.
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        assertSame("Reader must retain the live model while client reattachment is pending", account,
+            plugin.getDataHandler().viewAccountData(ACCOUNT));
+        assertNull(handlerStorage());
+        clientThread.drain();
+        retry.join();
+        assertSame(storage, handlerStorage());
+        assertLiveStateUnchanged();
+        assertFalse(plugin.hasPendingAccountingSaves());
+        assertTrue(plugin.getDataHandler().storeData());
+        plugin.addSelectedGeTabOffers(singletonList(offer("newer-than-json-after-retry", 4)));
+        finishStorageWork();
+        assertTrue(hasOffer(storage.loadAccount(ACCOUNT), "newer-than-json-after-retry"));
+        persister.skipItemHydration = true; // This controller fixture excludes ItemManager; storage and routing remain real.
+        int jsonReads = persister.accountLoads;
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        assertEquals("The recovered reader must not fall back to its older JSON snapshot", jsonReads, persister.accountLoads);
+        assertFalse(plugin.hasPendingAccountingSaves());
+        assertTrue(hasOffer(plugin.getDataHandler().viewAccountData(ACCOUNT), "newer-than-json-after-retry"));
+    }
+
+    @Test
+    public void writesDuringClientReattachmentAreCommittedWithoutBeingStranded() throws Exception {
+        SqliteStorage storage = failProtectedStorage();
+        setReadOnly(storage, false);
+        java.util.concurrent.CompletableFuture<String> retry = plugin.retryAccountingStorage();
+        executor.drain();
+        plugin.recordTrade(ACCOUNT, offer("during-reader-handoff", 4));
+        executor.drain();
+        assertTrue(hasOffer(storage.loadAccount(ACCOUNT), "during-reader-handoff"));
+        assertFalse(retry.isDone());
+        clientThread.drain();
+        retry.join();
+        assertFalse(plugin.hasPendingAccountingSaves());
+        assertEquals(17, totalQuantity(storage.loadAccount(ACCOUNT)));
+    }
+
+    @Test
+    public void newWriteFailureBeforeClientReattachmentCannotPublishSuccessfulRecovery() throws Exception {
+        SqliteStorage storage = failProtectedStorage();
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        setReadOnly(storage, false);
+        java.util.concurrent.CompletableFuture<String> retry = plugin.retryAccountingStorage();
+        executor.drain();
+        setReadOnly(storage, true);
+        plugin.recordTrade(ACCOUNT, offer("failed-during-reader-handoff", 4));
+        executor.drain();
+        clientThread.drain();
+        assertTrue(retry.isCompletedExceptionally());
+        assertTrue(plugin.hasPendingAccountingSaves());
+        assertNull(handlerStorage());
+        setReadOnly(storage, false);
+        java.util.concurrent.CompletableFuture<String> next = plugin.retryAccountingStorage();
+        finishStorageWork();
+        next.join();
+        assertSame(storage, handlerStorage());
+        assertEquals(17, totalQuantity(storage.loadAccount(ACCOUNT)));
+    }
+
+    @Test
+    public void rejectedClientReattachmentRemainsRecoverableWithoutReplayingCommittedCommands() throws Exception {
+        SqliteStorage storage = failProtectedStorage();
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        setReadOnly(storage, false);
+        clientThread.rejectActions = true;
+        java.util.concurrent.CompletableFuture<String> retry = plugin.retryAccountingStorage();
+        executor.drain();
+        assertTrue(retry.isCompletedExceptionally());
+        assertTrue(plugin.hasPendingAccountingSaves());
+        assertNull(handlerStorage());
+        assertEquals(13, totalQuantity(storage.loadAccount(ACCOUNT)));
+        clientThread.rejectActions = false;
+        java.util.concurrent.CompletableFuture<String> next = plugin.getAccountingUiService().retryStorage();
+        finishStorageWork();
+        next.join();
+        assertSame(storage, handlerStorage());
+        assertEquals("Already committed commands must not replay", 13, totalQuantity(storage.loadAccount(ACCOUNT)));
+    }
+
+    @Test
+    public void closingStorageRejectsQueuedRecoveryWithoutReattachingTheOldDatabase() throws Exception {
+        SqliteStorage storage = failProtectedStorage();
+        setReadOnly(storage, false);
+        java.util.concurrent.CompletableFuture<String> retry = plugin.retryAccountingStorage();
+        executor.drain();
+        assertFalse(retry.isDone());
+        java.lang.reflect.Method close = FlippingPlugin.class.getDeclaredMethod("closeStorage");
+        close.setAccessible(true);
+        close.invoke(plugin);
+        assertTrue("Closing resolves pending recovery even if client callbacks will never run", retry.isCompletedExceptionally());
+        SqliteStorage replacement = new SqliteStorage(new File(temporaryFolder.getRoot(), "replacement.db"));
+        replacement.initializeSchema();
+        setField(plugin, "sqliteStorage", replacement);
+        plugin.getDataHandler().setSqliteStorage(replacement);
+        finishStorageWork();
+        assertSame(replacement, plugin.getSqliteStorage());
+        assertSame("The queued callback must never restore the old storage", replacement, handlerStorage());
+        assertNull(plugin.getAccountingUiService());
+    }
+
+    @Test
+    public void projectionFailureStillReattachesCommittedSourceReads() throws Exception {
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        SqliteStorage storage = plugin.getSqliteStorage();
+        long accountId = storage.getAccountingStore().findAccountId(ACCOUNT);
+        storage.getAccountingStore().activate(storage.getAccountingStore().preview(new com.flippingutilities.accounting.AccountingPlan(
+            "retry-projection", accountId, com.flippingutilities.accounting.AccountingPlan.Mode.RECALCULATE,
+            null, null, java.util.Collections.emptyMap())));
+        setReadOnly(storage, true);
+        plugin.addSelectedGeTabOffers(singletonList(offer("committed-before-projection-failure", 2)));
+        finishStorageWork();
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        setReadOnly(storage, false);
+        try (Statement statement = storage.getConnection().createStatement()) {
+            statement.execute("CREATE TRIGGER fail_retry_projection BEFORE INSERT ON accounting_open_lots BEGIN SELECT RAISE(ABORT,'projection unavailable'); END");
+        }
+        java.util.concurrent.CompletableFuture<String> retry = plugin.retryAccountingStorage();
+        executor.drain();
+        assertFalse(retry.isDone());
+        clientThread.drain();
+        assertTrue(retry.isCompletedExceptionally());
+        assertSame("Projection errors must not strand the source reader", storage, handlerStorage());
+        assertFalse(plugin.hasPendingAccountingSaves());
+        assertTrue(hasOffer(storage.loadAccount(ACCOUNT), "committed-before-projection-failure"));
+        assertSame(account, plugin.getDataHandler().viewAccountData(ACCOUNT));
+        try (Statement statement = storage.getConnection().createStatement()) { statement.execute("DROP TRIGGER fail_retry_projection"); }
+        java.util.concurrent.CompletableFuture<String> next = plugin.retryAccountingStorage();
+        finishStorageWork();
+        next.join();
+        assertEquals(12, totalQuantity(storage.loadAccount(ACCOUNT)));
+    }
+
+    private SqliteStorage failProtectedStorage() throws Exception {
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        OfferEvent enriched = offer("seed-exact", 1);
+        enriched.setCumulativeAmount(100L);
+        plugin.recordTrade(ACCOUNT, enriched);
+        finishStorageWork();
+        SqliteStorage storage = plugin.getSqliteStorage();
+        setReadOnly(storage, true);
+        plugin.addSelectedGeTabOffers(singletonList(offer("failed-live-trade", 2)));
+        finishStorageWork();
+        return storage;
+    }
+
+    private static void setReadOnly(SqliteStorage storage, boolean value) throws Exception {
+        try (Statement statement = storage.getConnection().createStatement()) { statement.execute("PRAGMA query_only=" + (value ? "ON" : "OFF")); }
+    }
+
+    private SqliteStorage handlerStorage() throws Exception {
+        Field field = DataHandler.class.getDeclaredField("sqliteStorage");
+        field.setAccessible(true);
+        return (SqliteStorage) field.get(plugin.getDataHandler());
+    }
+
+    private static AccountData withoutItemHydration(AccountData source) {
+        if (source == null) return null;
+        AccountData result = new AccountData() { @Override public void prepareForUse(FlippingPlugin unused) {} };
+        result.setVersion(source.getVersion());
+        result.getTrades().addAll(source.getTrades());
+        result.getRecipeFlipGroups().addAll(source.getRecipeFlipGroups());
+        result.setSessionStartTime(source.getSessionStartTime());
+        result.setAccumulatedSessionTimeMillis(source.getAccumulatedSessionTimeMillis());
+        return result;
+    }
+
     private void switchTo(DataSource source) {
         queueSwitchTo(source);
         clientThread.drain();
@@ -877,6 +1096,8 @@ public class StorageBackendSwitchTest {
         private int loads;
         private boolean failLoads;
         private boolean failWrites;
+        private boolean skipItemHydration;
+        private int accountLoads;
         private String failedWriteAccount;
 
         MemoryTradePersister() { super(new Gson()); }
@@ -895,14 +1116,20 @@ public class StorageBackendSwitchTest {
             return loadAllAccounts();
         }
         @Override public AccountData loadAccount(String name) {
-            return gson.fromJson(accounts.get(name), AccountData.class);
+            accountLoads++;
+            AccountData loaded = gson.fromJson(accounts.get(name), AccountData.class);
+            return skipItemHydration ? withoutItemHydration(loaded) : loaded;
         }
         @Override public AccountWideData loadAccountWideData() { return new AccountWideData(); }
     }
 
     private static final class QueuedClientThread extends ClientThread {
         private final Deque<Runnable> tasks = new ArrayDeque<>();
-        @Override public void invokeLater(Runnable task) { tasks.add(task); }
+        private boolean rejectActions;
+        @Override public void invokeLater(Runnable task) {
+            if (rejectActions) throw new java.util.concurrent.RejectedExecutionException("Client callback unavailable");
+            tasks.add(task);
+        }
         @Override public void invokeLater(BooleanSupplier task) {
             tasks.add(() -> assertTrue("Client action should complete in one tick", task.getAsBoolean()));
         }
