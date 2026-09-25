@@ -23,6 +23,7 @@ import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.sql.Connection;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -284,6 +285,57 @@ public class StorageBackendSwitchTest {
     }
 
     @Test
+    public void failedAccountReadKeepsNewerCachedHistoryThroughRecovery() throws Exception {
+        account.getTrades().clear();
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+
+        // Keep JSON at the switch snapshot while the live account and SQLite receive newer trades.
+        account.getTrades().add(item);
+        plugin.recordTrade(ACCOUNT, offer("original", 10));
+        plugin.addSelectedGeTabOffers(singletonList(offer("since-snapshot", 7)));
+        finishStorageWork();
+
+        assertEquals(17, totalQuantity(account));
+        assertEquals(17, totalQuantity(plugin.getSqliteStorage().loadAccount(ACCOUNT)));
+        assertEquals(0, totalQuantity(persister.loadAccount(ACCOUNT)));
+        SqliteStorage failedStorage = plugin.getSqliteStorage();
+        Connection failedConnection = failedStorage.getConnection();
+        try (Statement statement = failedConnection.createStatement()) {
+            statement.execute("ALTER TABLE item_favorites RENAME TO unavailable_favorites");
+        }
+
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        // A second directory notification can arrive before queued recovery saves the model.
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+
+        assertSame("A read failure must preserve the newer live account", account,
+            plugin.getDataHandler().viewAccountData(ACCOUNT));
+        assertEquals(17, totalQuantity(plugin.getDataHandler().viewAccountData(ACCOUNT)));
+        assertTrue(failedStorage.requiresFullResync());
+        try (Statement statement = failedConnection.createStatement()) {
+            statement.execute("ALTER TABLE unavailable_favorites RENAME TO item_favorites");
+        }
+
+        finishStorageWork();
+
+        assertNull(plugin.getSqliteStorage());
+        assertTrue("Recovery must close the failed database connection", failedConnection.isClosed());
+        assertLiveStateUnchanged();
+        assertEquals(17, totalQuantity(plugin.getDataHandler().viewAccountData(ACCOUNT)));
+        assertEquals("Recovery must save the newer live account to JSON", 17,
+            totalQuantity(persister.loadAccount(ACCOUNT)));
+        assertTrue(failedStorage.requiresFullResync());
+
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+
+        assertFalse(plugin.getSqliteStorage().requiresFullResync());
+        assertEquals(17, totalQuantity(plugin.getSqliteStorage().loadAccount(ACCOUNT)));
+        assertLiveStateUnchanged();
+    }
+
+    @Test
     public void failedAccountReadUsesJsonAndMarksDatabaseForRebuild() throws Exception {
         account.getTrades().clear();
         switchTo(DataSource.SQLITE);
@@ -292,6 +344,7 @@ public class StorageBackendSwitchTest {
         try (Statement statement = failedStorage.getConnection().createStatement()) {
             statement.execute("DROP TABLE item_favorites");
         }
+        plugin.getDataHandler().getCurrentAccounts().remove(ACCOUNT);
 
         plugin.getDataHandler().loadAccountData(ACCOUNT);
 
@@ -413,6 +466,11 @@ public class StorageBackendSwitchTest {
     private static boolean hasOffer(AccountData account, String uuid) {
         return account.getTrades().stream().flatMap(item -> item.getHistory().getCompressedOfferEvents().stream())
             .anyMatch(offer -> uuid.equals(offer.getUuid()));
+    }
+
+    private static int totalQuantity(AccountData account) {
+        return account.getTrades().stream().flatMap(item -> item.getHistory().getCompressedOfferEvents().stream())
+            .mapToInt(OfferEvent::getCurrentQuantityInTrade).sum();
     }
 
     private static void setField(Object target, String name, Object value) throws Exception {
