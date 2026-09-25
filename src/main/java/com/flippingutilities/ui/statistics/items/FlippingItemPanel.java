@@ -470,7 +470,7 @@ public class FlippingItemPanel extends JPanel
 			}
 		}
 
-		int itemCountFlipped = FlippingItem.countFlipQuantity(adjustedOffers);
+		long itemCountFlipped = FlippingItem.countFlipQuantity(adjustedOffers);
 		long revenueFromFlippedItems = FlippingItem.getValueOfMatchedOffers(adjustedOffers, false);
 		long expenseFromFlippedItems = FlippingItem.getValueOfMatchedOffers(adjustedOffers, true);
 		long totalRevenue = FlippingItem.getTotalRevenueOrExpense(offers, false);
@@ -498,7 +498,7 @@ public class FlippingItemPanel extends JPanel
 		itemProfitAndQuantityLabel.setFont(FontManager.getRunescapeSmallFont());
 	}
 
-	private void updateFlippingLabels(long flippingExpense, long flippingRevenue, int itemsFlipped) {
+	private void updateFlippingLabels(long flippingExpense, long flippingRevenue, long itemsFlipped) {
 		long profitFromFlips = flippingRevenue - flippingExpense;
 		totalProfitValLabel.setText(UIUtilities.quantityToRSDecimalStack(profitFromFlips, true) + " gp");
 		totalProfitValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);

@@ -374,7 +374,7 @@ public class HistoryManager
 	{
 		return tradeList.stream().
 			filter(o -> o.isBuy() == isBuy).
-			mapToLong(o -> o.getCurrentQuantityInTrade() * o.getPrice()).sum();
+			mapToLong(o -> (long) o.getCurrentQuantityInTrade() * o.getPrice()).sum();
 	}
 
 	/**
@@ -384,12 +384,19 @@ public class HistoryManager
 	 * matched.
 	 *
 	 * @param tradeList The list of offers that the flip count is based on
-	 * @return An integer representing the total currentQuantityInTrade of items flipped in the list of offers
+	 * @return The total matched quantity across accounts, including histories larger than one offer
 	 */
-	public static int countFlipQuantity(List<OfferEvent> tradeList)
+	public static long countFlipQuantity(List<OfferEvent> tradeList)
 	{
-		int numBoughtItems = 0;
-		int numSoldItems = 0;
+		return groupOffersByAccount(tradeList).stream()
+			.mapToLong(HistoryManager::countAccountFlipQuantity)
+			.sum();
+	}
+
+	private static long countAccountFlipQuantity(List<OfferEvent> tradeList)
+	{
+		long numBoughtItems = 0;
+		long numSoldItems = 0;
 
 		for (OfferEvent offer : tradeList)
 		{
@@ -420,7 +427,7 @@ public class HistoryManager
 	 */
 	private static long getValueOfOffersUpToLimit(List<OfferEvent> tradeList, long itemLimit)
 	{
-		int itemsSeen = 0;
+		long itemsSeen = 0;
 		long moneySpent = 0;
 
 		itemLimit = itemLimit == -1 ? Long.MAX_VALUE : itemLimit;
@@ -434,7 +441,7 @@ public class HistoryManager
 			}
 			else
 			{
-				moneySpent += offer.getCurrentQuantityInTrade() * offer.getPrice();
+				moneySpent += (long) offer.getCurrentQuantityInTrade() * offer.getPrice();
 				itemsSeen += offer.getCurrentQuantityInTrade();
 			}
 
