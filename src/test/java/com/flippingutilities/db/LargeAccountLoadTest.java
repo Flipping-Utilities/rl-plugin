@@ -140,8 +140,8 @@ public class LargeAccountLoadTest {
 
         String eventSql = "INSERT INTO events (account_id, timestamp, type, cost, profit, note) VALUES (?, ?, 'recipe', ?, ?, ?)";
         String recipeFlipSql = "INSERT INTO recipe_flips (event_id, recipe_key, coin_cost) VALUES (?, ?, ?)";
-        String inputSql = "INSERT INTO recipe_flip_inputs (recipe_flip_id, item_id, offer_uuid, amount_consumed) VALUES (?, ?, ?, ?)";
-        String outputSql = "INSERT INTO recipe_flip_outputs (recipe_flip_id, item_id, offer_uuid, amount_consumed) VALUES (?, ?, ?, ?)";
+        String inputSql = "INSERT INTO recipe_flip_inputs (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)";
+        String outputSql = "INSERT INTO recipe_flip_outputs (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)";
         String consumedSql = "INSERT INTO consumed_trade (trade_id, qty, event_id) VALUES (?, ?, ?)";
 
         try (
@@ -216,6 +216,8 @@ public class LargeAccountLoadTest {
         statement.setInt(2, itemId);
         statement.setNull(3, Types.VARCHAR);
         statement.setInt(4, amountConsumed);
+        statement.setString(5, SqliteStorage.serializeOffer(complete(DISPLAY_NAME, itemId,
+            "recipe-" + recipeFlipId + "-" + itemId, baseTimestamp, amountConsumed, 500, true)));
         statement.addBatch();
     }
 

@@ -93,6 +93,13 @@ public class SqliteStorage {
         return SLOT_GSON.toJson(offer);
     }
 
+    static String serializeRecipeOffer(PartialOffer component) throws SQLException {
+        if (component.getOffer() == null) {
+            throw new SQLException("Cannot persist recipe: missing offer " + component.getOfferUuid());
+        }
+        return serializeOffer(component.getOffer());
+    }
+
     private final File dbFile;
     private Connection connection;
     private boolean schemaInitAttempted;
@@ -451,7 +458,7 @@ public class SqliteStorage {
         data.getTrades().addAll(tradeItems);
 
         // Load recipe flip groups
-        List<RecipeFlipGroup> recipeFlipGroups = loadRecipeFlipGroups(accountId);
+        List<RecipeFlipGroup> recipeFlipGroups = loadRecipeFlipGroups(accountId, displayName);
         data.getRecipeFlipGroups().addAll(recipeFlipGroups);
 
         // Recreate favorite-only items (favorited from search without ever trading them).
@@ -492,7 +499,7 @@ public class SqliteStorage {
     /**
      * Load recipe flip groups from SQLite for an account.
      */
-    private List<RecipeFlipGroup> loadRecipeFlipGroups(int accountId) {
+    private List<RecipeFlipGroup> loadRecipeFlipGroups(int accountId, String displayName) {
         List<RecipeFlipGroup> groups = new ArrayList<>();
 
         // Get all recipe flip events for this account, grouped by recipe_key
@@ -520,8 +527,8 @@ public class SqliteStorage {
                         RecipeFlipGroup group = groupMap.computeIfAbsent(recipeKey, RecipeFlipGroup::new);
 
                         // Load inputs and outputs for this recipe flip
-                        Map<Integer, Map<String, PartialOffer>> inputs = loadRecipeFlipInputs(recipeFlipId);
-                        Map<Integer, Map<String, PartialOffer>> outputs = loadRecipeFlipOutputs(recipeFlipId);
+                        Map<Integer, Map<String, PartialOffer>> inputs = loadRecipeFlipComponents(recipeFlipId, displayName, true);
+                        Map<Integer, Map<String, PartialOffer>> outputs = loadRecipeFlipComponents(recipeFlipId, displayName, false);
 
                         // Create RecipeFlip
                         RecipeFlip flip = new RecipeFlip(
@@ -544,104 +551,33 @@ public class SqliteStorage {
         return groups;
     }
 
-    /**
-     * Load inputs for a recipe flip.
-     * Queries price from the trades table using the offer UUID.
-     */
-    private Map<Integer, Map<String, PartialOffer>> loadRecipeFlipInputs(long recipeFlipId) {
-        Map<Integer, Map<String, PartialOffer>> inputs = new HashMap<>();
-
-        String sql = "SELECT rfi.item_id, rfi.offer_uuid, rfi.amount_consumed, t.price, t.timestamp, t.qty AS trade_qty " +
-            "FROM recipe_flip_inputs rfi " +
-            "LEFT JOIN trades t ON t.uuid = rfi.offer_uuid " +
-            "WHERE rfi.recipe_flip_id = ?";
-        try {
-            Connection conn = getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setLong(1, recipeFlipId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        int itemId = rs.getInt("item_id");
-                        String offerUuid = rs.getString("offer_uuid");
-                        int amountConsumed = rs.getInt("amount_consumed");
-                        int price = rs.getInt("price");
-                        long tradeTimestamp = rs.getLong("timestamp");
-                        // The backing offer must carry the ORIGINAL trade quantity (not the
-                        // consumed amount): remaining-history is displayed as offerQty -
-                        // amountConsumed, so a qty of amountConsumed always shows 0 remaining.
-                        // Trades store original quantities; consumption lives in consumed_trade.
-                        int tradeQty = rs.getInt("trade_qty");
-                        int stubQty = rs.wasNull() ? amountConsumed : tradeQty;
-
-                        OfferEvent stubOffer = createStubOfferEvent(offerUuid, itemId, true, stubQty, price, tradeTimestamp);
-                        PartialOffer po = new PartialOffer(stubOffer, amountConsumed);
-                        inputs.computeIfAbsent(itemId, k -> new HashMap<>()).put(offerUuid, po);
+    /** Recipe snapshots remain valid even after their source trade leaves item history. */
+    private Map<Integer, Map<String, PartialOffer>> loadRecipeFlipComponents(long recipeFlipId,
+                                                                           String displayName, boolean inputs) {
+        Map<Integer, Map<String, PartialOffer>> components = new HashMap<>();
+        String table = inputs ? "recipe_flip_inputs" : "recipe_flip_outputs";
+        String sql = "SELECT item_id, offer_uuid, amount_consumed, offer_json FROM " + table + " WHERE recipe_flip_id = ?";
+        try (PreparedStatement ps = getConnection().prepareStatement(sql)) {
+            ps.setLong(1, recipeFlipId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    int itemId = rs.getInt("item_id");
+                    String uuid = rs.getString("offer_uuid");
+                    OfferEvent offer = SLOT_GSON.fromJson(rs.getString("offer_json"), OfferEvent.class);
+                    if (offer == null) {
+                        throw new IllegalStateException("Missing recipe offer snapshot for " + uuid);
                     }
+                    offer.setMadeBy(displayName);
+                    offer.setItemName("Item " + itemId);
+                    PartialOffer component = new PartialOffer(offer, rs.getInt("amount_consumed"));
+                    component.setOfferUuid(uuid);
+                    components.computeIfAbsent(itemId, ignored -> new HashMap<>()).put(uuid, component);
                 }
             }
         } catch (SQLException e) {
-            throw new IllegalStateException("Error loading recipe flip inputs", e);
+            throw new IllegalStateException("Error loading recipe components", e);
         }
-
-        return inputs;
-    }
-
-    /**
-     * Load outputs for a recipe flip.
-     * Queries price from the trades table using the offer UUID.
-     */
-    private Map<Integer, Map<String, PartialOffer>> loadRecipeFlipOutputs(long recipeFlipId) {
-        Map<Integer, Map<String, PartialOffer>> outputs = new HashMap<>();
-
-        String sql = "SELECT rfo.item_id, rfo.offer_uuid, rfo.amount_consumed, t.price, t.timestamp, t.qty AS trade_qty " +
-            "FROM recipe_flip_outputs rfo " +
-            "LEFT JOIN trades t ON t.uuid = rfo.offer_uuid " +
-            "WHERE rfo.recipe_flip_id = ?";
-        try {
-            Connection conn = getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setLong(1, recipeFlipId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        int itemId = rs.getInt("item_id");
-                        String offerUuid = rs.getString("offer_uuid");
-                        int amountConsumed = rs.getInt("amount_consumed");
-                        int price = rs.getInt("price");
-                        long tradeTimestamp = rs.getLong("timestamp");
-                        // See loadRecipeFlipInputs: the stub must carry the original trade
-                        // quantity so remaining = tradeQty - amountConsumed is correct.
-                        int tradeQty = rs.getInt("trade_qty");
-                        int stubQty = rs.wasNull() ? amountConsumed : tradeQty;
-
-                        OfferEvent stubOffer = createStubOfferEvent(offerUuid, itemId, false, stubQty, price, tradeTimestamp);
-                        PartialOffer po = new PartialOffer(stubOffer, amountConsumed);
-                        outputs.computeIfAbsent(itemId, k -> new HashMap<>()).put(offerUuid, po);
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            throw new IllegalStateException("Error loading recipe flip outputs", e);
-        }
-
-        return outputs;
-    }
-
-    /**
-     * Create a stub OfferEvent for recipe flip display purposes.
-     * This is used when loading recipe flips from SQLite where we don't have the full offer data.
-     */
-    private OfferEvent createStubOfferEvent(String uuid, int itemId, boolean isBuy, int qty, int price, long timestamp) {
-        return new OfferEvent(
-            uuid,
-            isBuy,
-            itemId,
-            qty,
-            price,
-            Instant.ofEpochMilli(timestamp),
-            0,
-            isBuy ? net.runelite.api.GrandExchangeOfferState.BOUGHT : net.runelite.api.GrandExchangeOfferState.SOLD,
-            0, 0, qty, null, false, null, "Item " + itemId, price, price * qty
-        );
+        return components;
     }
 
     /**
@@ -1527,8 +1463,8 @@ public class SqliteStorage {
             return;
         }
         String componentSql = isInput
-            ? "INSERT INTO recipe_flip_inputs (recipe_flip_id, item_id, offer_uuid, amount_consumed) VALUES (?, ?, ?, ?)"
-            : "INSERT INTO recipe_flip_outputs (recipe_flip_id, item_id, offer_uuid, amount_consumed) VALUES (?, ?, ?, ?)";
+            ? "INSERT INTO recipe_flip_inputs (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)"
+            : "INSERT INTO recipe_flip_outputs (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement componentPs = conn.prepareStatement(componentSql);
              // Clamps consumption to the trade's remaining quantity so recipe data referencing
              // more than the trade holds (legacy/duplicate records) cannot over-consume it.
@@ -1552,6 +1488,7 @@ public class SqliteStorage {
                         componentPs.setString(3, po.getOfferUuid());
                     }
                     componentPs.setInt(4, po.getAmountConsumed());
+                    componentPs.setString(5, serializeRecipeOffer(po));
                     componentPs.executeUpdate();
 
                     if (po.getOfferUuid() != null) {

@@ -419,8 +419,8 @@ public class MigrationService {
 
         String eventSql = "INSERT OR IGNORE INTO events (account_id, timestamp, type, cost, profit, note, natural_key) VALUES (?, ?, 'recipe', ?, ?, ?, ?)";
         String recipeFlipSql = "INSERT INTO recipe_flips (event_id, recipe_key, coin_cost) VALUES (?, ?, ?)";
-        String inputSql = "INSERT INTO recipe_flip_inputs (recipe_flip_id, item_id, offer_uuid, amount_consumed) VALUES (?, ?, ?, ?)";
-        String outputSql = "INSERT INTO recipe_flip_outputs (recipe_flip_id, item_id, offer_uuid, amount_consumed) VALUES (?, ?, ?, ?)";
+        String inputSql = "INSERT INTO recipe_flip_inputs (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)";
+        String outputSql = "INSERT INTO recipe_flip_outputs (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)";
         // Guards against over-consumption: real recipe data can reference more consumption than
         // the underlying trade row holds (e.g. offers deleted after the recipe flip was made,
         // or duplicate legacy records). The trade's remaining qty is recomputed per row so
@@ -500,6 +500,7 @@ public class MigrationService {
                                     inputPs.setInt(2, itemId);
                                     inputPs.setString(3, po.getOfferUuid());
                                     inputPs.setInt(4, po.getAmountConsumed());
+                                    inputPs.setString(5, SqliteStorage.serializeRecipeOffer(po));
                                     inputPs.addBatch();
                                 }
                             }
@@ -517,6 +518,7 @@ public class MigrationService {
                                     outputPs.setInt(2, itemId);
                                     outputPs.setString(3, po.getOfferUuid());
                                     outputPs.setInt(4, po.getAmountConsumed());
+                                    outputPs.setString(5, SqliteStorage.serializeRecipeOffer(po));
                                     outputPs.addBatch();
                                 }
                             }
