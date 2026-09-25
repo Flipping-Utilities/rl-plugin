@@ -83,6 +83,12 @@ public class HistoryManager
 
 	public List<String> updateHistory(OfferEvent newOffer)
 	{
+		return updateHistory(newOffer, findPreviousOfferInSlot(newOffer));
+	}
+
+	/** Live events provide their actual slot predecessor; archived fills are not replacements. */
+	public List<String> updateHistory(OfferEvent newOffer, OfferEvent previousOffer)
+	{
 		List<String> removedUuids = Collections.emptyList();
 		//if slot is -1 than the offer was added manually from GE history.
 		//Since we don't know when it came or its slot/it doesn't have a time or slot, there is no point in updating ge
@@ -90,7 +96,7 @@ public class HistoryManager
 		if (newOffer.getSlot() != -1)
 		{
 			updateGeLimitProperties(newOffer);
-			removedUuids = deletePreviousOffersForTrade(newOffer);
+			removedUuids = deletePreviousOffer(newOffer, previousOffer);
 		}
 
 		compressedOfferEvents.add(newOffer);
@@ -153,48 +159,34 @@ public class HistoryManager
 		}
 	}
 
-	/**
-	 * Deletes previous offer events for the same trade as the given offer event so that each trade has only one
-	 * offer event representing it.
-	 *
-	 * @param newOfferEvent offer event just received
-	 */
-	//TODO pretty sure this has an edge cases where we think an offer is part of the same trade but it isn't...so we delete too much.
-	//Ex:
-	//IN RL: set offer to buy 100 lobsters in slot X. Offer event comes in and Five lobsters buy. log off.
-	//log onto mobile, cancel the previous lobster offer and set another for 100 lobsters again in slot X.
-	//Log back into RL with 10 lobsters being bought. This method will think those offers are for the same trade and delete
-	//the first offer event for 5 lobsters...There are ways to make this more unlikely, such as checking if all the relevant
-	//properties of the offers match (except currentQuantityInTrade). But, there is no way to be 100% sure because all
-	//those properties could match but it could still be from a different trade if they cancel and make a trade outside of
-	//RL
+	/** History-only callers can identify at most the latest snapshot in the same slot. */
 	public List<String> deletePreviousOffersForTrade(OfferEvent newOfferEvent)
 	{
-		List<String> removedUuids = new ArrayList<>();
-		for (int i = compressedOfferEvents.size() - 1; i > -1; i--)
-		{
-			OfferEvent aPreviousOffer = compressedOfferEvents.get(i);
+		return deletePreviousOffer(newOfferEvent, findPreviousOfferInSlot(newOfferEvent));
+	}
 
-			// if the previous offer was cancelled while a partial offer came through, the old (now invalid quantity)
-			// cancelled offer must be deleted
-			if (newOfferEvent.isUpdateForCancelled(aPreviousOffer)) {
-				removedUuids.add(compressedOfferEvents.remove(i).getUuid());
-			}
-			if (aPreviousOffer.getSlot() == newOfferEvent.getSlot() && aPreviousOffer.isBuy() == newOfferEvent.isBuy())
-			{
-				//if it belongs to the same slot and its complete, it must belong to a previous trade given that
-				//the most recent offer was for the same slot
-				if (aPreviousOffer.isComplete())
-				{
-					return removedUuids;
-				}
-				else
-				{
-					removedUuids.add(compressedOfferEvents.remove(i).getUuid());
-				}
+	private OfferEvent findPreviousOfferInSlot(OfferEvent newOffer)
+	{
+		if (newOffer.getSlot() == -1) return null;
+		for (int i = compressedOfferEvents.size() - 1; i >= 0; i--) {
+			OfferEvent previous = compressedOfferEvents.get(i);
+			if (previous.getSlot() == newOffer.getSlot() && previous.isBuy() == newOffer.isBuy()) {
+				return previous;
 			}
 		}
-		return removedUuids;
+		return null;
+	}
+
+	private List<String> deletePreviousOffer(OfferEvent newOffer, OfferEvent previous)
+	{
+		if (previous == null || previous.getUuid() == null || previous.getItemId() != newOffer.getItemId()
+			|| previous.getSlot() != newOffer.getSlot() || previous.isBuy() != newOffer.isBuy()
+			|| (previous.isComplete() && !newOffer.isUpdateForCancelled(previous))) {
+			return Collections.emptyList();
+		}
+		String uuid = previous.getUuid();
+		boolean removed = compressedOfferEvents.removeIf(offer -> uuid.equals(offer.getUuid()));
+		return removed ? Collections.singletonList(uuid) : Collections.emptyList();
 	}
 
 	/**
