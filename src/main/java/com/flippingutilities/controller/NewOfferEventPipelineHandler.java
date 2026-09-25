@@ -60,6 +60,9 @@ public class NewOfferEventPipelineHandler {
             newOfferEvent.setMadeBy(currentlyLoggedInAccount);
         }
 
+        // Screening replaces lastOffers; retain the known predecessor for history updates.
+        OfferEvent previousOffer = plugin.getDataHandler().getAccountData(currentlyLoggedInAccount)
+            .getLastOffers().get(newOfferEvent.getSlot());
         Optional<OfferEvent> screenedOfferEvent = screenOfferEvent(newOfferEvent);
 
         if (!screenedOfferEvent.isPresent()) {
@@ -72,7 +75,7 @@ public class NewOfferEventPipelineHandler {
 
         Optional<FlippingItem> flippingItem = currentlyLoggedInAccountsTrades.stream().filter(item -> item.getItemId() == finalizedOfferEvent.getItemId()).findFirst();
 
-        List<String> replacedUuids = updateTradesList(currentlyLoggedInAccountsTrades, flippingItem, finalizedOfferEvent.clone());
+        List<String> replacedUuids = updateTradesList(currentlyLoggedInAccountsTrades, flippingItem, finalizedOfferEvent.clone(), previousOffer);
 
         // Persist exactly the history replacement made above, including late cancellation
         // corrections. Slot state, replacement, and the new snapshot commit together.
@@ -214,7 +217,8 @@ public class NewOfferEventPipelineHandler {
      * @param flippingItem the flipping item to be updated in the tradeslist, if it even exists
      * @param newOffer     new offer that just came in
      */
-    private List<String> updateTradesList(List<FlippingItem> trades, Optional<FlippingItem> flippingItem, OfferEvent newOffer) {
+    private List<String> updateTradesList(List<FlippingItem> trades, Optional<FlippingItem> flippingItem,
+                                          OfferEvent newOffer, OfferEvent previousOffer) {
         if (flippingItem.isPresent()) {
             FlippingItem item = flippingItem.get();
 
@@ -223,7 +227,7 @@ public class NewOfferEventPipelineHandler {
                 item.setValidFlippingPanelItem(true);
             }
 
-            List<String> removedUuids = item.updateHistory(newOffer);
+            List<String> removedUuids = item.updateHistory(newOffer, previousOffer);
             item.updateLatestProperties(newOffer);
             return removedUuids;
         } else {

@@ -162,6 +162,12 @@ public class FlippingItem implements Searchable
 		return history.updateHistory(newOffer);
 	}
 
+	public List<String> updateHistory(OfferEvent newOffer, OfferEvent previousOffer)
+	{
+		newOffer.setItemName(itemName);
+		return history.updateHistory(newOffer, previousOffer);
+	}
+
 	/**
 	 * Updates the latest margin check/buy/sell offers. Technically, we don't need this and we can just
 	 * query the history manager, but this saves us from querying the history manager which would have

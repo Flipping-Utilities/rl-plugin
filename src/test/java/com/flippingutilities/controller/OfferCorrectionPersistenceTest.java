@@ -1,7 +1,10 @@
 package com.flippingutilities.controller;
 
 import com.flippingutilities.db.SqliteStorage;
+import com.flippingutilities.db.MigrationService;
+import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.model.*;
+import com.google.gson.Gson;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import net.runelite.api.GrandExchangeOfferState;
 import org.junit.After;
@@ -51,6 +54,64 @@ public class OfferCorrectionPersistenceTest {
     }
 
     @After public void tearDown() { if (storage != null) storage.close(); }
+
+    @Test
+    public void completionReplacesOnlyTheMigratedActivePartial() {
+        migrateArchivedAndActivePartial(true);
+        assertEquals(9, quantity(reopen()));
+
+        pipeline.onNewOfferEvent(offer("completed", GrandExchangeOfferState.BOUGHT, 10, 100));
+
+        assertArchivedFillSurvives(account, 14);
+        assertArchivedFillSurvives(reopen(), 14);
+    }
+
+    @Test
+    public void hiddenActivePredecessorDoesNotMakeCompletionReplaceArchivedHistory() {
+        // The active offer still provides slot continuity after its history was deleted.
+        migrateArchivedAndActivePartial(false);
+        assertEquals(4, quantity(reopen()));
+
+        pipeline.onNewOfferEvent(offer("completed", GrandExchangeOfferState.BOUGHT, 10, 100));
+
+        assertArchivedFillSurvives(account, 14);
+        assertArchivedFillSurvives(reopen(), 14);
+    }
+
+    @Test
+    public void freshOfferInReusedSlotPreservesAnArchivedPartial() {
+        account.getTrades().get(0).getHistory().getCompressedOfferEvents()
+            .add(offer("archived", GrandExchangeOfferState.BUYING, 4, 80));
+        migrateAccount();
+
+        pipeline.onNewOfferEvent(offer("new-start", GrandExchangeOfferState.BUYING, 0, 100));
+        pipeline.onNewOfferEvent(offer("new-fill", GrandExchangeOfferState.BUYING, 3, 101));
+
+        assertArchivedFillSurvives(account, 7);
+        assertArchivedFillSurvives(reopen(), 7);
+    }
+
+    private void migrateArchivedAndActivePartial(boolean activeIsInHistory) {
+        account.getTrades().get(0).getHistory().getCompressedOfferEvents()
+            .add(offer("archived", GrandExchangeOfferState.BUYING, 4, 80));
+        OfferEvent active = offer("active", GrandExchangeOfferState.BUYING, 5, 90);
+        if (activeIsInHistory) {
+            account.getTrades().get(0).getHistory().getCompressedOfferEvents().add(active);
+        }
+        account.getLastOffers().put(3, active);
+        migrateAccount();
+    }
+
+    private void migrateAccount() {
+        assertEquals(1, new MigrationService(storage, new TradePersister(new Gson()))
+            .migrate(Collections.singletonMap(ACCOUNT, account)));
+    }
+
+    private void assertArchivedFillSurvives(AccountData data, long expectedQuantity) {
+        assertEquals("A new slot update must not discard an unrelated archived fill", expectedQuantity, quantity(data));
+        assertTrue("The archived UUID must remain in history", data.getTrades().get(0).getHistory()
+            .getCompressedOfferEvents().stream().anyMatch(offer -> "archived".equals(offer.getUuid())));
+    }
 
     @Test
     public void cancellationCorrectionReplacesExactHistoryAndPreservesRecipeSnapshot() {
