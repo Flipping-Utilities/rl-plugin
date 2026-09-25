@@ -1,6 +1,7 @@
 package com.flippingutilities.db;
 
 import com.flippingutilities.model.AccountData;
+import com.flippingutilities.model.OfferEvent;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -18,6 +19,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.flippingutilities.db.StorageTestOffers.complete;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -89,7 +91,8 @@ public class LargeAccountLoadTest {
         boolean originalAutoCommit = connection.getAutoCommit();
         connection.setAutoCommit(false);
 
-        String sql = "INSERT INTO trades (account_id, item_id, timestamp, qty, price, is_buy) VALUES (?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO trades (account_id, item_id, timestamp, qty, price, is_buy, uuid, tax, offer_json) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             for (int i = 0; i < TOTAL_TRADES; i++) {
                 int itemId = FIRST_ITEM_ID + (i % ITEM_COUNT);
@@ -100,12 +103,17 @@ public class LargeAccountLoadTest {
                 int basePrice = 10_000 + ((itemId - FIRST_ITEM_ID) * 35) + (cycle % 60);
                 int price = isBuy ? basePrice : basePrice + 175 + (cycle % 15);
 
+                OfferEvent offer = complete(DISPLAY_NAME, itemId, "perf-" + i, timestamp, qty, price, isBuy);
+
                 statement.setInt(1, accountId);
                 statement.setInt(2, itemId);
                 statement.setLong(3, timestamp);
                 statement.setInt(4, qty);
                 statement.setInt(5, price);
                 statement.setInt(6, isBuy ? 1 : 0);
+                statement.setString(7, offer.getUuid());
+                statement.setLong(8, offer.getTaxPaid());
+                statement.setString(9, SqliteStorage.serializeOffer(offer));
                 statement.addBatch();
 
                 if ((i + 1) % 1_000 == 0) {

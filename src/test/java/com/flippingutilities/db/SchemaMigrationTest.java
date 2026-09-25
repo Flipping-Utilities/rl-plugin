@@ -51,47 +51,13 @@ public class SchemaMigrationTest {
     public void testFreshSchemaAtCurrentVersion() throws Exception {
         storage.initializeSchema();
         int version = getUserVersion();
-        assertEquals("Fresh DB should be at SCHEMA_VERSION",
-            SqliteSchema.SCHEMA_VERSION, version);
+        assertEquals("The released backend starts with one initial schema", 1, version);
     }
 
     @Test
     public void testFreshSchemaUsesIndexedRecipeComponentLookups() throws Exception {
         storage.initializeSchema();
         assertRecipeComponentLookupsAreIndexed();
-    }
-
-    @Test
-    public void testV6UpgradeIndexesRecipeComponentsWithoutChangingData() throws Exception {
-        storage.initializeSchema();
-        try (Statement stmt = storage.getConnection().createStatement()) {
-            removeV8Columns(stmt);
-            stmt.execute("DROP INDEX IF EXISTS idx_recipe_flip_inputs_flip");
-            stmt.execute("DROP INDEX IF EXISTS idx_recipe_flip_outputs_flip");
-            stmt.execute("PRAGMA user_version = 6");
-            stmt.execute("INSERT INTO recipe_flips (id, recipe_key, coin_cost) VALUES (1, '4151:4587', 25)");
-            stmt.execute("INSERT INTO recipe_flip_inputs (recipe_flip_id, item_id, offer_uuid, amount_consumed) " +
-                "VALUES (1, 4151, 'input-offer', 4)");
-            stmt.execute("INSERT INTO recipe_flip_outputs (recipe_flip_id, item_id, offer_uuid, amount_consumed) " +
-                "VALUES (1, 4587, 'output-offer', 2)");
-        }
-
-        storage.close();
-        storage = new SqliteStorage(dbFile);
-        storage.initializeSchema();
-
-        assertEquals(SqliteSchema.SCHEMA_VERSION, getUserVersion());
-        assertRecipeComponentLookupsAreIndexed();
-        try (Statement stmt = storage.getConnection().createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT i.offer_uuid, i.amount_consumed, o.offer_uuid, o.amount_consumed " +
-                 "FROM recipe_flip_inputs i JOIN recipe_flip_outputs o USING (recipe_flip_id)")) {
-            assertTrue(rs.next());
-            assertEquals("input-offer", rs.getString(1));
-            assertEquals(4, rs.getInt(2));
-            assertEquals("output-offer", rs.getString(3));
-            assertEquals(2, rs.getInt(4));
-            assertFalse(rs.next());
-        }
     }
 
     private void assertRecipeComponentLookupsAreIndexed() throws Exception {
@@ -119,27 +85,9 @@ public class SchemaMigrationTest {
         }
     }
 
-    /**
-     * v5 -> v6: ge_limit_state gains items_bought_complete (the base the window is
-     * recalculated from when the next partial buy arrives, so GE limit counts survive
-     * restarts). Simulates a v5 DB by dropping the column and resetting the version, then
-     * verifies the upgrade re-adds it and that both counters round-trip.
-     */
     @Test
-    public void testV5ToV6AddsItemsBoughtComplete() throws Exception {
+    public void testGeLimitCountersArePresentInInitialSchema() throws Exception {
         storage.initializeSchema();
-        Connection conn = storage.getConnection();
-        try (Statement stmt = conn.createStatement()) {
-            removeV8Columns(stmt);
-            stmt.execute("ALTER TABLE ge_limit_state DROP COLUMN items_bought_complete;");
-            stmt.execute("PRAGMA user_version = 5;");
-        }
-
-        storage.close();
-        storage = new SqliteStorage(dbFile);
-        storage.initializeSchema();
-        assertEquals("Upgraded DB should be at SCHEMA_VERSION", SqliteSchema.SCHEMA_VERSION, getUserVersion());
-
         storage.upsertAccount("GeAcct", null);
         storage.upsertGeLimitState("GeAcct", 4151, java.time.Instant.ofEpochMilli(1789500000000L), 110, 100);
 
@@ -157,49 +105,51 @@ public class SchemaMigrationTest {
     @Test
     public void testReinitializeIsNoOp() throws Exception {
         storage.initializeSchema();
-        int v1 = getUserVersion();
+        storage.recordTrade("Acct", complete("Acct", 4151, "saved-offer", 1700000000000L, 1, 100, true));
+        storage.close();
         storage.initializeSchema();
-        int v2 = getUserVersion();
-        assertEquals("Re-running initializeSchema should not change version", v1, v2);
+        assertEquals(1, getUserVersion());
+        assertEquals("saved-offer", storage.loadAccount("Acct").getTrades().get(0)
+            .getHistory().getCompressedOfferEvents().get(0).getUuid());
     }
 
     @Test
-    public void testV7UpgradeRequiresResyncBeforeUsingIncompleteOfferMetadata() throws Exception {
+    public void testOfferMetadataIsRequired() throws Exception {
         storage.initializeSchema();
-        storage.upsertAccount("Existing account", null);
-        storage.recordTrade("Existing account", complete("Existing account", 4151, "original-offer", 1700000000000L, 1, 100, true));
-        storage.setSetting("migration_completed", "true");
+        storage.upsertAccount("Acct", null);
         try (Statement statement = storage.getConnection().createStatement()) {
-            removeV8Columns(statement);
-            statement.execute("PRAGMA user_version = 7");
-        }
-        storage.close();
-        storage = new SqliteStorage(dbFile);
-
-        storage.initializeSchema();
-
-        assertEquals(SqliteSchema.SCHEMA_VERSION, getUserVersion());
-        assertEquals("true", storage.getSetting("migration_pending"));
-        assertTrue(storage.requiresFullResync());
-        // Upgrade preserves old records until the caller has safely loaded the JSON source.
-        try (Statement statement = storage.getConnection().createStatement();
-             ResultSet rows = statement.executeQuery("SELECT uuid FROM trades")) {
-            assertTrue(rows.next());
-            assertEquals("original-offer", rows.getString(1));
+            assertInsertRejected(statement, "INSERT INTO trades (account_id, item_id, timestamp, qty, price, is_buy) " +
+                "SELECT id, 4151, 1700000000000, 1, 100, 1 FROM accounts WHERE display_name = 'Acct'");
+            assertInsertRejected(statement, "INSERT INTO active_slots (account_id, slot_index) " +
+                "SELECT id, 0 FROM accounts WHERE display_name = 'Acct'");
         }
     }
 
-    private void removeV8Columns(Statement statement) throws Exception {
-        statement.execute("ALTER TABLE trades DROP COLUMN offer_json");
-        statement.execute("ALTER TABLE active_slots DROP COLUMN offer_json");
-        statement.execute("ALTER TABLE active_slots DROP COLUMN history_visible");
-        statement.execute("DROP TABLE item_visibility");
+    @Test
+    public void testForeignKeysAreEnforced() throws Exception {
+        storage.initializeSchema();
+        try (Statement statement = storage.getConnection().createStatement()) {
+            assertInsertRejected(statement,
+                "INSERT INTO item_visibility (account_id, item_id, is_visible) VALUES (999, 4151, 1)");
+            try (ResultSet violations = statement.executeQuery("PRAGMA foreign_key_check")) {
+                assertFalse(violations.next());
+            }
+        }
+    }
+
+    private void assertInsertRejected(Statement statement, String sql) throws SQLException {
+        try {
+            statement.executeUpdate(sql);
+            fail("Invalid row should have been rejected");
+        } catch (SQLException expected) {
+            assertEquals("SQLite constraint violation", 19, expected.getErrorCode());
+        }
     }
 
     @Test
     public void testTradesUuidUniqueConstraint() throws Exception {
         storage.initializeSchema();
-        // The v4 schema adds UNIQUE(account_id, uuid). Verify by attempting a duplicate insert.
+        // Re-recording the same offer must preserve a single row.
         storage.upsertAccount("Acct", null);
         storage.recordTrade("Acct", complete("Acct", 4151, "dup-uuid", 1700000000000L, 1, 100, true));
         storage.recordTrade("Acct", complete("Acct", 4151, "dup-uuid", 1700000000000L, 1, 100, true));

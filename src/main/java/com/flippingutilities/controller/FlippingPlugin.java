@@ -479,18 +479,20 @@ public class FlippingPlugin extends Plugin {
     private boolean runMigrationIfNeeded(SqliteStorage storage, boolean fullResync) {
         try {
             storage.initializeSchema();
-            if (fullResync || storage.requiresFullResync()) {
-                // Keep JSON authoritative through interrupted rebuilds, including deletions.
-                storage.markOutOfSync();
-                for (String name : storage.listAccounts()) {
-                    storage.deleteAccountData(name);
-                }
-                storage.clearSetting("migration_completed");
-                storage.clearSetting("migration_completed_at");
-            }
-            if ("true".equalsIgnoreCase(storage.getSetting("migration_pending"))
+            boolean rebuild = fullResync || storage.requiresFullResync();
+            if (rebuild || "true".equalsIgnoreCase(storage.getSetting("migration_pending"))
                     || !"true".equalsIgnoreCase(storage.getSetting("migration_completed"))) {
-                new MigrationService(storage, tradePersister).migrate();
+                // Read once before clearing SQLite; an unreadable source must not erase it.
+                Map<String, AccountData> snapshot = tradePersister.loadAllAccountsForMigration();
+                if (rebuild) {
+                    storage.markOutOfSync();
+                    for (String name : storage.listAccounts()) {
+                        storage.deleteAccountData(name);
+                    }
+                    storage.clearSetting("migration_completed");
+                    storage.clearSetting("migration_completed_at");
+                }
+                new MigrationService(storage, tradePersister).migrate(snapshot);
             }
             boolean completed = "true".equalsIgnoreCase(storage.getSetting("migration_completed"));
             if (completed) {

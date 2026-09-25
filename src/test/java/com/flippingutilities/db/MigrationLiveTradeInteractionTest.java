@@ -306,7 +306,7 @@ public class MigrationLiveTradeInteractionTest {
 
         TradePersister stub = new TradePersister(new Gson()) {
             @Override
-            public Map<String, AccountData> loadAllAccounts() {
+            public Map<String, AccountData> loadAllAccountsForMigration() {
                 return accounts;
             }
         };
@@ -334,7 +334,7 @@ public class MigrationLiveTradeInteractionTest {
         }
         TradePersister persister = new TradePersister(new Gson()) {
             @Override
-            public Map<String, AccountData> loadAllAccounts() {
+            public Map<String, AccountData> loadAllAccountsForMigration() {
                 return Collections.singletonMap(failedAccount, source);
             }
 
@@ -421,7 +421,7 @@ public class MigrationLiveTradeInteractionTest {
 
     private int migrateAccounts(Map<String, AccountData> accounts) {
         TradePersister persister = new TradePersister(new Gson()) {
-            @Override public Map<String, AccountData> loadAllAccounts() { return accounts; }
+            @Override public Map<String, AccountData> loadAllAccountsForMigration() { return accounts; }
             @Override public AccountWideData loadAccountWideData() { return new AccountWideData(); }
         };
         return new MigrationService(storage, persister).migrate();

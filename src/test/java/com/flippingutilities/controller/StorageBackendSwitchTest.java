@@ -176,6 +176,14 @@ public class StorageBackendSwitchTest {
 
     @Test
     public void failedMigrationRetainsLiveStateAndFallsBackToJson() {
+        SqliteStorage existing = new SqliteStorage(database);
+        try {
+            existing.initializeSchema();
+            existing.recordTrade(ACCOUNT, offer("previously-persisted", 4));
+            existing.setSetting("migration_completed", "true");
+        } finally {
+            existing.close();
+        }
         persister.failLoads = true;
         switchTo(DataSource.SQLITE);
         item.setFavoriteCode("unsaved-edit");
@@ -185,6 +193,13 @@ public class StorageBackendSwitchTest {
         assertNull(plugin.getSqliteStorage());
         assertEquals("unsaved-edit", item.getFavoriteCode());
         assertLiveStateUnchanged();
+        SqliteStorage reopened = new SqliteStorage(database);
+        try {
+            assertTrue(hasOffer(reopened.loadAccount(ACCOUNT), "previously-persisted"));
+            assertTrue(reopened.requiresFullResync());
+        } finally {
+            reopened.close();
+        }
     }
 
     @Test
@@ -431,6 +446,9 @@ public class StorageBackendSwitchTest {
             Map<String, AccountData> result = new HashMap<>();
             accounts.forEach((name, json) -> result.put(name, gson.fromJson(json, AccountData.class)));
             return result;
+        }
+        @Override public Map<String, AccountData> loadAllAccountsForMigration() {
+            return loadAllAccounts();
         }
         @Override public AccountData loadAccount(String name) {
             return gson.fromJson(accounts.get(name), AccountData.class);
