@@ -199,7 +199,7 @@ public class MasterPanel extends PluginPanel
 	{
 		JComboBox viewSelectorDropdown = new JComboBox();
 		viewSelectorDropdown.setBackground(CustomColors.DARK_GRAY_LIGHTER);
-		viewSelectorDropdown.setFocusable(false);
+		viewSelectorDropdown.getAccessibleContext().setAccessibleName("Account");
 		viewSelectorDropdown.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
 		viewSelectorDropdown.setRenderer(new TitleCaseListCellRenderer());
 
