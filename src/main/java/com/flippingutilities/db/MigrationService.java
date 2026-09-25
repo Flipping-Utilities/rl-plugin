@@ -204,6 +204,8 @@ public class MigrationService {
             return new int[]{0, 0};
         }
 
+        accountData.normalizeOfferIds();
+
         List<FlippingItem> tradeItems = accountData.getTrades();
         if (tradeItems == null) {
             tradeItems = Collections.emptyList();
