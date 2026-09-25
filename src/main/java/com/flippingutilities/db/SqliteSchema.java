@@ -9,7 +9,7 @@ import java.util.List;
 public final class SqliteSchema {
 
     // Schema version for migration tracking
-    public static final int SCHEMA_VERSION = 6;
+    public static final int SCHEMA_VERSION = 7;
 
     // PRAGMA for reading current version and for migrating to the current version
     public static final String PRAGMA_GET_USER_VERSION = "PRAGMA user_version";
@@ -190,6 +190,12 @@ public final class SqliteSchema {
     public static final String INDEX_RECIPE_FLIPS_RECIPE_KEY =
         "CREATE INDEX IF NOT EXISTS idx_recipe_flips_recipe_key ON recipe_flips (recipe_key)";
 
+    public static final String INDEX_RECIPE_FLIP_INPUTS_FLIP =
+        "CREATE INDEX IF NOT EXISTS idx_recipe_flip_inputs_flip ON recipe_flip_inputs (recipe_flip_id)";
+
+    public static final String INDEX_RECIPE_FLIP_OUTPUTS_FLIP =
+        "CREATE INDEX IF NOT EXISTS idx_recipe_flip_outputs_flip ON recipe_flip_outputs (recipe_flip_id)";
+
     // Partial unique index: at most one void (event_id IS NULL) per trade.
     public static final String INDEX_CONSUMED_TRADE_VOID =
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_consumed_trade_void ON consumed_trade (trade_id) WHERE event_id IS NULL";
@@ -224,6 +230,8 @@ public final class SqliteSchema {
             INDEX_TRADES_ACCOUNT_ITEM_TIMESTAMP,
             INDEX_TRADES_UUID,
             INDEX_RECIPE_FLIPS_RECIPE_KEY,
+            INDEX_RECIPE_FLIP_INPUTS_FLIP,
+            INDEX_RECIPE_FLIP_OUTPUTS_FLIP,
             INDEX_CONSUMED_TRADE_TRADE_ID,
             INDEX_CONSUMED_TRADE_EVENT_ID,
             INDEX_EVENTS_ACCOUNT_TIMESTAMP,
@@ -237,14 +245,18 @@ public final class SqliteSchema {
      * Returns DDL statements to upgrade the schema from the given version to the current version.
      *
      * The SQLite backend has never shipped, so the only databases that can exist below the
-     * current version are development databases (at v5). Fresh installs create the full v6
-     * schema directly; the single step below covers the v5 -> v6 upgrade: persisting
-     * {@code itemsBoughtThroughCompleteOffers} so GE limit counts survive restarts.
+     * current version are development databases (v5 or v6). Fresh installs create the full
+     * schema directly. Version 6 persists {@code itemsBoughtThroughCompleteOffers} so GE
+     * limit counts survive restarts; version 7 indexes recipe components for account loading.
      */
     public static List<String> getMigrationStatements(int fromVersion) {
         List<String> stmts = new ArrayList<>();
         if (fromVersion < 6) {
             stmts.add("ALTER TABLE ge_limit_state ADD COLUMN items_bought_complete INTEGER DEFAULT 0;");
+        }
+        if (fromVersion < 7) {
+            stmts.add(INDEX_RECIPE_FLIP_INPUTS_FLIP);
+            stmts.add(INDEX_RECIPE_FLIP_OUTPUTS_FLIP);
         }
         return stmts;
     }

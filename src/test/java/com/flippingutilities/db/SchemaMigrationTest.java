@@ -8,6 +8,7 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -51,6 +52,69 @@ public class SchemaMigrationTest {
         int version = getUserVersion();
         assertEquals("Fresh DB should be at SCHEMA_VERSION",
             SqliteSchema.SCHEMA_VERSION, version);
+    }
+
+    @Test
+    public void testFreshSchemaUsesIndexedRecipeComponentLookups() throws Exception {
+        storage.initializeSchema();
+        assertRecipeComponentLookupsAreIndexed();
+    }
+
+    @Test
+    public void testV6UpgradeIndexesRecipeComponentsWithoutChangingData() throws Exception {
+        storage.initializeSchema();
+        try (Statement stmt = storage.getConnection().createStatement()) {
+            stmt.execute("DROP INDEX IF EXISTS idx_recipe_flip_inputs_flip");
+            stmt.execute("DROP INDEX IF EXISTS idx_recipe_flip_outputs_flip");
+            stmt.execute("PRAGMA user_version = 6");
+            stmt.execute("INSERT INTO recipe_flips (id, recipe_key, coin_cost) VALUES (1, '4151:4587', 25)");
+            stmt.execute("INSERT INTO recipe_flip_inputs (recipe_flip_id, item_id, offer_uuid, amount_consumed) " +
+                "VALUES (1, 4151, 'input-offer', 4)");
+            stmt.execute("INSERT INTO recipe_flip_outputs (recipe_flip_id, item_id, offer_uuid, amount_consumed) " +
+                "VALUES (1, 4587, 'output-offer', 2)");
+        }
+
+        storage.close();
+        storage = new SqliteStorage(dbFile);
+        storage.initializeSchema();
+
+        assertEquals(SqliteSchema.SCHEMA_VERSION, getUserVersion());
+        assertRecipeComponentLookupsAreIndexed();
+        try (Statement stmt = storage.getConnection().createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT i.offer_uuid, i.amount_consumed, o.offer_uuid, o.amount_consumed " +
+                 "FROM recipe_flip_inputs i JOIN recipe_flip_outputs o USING (recipe_flip_id)")) {
+            assertTrue(rs.next());
+            assertEquals("input-offer", rs.getString(1));
+            assertEquals(4, rs.getInt(2));
+            assertEquals("output-offer", rs.getString(3));
+            assertEquals(2, rs.getInt(4));
+            assertFalse(rs.next());
+        }
+    }
+
+    private void assertRecipeComponentLookupsAreIndexed() throws Exception {
+        for (String direction : new String[]{"inputs", "outputs"}) {
+            String alias = direction.equals("inputs") ? "rfi" : "rfo";
+            // Match loadRecipeFlipInputs/loadRecipeFlipOutputs, including the trade join.
+            String query = "SELECT " + alias + ".item_id, " + alias + ".offer_uuid, " + alias + ".amount_consumed, " +
+                "t.price, t.timestamp, t.qty AS trade_qty FROM recipe_flip_" + direction + " " + alias + " " +
+                "LEFT JOIN trades t ON t.uuid = " + alias + ".offer_uuid WHERE " + alias + ".recipe_flip_id = ?";
+            boolean indexed = false;
+            StringBuilder plan = new StringBuilder();
+            try (PreparedStatement statement = storage.getConnection().prepareStatement("EXPLAIN QUERY PLAN " + query)) {
+                statement.setLong(1, 1L);
+                try (ResultSet results = statement.executeQuery()) {
+                    while (results.next()) {
+                        String detail = results.getString("detail");
+                        plan.append(detail).append('\n');
+                        if (detail.startsWith("SEARCH " + alias + " ") && detail.contains("recipe_flip_id=?")) {
+                            indexed = true;
+                        }
+                    }
+                }
+            }
+            assertTrue("Loading each recipe must search its " + direction + " by flip ID:\n" + plan, indexed);
+        }
     }
 
     /**
