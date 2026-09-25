@@ -662,10 +662,7 @@ public class FlippingItemPanel extends JPanel
 		itemIconLabel.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
-				flippingItem.setValidFlippingPanelItem(false);
-				if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
-					plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
-				}
+				plugin.setItemVisible(flippingItem, false);
 				plugin.getFlippingPanel().rebuild(plugin.viewItemsForCurrentView());
 			}
 

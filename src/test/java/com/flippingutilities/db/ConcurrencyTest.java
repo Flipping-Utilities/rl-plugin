@@ -1,8 +1,6 @@
 package com.flippingutilities.db;
 
 import com.flippingutilities.model.AccountData;
-import com.flippingutilities.model.FlippingItem;
-import com.flippingutilities.model.OfferEvent;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -11,10 +9,7 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.*;
+import static com.flippingutilities.db.StorageTestOffers.complete;
 
 /**
  * Verifies that SqliteStorage handles concurrent access safely (all public methods are
@@ -52,8 +48,8 @@ public class ConcurrencyTest {
                     .map(Path::toFile)
                     .forEach(File::delete);
             } catch (Exception ignored) {}
-            }
         }
+    }
 
     @Test
     public void testConcurrentInsertsAndQueries() throws Exception {
@@ -72,10 +68,10 @@ public class ConcurrencyTest {
                     for (int i = 0; i < insertsPerThread; i++) {
                         String uuid = "conc-" + threadId + "-" + i;
                         long ts = Instant.now().toEpochMilli() + (threadId * 1000L + i);
-                        storage.insertTrade(account, 4151, uuid, ts, 1, 50000, i % 2 == 0);
+                        storage.recordTrade(account, complete(account, 4151, uuid, ts, 1, 50000, i % 2 == 0));
                         // Interleave a query every few inserts
                         if (i % 5 == 0) {
-                            storage.loadTrades(account, Instant.EPOCH);
+                            storage.loadAccount(account);
                         }
                     }
                 } catch (Exception e) {
@@ -94,13 +90,14 @@ public class ConcurrencyTest {
         assertEquals("No errors during concurrent inserts/queries", 0, errors.get());
 
         // Verify the total number of trades: each thread inserted insertsPerThread unique uuids.
-        List<Map<String, Object>> trades = storage.loadTrades(account, Instant.EPOCH);
+        AccountData data = storage.loadAccount(account);
         assertEquals("Total trades should match sum of all inserts",
-            numThreads * insertsPerThread, trades.size());
+            numThreads * insertsPerThread,
+            data.getTrades().get(0).getHistory().getCompressedOfferEvents().size());
     }
 
     @Test
-    public void testConcurrentInsertTradeAndQueryAggregateStats() throws Exception {
+    public void testConcurrentTradeWritesAndAccountLoads() throws Exception {
         final int numThreads = 3;
         final String account = "ConcurrentAcct";
         final AtomicInteger errors = new AtomicInteger(0);
@@ -114,10 +111,10 @@ public class ConcurrencyTest {
             pool.submit(() -> {
                 try {
                     for (int i = 0; i < 20; i++) {
-                        storage.insertTrade(account, 4151,
+                        storage.recordTrade(account, complete(account, 4151,
                             "agg-" + threadId + "-" + i,
                             Instant.now().toEpochMilli() + i,
-                            1, 50000, true);
+                            1, 50000, true));
                     }
                 } catch (Exception e) {
                     errors.incrementAndGet();
@@ -127,11 +124,11 @@ public class ConcurrencyTest {
             });
         }
 
-        // Thread 3: query aggregate stats repeatedly
+        // Thread 3: reload the account repeatedly
         pool.submit(() -> {
             try {
                 for (int i = 0; i < 20; i++) {
-                    storage.queryAggregateStats(account, Instant.EPOCH);
+                    storage.loadAccount(account);
                 }
             } catch (Exception e) {
                 errors.incrementAndGet();

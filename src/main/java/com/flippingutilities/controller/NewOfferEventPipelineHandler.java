@@ -73,8 +73,8 @@ public class NewOfferEventPipelineHandler {
 
         updateTradesList(currentlyLoggedInAccountsTrades, flippingItem, finalizedOfferEvent.clone());
 
-        // Dual-write: also record the trade (and reconcile flip events) to SQLite if enabled
-        plugin.recordTradeToRepository(currentlyLoggedInAccount, finalizedOfferEvent);
+        // Persist the same offer metadata used by the live history.
+        plugin.recordTrade(currentlyLoggedInAccount, finalizedOfferEvent);
 
         // Keep the persisted GE limit state in sync (only buys change it)
         persistGeLimitState(currentlyLoggedInAccount, finalizedOfferEvent);
@@ -143,7 +143,7 @@ public class NewOfferEventPipelineHandler {
                 if (newOfferEvent.isStartOfOffer()) {
                     newOfferEvent.setTradeStartedAt(Instant.now());
                 }
-                persistSlotState(plugin.getCurrentlyLoggedInAccount(), newOfferEvent.getSlot(), newOfferEvent);
+                persistSlotState(plugin.getCurrentlyLoggedInAccount(), newOfferEvent.getSlot(), newOfferEvent, false);
             }
 
             return Optional.empty();
@@ -159,7 +159,7 @@ public class NewOfferEventPipelineHandler {
         if (newOfferEvent.isCausedByEmptySlot()) {
             lastOfferEventForEachSlot.remove(newOfferEvent.getSlot());
             slotActivityTimers.get(newOfferEvent.getSlot()).reset();
-            persistSlotState(plugin.getCurrentlyLoggedInAccount(), newOfferEvent.getSlot(), null);
+            persistSlotState(plugin.getCurrentlyLoggedInAccount(), newOfferEvent.getSlot(), null, false);
             return Optional.empty();
         }
 
@@ -171,7 +171,8 @@ public class NewOfferEventPipelineHandler {
         newOfferEvent.setTradeStartedAt(lastOfferEvent.getTradeStartedAt());
         lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
         slotActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
-        persistSlotState(plugin.getCurrentlyLoggedInAccount(), newOfferEvent.getSlot(), newOfferEvent);
+        persistSlotState(plugin.getCurrentlyLoggedInAccount(), newOfferEvent.getSlot(), newOfferEvent,
+            newOfferEvent.getCurrentQuantityInTrade() > 0);
         return newOfferEvent.getCurrentQuantityInTrade() ==0? Optional.empty() : Optional.of(newOfferEvent);
     }
 
@@ -238,22 +239,14 @@ public class NewOfferEventPipelineHandler {
     /**
      * Persists the in-progress offer state of a slot (or clears it when the slot empties) to
      * SQLite when enabled, so active offers survive restarts. The write is queued on the
-     * storage executor to keep DB I/O off the client thread. Best-effort.
+     * storage executor to keep DB I/O off the client thread.
      */
-    private void persistSlotState(String account, int slotIndex, OfferEvent offer) {
-        try {
-            if (account == null) {
-                return;
-            }
-            if (plugin.getSqliteStorage() == null) {
-                return;
-            }
-            final String accountName = account;
-            final OfferEvent offerSnapshot = offer == null ? null : offer.clone();
-            plugin.submitStorageTask(storage -> storage.upsertSlot(accountName, slotIndex, offerSnapshot));
-        } catch (Exception e) {
-            log.debug("Failed to queue slot state persistence (best-effort): {}", e.getMessage());
+    private void persistSlotState(String account, int slotIndex, OfferEvent offer, boolean historyVisible) {
+        if (account == null || plugin.getSqliteStorage() == null) {
+            return;
         }
+        OfferEvent snapshot = offer == null ? null : offer.clone();
+        plugin.submitStorageTask(storage -> storage.upsertSlot(account, slotIndex, snapshot, historyVisible));
     }
 
     /**

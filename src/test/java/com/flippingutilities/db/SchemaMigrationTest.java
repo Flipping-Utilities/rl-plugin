@@ -15,6 +15,7 @@ import java.sql.Statement;
 import java.util.Comparator;
 
 import static org.junit.Assert.*;
+import static com.flippingutilities.db.StorageTestOffers.complete;
 
 /**
  * Verifies that the schema initializes at the expected version and that key constraints
@@ -64,6 +65,7 @@ public class SchemaMigrationTest {
     public void testV6UpgradeIndexesRecipeComponentsWithoutChangingData() throws Exception {
         storage.initializeSchema();
         try (Statement stmt = storage.getConnection().createStatement()) {
+            removeV8Columns(stmt);
             stmt.execute("DROP INDEX IF EXISTS idx_recipe_flip_inputs_flip");
             stmt.execute("DROP INDEX IF EXISTS idx_recipe_flip_outputs_flip");
             stmt.execute("PRAGMA user_version = 6");
@@ -128,6 +130,7 @@ public class SchemaMigrationTest {
         storage.initializeSchema();
         Connection conn = storage.getConnection();
         try (Statement stmt = conn.createStatement()) {
+            removeV8Columns(stmt);
             stmt.execute("ALTER TABLE ge_limit_state DROP COLUMN items_bought_complete;");
             stmt.execute("PRAGMA user_version = 5;");
         }
@@ -161,25 +164,61 @@ public class SchemaMigrationTest {
     }
 
     @Test
+    public void testV7UpgradeRequiresResyncBeforeUsingIncompleteOfferMetadata() throws Exception {
+        storage.initializeSchema();
+        storage.upsertAccount("Existing account", null);
+        storage.recordTrade("Existing account", complete("Existing account", 4151, "original-offer", 1700000000000L, 1, 100, true));
+        storage.setSetting("migration_completed", "true");
+        try (Statement statement = storage.getConnection().createStatement()) {
+            removeV8Columns(statement);
+            statement.execute("PRAGMA user_version = 7");
+        }
+        storage.close();
+        storage = new SqliteStorage(dbFile);
+
+        storage.initializeSchema();
+
+        assertEquals(SqliteSchema.SCHEMA_VERSION, getUserVersion());
+        assertEquals("true", storage.getSetting("migration_pending"));
+        assertTrue(storage.requiresFullResync());
+        // Upgrade preserves old records until the caller has safely loaded the JSON source.
+        try (Statement statement = storage.getConnection().createStatement();
+             ResultSet rows = statement.executeQuery("SELECT uuid FROM trades")) {
+            assertTrue(rows.next());
+            assertEquals("original-offer", rows.getString(1));
+        }
+    }
+
+    private void removeV8Columns(Statement statement) throws Exception {
+        statement.execute("ALTER TABLE trades DROP COLUMN offer_json");
+        statement.execute("ALTER TABLE active_slots DROP COLUMN offer_json");
+        statement.execute("ALTER TABLE active_slots DROP COLUMN history_visible");
+        statement.execute("DROP TABLE item_visibility");
+    }
+
+    @Test
     public void testTradesUuidUniqueConstraint() throws Exception {
         storage.initializeSchema();
         // The v4 schema adds UNIQUE(account_id, uuid). Verify by attempting a duplicate insert.
         storage.upsertAccount("Acct", null);
-        int id1 = storage.insertTrade("Acct", 4151, "dup-uuid", 1700000000000L, 1, 100, true);
-        assertTrue("First insert should succeed", id1 > 0);
-        // Second insert with same uuid should be ignored by INSERT OR IGNORE (returns -1).
-        int id2 = storage.insertTrade("Acct", 4151, "dup-uuid", 1700000000000L, 1, 100, true);
-        assertEquals("Duplicate uuid insert should be ignored", -1, id2);
+        storage.recordTrade("Acct", complete("Acct", 4151, "dup-uuid", 1700000000000L, 1, 100, true));
+        storage.recordTrade("Acct", complete("Acct", 4151, "dup-uuid", 1700000000000L, 1, 100, true));
+        try (Statement statement = storage.getConnection().createStatement();
+             ResultSet rows = statement.executeQuery("SELECT COUNT(*) FROM trades")) {
+            assertTrue(rows.next());
+            assertEquals("Duplicate UUID must not create another trade", 1, rows.getInt(1));
+        }
     }
 
     @Test
     public void testConsumedTradeEventIdNullable() throws Exception {
         storage.initializeSchema();
         storage.upsertAccount("Acct", null);
-        int tradeId = storage.insertTrade("Acct", 4151, "void-uuid", 1700000000000L, 1, 100, false);
-        assertTrue("Trade insert should succeed", tradeId > 0);
-        // Voiding a trade (eventId = null) should not throw now that event_id is nullable.
-        storage.consumeTrade(tradeId, 1, null);
+        storage.recordTrade("Acct", complete("Acct", 4151, "void-uuid", 1700000000000L, 1, 100, false));
+        try (Statement statement = storage.getConnection().createStatement()) {
+            assertEquals(1, statement.executeUpdate("INSERT INTO consumed_trade (trade_id, qty, event_id) " +
+                "SELECT id, 1, NULL FROM trades WHERE uuid = 'void-uuid'"));
+        }
     }
 
     @Test
