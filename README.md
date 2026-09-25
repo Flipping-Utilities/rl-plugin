@@ -128,6 +128,36 @@ Quickly lookup your favorited items just by typing "1" in the ge search!
 
 # Development
 
+### Building and testing
+
+Install a JDK 11 and set `JAVA_HOME` to that installation. Use the checked-in Gradle wrapper;
+you do not need a separate Gradle installation. The first build downloads Gradle and dependencies.
+
+```sh
+./gradlew clean build
+```
+
+This compiles the plugin, runs all tests and creates the JAR in `build/libs/`. On Windows,
+use `gradlew.bat` in place of `./gradlew` (or `./gradlew` from Git Bash).
+
+For a shorter development cycle:
+
+```sh
+./gradlew test
+./gradlew test --tests 'com.flippingutilities.GeTaxTest'
+./gradlew runPlugin
+```
+
+`runPlugin` opens RuneLite in developer mode. Gradle automatically discovers JUnit tests under
+`src/test/java`; add new test classes there without maintaining a suite list. Open
+`build/reports/tests/test/index.html` for results, including any tests skipped because their
+external fixtures are unavailable.
+
+Pull requests and pushes to `master` run `clean build` on Linux, macOS and Windows with Java 11.
+The workflow retains the HTML and XML test reports for 14 days, including failed test runs.
+Dependency versions remain defined in `build.gradle`; RuneLite follows `latest.release`, so a
+new upstream release can change dependency resolution even when this repository has not changed.
+
 ### General Structure of Codebase
 
 This section will talk about the purpose of various parts of the codebase, specifically the folders.
