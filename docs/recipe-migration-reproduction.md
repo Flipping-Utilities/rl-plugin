@@ -67,8 +67,8 @@ and leaves migration incomplete instead of claiming a successful zero-price impo
    `5d1feb32dddec12d80f0a5e90388ddb32901059c`. Copy
    `RealDataMigrationTest.java` from commit `e9fcdd6` and fixture copies there, then
    run that test. That test version matches the earlier schema; later versions use
-   the simplified recipe tables. The component
-   component parity assertions should identify the first lost value. This operation
+   the simplified recipe tables. The component parity assertions should identify
+   the first lost value. This operation
    belongs only in the separate reproduction worktree; do not alter the fixed branch.
 6. For the actual UI path, use a disposable RuneLite profile with copies of the data.
    Compare before first startup, immediately after migration, and after restart.
