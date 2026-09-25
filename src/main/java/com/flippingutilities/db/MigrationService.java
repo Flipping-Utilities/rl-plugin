@@ -233,7 +233,13 @@ public class MigrationService {
                 if (offer != null && offer.getUuid() != null) {
                     historyOfferUuids.add(offer.getUuid());
                 }
-                if (offer == null || !offer.isComplete() || offer.isCausedByEmptySlot()) continue;
+                if (offer == null || offer.isCausedByEmptySlot()) continue;
+                // Incomplete offers with filled units are real money: the JSON backend's
+                // flip computation counts them (cancelled partials, offers abandoned
+                // mid-fill when the client closed). Filtering them out here silently
+                // undercounted profit after migration. Fully-empty in-progress offers
+                // (qty 0, nothing filled) still carry no information - skip those.
+                if (!offer.isComplete() && offer.getCurrentQuantityInTrade() <= 0) continue;
 
                 long timestamp = offer.getTime() != null ? offer.getTime().toEpochMilli() : Instant.now().toEpochMilli();
                 // Recipe components retain consumption separately from the original trade.

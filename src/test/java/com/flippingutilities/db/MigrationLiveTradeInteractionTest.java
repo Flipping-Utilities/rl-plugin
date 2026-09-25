@@ -374,6 +374,41 @@ public class MigrationLiveTradeInteractionTest {
     }
 
     /**
+     * Incomplete offers with filled units (cancelled partials, offers abandoned mid-fill when
+     * the client closed) are real money that the JSON backend counts. The migration used to
+     * drop them (isComplete-only filter), silently undercounting profit - e.g. a live account
+     * lost a 44,250-unit partial SELL worth ~1.4M. They must migrate, and a later completion
+     * of the same offer must UPDATE the row instead of being swallowed by the uuid dedupe.
+     */
+    @Test
+    public void testStalePartialOfferMigratesAndCompletes() throws Exception {
+        OfferEvent partial = completeOffer("stale-sell", false, 100, 500, BASE_TS);
+        partial.setState(GrandExchangeOfferState.SELLING);
+        partial.setCurrentQuantityInTrade(40);
+        partial.setTotalQuantityInTrade(100);
+
+        // Buy the full eventual volume so the terminal sell pairs completely at the end;
+        // during the partial phase only 40 units can pair.
+        OfferEvent buy = completeOffer("stale-buy", true, 100, 450, BASE_TS - 1000);
+        AccountData data = accountDataWithOffers(buy, partial);
+
+        MigrationService service = new MigrationService(storage, new TradePersister(new GsonBuilder().create()));
+        service.migrate(java.util.Collections.singletonMap(ACCOUNT, data));
+
+        // The partial sell's 40 filled units count in profit, matching the JSON backend.
+        assertEquals("Partial fill must contribute its filled volume",
+            (long) (500 - 450) * 40, loadedProfit());
+
+        // The offer later completes for the full 100 units: the live terminal event must
+        // UPDATE the migrated row (INSERT OR IGNORE froze it at 40 forever).
+        OfferEvent terminal = completeOffer("stale-sell", false, 100, 500, BASE_TS + 60000);
+        storage.recordTrade(ACCOUNT, terminal);
+
+        assertEquals("Completion must update the row to the terminal volume",
+            (long) (500 - 450) * 100, loadedProfit());
+    }
+
+    /**
      * A partially-failed migration must keep successfully-migrated accounts committed (their
      * migrated_ flags durable) while leaving migration_completed unset so the next startup
      * retries the failed account.

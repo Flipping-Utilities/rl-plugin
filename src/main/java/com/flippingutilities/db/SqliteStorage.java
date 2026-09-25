@@ -781,9 +781,18 @@ public class SqliteStorage {
     /** Records the original offer, preserving classification and continuity across reloads. */
     public synchronized void recordTrade(String displayName, OfferEvent offer) {
         int accountId = getOrCreateAccountId(displayName);
-        String sql = "INSERT OR IGNORE INTO trades " +
+        // Latest-state upsert per offer uuid: fills only grow toward the terminal state, so a
+        // later event for the same offer replaces the row. A pure INSERT OR IGNORE froze the
+        // FIRST recorded quantity - a partially-filled offer inserted by the migration (or an
+        // early partial) then never updated when the offer completed, permanently undercounting
+        // its volume. The qty guard keeps a stale/duplicate event from regressing the row.
+        String sql = "INSERT INTO trades " +
             "(account_id, item_id, uuid, timestamp, qty, price, is_buy, offer_json) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+            "ON CONFLICT(account_id, uuid) DO UPDATE SET " +
+            "timestamp = excluded.timestamp, qty = excluded.qty, price = excluded.price, " +
+            "offer_json = excluded.offer_json " +
+            "WHERE excluded.qty >= trades.qty";
         try (PreparedStatement statement = getConnection().prepareStatement(sql)) {
             statement.setInt(1, accountId);
             statement.setInt(2, offer.getItemId());
