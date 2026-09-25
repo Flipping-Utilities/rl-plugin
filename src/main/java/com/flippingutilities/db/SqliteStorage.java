@@ -95,6 +95,28 @@ public class SqliteStorage {
         return SLOT_GSON.toJson(offer);
     }
 
+    /**
+     * Minimal stand-in for a recipe component whose backing offer no longer exists anywhere
+     * (e.g. offers destroyed by historical data-loss bugs that the recipe references still
+     * remember). Zero-price: the real price is unknowable; the point is that the component
+     * renders and the account keeps loading instead of being refused wholesale.
+     */
+    static OfferEvent synthesizeComponentStub(String uuid, int itemId, boolean buy, int qty, Instant time) {
+        OfferEvent offer = new OfferEvent();
+        offer.setUuid(uuid);
+        offer.setItemId(itemId);
+        offer.setBuy(buy);
+        int safeQty = Math.max(0, qty);
+        offer.setCurrentQuantityInTrade(safeQty);
+        offer.setTotalQuantityInTrade(safeQty);
+        offer.setPrice(0);
+        offer.setTime(time != null ? time : Instant.EPOCH);
+        offer.setState(buy
+            ? net.runelite.api.GrandExchangeOfferState.BOUGHT
+            : net.runelite.api.GrandExchangeOfferState.SOLD);
+        return offer;
+    }
+
     static String serializeRecipeOffer(PartialOffer component) throws SQLException {
         if (component.getOffer() == null) {
             throw new SQLException("Cannot persist recipe: missing offer " + component.getOfferUuid());
@@ -565,7 +587,9 @@ public class SqliteStorage {
                     String uuid = rs.getString("offer_uuid");
                     OfferEvent offer = SLOT_GSON.fromJson(rs.getString("offer_json"), OfferEvent.class);
                     if (offer == null) {
-                        throw new IllegalStateException("Missing recipe offer snapshot for " + uuid);
+                        // Rows predating embedded snapshots (or with unreadable ones) must not
+                        // take the whole account down; render a zero-price stub instead.
+                        offer = synthesizeComponentStub(uuid, itemId, inputs, rs.getInt("amount_consumed"), null);
                     }
                     offer.setMadeBy(displayName);
                     offer.setItemName("Item " + itemId);

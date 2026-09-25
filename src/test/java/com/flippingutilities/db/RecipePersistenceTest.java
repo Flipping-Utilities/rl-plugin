@@ -90,8 +90,15 @@ public class RecipePersistenceTest {
             .forEach(component -> component.hydrateOffer(history)));
     }
 
+    /**
+     * A dangling reference (offer exists nowhere: not embedded, not in history) must NOT
+     * block the account's migration. Refusing the account drops ALL of its trades and flips
+     * from SQLite, degrades every total that includes it, and retries (and fails) on every
+     * startup — far more destructive than the dead reference itself. The reference migrates
+     * as a zero-price stub instead, matching how the JSON backend has always rendered it.
+     */
     @Test
-    public void unresolvedRecipeReferenceBlocksMigrationEvenAfterPreparingAndSavingJson() throws Exception {
+    public void danglingRecipeReferenceMigratesAsZeroPriceStubInsteadOfBlockingAccount() throws Exception {
         AccountData source = legacyAccount();
         source.getTrades().clear();
         PartialOffer missing = source.getRecipeFlipGroups().get(0).getPartialOffers().get(0);
@@ -104,11 +111,25 @@ public class RecipePersistenceTest {
         persister.writeToFile(ACCOUNT, source);
         SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("unresolved.db"));
         try {
-            assertEquals("Missing data must not be imported as a successful zero-price recipe",
-                0, new MigrationService(storage, persister).migrate());
-            assertNull(storage.getSetting("migration_completed"));
-            assertNull(storage.getSetting("migrated_" + ACCOUNT));
-            assertTrue("The failed account transaction must roll back", storage.listAccounts().isEmpty());
+            assertEquals("The account must migrate despite the dangling reference",
+                1, new MigrationService(storage, persister).migrate());
+            assertNotNull("migrated_ flag must be set so startup retries stop",
+                storage.getSetting("migrated_" + ACCOUNT));
+            assertEquals("Migration completes when no account fails",
+                "true", storage.getSetting("migration_completed"));
+
+            // The nulled component ("normal") renders as a zero-price stub; components that
+            // kept their embedded snapshots load with their real prices untouched.
+            AccountData loaded = storage.loadAccount(ACCOUNT);
+            assertEquals(1, loaded.getRecipeFlipGroups().size());
+            RecipeFlip flip = loaded.getRecipeFlipGroups().get(0).getRecipeFlips().get(0);
+            PartialOffer stubbed = flip.getInputs().get(4151).get("normal");
+            assertNotNull("Dangling component must still render", stubbed.getOffer());
+            assertEquals("Stub price must be zero", 0, stubbed.getOffer().getPrice());
+            assertEquals("Embedded snapshot price preserved (input)", 250,
+                flip.getInputs().get(4587).get("detached-input").getOffer().getPreTaxPrice());
+            assertEquals("Embedded snapshot price preserved (output)", 1000,
+                flip.getOutputs().get(11802).get("detached-output").getOffer().getPreTaxPrice());
         } finally {
             storage.close();
         }
