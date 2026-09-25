@@ -166,6 +166,44 @@ public class AccountRoundTripTest {
     }
 
     @Test
+    public void deletingLastHistoryOfferPreservesGeLimitsForEveryRestoredItem() throws Exception {
+        SqliteStorage storage = new SqliteStorage(folder.newFile("deleted-history-limits.db"));
+        try {
+            storage.initializeSchema();
+            Instant nextRefresh = Instant.ofEpochMilli(System.currentTimeMillis() + 3_600_000L);
+            int[] itemIds = {ITEM, 4587, 11802};
+            for (int itemId : itemIds) {
+                OfferEvent completed = offer("deleted-" + itemId, GrandExchangeOfferState.BOUGHT, 5, 5, 100, 8, 0);
+                completed.setItemId(itemId);
+                storage.recordTrade(ACCOUNT, completed);
+                storage.upsertGeLimitState(ACCOUNT, itemId, nextRefresh, 7, 5);
+                storage.deleteTradesByUuid(ACCOUNT, Collections.singletonList(completed.getUuid()));
+            }
+            storage.upsertItemVisibility(ACCOUNT, ITEM, true);
+            storage.upsertFavorite(ACCOUNT, 4587, true, "q");
+            // The third item has only its GE limit state left in storage.
+            storage.close();
+
+            AccountData restored = storage.loadAccount(ACCOUNT);
+            assertEquals(3, restored.getTrades().size());
+            for (int itemId : itemIds) {
+                FlippingItem item = restored.getTrades().stream()
+                    .filter(candidate -> candidate.getItemId() == itemId).findFirst().orElseThrow(AssertionError::new);
+                assertTrue(item.getHistory().getCompressedOfferEvents().isEmpty());
+                assertEquals(nextRefresh, item.getGeLimitResetTime());
+                assertEquals(7, item.getItemsBoughtThisLimitWindow());
+                assertEquals(5, item.getHistory().getItemsBoughtThroughCompleteOffers());
+                if (itemId == 4587) {
+                    assertTrue(item.isFavorite());
+                    assertEquals("q", item.getFavoriteCode());
+                }
+            }
+        } finally {
+            storage.close();
+        }
+    }
+
+    @Test
     public void migrationKeepsDeletedPartialFillOutOfHistory() throws Exception {
         AccountData original = account();
         OfferEvent partial = offer("deleted", GrandExchangeOfferState.BUYING, 5, 10, 100, 8, 0);

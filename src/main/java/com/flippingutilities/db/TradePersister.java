@@ -134,6 +134,11 @@ public class TradePersister
 		accountsWithLoadFailures.add(displayName);
 	}
 
+	/** Call only after a successfully prepared model has replaced the cached fallback. */
+	public void accountPrepared(String displayName) {
+		accountsWithLoadFailures.remove(displayName);
+	}
+
 	public boolean isAccountProtected(String displayName) {
 		return accountDirectoryUnreadable || accountsWithLoadFailures.contains(displayName);
 	}
@@ -223,6 +228,10 @@ public class TradePersister
 		for (File file : accountFiles()) {
 			if (!isAccountSnapshot(file.getName())) continue;
 			String displayName = file.getName().substring(0, file.getName().length() - ".json".length());
+			if (isAccountProtected(displayName)) {
+				throw new IllegalStateException("Cannot migrate protected account " + displayName
+					+ "; restore and load valid data first");
+			}
 			accounts.put(displayName, loadExistingAccount(displayName, file));
 		}
 		return accounts;
@@ -269,9 +278,7 @@ public class TradePersister
 
 	private AccountData loadExistingAccount(String displayName, File primary) {
 		try {
-			AccountData account = readAccountWithBackup(displayName, primary);
-			accountsWithLoadFailures.remove(displayName);
-			return account;
+			return readAccountWithBackup(displayName, primary);
 		} catch (IllegalStateException failure) {
 			protectAccount(displayName);
 			throw failure;
@@ -289,7 +296,6 @@ public class TradePersister
 			if (data == null || json.peek() != com.google.gson.stream.JsonToken.END_DOCUMENT) {
 				throw new IOException("Account-wide snapshot is empty or incomplete: " + accountFile);
 			}
-			accountsWithLoadFailures.remove("accountwide");
 			return data;
 		} catch (IOException | RuntimeException | OutOfMemoryError failure) {
 			protectAccount("accountwide");

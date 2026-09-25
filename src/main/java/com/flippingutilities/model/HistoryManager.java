@@ -81,18 +81,20 @@ public class HistoryManager
 		);
 	}
 
-	public void updateHistory(OfferEvent newOffer)
+	public List<String> updateHistory(OfferEvent newOffer)
 	{
+		List<String> removedUuids = Collections.emptyList();
 		//if slot is -1 than the offer was added manually from GE history.
 		//Since we don't know when it came or its slot/it doesn't have a time or slot, there is no point in updating ge
 		//properties or trying to delete previous offers for the trade.
 		if (newOffer.getSlot() != -1)
 		{
 			updateGeLimitProperties(newOffer);
-			deletePreviousOffersForTrade(newOffer);
+			removedUuids = deletePreviousOffersForTrade(newOffer);
 		}
 
 		compressedOfferEvents.add(newOffer);
+		return removedUuids;
 	}
 
 	/**
@@ -166,8 +168,9 @@ public class HistoryManager
 	//properties of the offers match (except currentQuantityInTrade). But, there is no way to be 100% sure because all
 	//those properties could match but it could still be from a different trade if they cancel and make a trade outside of
 	//RL
-	public void deletePreviousOffersForTrade(OfferEvent newOfferEvent)
+	public List<String> deletePreviousOffersForTrade(OfferEvent newOfferEvent)
 	{
+		List<String> removedUuids = new ArrayList<>();
 		for (int i = compressedOfferEvents.size() - 1; i > -1; i--)
 		{
 			OfferEvent aPreviousOffer = compressedOfferEvents.get(i);
@@ -175,7 +178,7 @@ public class HistoryManager
 			// if the previous offer was cancelled while a partial offer came through, the old (now invalid quantity)
 			// cancelled offer must be deleted
 			if (newOfferEvent.isUpdateForCancelled(aPreviousOffer)) {
-				compressedOfferEvents.remove(i);
+				removedUuids.add(compressedOfferEvents.remove(i).getUuid());
 			}
 			if (aPreviousOffer.getSlot() == newOfferEvent.getSlot() && aPreviousOffer.isBuy() == newOfferEvent.isBuy())
 			{
@@ -183,14 +186,15 @@ public class HistoryManager
 				//the most recent offer was for the same slot
 				if (aPreviousOffer.isComplete())
 				{
-					return;
+					return removedUuids;
 				}
 				else
 				{
-					compressedOfferEvents.remove(i);
+					removedUuids.add(compressedOfferEvents.remove(i).getUuid());
 				}
 			}
 		}
+		return removedUuids;
 	}
 
 	/**

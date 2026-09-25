@@ -156,10 +156,10 @@ public class FlippingItem implements Searchable
 	 *
 	 * @param newOffer the new offer that just came in
 	 */
-	public void updateHistory(OfferEvent newOffer)
+	public List<String> updateHistory(OfferEvent newOffer)
 	{
 		newOffer.setItemName(itemName);
-		history.updateHistory(newOffer);
+		return history.updateHistory(newOffer);
 	}
 
 	/**

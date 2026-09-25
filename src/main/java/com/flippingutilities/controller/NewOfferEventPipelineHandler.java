@@ -5,6 +5,7 @@ import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.WorldType;
+import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemStats;
@@ -71,10 +72,12 @@ public class NewOfferEventPipelineHandler {
 
         Optional<FlippingItem> flippingItem = currentlyLoggedInAccountsTrades.stream().filter(item -> item.getItemId() == finalizedOfferEvent.getItemId()).findFirst();
 
-        updateTradesList(currentlyLoggedInAccountsTrades, flippingItem, finalizedOfferEvent.clone());
+        List<String> replacedUuids = updateTradesList(currentlyLoggedInAccountsTrades, flippingItem, finalizedOfferEvent.clone());
 
-        // Persist the same offer metadata used by the live history.
-        plugin.recordTrade(currentlyLoggedInAccount, finalizedOfferEvent);
+        // Persist exactly the history replacement made above, including late cancellation
+        // corrections. Slot state, replacement, and the new snapshot commit together.
+        OfferEvent snapshot = finalizedOfferEvent.clone();
+        plugin.submitStorageTask(storage -> storage.recordOfferUpdate(currentlyLoggedInAccount, snapshot, replacedUuids));
 
         // Keep the persisted GE limit state in sync (only buys change it)
         persistGeLimitState(currentlyLoggedInAccount, finalizedOfferEvent);
@@ -157,9 +160,22 @@ public class NewOfferEventPipelineHandler {
         //because we took care of the empty slot updates on login in a previous clause, this
         //will only trigger on empty slot updates when an offer is collected
         if (newOfferEvent.isCausedByEmptySlot()) {
+            OfferEvent retained = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getTrades().stream()
+                .filter(item -> item.getItemId() == lastOfferEvent.getItemId())
+                .flatMap(item -> item.getHistory().getCompressedOfferEvents().stream())
+                .filter(offer -> Objects.equals(offer.getUuid(), lastOfferEvent.getUuid()))
+                .findFirst().orElse(null);
+            // A collected slot is terminal, including a partial fill delivered just after
+            // cancellation. Finalize it so the next trade in this slot cannot replace it.
+            if (retained != null && !retained.isComplete()) {
+                retained.setState(retained.isBuy() ? GrandExchangeOfferState.CANCELLED_BUY
+                    : GrandExchangeOfferState.CANCELLED_SELL);
+            }
+            OfferEvent archived = retained == null ? null : retained.clone();
             lastOfferEventForEachSlot.remove(newOfferEvent.getSlot());
             slotActivityTimers.get(newOfferEvent.getSlot()).reset();
-            persistSlotState(plugin.getCurrentlyLoggedInAccount(), newOfferEvent.getSlot(), null, false);
+            String account = plugin.getCurrentlyLoggedInAccount();
+            plugin.submitStorageTask(storage -> storage.archiveOfferAndClearSlot(account, newOfferEvent.getSlot(), archived));
             return Optional.empty();
         }
 
@@ -171,8 +187,9 @@ public class NewOfferEventPipelineHandler {
         newOfferEvent.setTradeStartedAt(lastOfferEvent.getTradeStartedAt());
         lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
         slotActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
-        persistSlotState(plugin.getCurrentlyLoggedInAccount(), newOfferEvent.getSlot(), newOfferEvent,
-            newOfferEvent.getCurrentQuantityInTrade() > 0);
+        if (newOfferEvent.getCurrentQuantityInTrade() == 0) {
+            persistSlotState(plugin.getCurrentlyLoggedInAccount(), newOfferEvent.getSlot(), newOfferEvent, false);
+        }
         return newOfferEvent.getCurrentQuantityInTrade() ==0? Optional.empty() : Optional.of(newOfferEvent);
     }
 
@@ -197,7 +214,7 @@ public class NewOfferEventPipelineHandler {
      * @param flippingItem the flipping item to be updated in the tradeslist, if it even exists
      * @param newOffer     new offer that just came in
      */
-    private void updateTradesList(List<FlippingItem> trades, Optional<FlippingItem> flippingItem, OfferEvent newOffer) {
+    private List<String> updateTradesList(List<FlippingItem> trades, Optional<FlippingItem> flippingItem, OfferEvent newOffer) {
         if (flippingItem.isPresent()) {
             FlippingItem item = flippingItem.get();
 
@@ -206,10 +223,12 @@ public class NewOfferEventPipelineHandler {
                 item.setValidFlippingPanelItem(true);
             }
 
-            item.updateHistory(newOffer);
+            List<String> removedUuids = item.updateHistory(newOffer);
             item.updateLatestProperties(newOffer);
+            return removedUuids;
         } else {
             addToTradesList(trades, newOffer);
+            return Collections.emptyList();
         }
     }
 

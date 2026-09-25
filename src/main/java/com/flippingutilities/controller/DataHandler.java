@@ -181,6 +181,8 @@ public class DataHandler {
             log.debug("Fetching accountwide data");
             AccountWideData accountWideData = plugin.tradePersister.loadAccountWideData();
             boolean didActuallySetDefaults = accountWideData.setDefaults();
+            this.accountWideData = accountWideData;
+            plugin.tradePersister.accountPrepared("accountwide");
             accountWideDataChanged = didActuallySetDefaults;
             return accountWideData;
         }
@@ -207,7 +209,9 @@ public class DataHandler {
             try {
                 accountData.startNewSession();
                 accountData.prepareForUse(plugin);
-                
+                accountSpecificData.put(displayName, accountData);
+                plugin.tradePersister.accountPrepared(displayName);
+
                 // Check if migration is needed and save immediately
                 if (accountData.needsMigration()) {
                     log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
@@ -300,7 +304,9 @@ public class DataHandler {
         try {
             AccountData accountData = plugin.tradePersister.loadAccount(displayName);
             accountData.prepareForUse(plugin);
-            
+            accountSpecificData.put(displayName, accountData);
+            plugin.tradePersister.accountPrepared(displayName);
+
             // Check if migration is needed and save immediately
             if (accountData.needsMigration()) {
                 log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
