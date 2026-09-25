@@ -611,6 +611,10 @@ public class FlippingPlugin extends Plugin {
     @Override
     protected void shutDown() {
         log.debug("shutdown running!");
+        if (cacheUpdaterJob != null) {
+            cacheUpdaterJob.stop();
+            cacheUpdaterJob = null;
+        }
         if (generalRepeatingTasks != null) {
             generalRepeatingTasks.cancel(true);
             generalRepeatingTasks = null;
