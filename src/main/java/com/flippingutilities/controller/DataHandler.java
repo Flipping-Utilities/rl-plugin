@@ -225,16 +225,6 @@ public class DataHandler {
                 accountData.prepareForUse(plugin);
                 accountSpecificData.put(displayName, accountData);
                 plugin.tradePersister.accountPrepared(displayName);
-
-                // Check if migration is needed and save immediately
-                if (accountData.needsMigration()) {
-                    log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
-                        displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
-                    plugin.tradePersister.createPreMigrationBackup(displayName);
-                    accountData.markMigrated();
-                    plugin.tradePersister.writeToFile(displayName, accountData);
-                    log.info("Migration complete for {}", displayName);
-                }
             }
             catch (Exception | OutOfMemoryError e) {
                 plugin.tradePersister.protectAccount(displayName);
@@ -243,7 +233,33 @@ public class DataHandler {
                 newAccountData.startNewSession();
                 newAccountData.prepareForUse(plugin);
                 allAccountData.put(displayName, newAccountData);
+                continue;
             }
+            persistVersionMigration(displayName, accountData);
+        }
+    }
+
+    /**
+     * Persists a format-version migration for an account that loaded and prepared
+     * successfully. A failure here (backup creation or the write itself) must NOT discard
+     * the account or disable its saves - the data itself is valid - so it is logged and the
+     * account is marked dirty for a retry on a later save.
+     */
+    private void persistVersionMigration(String displayName, AccountData accountData) {
+        try {
+            if (!accountData.needsMigration()) {
+                return;
+            }
+            log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})",
+                displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
+            plugin.tradePersister.createPreMigrationBackup(displayName);
+            accountData.markMigrated();
+            plugin.tradePersister.writeToFile(displayName, accountData);
+            log.info("Migration complete for {}", displayName);
+        } catch (Exception e) {
+            log.warn("Could not persist version migration for {}; keeping the loaded account and retrying on a later save",
+                displayName, e);
+            markDataAsHavingChanged(displayName);
         }
     }
 
@@ -333,17 +349,7 @@ public class DataHandler {
             accountData.prepareForUse(plugin);
             accountSpecificData.put(displayName, accountData);
             plugin.tradePersister.accountPrepared(displayName);
-
-            // Check if migration is needed and save immediately
-            if (accountData.needsMigration()) {
-                log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
-                    displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
-                plugin.tradePersister.createPreMigrationBackup(displayName);
-                accountData.markMigrated();
-                plugin.tradePersister.writeToFile(displayName, accountData);
-                log.info("Migration complete for {}", displayName);
-            }
-            
+            persistVersionMigration(displayName, accountData);
             return accountData;
         }
         catch (Exception | OutOfMemoryError e)
