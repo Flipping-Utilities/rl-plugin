@@ -93,8 +93,10 @@ public class OfferEvent
 
 	//Used in theGeHistoryTabOfferPanel and RecipeFlipPanel
 	private transient String itemName;
-	//used in the live slot view to show what price something was listed at
-	private transient int listedPrice;
+	//used in the live slot view to show what price something was listed at.
+	//persisted so external tools can see the offer price for unfilled slots.
+	@SerializedName("lp")
+	private int listedPrice;
 	private transient int spent;
 
 	/**
