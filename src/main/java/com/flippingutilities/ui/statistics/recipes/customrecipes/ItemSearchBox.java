@@ -80,7 +80,8 @@ public class ItemSearchBox extends JPanel {
 
             ItemManager itemManager = plugin.getItemManager();
             for (ItemComposition item : matches.subList(0, Math.min(10, matches.size()))) {
-                int price = itemManager.getItemPrice(item.getId());
+                // getItemPrice is 64-bit since the max cash update; keep the full value for display
+                long price = itemManager.getItemPrice(item.getId());
                 AsyncBufferedImage image = itemManager.getImage(item.getId());
                 suggestionData.add(new SuggestionData(item.getId(), item.getName(), price, image));
             }
@@ -174,7 +175,7 @@ public class ItemSearchBox extends JPanel {
     }
 
     private boolean passesFilters(ItemComposition item, boolean includeNoted, boolean includeUntradeable, ItemManager itemManager) {
-        int price = itemManager.getItemPrice(item.getId());
+        long price = itemManager.getItemPrice(item.getId());
         // Remove untradeables except coins
         if (!includeUntradeable && price == 0 && item.getId() != ItemID.COINS) return false;
 

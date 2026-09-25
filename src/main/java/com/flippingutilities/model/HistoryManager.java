@@ -56,13 +56,17 @@ public class HistoryManager
 
 	@SerializedName("nGLR")
 	@Getter
+	@Setter
 	private Instant nextGeLimitRefresh;
 
 	@SerializedName("iBTLW")
 	@Getter
+	@Setter
 	private int itemsBoughtThisLimitWindow;
 
 	@SerializedName("pIB")
+	@Getter
+	@Setter
 	private int itemsBoughtThroughCompleteOffers;
 
 	public HistoryManager clone()

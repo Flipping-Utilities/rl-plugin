@@ -79,7 +79,9 @@ public class RecipeFlip {
     public long getTaxPaid() {
         return getOutputs().values().stream()
             .mapToLong(
-                offerIdToPartialOfferMap -> offerIdToPartialOfferMap.values().stream().mapToInt(po -> po.getOffer().getTaxPaidPerItem() * po.amountConsumed).sum())
+                offerIdToPartialOfferMap -> offerIdToPartialOfferMap.values().stream()
+                    .filter(po -> po.getOffer() != null)
+                    .mapToInt(po -> po.getOffer().getTaxPaidPerItem() * po.amountConsumed).sum())
             .sum();
     }
 

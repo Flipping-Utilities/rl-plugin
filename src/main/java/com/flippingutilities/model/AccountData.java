@@ -123,13 +123,16 @@ public class AccountData {
         }
 
         hydrateRecipeFlipGroups(plugin);
-        hydratePartialOffers(hydratedOffers);
+        hydratePartialOffers(hydratedOffers, plugin.getItemManager());
         hydrateSlotTimers(plugin);
     }
 
     private void hydrateRecipeFlipGroups(FlippingPlugin plugin) {
         for (RecipeFlipGroup group : recipeFlipGroups) {
             group.hydrateRecipe(plugin.getRecipeHandler());
+            if (group.getRecipe() == null) {
+                group.synthesizeRecipe(plugin.getItemManager());
+            }
         }
     }
 
@@ -142,23 +145,90 @@ public class AccountData {
                 timer.setPlugin(plugin);
             });
         }
+
+        // Restore timer state from the persisted last offers. The JSON backend serializes the
+        // timers themselves, but the SQLite backend only persists the offers — without this
+        // wiring the GE slot timers are blank after every restart in SQLite mode. Timers that
+        // already carry an offer (JSON path) are left untouched.
+        if (lastOffers != null) {
+            for (Map.Entry<Integer, OfferEvent> entry : lastOffers.entrySet()) {
+                OfferEvent offer = entry.getValue();
+                if (offer == null || offer.isComplete() || offer.isCausedByEmptySlot()) {
+                    continue;
+                }
+                int slotIndex = entry.getKey();
+                if (slotIndex < 0 || slotIndex >= slotTimers.size()) {
+                    continue;
+                }
+                SlotActivityTimer timer = slotTimers.get(slotIndex);
+                if (timer.currentOffer == null) {
+                    timer.currentOffer = offer;
+                    timer.tradeStartTime = offer.getTradeStartedAt() != null
+                        ? offer.getTradeStartedAt()
+                        : offer.getTime();
+                    // lastUpdate must be non-null or createFormattedTimeString() returns null
+                    // (blank timer) and isSlotStagnant() NPEs. The offer's time is the last
+                    // known activity, so the elapsed display continues across the restart.
+                    timer.setLastUpdate(offer.getTime() != null ? offer.getTime() : Instant.now());
+                    timer.offerOccurredAtUnknownTime = offer.isBeforeLogin();
+                }
+            }
+        }
     }
 
-    private void hydratePartialOffers(Map<String, OfferEvent> hydratedOffers) {
-        List<PartialOffer> partialOffers = recipeFlipGroups.stream()
-            .flatMap(rfg -> rfg.getPartialOffers().stream())
-            .collect(Collectors.toList());
-        partialOffers.forEach(po -> {
-            po.hydrateOffer(hydratedOffers);
-            if (po.getOffer() == null) {
-                log.warn("partial offer references deleted offer event with uuid: {}", po.getOfferUuid());
+    private void hydratePartialOffers(Map<String, OfferEvent> hydratedOffers, ItemManager itemManager) {
+        for (RecipeFlipGroup rfg : recipeFlipGroups) {
+            for (RecipeFlip flip : rfg.getRecipeFlips()) {
+                hydrateComponentOffers(flip.getInputs(), true, hydratedOffers, itemManager);
+                hydrateComponentOffers(flip.getOutputs(), false, hydratedOffers, itemManager);
+            }
+        }
+    }
+
+    private void hydrateComponentOffers(Map<Integer, Map<String, PartialOffer>> components, boolean isBuy,
+                                        Map<String, OfferEvent> hydratedOffers, ItemManager itemManager) {
+        if (components == null) {
+            return;
+        }
+        components.forEach((itemId, offerMap) -> {
+            if (offerMap == null) {
                 return;
             }
-            OfferEvent o = hydratedOffers.get(po.getOfferUuid());
-            if (o != null) {
-                po.hydrateUnderlyingOfferEvent(o.getMadeBy(), o.getItemName());
-            }
+            offerMap.values().forEach(po -> {
+                po.hydrateOffer(hydratedOffers);
+                if (po.getOffer() == null) {
+                    // Backing trade was deleted; synthesize a stub so the flip still renders with a real item name.
+                    log.debug("Partial offer references deleted offer event uuid={}; creating stub for item {}",
+                        po.getOfferUuid(), itemId);
+                    OfferEvent stub = new OfferEvent();
+                    stub.setUuid(po.getOfferUuid());
+                    stub.setItemId(itemId);
+                    stub.setBuy(isBuy);
+                    stub.setPrice(0);
+                    stub.setTime(Instant.EPOCH);
+                    stub.setItemName(resolveItemName(itemManager, itemId));
+                    po.setOffer(stub);
+                    return;
+                }
+                OfferEvent o = hydratedOffers.get(po.getOfferUuid());
+                if (o != null) {
+                    po.hydrateUnderlyingOfferEvent(o.getMadeBy(), o.getItemName());
+                }
+            });
         });
+    }
+
+    private String resolveItemName(ItemManager itemManager, int itemId) {
+        try {
+            if (itemManager != null && itemManager.getItemComposition(itemId) != null) {
+                String name = itemManager.getItemComposition(itemId).getName();
+                if (name != null && !name.isEmpty()) {
+                    return name;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "Item " + itemId;
     }
 
     /**
@@ -166,12 +236,19 @@ public class AccountData {
      * the item manager retrieves the item's name as "Members object". The item manager returns the correct
      * name when the user is on a member's world or logged out. As such, this method is called when the plugin starts
      * and whenever the user logs into a members world to clean up any "Members object" item names.
+     * Also fixes placeholder names like "Item 12345" from SQLite migration.
      */
     public void fixIncorrectItemNames(ItemManager itemManager) {
         trades.forEach(item -> {
-            if (item.getItemName().equals("Members object")) {
-                String actualName = itemManager.getItemComposition(item.getItemId()).getName();
-                item.setItemName(actualName);
+            String currentName = item.getItemName();
+            // Match "Members object" (f2p world artifact) or SQLite placeholder "Item <id>"
+            if (currentName.equals("Members object") || currentName.matches("Item \\d+")) {
+                try {
+                    String actualName = itemManager.getItemComposition(item.getItemId()).getName();
+                    item.setItemName(actualName);
+                } catch (RuntimeException e) {
+                    // Item composition not loaded yet; keep current name and retry on next login
+                }
             }
         });
     }

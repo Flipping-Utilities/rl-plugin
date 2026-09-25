@@ -34,13 +34,14 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.*;
-
 /**
  * Responsible for loading data from disk, handling any operations to access/change data during the plugin's life, and storing
  * data to disk.
  */
 @Slf4j
 public class DataHandler {
+    // SQLite storage backend (optional)
+    private com.flippingutilities.db.SqliteStorage sqliteStorage;
     FlippingPlugin plugin;
     private AccountWideData accountWideData;
     private BackupCheckpoints backupCheckpoints;
@@ -51,6 +52,10 @@ public class DataHandler {
 
     public DataHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    public void setSqliteStorage(com.flippingutilities.db.SqliteStorage storage) {
+        this.sqliteStorage = storage;
     }
 
     public AccountWideData viewAccountWideData() {
@@ -146,6 +151,15 @@ public class DataHandler {
         plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
         accountSpecificData = fetchAndPrepareAllAccountData();
         backupAllAccountData();
+        // After the JSON loading completes, optionally route to SQLite backend
+        if (plugin.getConfig().dataSource().isSqlite() && sqliteStorage != null) {
+            log.info("Using SQLite storage backend");
+            // If no accounts were loaded from JSON, load from SQLite
+            if (accountSpecificData.isEmpty()) {
+                log.info("No JSON data found, loading accounts from SQLite");
+                loadAccountsFromSqlite();
+            }
+        }
     }
     
     private void backupAllAccountData() {
@@ -230,12 +244,61 @@ public class DataHandler {
     }
 
     private Map<String, AccountData> fetchAllAccountData() {
+        // SQLite path: try loading from SQLite first
+        if (sqliteStorage != null && plugin.getConfig().dataSource().isSqlite()) {
+            try {
+                Map<String, AccountData> accounts = new HashMap<>();
+                for (String displayName : sqliteStorage.listAccounts()) {
+                    // guard against junk rows named after the pseudo account-wide view
+                    if (displayName.equalsIgnoreCase(FlippingPlugin.ACCOUNT_WIDE)) {
+                        continue;
+                    }
+                    AccountData data = fetchAccountData(displayName);
+                    if (data != null) {
+                        accounts.put(displayName, data);
+                    }
+                }
+                if (!accounts.isEmpty()) {
+                    mergeJsonOnlyAccounts(accounts);
+                    return accounts;
+                }
+                // Empty DB: fall through to JSON so a fresh SQLite install can still bootstrap.
+            } catch (Exception e) {
+                log.warn("Failed to load from SQLite, falling back to JSON", e);
+            }
+        }
         try {
             return plugin.tradePersister.loadAllAccounts();
         }
         catch (Exception e) {
             log.warn("error propagated from tradePersister.loadAllAccounts() when fetching all account data, returning empty hashmap", e);
             return new HashMap<>();
+        }
+    }
+
+    /**
+     * After a partially-failed migration some accounts exist only in JSON (their SQLite
+     * migration failed and will be retried on the next startup). Keep them visible instead of
+     * silently dropping them from the UI. In steady state (migration complete) this is a no-op.
+     */
+    private void mergeJsonOnlyAccounts(Map<String, AccountData> sqliteAccounts) {
+        try {
+            if ("true".equalsIgnoreCase(sqliteStorage.getSetting("migration_completed"))) {
+                return;
+            }
+            Map<String, AccountData> jsonAccounts = plugin.tradePersister.loadAllAccounts();
+            int merged = 0;
+            for (Map.Entry<String, AccountData> entry : jsonAccounts.entrySet()) {
+                if (!sqliteAccounts.containsKey(entry.getKey())) {
+                    sqliteAccounts.put(entry.getKey(), entry.getValue());
+                    merged++;
+                }
+            }
+            if (merged > 0) {
+                log.info("Migration incomplete: merged {} JSON-only account(s) into the view until the retry succeeds", merged);
+            }
+        } catch (Exception e) {
+            log.warn("Could not merge JSON-only accounts after incomplete migration", e);
         }
     }
 
@@ -253,6 +316,22 @@ public class DataHandler {
 
     private AccountData fetchAccountData(String displayName)
     {
+        // SQLite path: attempt to load from SQLite when configured
+        if (sqliteStorage != null && plugin.getConfig().dataSource().isSqlite()) {
+            try {
+                AccountData accountData = sqliteStorage.loadAccount(displayName);
+                if (accountData != null) {
+                    accountData.prepareForUse(plugin);
+                    if (accountData.needsMigration()) {
+                        accountData.markMigrated();
+                    }
+                    return accountData;
+                }
+                // SQLite returned null (account not found); fall through to JSON.
+            } catch (Exception e) {
+                log.warn("Couldn't load from SQLite for {}, falling back to JSON", displayName, e);
+            }
+        }
         try {
             AccountData accountData = plugin.tradePersister.loadAccount(displayName);
             accountData.prepareForUse(plugin);
@@ -279,6 +358,13 @@ public class DataHandler {
 
     private void storeAccountData(String displayName)
     {
+        // Never write files for the pseudo "account-wide" view (or a null account): doing so
+        // creates "Accountwide.json", which then loads back as a real account and duplicates
+        // the account-wide entry in the account selector.
+        if (displayName == null || displayName.equalsIgnoreCase(FlippingPlugin.ACCOUNT_WIDE)) {
+            log.debug("not storing data for pseudo account '{}'", displayName);
+            return;
+        }
         try
         {
             AccountData data = accountSpecificData.get(displayName);
@@ -305,5 +391,57 @@ public class DataHandler {
         catch (Exception e) {
             log.warn("couldn't store data to {} bc of {}",fileName, e);
         }
+    }
+
+    /**
+     * Load accounts from SQLite when JSON files don't exist.
+     * This is used when transitioning to SQLite mode.
+     */
+    public void loadAccountsFromSqlite() {
+        if (sqliteStorage == null) {
+            log.warn("SQLite storage not available");
+            return;
+        }
+
+        List<String> sqliteAccounts = sqliteStorage.listAccounts();
+        log.info("Loading {} accounts from SQLite", sqliteAccounts.size());
+
+        for (String displayName : sqliteAccounts) {
+            if (displayName.equalsIgnoreCase(FlippingPlugin.ACCOUNT_WIDE)) {
+                continue;
+            }
+            if (!accountSpecificData.containsKey(displayName)) {
+                AccountData accountData = fetchAccountData(displayName);
+                accountSpecificData.put(displayName, accountData);
+                log.info("Loaded account {} from SQLite", displayName);
+            }
+        }
+    }
+
+    public void reloadFromSqlite() {
+        if (sqliteStorage == null || !plugin.getConfig().dataSource().isSqlite()) {
+            log.debug("Skipping SQLite reload because storage is not enabled");
+            return;
+        }
+
+        List<String> sqliteAccounts = sqliteStorage.listAccounts();
+        Map<String, AccountData> reloadedAccounts = new HashMap<>();
+        log.info("Reloading {} accounts from SQLite", sqliteAccounts.size());
+
+        for (String displayName : sqliteAccounts) {
+            if (displayName.equalsIgnoreCase(FlippingPlugin.ACCOUNT_WIDE)) {
+                continue;
+            }
+            reloadedAccounts.put(displayName, fetchAccountData(displayName));
+        }
+
+        // Carry over in-memory accounts that don't exist in SQLite (e.g. JSON-only accounts
+        // after a partially-failed migration); replacing the map wholesale would drop them.
+        for (Map.Entry<String, AccountData> entry : accountSpecificData.entrySet()) {
+            reloadedAccounts.putIfAbsent(entry.getKey(), entry.getValue());
+        }
+
+        accountSpecificData = reloadedAccounts;
+        accountsWithUnsavedChanges.clear();
     }
 }

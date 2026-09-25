@@ -289,7 +289,7 @@ public class OfferEvent
 			isBuy,
 			offer.getItemId(),
 			offer.getQuantitySold(),
-			offer.getQuantitySold() == 0 ? 0 : offer.getSpent() / offer.getQuantitySold(),
+			offer.getQuantitySold() == 0 ? 0 : saturatePrice(offer.getSpent() / offer.getQuantitySold()),
 			Instant.now().truncatedTo(ChronoUnit.SECONDS),
 			event.getSlot(),
 			offer.getState(),
@@ -300,8 +300,18 @@ public class OfferEvent
 			false,
 			null,
 			null,
-			offer.getPrice(),
-			offer.getSpent());
+			saturatePrice(offer.getPrice()),
+			saturatePrice(offer.getSpent()));
+	}
+
+	/**
+	 * The client API returns 64-bit prices/spent amounts (max cash update) while this model is
+	 * still int-based. Saturate instead of truncating so ultra-rare prices don't silently wrap
+	 * to negative values. Accepts ints as well, so this compiles against both API versions.
+	 */
+	private static int saturatePrice(long value)
+	{
+		return (int) Math.min(value, Integer.MAX_VALUE);
 	}
 
 	/**

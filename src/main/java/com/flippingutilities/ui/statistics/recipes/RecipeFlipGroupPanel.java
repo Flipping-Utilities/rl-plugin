@@ -321,13 +321,26 @@ public class RecipeFlipGroupPanel extends JPanel {
 
         Recipe recipe = recipeFlipGroup.getRecipe();
 
-        int recipesMade = recipeFlips.stream().mapToInt(rf -> rf.getRecipeCountMade(recipe)).sum();
-        long revenue = recipeFlips.stream().mapToLong(RecipeFlip::getRevenue).sum();
-        long expense = recipeFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
-        long profit = revenue - expense;
+        long profit;
+        long expense;
+        int recipesMade;
+
+        // Always compute from the (interval-filtered) flip list. The former fast path via the
+        // group's cached stats from the events table was both stale after live-created flips
+        // (showing "0 gp x1" until a restart) and interval-blind (all-time numbers in a -1d
+        // view). The flips are fully in memory in both backends, so computing is cheap and
+        // keeps the summary, details, and the totals consistent.
+        recipesMade = recipeFlips.stream().mapToInt(rf -> rf.getRecipeCountMade(recipe)).sum();
+        long flipRevenue = recipeFlips.stream().mapToLong(RecipeFlip::getRevenue).sum();
+        expense = recipeFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
+        profit = flipRevenue - expense;
 
         updateTitleLabels(profit, recipesMade);
-        updateFlippingLabels(expense, revenue, recipesMade);
+        // revenue = profit + expense holds for both paths (cached: by construction;
+        // computed: flipRevenue = profit + expense). Named differently from the inner-scope
+        // flipRevenue to avoid confusion.
+        long totalRevenue = profit + expense;
+        updateFlippingLabels(expense, totalRevenue, recipesMade);
         updateTimeLabels();
     }
 

@@ -26,7 +26,15 @@
 
 package com.flippingutilities.controller;
 
+import com.flippingutilities.DataSource;
+import com.flippingutilities.SqliteMaintenanceAction;
 import com.flippingutilities.FlippingConfig;
+import com.flippingutilities.db.MigrationService;
+import com.flippingutilities.db.FlipRepository;
+import com.flippingutilities.db.SqliteStorage;
+import com.flippingutilities.db.JsonFlipRepository;
+import com.flippingutilities.db.SqliteFlipRepository;
+import net.runelite.client.RuneLite;
 import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.jobs.SlotSenderJob;
 import com.flippingutilities.jobs.TimeseriesFetcher;
@@ -145,6 +153,10 @@ public class FlippingPlugin extends Plugin {
 
     @Inject
     @Getter
+    private ConfigManager configManager;
+
+    @Inject
+    @Getter
     private TimeseriesFetcher timeseriesFetcher;
 
     @Getter
@@ -232,6 +244,25 @@ public class FlippingPlugin extends Plugin {
     @Inject
     private OfferGraphChartOverlay offerGraphChartOverlay;
 
+    // SQLite storage backend (optional - used when dataSource=SQLITE)
+    @Getter
+    private SqliteStorage sqliteStorage;
+
+    // Repository for data access (routed based on config)
+    @Getter
+    private FlipRepository flipRepository;
+
+    // Guard flag: true while async migration is running, prevents sync conflicts
+    @Getter
+    private volatile boolean migrationInProgress = false;
+
+    // Set when switching to the SQLite backend: the next runMigrationIfNeeded clears the
+    // per-account migrated flags and re-imports everything from the just-flushed JSON. This
+    // pulls in trades recorded while the plugin was in JSON mode, which the stats totals
+    // (backed by SQLite events) would otherwise never see. The re-run is idempotent
+    // (INSERT OR IGNORE + natural keys) so already-migrated data is untouched.
+    private volatile boolean forceFullResync = false;
+
     @Override
     protected void startUp() {
         accountCurrentlyViewed = ACCOUNT_WIDE;
@@ -242,6 +273,7 @@ public class FlippingPlugin extends Plugin {
 
         optionHandler = new OptionHandler(this);
         dataHandler = new DataHandler(this);
+        initializeRepository();
         gameUiChangesHandler = new GameUiChangesHandler(this, eventBus);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
         apiAuthHandler = new ApiAuthHandler(this);
@@ -294,6 +326,316 @@ public class FlippingPlugin extends Plugin {
         });
     }
 
+    /**
+     * Initialize the appropriate FlipRepository based on config.
+     * If SQLite mode is enabled, creates SqliteStorage and SqliteFlipRepository.
+     * Also schedules async migration if needed.
+     * Otherwise, uses JsonFlipRepository which wraps the in-memory data.
+     */
+    private void initializeRepository() {
+        if (config.dataSource().isSqlite()) {
+            try {
+                File dbFile = new File(RuneLite.RUNELITE_DIR, "flipping/flipping.db");
+                sqliteStorage = new SqliteStorage(dbFile);
+                sqliteStorage.initializeSchema();
+                dataHandler.setSqliteStorage(sqliteStorage);
+                SqliteFlipRepository repository = new SqliteFlipRepository(sqliteStorage, itemManager);
+                // Totals and item summaries delegate to the same in-memory computation the
+                // JSON backend and the panels use, so the two views never disagree.
+                repository.setMemoryView(new JsonFlipRepository(this));
+                flipRepository = repository;
+                log.info("Initialized SQLite repository at {}", dbFile.getAbsolutePath());
+
+                // Run migration asynchronously to avoid blocking client launch
+                executor.submit(this::runMigrationIfNeeded);
+            } catch (Exception e) {
+                log.warn("Failed to initialize SQLite repository, falling back to JSON", e);
+                if (sqliteStorage != null) {
+                    sqliteStorage.close();
+                    sqliteStorage = null;
+                }
+                dataHandler.setSqliteStorage(null);
+                flipRepository = new JsonFlipRepository(this);
+            }
+        } else {
+            flipRepository = new JsonFlipRepository(this);
+            log.debug("Using JSON repository");
+        }
+    }
+
+    /**
+     * Live-switch the storage backend (JSON <-> SQLite) without a restart. Waits for any
+     * in-flight migration on a background thread (deleting/closing the DB underneath a running
+     * migration would corrupt it), then tears down the backend-dependent runtime,
+     * re-initializes the repository, reloads data, and restarts the runtime. The swap itself
+     * runs on the client thread so grand-exchange offer events cannot interleave with a null
+     * repository during the switch.
+     */
+    private void switchStorageBackend() {
+        executor.submit(() -> {
+            long deadline = System.currentTimeMillis() + 120_000;
+            while (migrationInProgress && System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(250);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Storage backend switch cancelled while waiting for migration");
+                    return;
+                }
+            }
+            if (migrationInProgress) {
+                log.warn("Skipping storage backend switch: migration still in progress after waiting");
+                return;
+            }
+            clientThread.invokeLater(() -> {
+                log.info("Switching storage backend to {}", config.dataSource());
+                try {
+                    // Flush in-memory state to JSON first: trades recorded since the last
+                    // auto-save exist only in memory, and discarding them here would lose
+                    // them from BOTH backends (JSON reload / SQLite re-migration).
+                    dataHandler.storeData();
+
+                    // --- tear down the old backend's runtime ---
+                    if (generalRepeatingTasks != null) {
+                        generalRepeatingTasks.cancel(true);
+                        generalRepeatingTasks = null;
+                    }
+                    cancelAutoSaveTask();
+                    if (cacheUpdaterJob != null) { cacheUpdaterJob.stop(); cacheUpdaterJob = null; }
+                    if (wikiDataFetcherJob != null) { wikiDataFetcherJob.stop(); wikiDataFetcherJob = null; }
+                    if (slotStateSenderJob != null) { slotStateSenderJob.stop(); slotStateSenderJob = null; }
+                    if (flipRepository != null) {
+                        try { flipRepository.close(); } catch (Exception ignored) {}
+                        flipRepository = null;
+                    }
+                    if (sqliteStorage != null) {
+                        sqliteStorage.close();
+                        sqliteStorage = null;
+                    }
+                    if (!config.dataSource().isSqlite()) {
+                        dataHandler.setSqliteStorage(null);
+                    }
+
+                    // --- re-initialize for the new backend (schedules migration async when switching to SQLite) ---
+                    if (config.dataSource().isSqlite()) {
+                        // Trades recorded while in JSON mode only exist in memory/JSON; force a
+                        // full idempotent re-migration so the SQLite-backed stats totals see them.
+                        forceFullResync = true;
+                    }
+                    initializeRepository();
+
+                    // --- reload data from the new backend ---
+                    if (config.dataSource().isSqlite()) {
+                        dataHandler.reloadFromSqlite();
+                    } else {
+                        dataHandler.loadData();
+                    }
+
+                    // --- restart the runtime ---
+                    masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
+                    generalRepeatingTasks = setupRepeatingTasks(1000);
+                    if (config.autoSaveEnabled()) {
+                        autoSaveTask = startAutoSave();
+                    }
+                    startJobs();
+                    statPanel.rebuildItemsDisplay(viewItemsForCurrentView());
+                    flippingPanel.rebuild(viewItemsForCurrentView());
+                    masterPanel.updateSqliteIndicator();
+                    log.info("Storage backend switched to {}", config.dataSource());
+                } catch (Exception e) {
+                    log.warn("Failed to switch storage backend", e);
+                }
+                return true;
+            });
+        });
+    }
+
+    /**
+     * Run migration from JSON to SQLite if needed.
+     * This runs asynchronously on a background thread to avoid blocking client launch.
+     */
+    private void runMigrationIfNeeded() {
+        if (sqliteStorage == null) {
+            return;
+        }
+
+        if (forceFullResync) {
+            forceFullResync = false;
+            log.info("Backend switch to SQLite: wiping SQLite accounts and re-importing from the authoritative JSON");
+            // The JSON files were flushed with the full in-memory state when the user switched
+            // to JSON mode, and JSON-mode sessions kept them up to date, so JSON is the
+            // complete authoritative snapshot. A pure INSERT OR IGNORE re-migration would only
+            // import additions and resurrect records the user deliberately deleted while on
+            // the JSON backend. Deleting each account and re-importing from JSON reconciles
+            // removals too. (deleteAccountData also clears the migrated_ flags.)
+            for (String name : sqliteStorage.listAccounts()) {
+                if (!name.equalsIgnoreCase(ACCOUNT_WIDE)) {
+                    sqliteStorage.deleteAccountData(name);
+                }
+            }
+            sqliteStorage.clearSetting("migration_completed");
+            sqliteStorage.clearSetting("migration_completed_at");
+        }
+
+        migrationInProgress = true;
+        try {
+            boolean shouldMigrate = false;
+            String reason = "";
+
+            // Check 1: migration never completed (pending flag set, or the completion flag is
+            // missing/false — e.g. an interrupted run). This is what makes interrupted
+            // migrations self-heal: per-account migrated_ flags make the retry cheap, and
+            // INSERT OR IGNORE + natural keys make re-running an account a no-op.
+            String flag = sqliteStorage.getSetting("migration_pending");
+            String completed = sqliteStorage.getSetting("migration_completed");
+            if ("true".equalsIgnoreCase(flag) || !"true".equalsIgnoreCase(completed)) {
+                shouldMigrate = true;
+                reason = "true".equalsIgnoreCase(flag)
+                    ? "migration_pending flag set"
+                    : "migration not marked complete (interrupted run?)";
+            }
+
+            // (A previous "SQLite empty + JSON files exist" heuristic is subsumed by Check 1:
+            // a fresh empty DB has no completion flag, so it always migrates/bootstrap.)
+
+            if (shouldMigrate) {
+                log.info("Migration needed ({}). Starting migration from JSON to SQLITE storage...", reason);
+                MigrationService migrationService = new MigrationService(sqliteStorage, tradePersister);
+                int migrated = migrationService.migrate();
+                // Only clear the pending flag when the migration actually completed. If any
+                // account failed, migration_completed is not set by MigrationService; keeping
+                // migration_pending makes the next startup retry the failed accounts instead
+                // of silently dropping them (SQLite mode ignores not-yet-migrated JSON data).
+                if ("true".equalsIgnoreCase(sqliteStorage.getSetting("migration_completed"))) {
+                    sqliteStorage.clearSetting("migration_pending");
+                } else {
+                    log.warn("Migration did not complete for all accounts ({} migrated); migration_pending kept for retry on next startup", migrated);
+                }
+                log.info("Migration completed: {} accounts migrated.", migrated);
+
+                clientThread.invokeLater(() -> {
+                    if (dataHandler == null || masterPanel == null) {
+                        log.debug("Skipping post-migration reload because UI components are not initialized yet");
+                        return false;
+                    }
+
+                    try {
+                        log.info("Reloading account data from SQLite after migration completion");
+                        dataHandler.reloadFromSqlite();
+                        masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
+                        log.info("Post-migration SQLite reload complete. {} accounts loaded.", dataHandler.getCurrentAccounts().size());
+                    } catch (Exception reloadEx) {
+                        log.warn("Post-migration SQLite reload failed", reloadEx);
+                    }
+                    return true;
+                });
+            }
+        } catch (Exception ex) {
+            log.warn("Migration check failed: {}", ex.getMessage());
+        } finally {
+            migrationInProgress = false;
+        }
+    }
+
+    /**
+     * SQLite maintenance entry point from the config dropdown. Confirms the destructive
+     * action, then runs it on a background thread.
+     */
+    private void handleSqliteMaintenance(SqliteMaintenanceAction action) {
+        // Note: no migrationInProgress rejection here. The maintenance runs on the same
+        // single-threaded executor as the migration, so it is naturally ordered after any
+        // in-flight migration; rejecting the action previously left users unable to
+        // regenerate while (or shortly after) a backend-switch re-migration was running.
+        if (sqliteStorage == null) {
+            javax.swing.JOptionPane.showMessageDialog(masterPanel,
+                "SQLite storage is not active. Switch the data source to SQLite first.",
+                "SQLite maintenance", javax.swing.JOptionPane.WARNING_MESSAGE);
+            resetSqliteMaintenanceConfig();
+            return;
+        }
+
+        String msg = action == SqliteMaintenanceAction.DELETE
+            ? "Delete all SQLite database files? This clears stored trades. Your JSON files are not affected."
+            : "Regenerate the SQLite database from JSON? This deletes the current database and rebuilds it from your JSON files.";
+        int choice = javax.swing.JOptionPane.showConfirmDialog(masterPanel, msg,
+            "Confirm SQLite maintenance", javax.swing.JOptionPane.YES_NO_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE);
+        if (choice != javax.swing.JOptionPane.YES_OPTION) {
+            resetSqliteMaintenanceConfig();
+            return;
+        }
+
+        log.info("Starting SQLite maintenance: {}", action);
+        executor.submit(() -> doSqliteMaintenance(action));
+    }
+
+    /**
+     * Deletes the SQLite files and (for REGENERATE) re-runs JSON -> SQLite migration.
+     * Must run off the client/EDT thread (DB I/O).
+     */
+    private void doSqliteMaintenance(SqliteMaintenanceAction action) {
+        try {
+            // Flush in-memory state to JSON first so (a) trades recorded since the last
+            // auto-save are not lost and (b) REGENERATE re-imports the LATEST data, not a
+            // potentially stale on-disk snapshot.
+            dataHandler.storeData();
+
+            // Close the connection so the files can be deleted (Windows won't delete open files).
+            sqliteStorage.close();
+            deleteSqliteFiles();
+            sqliteStorage.initializeSchema();
+            // The accounts table was recreated empty; stale cached ids would FK-violate.
+            sqliteStorage.invalidateAccountCache();
+
+            if (action == SqliteMaintenanceAction.REGENERATE) {
+                // The DB was just rebuilt from scratch; a stale force-resync flag from an
+                // aborted backend switch would pointlessly clear the fresh migration flags.
+                forceFullResync = false;
+                sqliteStorage.setSetting("migration_pending", "true");
+                runMigrationIfNeeded(); // migrates JSON -> SQLite and reloads via its own callback
+            } else {
+                reloadAfterMaintenance();
+            }
+        } catch (Exception e) {
+            log.warn("SQLite maintenance ({}) failed", action, e);
+        } finally {
+            resetSqliteMaintenanceConfig();
+        }
+    }
+
+    private void deleteSqliteFiles() {
+        File db = sqliteStorage.getDbFile();
+        File[] files = {
+            db,
+            new File(db.getPath() + "-wal"),
+            new File(db.getPath() + "-shm")
+        };
+        for (File f : files) {
+            if (f.exists() && !f.delete()) {
+                log.warn("Could not delete {}", f.getAbsolutePath());
+            }
+        }
+    }
+
+    private void reloadAfterMaintenance() {
+        clientThread.invokeLater(() -> {
+            try {
+                dataHandler.reloadFromSqlite();
+                masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
+                statPanel.rebuildItemsDisplay(viewItemsForCurrentView());
+                flippingPanel.rebuild(viewItemsForCurrentView());
+            } catch (Exception e) {
+                log.warn("Reload after SQLite maintenance failed", e);
+            }
+            return true;
+        });
+    }
+
+    private void resetSqliteMaintenanceConfig() {
+        if (configManager != null) {
+            configManager.setConfiguration(CONFIG_GROUP, "sqliteMaintenance", SqliteMaintenanceAction.NONE.name());
+        }
+    }
+
     @Override
     protected void shutDown() {
         log.debug("shutdown running!");
@@ -311,6 +653,12 @@ public class FlippingPlugin extends Plugin {
         }
         masterPanel.dispose();
 
+        // Close repository if it exists
+        if (flipRepository != null) {
+            flipRepository.close();
+            flipRepository = null;
+        }
+
         clientToolbar.removeNavigation(navButton);
     }
 
@@ -325,6 +673,9 @@ public class FlippingPlugin extends Plugin {
             slotTimersTask = null;
         }
         dataHandler.storeData();
+        if (flipRepository != null) {
+            flipRepository.close();
+        }
         if (cacheUpdaterJob != null) cacheUpdaterJob.stop();
         if (wikiDataFetcherJob != null) wikiDataFetcherJob.stop();
         if (slotStateSenderJob != null) slotStateSenderJob.stop();
@@ -585,7 +936,7 @@ public class FlippingPlugin extends Plugin {
             return;
         }
 
-        if (fileName.equals("accountwide.json")) {
+        if (displayNameOfChangedAcc.equalsIgnoreCase(ACCOUNT_WIDE)) {
             executor.schedule(() -> {
                 dataHandler.loadAccountWideData();
             }, 1000, TimeUnit.MILLISECONDS);
@@ -628,9 +979,13 @@ public class FlippingPlugin extends Plugin {
         if (dataHandler.getCurrentAccounts().size() == 0) {
             return new ArrayList<>();
         }
+        List<RecipeFlipGroup> built = recipeHandler.createAccountWideRecipeFlipGroupList(dataHandler.viewAllAccountData());
+        // Assign the cache BEFORE clearing the dirty flag: background readers (the stats
+        // totals run on the executor) checking the flag would otherwise see "not dirty"
+        // with a null cache during the very first build and NPE.
+        prevBuildAccountWideRecipeFlipGroup = built;
         updateSinceLastRecipeFlipGroupAccountWideBuild = false;
-        prevBuildAccountWideRecipeFlipGroup = recipeHandler.createAccountWideRecipeFlipGroupList(dataHandler.viewAllAccountData());
-        return prevBuildAccountWideRecipeFlipGroup;
+        return built;
     }
 
     private List<FlippingItem> createAccountWideFlippingItemList() {
@@ -644,9 +999,11 @@ public class FlippingPlugin extends Plugin {
             return new ArrayList<>();
         }
 
+        List<FlippingItem> built = flippingItemHandler.createAccountWideFlippingItemList(dataHandler.viewAllAccountData());
+        // Assign the cache BEFORE clearing the dirty flag (see createAccountWideRecipeFlipGroupList).
+        prevBuiltAccountWideItemList = built;
         updateSinceLastItemAccountWideBuild = false;
-        prevBuiltAccountWideItemList = flippingItemHandler.createAccountWideFlippingItemList(dataHandler.viewAllAccountData());;
-        return prevBuiltAccountWideItemList;
+        return built;
     }
 
     public List<FlippingItem> sortItems(List<FlippingItem> items, SORT sort, Instant startOfInterval) {
@@ -705,6 +1062,11 @@ public class FlippingPlugin extends Plugin {
 
         dataHandler.getAccountData(currentlyLoggedInAccount).setAccumulatedSessionTimeMillis(newTotalTime);
         dataHandler.getAccountData(currentlyLoggedInAccount).setLastSessionTimeUpdate(Instant.now());
+
+        // Persist session time to SQLite if active
+        if (sqliteStorage != null) {
+            sqliteStorage.updateAccountSessionTime(currentlyLoggedInAccount, newTotalTime);
+        }
 
         if (shouldUpdateSessionTimeDisplay()) {
             statPanel.updateSessionTimeDisplay(viewAccumulatedTimeForCurrentView());
@@ -775,6 +1137,10 @@ public class FlippingPlugin extends Plugin {
                     ifPresent(accountItem -> {
                         accountItem.setFavorite(favoriteStatus);
                         markAccountTradesAsHavingChanged(accountName);
+                        // Persist to SQLite if active
+                        if (sqliteStorage != null) {
+                            sqliteStorage.upsertFavorite(accountName, item.getItemId(), favoriteStatus, accountItem.getFavoriteCode());
+                        }
                     });
         }
     }
@@ -790,8 +1156,94 @@ public class FlippingPlugin extends Plugin {
                     ifPresent(accountItem -> {
                         accountItem.setFavoriteCode(favoriteCode);
                         markAccountTradesAsHavingChanged(accountName);
+                        // Persist to SQLite if active
+                        if (sqliteStorage != null) {
+                            sqliteStorage.upsertFavorite(accountName, item.getItemId(), accountItem.isFavorite(), favoriteCode);
+                        }
                     });
         }
+    }
+
+    /**
+     * Single-account favorite toggle: unlike the account-wide variant, the panel updates the
+     * FlippingItem itself, so this only persists the change to the active backend. Without the
+     * upsert, SQLite mode restarts revert the toggle (JSON stays authoritative in memory only).
+     */
+    public void persistFavoriteOnAccount(String accountName, FlippingItem item) {
+        if (accountName == null || item == null) {
+            return;
+        }
+        if (sqliteStorage != null && config.dataSource().isSqlite()) {
+            executor.submit(() -> {
+                try {
+                    sqliteStorage.upsertFavorite(accountName, item.getItemId(), item.isFavorite(), item.getFavoriteCode());
+                } catch (Exception e) {
+                    log.warn("Failed to persist favorite state for {}:{} (best-effort): {}", accountName, item.getItemId(), e.getMessage());
+                }
+            });
+        }
+    }
+
+    /** Single-account quick-search code change; see {@link #persistFavoriteOnAccount}. */
+    public void persistFavoriteCodeOnAccount(String accountName, FlippingItem item) {
+        persistFavoriteOnAccount(accountName, item);
+    }
+
+    /**
+     * Persist the deletion of a single recipe flip (per-flip delete button) to SQLite so it
+     * does not reappear after a restart. No-op in JSON mode. Best-effort.
+     */
+    public void deleteRecipeFlipFromStorage(String recipeKey, RecipeFlip flip) {
+        if (sqliteStorage == null || !config.dataSource().isSqlite()) {
+            return;
+        }
+        final String account = pluginAccountForRecipeWrites();
+        if (account == null || flip == null || flip.getTimeOfCreation() == null) {
+            return;
+        }
+        final String key = recipeKey;
+        final Instant created = flip.getTimeOfCreation();
+        executor.submit(() -> {
+            try {
+                sqliteStorage.deleteRecipeFlip(account, key, created);
+            } catch (Exception e) {
+                log.warn("Failed to delete recipe flip from SQLite (best-effort): {}", e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Persist the interval-reset deletion of recipe flips (recipe group panel reset) to
+     * SQLite. No-op in JSON mode. Best-effort.
+     */
+    public void deleteRecipeFlipsSinceFromStorage(Instant since) {
+        if (sqliteStorage == null || !config.dataSource().isSqlite()) {
+            return;
+        }
+        final String account = pluginAccountForRecipeWrites();
+        if (account == null) {
+            return;
+        }
+        final Instant start = since;
+        executor.submit(() -> {
+            try {
+                sqliteStorage.deleteRecipeFlipsSince(account, start);
+            } catch (Exception e) {
+                log.warn("Failed to delete recipe flips from SQLite (best-effort): {}", e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Recipe flip deletions only make sense on a real account (the account-wide view blocks
+     * them in the UI), so target the currently viewed account.
+     */
+    private String pluginAccountForRecipeWrites() {
+        String viewed = getAccountCurrentlyViewed();
+        if (viewed == null || viewed.equalsIgnoreCase(ACCOUNT_WIDE)) {
+            return null;
+        }
+        return viewed;
     }
 
     public void addSelectedGeTabOffers(List<OfferEvent> selectedOffers) {
@@ -837,6 +1289,42 @@ public class FlippingPlugin extends Plugin {
                 item.setTotalGELimit(geLimit);
             });
         }
+        recordImportedTradeToRepository(currentlyLoggedInAccount, selectedOffer);
+    }
+
+    /**
+     * Persist a manually imported GE-history offer to SQLite so it survives restarts like a
+     * live-recorded trade would. Mirrors the pipeline's recordTradeToRepository: complete,
+     * non-empty offers only; idempotent via the trades (account_id, uuid) uniqueness; the DB
+     * write runs off the client thread. Best-effort — the JSON dual-write keeps a copy.
+     */
+    private void recordImportedTradeToRepository(String account, OfferEvent offer) {
+        try {
+            if (!offer.isComplete() || offer.getCurrentQuantityInTrade() <= 0) {
+                return;
+            }
+            FlipRepository repository = getFlipRepository();
+            if (!(repository instanceof SqliteFlipRepository)) {
+                return; // SQLite not enabled
+            }
+            final String accountName = account;
+            final int itemId = offer.getItemId();
+            final String uuid = offer.getUuid();
+            final long timestamp = offer.getTime() != null ? offer.getTime().toEpochMilli() : System.currentTimeMillis();
+            final int qty = offer.getCurrentQuantityInTrade();
+            final int price = offer.getPreTaxPrice();
+            final boolean isBuy = offer.isBuy();
+            final long taxPaid = offer.getTaxPaid();
+            executor.submit(() -> {
+                try {
+                    repository.recordTrade(accountName, itemId, uuid, timestamp, qty, price, isBuy, taxPaid);
+                } catch (Exception e) {
+                    log.warn("Failed to record imported trade to SQLite (best-effort): {}", e.getMessage());
+                }
+            });
+        } catch (Exception e) {
+            log.warn("Failed to queue imported trade recording to SQLite: {}", e.getMessage());
+        }
     }
 
     public void showGeHistoryTabPanel() {
@@ -870,6 +1358,23 @@ public class FlippingPlugin extends Plugin {
      * Used by the stats panel to invalidate all offers for a certain interval when a user hits the reset button.
      */
     public void deleteOffers(Instant startOfInterval) {
+        // Mirror the deletion into SQLite so the offers don't resurrect on the next SQLite
+        // reload. Best-effort on the executor.
+        if (sqliteStorage != null) {
+            List<String> accountsInScope = accountCurrentlyViewed.equals(ACCOUNT_WIDE)
+                ? new ArrayList<>(dataHandler.getCurrentAccounts())
+                : new ArrayList<>(Collections.singletonList(accountCurrentlyViewed));
+            executor.submit(() -> {
+                for (String accountName : accountsInScope) {
+                    try {
+                        sqliteStorage.deleteOffersSince(accountName, startOfInterval);
+                    } catch (Exception e) {
+                        log.warn("Failed to delete SQLite offers since {} for {}", startOfInterval, accountName, e);
+                    }
+                }
+            });
+        }
+
         if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
             for (AccountData accountData : dataHandler.getAllAccountData()) {
                 accountData.getTrades().forEach(item -> {
@@ -897,6 +1402,25 @@ public class FlippingPlugin extends Plugin {
         markAccountTradesAsHavingChanged(accountCurrentlyViewed);
         updateSinceLastItemAccountWideBuild = true;
         updateSinceLastRecipeFlipGroupAccountWideBuild = true;
+
+        // Mirror the deletion into SQLite (best-effort, off-thread). The offer uuids identify
+        // the exact trade rows; events backed by those trades are deleted with them.
+        if (sqliteStorage != null) {
+            List<String> uuids = offers.stream()
+                .map(OfferEvent::getUuid)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+            if (!uuids.isEmpty()) {
+                String accountName = item.getFlippedBy() != null ? item.getFlippedBy() : accountCurrentlyViewed;
+                executor.submit(() -> {
+                    try {
+                        sqliteStorage.deleteTradesByUuid(accountName, uuids);
+                    } catch (Exception e) {
+                        log.warn("Failed to delete SQLite trades by uuid for {}", accountName, e);
+                    }
+                });
+            }
+        }
     }
 
     /**
@@ -989,6 +1513,17 @@ public class FlippingPlugin extends Plugin {
 
     public void deleteAccount(String displayName) {
         dataHandler.deleteAccount(displayName);
+        if (sqliteStorage != null) {
+            // SQLite mode must delete its copy too, otherwise the account resurrects on the
+            // next reloadFromSqlite()/restart. Best-effort on the executor.
+            executor.submit(() -> {
+                try {
+                    sqliteStorage.deleteAccountData(displayName);
+                } catch (Exception e) {
+                    log.warn("Failed to delete SQLite data for account {}", displayName, e);
+                }
+            });
+        }
         if (accountCurrentlyViewed.equals(displayName)) {
             masterPanel.getAccountSelector().setSelectedItem(dataHandler.getCurrentAccounts().toArray()[0]);
         }
@@ -1047,9 +1582,29 @@ public class FlippingPlugin extends Plugin {
         return recipeHandler.getOfferIdToPartialOffer(viewRecipeFlipGroupsForCurrentView(), itemId);
     }
     public void addRecipeFlip(RecipeFlip recipeFlip, Recipe recipe) {
+        if (ACCOUNT_WIDE.equals(accountCurrentlyViewed)) {
+            // The account-wide pseudo view has no AccountData to attach the flip to (and
+            // persisting it would create a bogus "Accountwide" account in the DB).
+            log.warn("Cannot create a recipe flip from the account-wide view; switch to a specific account first");
+            return;
+        }
         AccountData account = dataHandler.getAccountData(accountCurrentlyViewed);
         recipeHandler.addRecipeFlip(account.getRecipeFlipGroups(), recipeFlip, recipe);
         updateSinceLastRecipeFlipGroupAccountWideBuild = true;
+
+        // Persist live-created recipe flips to SQLite, otherwise they are lost on the next
+        // reload in SQLite mode (they only lived in memory/JSON). Best-effort on the executor.
+        if (sqliteStorage != null) {
+            final String accountName = accountCurrentlyViewed;
+            final String recipeKey = RecipeHandler.createRecipeKey(recipe);
+            executor.submit(() -> {
+                try {
+                    sqliteStorage.insertRecipeFlip(accountName, recipeKey, recipeFlip);
+                } catch (Exception e) {
+                    log.warn("Failed to persist recipe flip to SQLite", e);
+                }
+            });
+        }
     }
 
     /**
@@ -1124,6 +1679,17 @@ public class FlippingPlugin extends Plugin {
 
         handleSlotTimersConfigChange(event);
         handleAutoSaveConfigChange(event);
+        // Live-switch the storage backend when the data source config changes.
+        if (event.getKey().equals("dataSource")) {
+            switchStorageBackend();
+        }
+
+        if (event.getKey().equals("sqliteMaintenance")) {
+            SqliteMaintenanceAction action = config.sqliteMaintenance();
+            if (action != SqliteMaintenanceAction.NONE) {
+                handleSqliteMaintenance(action);
+            }
+        }
 
         statPanel.rebuildItemsDisplay(viewItemsForCurrentView());
         flippingPanel.rebuild(viewItemsForCurrentView());

@@ -276,7 +276,8 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         if (selectedSlot >= 0 && selectedSlot < client.getGrandExchangeOffers().length) {
             GrandExchangeOffer offer = client.getGrandExchangeOffers()[selectedSlot];
             if (offer != null && offer.getItemId() == itemId) {
-                offerPrice = offer.getPrice();
+                // 64-bit price (max cash update) saturates into the int-based model
+                offerPrice = (int) Math.min(offer.getPrice(), (long) Integer.MAX_VALUE);
             }
         }
         

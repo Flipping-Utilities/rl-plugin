@@ -414,6 +414,11 @@ public class FlippingItemPanel extends JPanel
 			}
 
 			flippingItem.setFavoriteCode(searchCodeTextField.getText());
+			// Persist the single-account code change so a SQLite-mode restart doesn't revert it.
+			// Runs after the set above so the persisted value is the new one.
+			if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+				plugin.persistFavoriteCodeOnAccount(plugin.getAccountCurrentlyViewed(), flippingItem);
+			}
 
 			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
 
@@ -761,6 +766,11 @@ public class FlippingItemPanel extends JPanel
 				boolean wasDummyAndAccountwide = wasDummy && plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE);
 				if (!wasDummyAndAccountwide) {
 					flippingItem.setFavorite(!flippingItem.isFavorite());
+					// Persist the single-account toggle so a SQLite-mode restart doesn't revert it.
+					// Runs after the toggle above so the persisted value is the new one.
+					if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+						plugin.persistFavoriteOnAccount(plugin.getAccountCurrentlyViewed(), flippingItem);
+					}
 				}
 
 				favoriteIcon.setIcon(flippingItem.isFavorite()? Icons.STAR_ON_ICON:Icons.STAR_OFF_ICON);

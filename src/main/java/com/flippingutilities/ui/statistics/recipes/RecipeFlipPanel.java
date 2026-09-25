@@ -2,6 +2,7 @@ package com.flippingutilities.ui.statistics.recipes;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.RecipeFlip;
+import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.model.RecipeFlipGroup;
 import com.flippingutilities.ui.uiutilities.CustomColors;
@@ -70,7 +71,11 @@ public class RecipeFlipPanel extends JPanel {
         quantityAndTimePanel.add(quantityLabel);
         quantityAndTimePanel.add(timeDisplay);
 
-        String recipeDisplayName = UIUtilities.truncateText(recipe.getName(), 40);
+        String recipeDisplayName = recipe != null
+                ? UIUtilities.truncateText(recipe.getName(), 40)
+                : (recipeFlipGroup.getRecipeKey() != null
+                        ? UIUtilities.truncateText("Recipe:" + recipeFlipGroup.getRecipeKey(), 40)
+                        : "Unknown Recipe");
         JLabel itemNameAndActionLabel = new JLabel(recipeDisplayName, SwingConstants.CENTER);
         itemNameAndActionLabel.setFont(FontManager.getRunescapeSmallFont());
         itemNameAndActionLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
@@ -117,9 +122,24 @@ public class RecipeFlipPanel extends JPanel {
             }
             else {
                 List<PartialOffer> partialOfferList = new ArrayList<>(partialOfferMap.values());
-                itemName = partialOfferList.get(0).getOffer().getItemName();
                 quantity = partialOfferList.stream().mapToInt(po -> po.amountConsumed).sum();
-                avgPrice =  partialOfferList.stream().mapToLong(po -> po.getOffer().getPrice() * po.amountConsumed).sum()/quantity;
+
+                // The backing offer may be missing if the original trade was deleted; fall back to the item id.
+                OfferEvent offer = partialOfferList.stream()
+                    .map(PartialOffer::getOffer)
+                    .filter(o -> o != null)
+                    .findFirst()
+                    .orElse(null);
+
+                itemName = (offer != null && offer.getItemName() != null && !offer.getItemName().isEmpty())
+                    ? offer.getItemName()
+                    : "Item " + itemId;
+
+                long totalValue = partialOfferList.stream()
+                    .filter(po -> po.getOffer() != null)
+                    .mapToLong(po -> (long) po.getOffer().getPrice() * po.amountConsumed)
+                    .sum();
+                avgPrice = quantity > 0 ? totalValue / quantity : 0;
             }
 
             componentGroupPanel.add(createComponentPanel(itemName, quantity, avgPrice));
@@ -235,6 +255,7 @@ public class RecipeFlipPanel extends JPanel {
 
                 if (result == JOptionPane.YES_OPTION) {
                     recipeFlipGroup.deleteFlip(recipeFlip);
+                    plugin.deleteRecipeFlipFromStorage(recipeFlipGroup.getRecipeKey(), recipeFlip);
                     plugin.setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
                     plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
                     plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());

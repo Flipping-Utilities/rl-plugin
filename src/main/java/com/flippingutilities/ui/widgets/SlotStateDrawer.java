@@ -2,6 +2,8 @@ package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.jobs.TimeseriesFetcher;
+import com.flippingutilities.model.TimeseriesResponse;
+import com.flippingutilities.model.Timestep;
 import com.flippingutilities.ui.uiutilities.GeSpriteLoader;
 import com.flippingutilities.utilities.SlotInfo;
 import com.flippingutilities.utilities.SlotPredictedState;
@@ -42,6 +44,13 @@ public class SlotStateDrawer {
     private Integer hoveredSlotIndex = null;
     private QuickLookTooltip currentTooltip = null;
     private Integer currentlyFetchedItemId = null;
+
+    // Pending graph data for when fetch completes before tooltip is created.
+    // This prevents a race condition where tooltip is created in buildAndShowTooltip
+    // while fetch callback tries to create another instance.
+    private TimeseriesResponse pendingGraphData = null;
+    private Timestep pendingTimestep = null;
+    private int pendingOfferPrice = 0;
 
     public SlotStateDrawer(
             FlippingPlugin plugin,
@@ -351,7 +360,9 @@ public class SlotStateDrawer {
             return Optional.empty();
         }
 
-        int listedPrice = offer.getPrice();
+        // 64-bit price (max cash update); saturating cast only affects prices > 2.1B, which
+        // classify as "better than wiki" either way
+        int listedPrice = (int) Math.min(offer.getPrice(), (long) Integer.MAX_VALUE);
         GrandExchangeOfferState offerState = offer.getState();
         boolean isBuy = offerState == GrandExchangeOfferState.BUYING || offerState == GrandExchangeOfferState.BOUGHT;
         boolean isCompleted = offerState == GrandExchangeOfferState.BOUGHT || offerState == GrandExchangeOfferState.SOLD;
