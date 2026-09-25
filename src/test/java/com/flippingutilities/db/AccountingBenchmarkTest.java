@@ -4,6 +4,7 @@ import com.flippingutilities.accounting.AccountingEngine;
 import com.flippingutilities.accounting.AccountingPlan;
 import com.flippingutilities.accounting.AccountingResult;
 import com.flippingutilities.db.accounting.SqliteAccountingStore;
+import com.flippingutilities.controller.accounting.AccountingCoordinator;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.accounting.AccountingUiService.ReportKind;
 import com.flippingutilities.ui.accounting.AccountingUiService.ReportQuery;
@@ -14,6 +15,9 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import net.runelite.api.GrandExchangeOfferState;
 import org.junit.Assume;
 import org.junit.Rule;
@@ -100,10 +104,30 @@ public class AccountingBenchmarkTest
                 planDetail = detail.toString();
             }
             assertTrue(planDetail, planDetail.contains("INDEX"));
+            ExecutorService orderedWorker = Executors.newSingleThreadExecutor();
+            long deepPageNanos, exportNanos, queuedWorkNanos;
+            try {
+                AccountingCoordinator coordinator = new AccountingCoordinator(storage, orderedWorker, () -> true);
+                ReportQuery deep = new ReportQuery(List.of("Benchmark"), START, START.plusSeconds(sourceCount + 10),
+                    "Fixture", "", Sort.TIME, ReportKind.FLIPS, null, sourceCount / 40 - 1, 20, null, null);
+                started = System.nanoTime();
+                assertEquals(20, coordinator.queryReport(deep).get(30, TimeUnit.SECONDS).rows.size());
+                deepPageNanos = System.nanoTime() - started;
+                started = System.nanoTime();
+                java.util.concurrent.CompletableFuture<java.nio.file.Path> export = coordinator.exportReport(deep,
+                    folder.getRoot().toPath().resolve("benchmark.csv"));
+                long queuedAt = System.nanoTime();
+                orderedWorker.submit(() -> { }).get(30, TimeUnit.SECONDS);
+                queuedWorkNanos = System.nanoTime() - queuedAt;
+                export.get(120, TimeUnit.SECONDS);
+                exportNanos = System.nanoTime() - started;
+            } finally { orderedWorker.shutdownNow(); }
             System.out.printf("Accounting benchmark sources=%d capture=%.1fms materialize=%.1fms coldReport=%.1fms "
-                    + "warmReportAvg=%.1fms twoAppendWrites=%.1fms fullReplay=%.1fms databaseBytes=%d%n%s",
+                    + "warmReportAvg=%.1fms twoAppendWrites=%.1fms fullReplay=%.1fms deepCoordinatorPage=%.1fms "
+                    + "completeExport=%.1fms queuedWorkDuringExport=%.1fms mainDatabaseBytes=%d%n%s",
                 sourceCount, millis(captureNanos), millis(materializationNanos), millis(coldReportNanos),
-                millis(warmAverageNanos), millis(appendNanos), millis(replayNanos), storage.getDbFile().length(), planDetail);
+                millis(warmAverageNanos), millis(appendNanos), millis(replayNanos), millis(deepPageNanos),
+                millis(exportNanos), millis(queuedWorkNanos), storage.getDbFile().length(), planDetail);
         }
         finally { storage.close(); }
     }

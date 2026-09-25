@@ -274,7 +274,7 @@ public class FlippingPlugin extends Plugin {
     private void attachAccounting(SqliteStorage storage) {
         if (sqliteStorage != storage || failedStorages.contains(storage)) return;
         accountingUiService = new AccountingCoordinator(storage, getStorageExecutor(),
-            () -> sqliteStorage == storage && !failedStorages.contains(storage));
+            () -> sqliteStorage == storage && !failedStorages.contains(storage), this::retryAccountingStorage);
         if (statPanel != null) statPanel.refreshAccounting();
     }
 
@@ -294,6 +294,8 @@ public class FlippingPlugin extends Plugin {
     }
 
     private final Set<SqliteStorage> failedStorages = ConcurrentHashMap.newKeySet();
+    private final Map<SqliteStorage, java.util.concurrent.ConcurrentLinkedQueue<Consumer<SqliteStorage>>> pendingStorageCommands = new ConcurrentHashMap<>();
+    private java.util.concurrent.CompletableFuture<String> storageRetry;
 
     // RuneLite's executor can have multiple workers. Serialize database imports, writes and
     // closes explicitly so a live mutation cannot be overwritten by an earlier import.
@@ -312,6 +314,7 @@ public class FlippingPlugin extends Plugin {
         if (storage != null) {
             getStorageExecutor().execute(() -> {
                 if (failedStorages.contains(storage)) {
+                    if (authoritativeStorages.contains(storage)) pendingCommands(storage).add(task);
                     return;
                 }
                 try {
@@ -325,6 +328,10 @@ public class FlippingPlugin extends Plugin {
                     }
                     if (statPanel != null) statPanel.refreshAccounting();
                 } catch (Exception e) {
+                    if (hasProtectedAccounting(storage)) {
+                        authoritativeStorages.add(storage);
+                        pendingCommands(storage).add(task);
+                    }
                     recoverFromStorageFailure(storage, e);
                 }
             });
@@ -335,14 +342,72 @@ public class FlippingPlugin extends Plugin {
         return storage != null && failedStorages.contains(storage);
     }
 
+    public boolean hasPendingAccountingSaves() { return isStorageFailed(sqliteStorage); }
+
+    private java.util.concurrent.ConcurrentLinkedQueue<Consumer<SqliteStorage>> pendingCommands(SqliteStorage storage) {
+        return pendingStorageCommands.computeIfAbsent(storage, ignored -> new java.util.concurrent.ConcurrentLinkedQueue<>());
+    }
+
+    /** Retry retained immutable commands on the same ordered writer. Pending memory is not crash durable. */
+    public synchronized java.util.concurrent.CompletableFuture<String> retryAccountingStorage() {
+        if (storageRetry != null && !storageRetry.isDone()) return storageRetry;
+        SqliteStorage storage = sqliteStorage;
+        if (storage == null) return java.util.concurrent.CompletableFuture.failedFuture(new IllegalStateException("SQLite is no longer active."));
+        java.util.concurrent.CompletableFuture<String> result = new java.util.concurrent.CompletableFuture<>();
+        storageRetry = result;
+        getStorageExecutor().execute(() -> {
+            if (sqliteStorage != storage) {
+                result.completeExceptionally(new IllegalStateException("The active database changed. Reopen Accounting."));
+                return;
+            }
+            java.util.concurrent.ConcurrentLinkedQueue<Consumer<SqliteStorage>> pending = pendingCommands(storage);
+            try {
+                try (java.sql.Statement check = storage.getConnection().createStatement();
+                     java.sql.ResultSet health = check.executeQuery("PRAGMA quick_check")) {
+                    if (!health.next() || !"ok".equalsIgnoreCase(health.getString(1))) throw new IllegalStateException("SQLite integrity check failed; the database was preserved.");
+                }
+                Consumer<SqliteStorage> command;
+                while ((command = pending.peek()) != null) {
+                    command.accept(storage);
+                    pending.remove(); // Remove only after the source transaction committed.
+                }
+                failedStorages.remove(storage);
+                pendingStorageCommands.remove(storage);
+            } catch (Exception failure) {
+                failedStorages.add(storage);
+                result.completeExceptionally(new IllegalStateException("SQLite saves still failed. " + pending.size()
+                    + " changes remain pending in memory. Keep the client open and retry after fixing storage.", failure));
+                return;
+            } finally {
+                if (statPanel != null) statPanel.refreshAccounting();
+                if (masterPanel != null) SwingUtilities.invokeLater(masterPanel::updateSqliteIndicator);
+            }
+            try {
+                storage.getAccountingStore().reconcileAll();
+                if (statPanel != null) statPanel.refreshAccounting();
+                result.complete("Pending changes saved; accounting refreshed.");
+            } catch (Exception projectionFailure) {
+                result.completeExceptionally(new IllegalStateException("Trades were saved, but reports still need reconciliation. Retry saves to rebuild them.", projectionFailure));
+            }
+        });
+        return result;
+    }
+
     /** Keep a durable recovery marker outside the database, which may itself be read-only. */
     void recoverFromStorageFailure(SqliteStorage storage, Exception failure) {
         if (!failedStorages.add(storage)) {
             return;
         }
         if (hasProtectedAccounting(storage)) {
+            authoritativeStorages.add(storage);
             log.error("SQLite persistence failed. Retaining the database and its accounting history for recovery", failure);
             if (statPanel != null) statPanel.refreshAccounting();
+            if (masterPanel != null) SwingUtilities.invokeLater(() -> {
+                masterPanel.updateSqliteIndicator();
+                javax.swing.JOptionPane.showMessageDialog(masterPanel,
+                    "SQLite could not save trading changes. New changes will remain pending in memory. Keep the client open and use Retry saves in Statistics before closing it.",
+                    "Trading changes are not saved", javax.swing.JOptionPane.ERROR_MESSAGE);
+            });
             return;
         }
         log.warn("SQLite persistence failed; saving JSON and rebuilding SQLite on next startup", failure);

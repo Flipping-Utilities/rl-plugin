@@ -268,6 +268,97 @@ public class AccountingPersistenceTest {
         assertTrue(delta.isEstimated()); assertEquals(Long.valueOf(202), delta.getAmountGp());
     }
 
+    @Test public void reviewOverclaimedLegacyRecipeInputsAreAllIncomplete() {
+        OfferEvent buy = offer("input", true, 1, 100, T.minusSeconds(10));
+        OfferEvent sale1 = offer("output1", false, 1, 130, T);
+        OfferEvent sale2 = offer("output2", false, 1, 130, T.plusSeconds(1));
+        storage.recordTrade("A", buy); storage.recordTrade("A", sale1); storage.recordTrade("A", sale2);
+        storage.insertRecipeFlip("A", "recipe", recipe(buy, sale1));
+        storage.insertRecipeFlip("A", "recipe", recipe(buy, sale2));
+        activate("full", AccountingPlan.Mode.RECALCULATE, null, null, Collections.emptyMap());
+        assertEquals("Neither disputed input reservation may yield known profit", 0, summary(null, null).getKnownProfitGp());
+        assertNull(summary(null, null).getProfitGp());
+        assertEquals(2, summary(null, null).getUnknownCount());
+        assertEquals(2, summary(null, null).getSoldQuantity());
+        assertEquals(Long.valueOf(260), summary(null, null).getGrossGp());
+        assertEquals(1, allocatedQuantity("input"));
+        assertEquals(2, accounting.getWarnings(account()).size());
+    }
+
+    @Test public void reviewGrowingCorrectionDoesNotDropObservedQuantity() {
+        OfferEvent first = offer("p1", true, 1, 100, T.minusSeconds(20)); first.setCumulativeAmount(100L);
+        storage.recordOfferUpdate("A", first, Collections.emptyList());
+        OfferEvent second = offer("p2", true, 2, 100, T.minusSeconds(10)); second.setCumulativeAmount(200L); second.setPredecessorUuid("p1");
+        storage.recordOfferUpdate("A", second, Collections.singletonList("p1"));
+        OfferEvent third = offer("p3", true, 3, 50, T); third.setCumulativeAmount(150L); third.setPredecessorUuid("p2");
+        storage.recordOfferUpdate("A", third, Collections.singletonList("p2"));
+        List<AccountingSource> sources = accounting.loadSources(account());
+        assertEquals("Latest cumulative observation proves three units", 3, sources.stream().mapToLong(AccountingSource::getQuantity).sum());
+        assertEquals(3, sources.size());
+        assertEquals(T.minusSeconds(20), sources.get(0).getTime());
+        assertEquals(T.minusSeconds(10), sources.get(1).getTime());
+        assertEquals(T, sources.get(2).getTime());
+        for (AccountingSource source : sources) { assertNull(source.getAmountGp()); assertTrue(source.isEstimated()); }
+        storage.recordOfferUpdate("A", third, Collections.singletonList("p2"));
+        assertEquals(3, accounting.loadSources(account()).stream().mapToLong(AccountingSource::getQuantity).sum());
+    }
+
+    @Test public void reviewGrowingCorrectionDoesNotFundEarlierSale() {
+        OfferEvent first = offer("p1", true, 1, 100, T.minusSeconds(20)); first.setCumulativeAmount(100L);
+        storage.recordOfferUpdate("A", first, Collections.emptyList());
+        trade("sale", false, 2, 120, T.minusSeconds(10));
+        OfferEvent second = offer("p2", true, 2, 45, T); second.setCumulativeAmount(90L); second.setPredecessorUuid("p1");
+        storage.recordOfferUpdate("A", second, Collections.singletonList("p1"));
+        activate("full", AccountingPlan.Mode.RECALCULATE, null, null, Collections.emptyMap());
+        assertNull("New quantity observed after the sale cannot fund its second unit", summary(null, null).getProfitGp());
+        assertEquals(0, summary(null, null).getKnownProfitGp());
+        assertEquals(0, allocatedQuantity("p2"));
+        assertEquals(1, allocatedQuantity("p1"));
+        assertEquals(T, accounting.loadSources(account()).stream().filter(source -> source.getId().equals("p2")).findFirst().get().getTime());
+    }
+
+    @Test public void disputedOldRecipeStockDoesNotInvalidateSeparateLaterBatch() {
+        OfferEvent first = offer("input1", true, 1, 100, T.minusSeconds(20)); first.setCumulativeAmount(100L);
+        OfferEvent second = offer("input2", true, 2, 100, T.minusSeconds(10)); second.setCumulativeAmount(200L); second.setPredecessorUuid("input1");
+        storage.recordOfferUpdate("A", first, Collections.emptyList());
+        storage.recordOfferUpdate("A", second, Collections.singletonList("input1"));
+        OfferEvent sale1 = offer("output1", false, 1, 130, T);
+        OfferEvent sale2 = offer("output2", false, 1, 130, T.plusSeconds(1));
+        OfferEvent sale3 = offer("output3", false, 1, 130, T.plusSeconds(2));
+        storage.recordTrade("A", sale1); storage.recordTrade("A", sale2); storage.recordTrade("A", sale3);
+        storage.insertRecipeFlip("A", "recipe", recipe(first, sale1));
+        storage.insertRecipeFlip("A", "recipe", recipe(first, sale2));
+        storage.insertRecipeFlip("A", "recipe", recipe(second, sale3));
+        activate("full", AccountingPlan.Mode.RECALCULATE, null, null, Collections.emptyMap());
+        assertEquals(30, summary(null, null).getKnownProfitGp());
+        assertEquals(2, summary(null, null).getUnknownCount());
+        assertEquals(1, allocatedQuantity("input1"));
+        assertEquals(1, allocatedQuantity("input2"));
+    }
+
+    @Test public void growingSaleCorrectionKeepsNewRevenueQuantityInItsOwnPeriod() {
+        trade("stock", true, 3, 10, T.minusSeconds(30));
+        OfferEvent first = offer("sale1", false, 1, 100, T.minusSeconds(20)); first.setCumulativeAmount(100L);
+        OfferEvent second = offer("sale2", false, 2, 100, T.minusSeconds(10)); second.setCumulativeAmount(200L); second.setPredecessorUuid("sale1");
+        OfferEvent third = offer("sale3", false, 3, 50, T); third.setCumulativeAmount(150L); third.setPredecessorUuid("sale2");
+        storage.recordOfferUpdate("A", first, Collections.emptyList());
+        storage.recordOfferUpdate("A", second, Collections.singletonList("sale1"));
+        storage.recordOfferUpdate("A", third, Collections.singletonList("sale2"));
+        activate("full", AccountingPlan.Mode.RECALCULATE, null, null, Collections.emptyMap());
+        assertEquals(2, summary(null, T).getSoldQuantity());
+        assertEquals(1, summary(T, T.plusSeconds(1)).getSoldQuantity());
+        assertNull(summary(null, null).getProfitGp());
+        assertNull(summary(T, T.plusSeconds(1)).getGrossGp());
+        assertEquals(3, allocatedQuantity("stock"));
+    }
+
+    private long allocatedQuantity(String source) {
+        try (PreparedStatement statement = storage.getConnection().prepareStatement("SELECT COALESCE(SUM(quantity),0) FROM accounting_allocations WHERE source_id=?")) {
+            statement.setString(1, source);
+            try (ResultSet row = statement.executeQuery()) { row.next(); return row.getLong(1); }
+        } catch (Exception failure) { throw new AssertionError(failure); }
+    }
+
     private RecipeFlip recipe(OfferEvent buy, OfferEvent sell) {
         return new RecipeFlip(T, Collections.singletonMap(4151, Collections.singletonMap(sell.getUuid(), new PartialOffer(sell, 1))),
             Collections.singletonMap(4151, Collections.singletonMap(buy.getUuid(), new PartialOffer(buy, 1))), 0);

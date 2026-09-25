@@ -105,16 +105,23 @@ final class AccountingSourceStore {
             execute(connection, "UPDATE accounting_orders SET suppressed_quantity=MAX(suppressed_quantity,?) WHERE account_id=? AND order_id=?",
                 quantity, accountId, order);
         }
-        if (quantity > before && (priorAmount == null || amount == null || amount >= priorAmount)) {
+        if (quantity > before) {
             long delta = quantity - before;
-            Long deltaAmount = difference(amount, priorAmount, before);
-            Long deltaTax = difference(tax, priorTax, before);
+            boolean correctedBaseline = decreased(amount, priorAmount) || decreased(tax, priorTax);
+            if (correctedBaseline) {
+                // Increased quantity is a new observed fill even when the old monetary
+                // baseline changed. Its cost cannot be split from that correction.
+                markConflict(connection, accountId, order);
+            }
+            Long deltaAmount = correctedBaseline ? null : difference(amount, priorAmount, before);
+            Long deltaTax = correctedBaseline ? null : difference(tax, priorTax, before);
             if (reportable || restricted) {
-                appendOnly = effective != null && !offer.isMarginCheck() && !restricted;
+                appendOnly = !correctedBaseline && effective != null && !offer.isMarginCheck() && !restricted;
                 execute(connection, "INSERT INTO accounting_sources(account_id,source_id,order_id,item_id,is_buy,quantity,amount_gp,tax_gp," +
                         "recognized_at,sequence,margin_eligible,estimated,restricted) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     accountId, observationId, order, offer.getItemId(), offer.isBuy(), delta, deltaAmount, deltaTax,
-                    epoch(effective), sequence, offer.isMarginCheck() && before == 0, estimated || priorEstimated || !offer.isBuy(), restricted);
+                    epoch(effective), sequence, offer.isMarginCheck() && before == 0,
+                    correctedBaseline || estimated || priorEstimated || !offer.isBuy(), restricted);
             }
         } else if (quantity < before || !Objects.equals(amount, priorAmount) || !Objects.equals(tax, priorTax)) {
             if (priorQuantity != null) correct(connection, accountId, order, quantity, amount, tax);
@@ -145,8 +152,7 @@ final class AccountingSourceStore {
                 quantity, amount, tax, accountId, order);
             return;
         }
-        execute(connection, "UPDATE accounting_orders SET conflicted=1 WHERE account_id=? AND order_id=?", accountId, order);
-        execute(connection, "UPDATE accounting_sources SET amount_gp=NULL,tax_gp=NULL,estimated=1 WHERE account_id=? AND order_id=?", accountId, order);
+        markConflict(connection, accountId, order);
         // Retain only provable quantity, oldest segments first. Ambiguous value remains unavailable.
         long remaining = Math.max(0, quantity - suppressed);
         List<Object[]> batches = new ArrayList<>();
@@ -161,6 +167,15 @@ final class AccountingSourceStore {
             else execute(connection, "UPDATE accounting_sources SET quantity=? WHERE account_id=? AND source_id=?", retained, accountId, batch[0]);
             remaining -= retained;
         }
+    }
+
+    private static boolean decreased(Long current, Long previous) {
+        return current != null && previous != null && current < previous;
+    }
+
+    private static void markConflict(Connection connection, long accountId, String order) throws SQLException {
+        execute(connection, "UPDATE accounting_orders SET conflicted=1 WHERE account_id=? AND order_id=?", accountId, order);
+        execute(connection, "UPDATE accounting_sources SET amount_gp=NULL,tax_gp=NULL,estimated=1 WHERE account_id=? AND order_id=?", accountId, order);
     }
 
     static void suppress(Connection connection, long accountId, List<String> aliases) throws SQLException {
@@ -256,6 +271,7 @@ final class AccountingSourceStore {
     static List<AccountingRecipe> recipes(Connection connection, long accountId) throws SQLException {
         List<AccountingRecipe> recipes = new ArrayList<>();
         java.util.Map<String, Long> reserved = new java.util.HashMap<>();
+        java.util.Set<String> disputed = new java.util.HashSet<>();
         try (PreparedStatement query = connection.prepareStatement(
             "SELECT * FROM accounting_recipes WHERE account_id=? AND deleted=0 ORDER BY recorded_at,storage_recipe_id")) {
             bind(query, accountId);
@@ -263,16 +279,32 @@ final class AccountingSourceStore {
                 while (row.next()) {
                     String recipeId = row.getString("recipe_id");
                     recipes.add(new AccountingRecipe(recipeId, accountId, instant(row, "recorded_at"),
-                        components(connection, accountId, recipeId, true, reserved), components(connection, accountId, recipeId, false, reserved),
+                        components(connection, accountId, recipeId, true, reserved, disputed), components(connection, accountId, recipeId, false, reserved, disputed),
                         nullableLong(row, "coin_cost_gp")));
                 }
             }
         }
-        return recipes;
+        if (disputed.isEmpty()) return recipes;
+        List<AccountingRecipe> checked = new ArrayList<>();
+        for (AccountingRecipe recipe : recipes) {
+            boolean disputedClaim = recipe.getInputs().stream().anyMatch(component -> disputed.contains(component.getSourceId()))
+                || recipe.getOutputs().stream().anyMatch(component -> disputed.contains(component.getSourceId()));
+            if (disputedClaim) {
+                // Quantity normalization reserves each physical segment at most once.
+                // Preserve the competing claim as unresolved evidence on *every* recipe
+                // touching it, including those which happened to reserve the stock first.
+                List<AccountingRecipe.Component> inputs = new ArrayList<>(recipe.getInputs());
+                inputs.add(new AccountingRecipe.Component("missing:disputed:" + recipe.getId(), 1));
+                checked.add(new AccountingRecipe(recipe.getId(), accountId, recipe.getRecordedAt(), inputs,
+                    recipe.getOutputs(), recipe.getCoinCostGp()));
+            } else checked.add(recipe);
+        }
+        return checked;
     }
 
     private static List<AccountingRecipe.Component> components(Connection connection, long accountId, String recipeId,
-                                                               boolean input, java.util.Map<String, Long> reserved) throws SQLException {
+                                                               boolean input, java.util.Map<String, Long> reserved,
+                                                               java.util.Set<String> disputed) throws SQLException {
         List<AccountingRecipe.Component> result = new ArrayList<>();
         try (PreparedStatement query = connection.prepareStatement(
             "SELECT * FROM accounting_recipe_components WHERE account_id=? AND recipe_id=? AND is_input=? ORDER BY component_id")) {
@@ -282,12 +314,14 @@ final class AccountingSourceStore {
                     String alias = row.getString("source_uuid");
                     String order = orderFor(connection, accountId, alias);
                     long remaining = row.getLong("quantity");
+                    java.util.Set<String> eligibleSources = new java.util.HashSet<>();
                     try (PreparedStatement batches = connection.prepareStatement(
                         "SELECT source_id,quantity FROM accounting_sources WHERE account_id=? AND order_id=? AND is_buy=? AND item_id=? " +
                             "AND sequence<=(SELECT MAX(sequence) FROM accounting_observations WHERE account_id=? AND source_uuid=?) ORDER BY sequence")) {
                         bind(batches, accountId, order, input, row.getInt("item_id"), accountId, alias);
                         try (ResultSet batch = batches.executeQuery()) {
                             while (batch.next() && remaining > 0) {
+                                eligibleSources.add(batch.getString("source_id"));
                                 long alreadyReserved = reserved.getOrDefault(batch.getString("source_id"), 0L);
                                 long used = Math.min(remaining, batch.getLong("quantity") - alreadyReserved);
                                 if (used <= 0) continue;
@@ -297,7 +331,10 @@ final class AccountingSourceStore {
                             }
                         }
                     }
-                    if (remaining > 0) result.add(new AccountingRecipe.Component("missing:" + recipeId + ":" + row.getString("component_id"), remaining));
+                    if (remaining > 0) {
+                        disputed.addAll(eligibleSources);
+                        result.add(new AccountingRecipe.Component("missing:" + recipeId + ":" + row.getString("component_id"), remaining));
+                    }
                     if (evidenceConflict(connection, accountId, order, alias, row.getString("payload"))) {
                         // Reserve real quantities, but do not silently revalue a historical declaration from conflicting evidence.
                         result.add(new AccountingRecipe.Component("missing:evidence:" + recipeId + ":" + row.getString("component_id"), 1));

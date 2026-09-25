@@ -22,6 +22,15 @@ public interface AccountingUiService {
     default CompletableFuture<ReportDetails> queryDetails(ReportQuery query, String rowId) {
         return CompletableFuture.failedFuture(new UnsupportedOperationException("Details are unavailable"));
     }
+    /** Returns at most 50 source lines. The page index is zero-based and bound to the query revision. */
+    default CompletableFuture<ReportDetails> queryDetails(ReportQuery query, String rowId, int page) {
+        return page == 0 ? queryDetails(query, rowId)
+            : CompletableFuture.failedFuture(new IllegalArgumentException("This source page is unavailable"));
+    }
+    /** Retry pending commands in order against the same database. */
+    default CompletableFuture<String> retryStorage() {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException("Save recovery is unavailable"));
+    }
     /** Export the captured query/revisions, or fail if that snapshot is no longer available. */
     CompletableFuture<Path> exportReport(ReportQuery query, Path destination);
 
@@ -269,9 +278,16 @@ public interface AccountingUiService {
     final class ReportDetails {
         public final String title;
         public final List<String> lines;
+        public final int page;
+        public final boolean hasMore;
         public ReportDetails(String title, List<String> lines) {
+            this(title, lines, 0, false);
+        }
+        public ReportDetails(String title, List<String> lines, int page, boolean hasMore) {
             this.title = title;
             this.lines = immutable(lines);
+            this.page = page;
+            this.hasMore = hasMore;
         }
     }
 
