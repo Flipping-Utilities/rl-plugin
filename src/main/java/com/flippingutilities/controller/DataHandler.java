@@ -56,8 +56,10 @@ public class DataHandler {
     }
 
     public void setSqliteStorage(com.flippingutilities.db.SqliteStorage storage) {
-        if (plugin.isStorageFailed(sqliteStorage)) {
-            preserveAccountsForRecovery();
+        if (storage == null) {
+            // Detaching cannot make an unsaved JSON snapshot safe to reload. This also
+            // covers an import that failed before this handler attached its database.
+            accountsAwaitingRecoverySnapshot.addAll(accountsWithUnsavedChanges);
         }
         this.sqliteStorage = storage;
     }
@@ -299,7 +301,8 @@ public class DataHandler {
     private AccountData fetchAccountData(String displayName)
     {
         // A write can fail before its queued client-thread recovery callback runs.
-        if (plugin.isStorageFailed(sqliteStorage)) {
+        if (plugin.isStorageFailed(sqliteStorage) || plugin.isStorageFailed(plugin.getSqliteStorage())) {
+            preserveAccountsForRecovery();
             setSqliteStorage(null);
         }
         if (accountsAwaitingRecoverySnapshot.contains(displayName)
