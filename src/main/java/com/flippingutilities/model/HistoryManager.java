@@ -413,6 +413,16 @@ public class HistoryManager
 		return Math.min(numBoughtItems, numSoldItems);
 	}
 
+	private static Collection<List<OfferEvent>> groupOffersByAccount(List<OfferEvent> offers)
+	{
+		Map<String, List<OfferEvent>> accounts = new HashMap<>();
+		for (OfferEvent offer : offers) {
+			// Legacy callers may supply unhydrated offers with no account name.
+			accounts.computeIfAbsent(offer.getMadeBy(), account -> new ArrayList<>()).add(offer);
+		}
+		return accounts.values();
+	}
+
 	/**
 	 * Calculates the amount of money spent on either a buy or sell list, up to the amount of items
 	 * specified by the limit.

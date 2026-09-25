@@ -519,8 +519,8 @@ public class FlippingItemPanel extends JPanel
 	}
 
 	private void updateGeneralLabels(long totalRevenue, long totalExpense, long numBuys, long numSells) {
-		avgBuyPriceValLabel.setText(QuantityFormatter.formatNumber((int) numBuys > 0? (totalExpense / numBuys) : 0) + " gp");
-		avgSellPriceValLabel.setText(QuantityFormatter.formatNumber((int) numSells > 0? (totalRevenue / numSells) : 0) + " gp");
+		avgBuyPriceValLabel.setText(QuantityFormatter.formatNumber(numBuys > 0? (totalExpense / numBuys) : 0) + " gp");
+		avgSellPriceValLabel.setText(QuantityFormatter.formatNumber(numSells > 0? (totalRevenue / numSells) : 0) + " gp");
 
 		quantityBoughtLabel.setText("" + numBuys);
 		quantitySoldLabel.setText("" + numSells);
