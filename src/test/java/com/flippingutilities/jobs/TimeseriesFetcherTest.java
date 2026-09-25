@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -293,6 +294,54 @@ public class TimeseriesFetcherTest {
         Field field = FlippingPlugin.class.getDeclaredField("currentWikiDataSource");
         field.setAccessible(true);
         field.set(plugin, source);
+    }
+
+    @Test
+    public void aSharedFailureCompletesEachConsumerOnceAndRetryCanSucceed() throws Exception {
+        ManualClient client = new ManualClient();
+        TimeseriesFetcher fetcher = fetcher(client);
+        AtomicInteger failures = new AtomicInteger();
+        CompletableFuture<TimeseriesResponse> first = fetcher.fetch(4151, Timestep.ONE_HOUR);
+        CompletableFuture<TimeseriesResponse> second = fetcher.fetch(4151, Timestep.ONE_HOUR);
+        first.whenComplete((response, error) -> { if (error != null) failures.incrementAndGet(); });
+        second.whenComplete((response, error) -> { if (error != null) failures.incrementAndGet(); });
+        assertEquals(1, client.calls.size());
+        client.calls.get(0).fail();
+        assertTrue(first.isCompletedExceptionally());
+        assertTrue(second.isCompletedExceptionally());
+        assertEquals(2, failures.get());
+        CompletableFuture<TimeseriesResponse> retry = fetcher.fetch(4151, Timestep.ONE_HOUR);
+        client.calls.get(1).respond(200, HISTORY);
+        assertEquals(Long.valueOf(42L), retry.join().getData().get(0).getAvgHighPrice());
+        assertEquals(2, failures.get());
+    }
+
+    @Test
+    public void cancellingOneCallerDoesNotCancelTheSharedRequest() throws Exception {
+        ManualClient client = new ManualClient();
+        TimeseriesFetcher fetcher = fetcher(client);
+        CompletableFuture<TimeseriesResponse> cancelled = fetcher.fetch(4151, Timestep.ONE_HOUR);
+        CompletableFuture<TimeseriesResponse> active = fetcher.fetch(4151, Timestep.ONE_HOUR);
+        cancelled.cancel(true);
+        assertFalse(client.calls.get(0).isCanceled());
+        client.calls.get(0).respond(200, HISTORY);
+        assertTrue(cancelled.isCancelled());
+        assertEquals(Long.valueOf(42L), active.join().getData().get(0).getAvgHighPrice());
+        assertEquals(1, client.calls.size());
+    }
+
+    @Test
+    public void unsuccessfulAndMalformedResponsesCompleteFuturesInsteadOfLeavingThemLoading() throws Exception {
+        ManualClient client = new ManualClient();
+        TimeseriesFetcher fetcher = fetcher(client);
+        CompletableFuture<TimeseriesResponse> httpError = fetcher.fetch(4151, Timestep.ONE_HOUR);
+        client.calls.get(0).respond(503, HISTORY);
+        assertTrue(httpError.isCompletedExceptionally());
+        CompletableFuture<TimeseriesResponse> malformed = fetcher.fetch(4151, Timestep.ONE_HOUR);
+        client.calls.get(1).respond(200, "{}");
+        assertTrue(malformed.isCompletedExceptionally());
+        client.rejectEnqueue = true;
+        assertTrue(fetcher.fetch(4151, Timestep.ONE_HOUR).isCompletedExceptionally());
     }
 
     private CachedTimeseries cached(Instant fetched, Long interval) {
