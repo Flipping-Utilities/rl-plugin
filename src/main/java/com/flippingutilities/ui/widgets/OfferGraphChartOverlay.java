@@ -7,6 +7,7 @@ import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesPoint;
 import com.flippingutilities.ui.uiutilities.ChartLoadingAnimation;
 import com.flippingutilities.ui.uiutilities.CustomColors;
+import com.flippingutilities.ui.uiutilities.PriceFormatter;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.flippingutilities.ui.widgets.graph.AreaMarker;
 import com.flippingutilities.ui.widgets.graph.ChartConfig;
@@ -92,10 +93,10 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
      * Duration options for the graph.
      */
     public enum GraphDuration {
-        ONE_DAY("1d", Timestep.FIVE_MINUTES, 24 * 60 * 60),
-        ONE_WEEK("1w", Timestep.ONE_HOUR, 7 * 24 * 60 * 60),
-        ONE_MONTH("1m", Timestep.SIX_HOURS, 30 * 24 * 60 * 60),
-        ONE_YEAR("1y", Timestep.TWENTY_FOUR_HOURS, 365 * 24 * 60 * 60);
+        ONE_DAY("1d", Timestep.TWENTY_FOUR_HOURS, 24 * 60 * 60),
+        ONE_WEEK("1w", Timestep.SEVEN_DAYS, 7 * 24 * 60 * 60),
+        ONE_MONTH("1m", Timestep.THIRTY_DAYS, 30 * 24 * 60 * 60),
+        ONE_YEAR("1y", Timestep.ONE_YEAR, 365 * 24 * 60 * 60);
 
         private final String label;
         private final Timestep timestep;
@@ -128,13 +129,15 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
                 return ONE_DAY;
             }
             switch (timestep) {
-                case ONE_HOUR:
+                case SEVEN_DAYS:
                     return ONE_WEEK;
-                case SIX_HOURS:
+                case THIRTY_DAYS:
                     return ONE_MONTH;
-                case TWENTY_FOUR_HOURS:
+                case ONE_YEAR:
                     return ONE_YEAR;
-                case FIVE_MINUTES:
+                case TWENTY_FOUR_HOURS:
+                case SIX_HOURS:
+                case SIX_MONTHS:
                 default:
                     return ONE_DAY;
             }
@@ -656,10 +659,10 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         updateChartMarkers(hoveredPrice);
 
         String buyPrice = hoveredPoint.getAvgHighPrice() != null
-                ? QuantityFormatter.quantityToRSDecimalStack(hoveredPoint.getAvgHighPrice(), true)
+                ? PriceFormatter.quantityToRSDecimalStack(hoveredPoint.getAvgHighPrice(), true)
                 : null;
         String sellPrice = hoveredPoint.getAvgLowPrice() != null
-                ? QuantityFormatter.quantityToRSDecimalStack(hoveredPoint.getAvgLowPrice(), true)
+                ? PriceFormatter.quantityToRSDecimalStack(hoveredPoint.getAvgLowPrice(), true)
                 : null;
         String timeAgo = TimeFormatters.formatTimeAgo(hoveredPoint.getTimestamp());
 
@@ -679,11 +682,11 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         }
 
         String instabuyPrice = lastIB != null && lastIB.getAvgHighPrice() != null
-                ? QuantityFormatter.quantityToRSDecimalStack(lastIB.getAvgHighPrice(), true)
+                ? PriceFormatter.quantityToRSDecimalStack(lastIB.getAvgHighPrice(), true)
                 : null;
         String ibTimeAgo = lastIB != null ? TimeFormatters.formatTimeAgo(lastIB.getTimestamp()) : "-";
         String instasellPrice = lastIS != null && lastIS.getAvgLowPrice() != null
-                ? QuantityFormatter.quantityToRSDecimalStack(lastIS.getAvgLowPrice(), true)
+                ? PriceFormatter.quantityToRSDecimalStack(lastIS.getAvgLowPrice(), true)
                 : null;
         String isTimeAgo = lastIS != null ? TimeFormatters.formatTimeAgo(lastIS.getTimestamp()) : "-";
 

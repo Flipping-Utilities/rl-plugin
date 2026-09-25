@@ -65,7 +65,12 @@ public class OptionHandler {
         if (plugin.getLastWikiRequestWrapper() != null) {
             WikiRequest wr = plugin.getLastWikiRequestWrapper().getWikiRequest();
             WikiItemMargins wikiItemMargins = wr.getData().get(itemId);
-            int wikiPrice = getBuyPrice ? wikiItemMargins.getHigh() : wikiItemMargins.getLow();
+            if (wikiItemMargins == null) {
+                throw new InvalidOptionException("wiki has no data for this item");
+            }
+            // The result feeds GE offer prices (which cannot exceed max cash), so a wiki
+            // price above max cash saturates rather than overflowing.
+            int wikiPrice = getBuyPrice ? wikiItemMargins.getHighCapped() : wikiItemMargins.getLowCapped();
             if (wikiPrice == 0) {
                 throw new InvalidOptionException(String.format("no insta %s data for this item", getBuyPrice ? "buy" : "sell"));
             }

@@ -369,8 +369,7 @@ public class SlotStateDrawer {
         SlotPredictedState predictedState = SlotPredictedState.getPredictedState(
                 isBuy,
                 listedPrice,
-                margins.getLow(),
-                margins.getHigh()
+                margins.getLowCapped(), margins.getHighCapped()
         );
 
         return Optional.of(

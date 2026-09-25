@@ -197,7 +197,7 @@ public interface FlippingConfig extends Config
                         position = 3
         )
         default Timestep priceGraphTimestep() {
-                return Timestep.FIVE_MINUTES;
+                return Timestep.TWENTY_FOUR_HOURS;
         }
 
 	@ConfigItem(

@@ -279,18 +279,23 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         return sorted;
     }
 
+    /** Wiki v2 prices may exceed max cash; the chart's price math is int based, so saturate. */
+    private static int capToInt(Long value) {
+        return value == null ? 0 : (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, value));
+    }
+
     private PriceRange calculatePriceRange(List<TimeseriesPoint> dataPoints) {
         Integer minPrice = null;
         Integer maxPrice = null;
 
         for (TimeseriesPoint point : dataPoints) {
             if (point.getAvgHighPrice() != null) {
-                int highPrice = point.getAvgHighPrice();
+                int highPrice = capToInt(point.getAvgHighPrice());
                 maxPrice = maxPrice == null ? highPrice : Math.max(maxPrice, highPrice);
             }
 
             if (point.getAvgLowPrice() != null) {
-                int lowPrice = point.getAvgLowPrice();
+                int lowPrice = capToInt(point.getAvgLowPrice());
                 minPrice = minPrice == null ? lowPrice : Math.min(minPrice, lowPrice);
             }
         }
@@ -434,14 +439,14 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
             int xPos = bounds.x + (int) (timePercent * bounds.width);
 
             if (point.getAvgHighPrice() != null) {
-                int highPrice = point.getAvgHighPrice();
+                int highPrice = capToInt(point.getAvgHighPrice());
                 highX[highCount] = xPos;
                 highY[highCount] = calculateYPosition(highPrice, bounds, priceRange);
                 highCount++;
             }
 
             if (point.getAvgLowPrice() != null) {
-                int lowPrice = point.getAvgLowPrice();
+                int lowPrice = capToInt(point.getAvgLowPrice());
                 lowX[lowCount] = xPos;
                 lowY[lowCount] = calculateYPosition(lowPrice, bounds, priceRange);
                 lowCount++;

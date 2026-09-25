@@ -31,7 +31,7 @@ public class WikiDataFetcherJobTest {
 
             assertEquals(1, received.size());
             assertEquals(WikiDataSource.DMM, received.get(0).getWikiDataSource());
-            assertEquals(900, received.get(0).getWikiRequest().getData().get(4151).getHigh());
+            assertEquals(Long.valueOf(900), received.get(0).getWikiRequest().getData().get(4151).getHigh());
             assertEquals(completion, job.timeOfLastRequestCompletion);
             assertFalse(job.inFlightRequest);
         } finally {
