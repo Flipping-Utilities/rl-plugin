@@ -573,6 +573,98 @@ public class StorageBackendSwitchTest {
         }
     }
 
+    @Test
+    public void pendingMigrationFailureDetachedBeforeRecoveryMustRetainFailedSnapshot() {
+        account.getTrades().clear();
+        switchTo(DataSource.SQLITE);
+        account.getTrades().add(item);
+        plugin.getDataHandler().markDataAsHavingChanged(ACCOUNT);
+        persister.failLoads = true;
+        persister.failWrites = true;
+        queueSwitchTo(DataSource.JSON);
+        finishStorageWork();
+        assertNull(plugin.getSqliteStorage());
+        assertEquals(0, totalQuantity(persister.loadAccount(ACCOUNT)));
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        assertEquals("Pending-import failure must preserve the newer live account after detach", 10,
+            totalQuantity(plugin.getDataHandler().viewAccountData(ACCOUNT)));
+        assertSame(account, plugin.getDataHandler().viewAccountData(ACCOUNT));
+        persister.failWrites = false;
+        finishStorageWork();
+        assertTrue(plugin.getDataHandler().storeData());
+        assertEquals(totalQuantity(account), totalQuantity(persister.loadAccount(ACCOUNT)));
+    }
+
+    @Test
+    public void writeFailureBeforeImportAttachmentMustRetainFailedSnapshot() {
+        account.getTrades().clear();
+        switchTo(DataSource.SQLITE);
+        account.getTrades().add(item);
+        plugin.submitStorageTask(storage -> {
+            try (Statement statement = storage.getConnection().createStatement()) {
+                statement.execute("PRAGMA query_only=ON");
+            } catch (Exception error) { throw new IllegalStateException(error); }
+        });
+        plugin.recordTrade(ACCOUNT, offer("original", 10));
+        plugin.addSelectedGeTabOffers(singletonList(offer("write-failed-before-attachment", 7)));
+        persister.failWrites = true;
+        queueSwitchTo(DataSource.JSON);
+        finishStorageWork();
+        assertNull(plugin.getSqliteStorage());
+        assertEquals(0, totalQuantity(persister.loadAccount(ACCOUNT)));
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        assertEquals("A failed write before backend attachment must preserve cached history", 17,
+            totalQuantity(plugin.getDataHandler().viewAccountData(ACCOUNT)));
+        assertSame(account, plugin.getDataHandler().viewAccountData(ACCOUNT));
+        persister.failWrites = false;
+        finishStorageWork();
+        assertTrue(plugin.getDataHandler().storeData());
+        assertEquals(totalQuantity(account), totalQuantity(persister.loadAccount(ACCOUNT)));
+    }
+
+    @Test
+    public void failedPendingMigrationMustRetainCachedDataBeforeRecoveryCallback() {
+        account.getTrades().clear();
+        switchTo(DataSource.SQLITE);
+        account.getTrades().add(item);
+        plugin.getDataHandler().markDataAsHavingChanged(ACCOUNT);
+        persister.failLoads = true;
+        executor.drain();
+        assertNotNull("Recovery callback has not detached the backend yet", plugin.getSqliteStorage());
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        assertEquals("The pending-import failure must be visible before the queued recovery callback", 10,
+            totalQuantity(plugin.getDataHandler().viewAccountData(ACCOUNT)));
+        assertSame(account, plugin.getDataHandler().viewAccountData(ACCOUNT));
+        persister.failWrites = false;
+        finishStorageWork();
+        assertTrue(plugin.getDataHandler().storeData());
+        assertEquals(totalQuantity(account), totalQuantity(persister.loadAccount(ACCOUNT)));
+    }
+
+    @Test
+    public void switchBeforeWriteFailureIsReportedPreservesFailedJsonSnapshot() throws Exception {
+        prepareNewerCachedHistory();
+        try (Statement statement = plugin.getSqliteStorage().getConnection().createStatement()) {
+            statement.execute("PRAGMA query_only=ON");
+        }
+        plugin.addSelectedGeTabOffers(singletonList(offer("write-failed", 7)));
+        persister.failWrites = true;
+        queueSwitchTo(DataSource.JSON);
+        // Detach before the storage worker has reported its write failure.
+        clientThread.drain();
+        finishStorageWork();
+
+        assertNull(plugin.getSqliteStorage());
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+        assertSame(account, plugin.getDataHandler().viewAccountData(ACCOUNT));
+        assertEquals(24, totalQuantity(plugin.getDataHandler().viewAccountData(ACCOUNT)));
+        assertEquals(0, totalQuantity(persister.loadAccount(ACCOUNT)));
+
+        persister.failWrites = false;
+        assertTrue(plugin.getDataHandler().storeData());
+        assertEquals(24, totalQuantity(persister.loadAccount(ACCOUNT)));
+    }
+
     private void switchTo(DataSource source) {
         queueSwitchTo(source);
         clientThread.drain();
