@@ -408,14 +408,42 @@ public class MigrationService {
             }
         }
 
-        // Hydrate each PartialOffer in recipe flips
+        // Hydrate each PartialOffer in recipe flips. Legacy files reference offers by uuid
+        // only; most resolve against the account's own history. References to offers that
+        // no longer exist anywhere (destroyed by historical data-loss bugs) must NOT abort
+        // the account's whole migration — that drops every trade of the account from
+        // SQLite and wrecks its totals. Synthesize a zero-price snapshot instead: the
+        // component renders as 0 gp, everything else stays intact.
         for (RecipeFlipGroup group : recipeFlipGroups) {
             for (RecipeFlip flip : group.getRecipeFlips()) {
-                for (PartialOffer po : flip.getPartialOffers()) {
-                    po.hydrateOffer(offersByUuid);
-                }
+                hydrateComponents(flip.getInputs(), offersByUuid, true, flip.getTimeOfCreation());
+                hydrateComponents(flip.getOutputs(), offersByUuid, false, flip.getTimeOfCreation());
             }
         }
+    }
+
+    private void hydrateComponents(Map<Integer, Map<String, PartialOffer>> components,
+                                   Map<String, OfferEvent> offersByUuid, boolean inputs, Instant timeOfCreation) {
+        if (components == null) {
+            return;
+        }
+        components.forEach((itemId, offerMap) -> {
+            if (offerMap == null) {
+                return;
+            }
+            offerMap.values().forEach(po -> {
+                if (po == null) {
+                    return;
+                }
+                po.hydrateOffer(offersByUuid);
+                if (po.getOffer() == null) {
+                    log.warn("Recipe component {} (item {}) references an offer that no longer exists; "
+                        + "storing a zero-price snapshot so the account can migrate", po.getOfferUuid(), itemId);
+                    po.setOffer(SqliteStorage.synthesizeComponentStub(
+                        po.getOfferUuid(), itemId, inputs, po.getAmountConsumed(), timeOfCreation));
+                }
+            });
+        });
     }
 
     /**

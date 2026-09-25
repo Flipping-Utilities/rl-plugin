@@ -329,6 +329,51 @@ public class MigrationLiveTradeInteractionTest {
     }
 
     /**
+     * Legacy recipe components reference offers by uuid only (no embedded snapshot), and some
+     * reference offers that were destroyed long ago by historical data-loss bugs. Neither may
+     * abort the account's migration: previously serializeRecipeOffer threw on the first null
+     * offer, rolling back the WHOLE account's transaction — the account then disappeared from
+     * SQLite (falling back to JSON with degraded totals) and the migration retried and failed
+     * on every startup. Resolvable references must hydrate from the account's own history with
+     * their real price; dead references must persist as zero-price stubs.
+     */
+    @Test
+    public void testLegacyAndDanglingRecipeReferencesDoNotAbortMigration() throws Exception {
+        // One resolvable input (in history) and one ghost output (exists nowhere).
+        OfferEvent buyOffer = completeOffer("legacy-in", true, 10, 50000, BASE_TS);
+        AccountData data = accountDataWithOffers(buyOffer);
+
+        Map<Integer, Map<String, PartialOffer>> inputs = new HashMap<>();
+        inputs.put(WHIP, new HashMap<>(Map.of("legacy-in", new PartialOffer("legacy-in", 10))));
+        OfferEvent ghostOutput = completeOffer("ghost-out", false, 4, 0, BASE_TS + 60000);
+        ghostOutput.setItemId(DSCIM);
+        Map<Integer, Map<String, PartialOffer>> outputs = new HashMap<>();
+        outputs.put(DSCIM, new HashMap<>(Map.of("ghost-out", new PartialOffer("ghost-out", 4))));
+
+        RecipeFlipGroup group = new RecipeFlipGroup("whip:crush");
+        group.addRecipeFlip(new RecipeFlip(Instant.ofEpochMilli(BASE_TS + 120000), outputs, inputs, 0L));
+        data.setRecipeFlipGroups(new ArrayList<>(Arrays.asList(group)));
+
+        MigrationService service = new MigrationService(storage, new TradePersister(new GsonBuilder().create()));
+        service.migrate(java.util.Collections.singletonMap(ACCOUNT, data));
+
+        assertEquals("Account must migrate despite the dangling reference", 1L,
+            count("SELECT COUNT(*) FROM accounts"));
+        assertNotNull("migrated_ flag must be set so retries stop",
+            storage.getSetting("migrated_" + ACCOUNT));
+        assertEquals("Both component rows must persist", 2L,
+            count("SELECT COUNT(*) FROM recipe_flip_inputs") + count("SELECT COUNT(*) FROM recipe_flip_outputs"));
+
+        AccountData loaded = storage.loadAccount(ACCOUNT);
+        RecipeFlip loadedFlip = loaded.getRecipeFlipGroups().get(0).getRecipeFlips().get(0);
+        assertEquals("Resolvable reference hydrates with the real price", 50000,
+            loadedFlip.getInputs().get(WHIP).get("legacy-in").getOffer().getPrice());
+        assertEquals("Dangling reference loads as a zero-price stub that still renders", 4,
+            loadedFlip.getOutputs().get(DSCIM).get("ghost-out").getOffer().getCurrentQuantityInTrade());
+        assertEquals(0, loadedFlip.getOutputs().get(DSCIM).get("ghost-out").getOffer().getPrice());
+    }
+
+    /**
      * A partially-failed migration must keep successfully-migrated accounts committed (their
      * migrated_ flags durable) while leaving migration_completed unset so the next startup
      * retries the failed account.
