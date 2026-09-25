@@ -2,7 +2,8 @@ package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.model.TimeseriesResponse;
 import com.flippingutilities.ui.uiutilities.CustomColors;
-import com.flippingutilities.ui.uiutilities.ChartLoadingAnimation;
+import com.flippingutilities.ui.uiutilities.GraphLoadState;
+import com.flippingutilities.ui.uiutilities.GraphStatusRenderer;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.SlotInfo;
@@ -47,7 +48,8 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
     private final Dimension dimension = new Dimension();
 
     private final TimeSeriesChart chart;
-    private final ChartLoadingAnimation chartLoadingAnimation = new ChartLoadingAnimation();
+    private GraphLoadState graphLoadState = GraphLoadState.LOADING;
+    private final GraphStatusRenderer graphStatusRenderer = new GraphStatusRenderer();
 
     public QuickLookTooltip() {
         ChartConfig chartConfig = ChartConfig.builder()
@@ -220,6 +222,19 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
 
     public void setGraphData(TimeseriesResponse timeseries, com.flippingutilities.model.Timestep timestep, int offerPrice) {
         chart.setDataSeries(timeseries, timestep, offerPrice);
+        graphLoadState = GraphLoadState.fromResponse(timeseries);
+    }
+
+    public void beginGraphLoad() {
+        graphLoadState = GraphLoadState.LOADING;
+    }
+
+    public void showGraphFailure() {
+        graphLoadState = GraphLoadState.FAILED;
+    }
+
+    public boolean canRetryGraph() {
+        return graphLoadState == GraphLoadState.FAILED;
     }
 
     @Override
@@ -318,7 +333,7 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
         int chartY = position.y + panelHeight - fixedChartHeight;
 
         chart.setPreferredLocation(new Point(chartX, chartY));
-        if (chart.hasData()) {
+        if (graphLoadState == GraphLoadState.READY && chart.hasData()) {
             chart.setPreferredLocation(new Point(chartX, chartY));
             java.awt.Shape originalClip = graphics.getClip();
             graphics.setClip(chartX, chartY, fixedChartWidth, fixedChartHeight);
@@ -326,7 +341,7 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
             graphics.setClip(originalClip);
         } else {
             Rectangle chartBounds = new Rectangle(chartX, chartY, fixedChartWidth, fixedChartHeight);
-            chartLoadingAnimation.render(graphics, chartBounds, System.currentTimeMillis());
+            graphStatusRenderer.render(graphics, chartBounds, graphLoadState, false);
         }
 
         dimension.setSize(panelWidth, panelHeight);
