@@ -665,6 +665,48 @@ public class StorageBackendSwitchTest {
         assertEquals(24, totalQuantity(persister.loadAccount(ACCOUNT)));
     }
 
+    @Test
+    public void enrichedHistorySurvivesWriteFailureWithoutJsonRebuild() throws Exception {
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        OfferEvent captured = offer("exact-capture", 3);
+        captured.setCumulativeAmount(301L);
+        captured.setObservedAt(SESSION_START.plusSeconds(20));
+        captured.setOrderId("live-order");
+        plugin.recordTrade(ACCOUNT, captured);
+        finishStorageWork();
+        SqliteStorage retained = plugin.getSqliteStorage();
+        long revision = retained.getAccountingStore().getSourceRevision(retained.getAccountingStore().findAccountId(ACCOUNT));
+        try (Statement statement = retained.getConnection().createStatement()) {
+            statement.execute("PRAGMA query_only=ON");
+        }
+        plugin.recordTrade(ACCOUNT, offer("failed-write", 2));
+        finishStorageWork();
+        assertSame(retained, plugin.getSqliteStorage());
+        assertTrue(plugin.isStorageFailed(retained));
+        assertFalse("JSON recovery must not be scheduled for richer accounting data", retained.requiresFullResync());
+        assertEquals(revision, retained.getAccountingStore().getSourceRevision(retained.getAccountingStore().findAccountId(ACCOUNT)));
+        assertTrue(hasOffer(retained.loadAccount(ACCOUNT), "exact-capture"));
+    }
+
+    @Test
+    public void resyncMarkerCannotReplaceEnrichedHistoryWithOlderJson() throws Exception {
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        OfferEvent captured = offer("retained-exact", 3);
+        captured.setCumulativeAmount(301L);
+        captured.setObservedAt(SESSION_START.plusSeconds(20));
+        plugin.recordTrade(ACCOUNT, captured);
+        finishStorageWork();
+        SqliteStorage retained = plugin.getSqliteStorage();
+        retained.markOutOfSync();
+        java.lang.reflect.Method migrate = FlippingPlugin.class.getDeclaredMethod("runMigrationIfNeeded", SqliteStorage.class, boolean.class);
+        migrate.setAccessible(true);
+        assertEquals(Boolean.TRUE, migrate.invoke(plugin, retained, true));
+        assertTrue(hasOffer(retained.loadAccount(ACCOUNT), "retained-exact"));
+        assertFalse(retained.requiresFullResync());
+    }
+
     private void switchTo(DataSource source) {
         queueSwitchTo(source);
         clientThread.drain();
