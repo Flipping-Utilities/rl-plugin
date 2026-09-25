@@ -820,6 +820,78 @@ public class StorageBackendSwitchTest {
     }
 
     @Test
+    public void startupRetryCannotBypassRejectedAccountingLayoutOrConsumePendingCommands() throws Exception {
+        assertStartupRetryPreservesSchemaRejection(true);
+    }
+
+    @Test
+    public void startupRetryCannotBypassUnsupportedSchemaVersionOrConsumePendingCommands() throws Exception {
+        assertStartupRetryPreservesSchemaRejection(false);
+    }
+
+    private void assertStartupRetryPreservesSchemaRejection(boolean incompatibleLayout) throws Exception {
+        SqliteStorage existing = new SqliteStorage(database);
+        try {
+            existing.initializeSchema();
+            OfferEvent retained = offer("retained-in-rejected-schema", 1);
+            retained.setCumulativeAmount(100L);
+            existing.recordTrade(ACCOUNT, retained);
+            existing.setSetting("migration_completed", "true");
+            if (incompatibleLayout) existing.setSetting("accounting_layout", "incompatible-prerelease-layout");
+            else try (Statement statement = existing.getConnection().createStatement()) {
+                statement.execute("PRAGMA user_version=999");
+            }
+        } finally { existing.close(); }
+
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        assertTrue("The existing database must be rejected before attachment", plugin.hasPendingAccountingSaves());
+        assertNotNull(plugin.getAccountingUiService());
+        assertNull(handlerStorage());
+        SqliteStorage storage = plugin.getSqliteStorage();
+        long accountId = storage.getAccountingStore().findAccountId(ACCOUNT);
+        long revision = storage.getAccountingStore().getSourceRevision(accountId);
+        plugin.recordTrade(ACCOUNT, offer("queued-after-schema-rejection", 2));
+        finishStorageWork();
+
+        for (int attempt = 0; attempt < 2; attempt++) {
+            java.util.concurrent.CompletableFuture<String> retry = plugin.getAccountingUiService().retryStorage();
+            finishStorageWork();
+            assertTrue("Retry must repeat the startup validation", retry.isCompletedExceptionally());
+            assertTrue(plugin.hasPendingAccountingSaves());
+            assertNull(handlerStorage());
+            assertEquals("Rejected retry cannot mutate canonical observations", revision,
+                storage.getAccountingStore().getSourceRevision(accountId));
+            assertFalse(hasOffer(storage.loadAccount(ACCOUNT), "queued-after-schema-rejection"));
+            assertTrue(hasOffer(storage.loadAccount(ACCOUNT), "retained-in-rejected-schema"));
+            if (incompatibleLayout) assertEquals("incompatible-prerelease-layout", storage.getSetting("accounting_layout"));
+            else try (Statement statement = storage.getConnection().createStatement();
+                      java.sql.ResultSet version = statement.executeQuery("PRAGMA user_version")) {
+                assertTrue(version.next());
+                assertEquals(999, version.getInt(1));
+            }
+        }
+
+        // Simulate an external repair. Retry itself must neither restamp nor reinterpret the rejected layout.
+        if (incompatibleLayout) storage.setSetting("accounting_layout", com.flippingutilities.db.accounting.AccountingSchema.LAYOUT);
+        else try (Statement statement = storage.getConnection().createStatement()) {
+            statement.execute("PRAGMA user_version=" + com.flippingutilities.db.SqliteSchema.SCHEMA_VERSION);
+        }
+        java.util.concurrent.CompletableFuture<String> repaired = plugin.getAccountingUiService().retryStorage();
+        finishStorageWork();
+        repaired.join();
+        assertFalse(plugin.hasPendingAccountingSaves());
+        assertSame(storage, handlerStorage());
+        assertTrue("Failed validation must retain the queued command for a valid retry",
+            hasOffer(storage.loadAccount(ACCOUNT), "queued-after-schema-rejection"));
+        assertEquals(3, totalQuantity(storage.loadAccount(ACCOUNT)));
+        java.util.concurrent.CompletableFuture<String> repeated = plugin.getAccountingUiService().retryStorage();
+        finishStorageWork();
+        repeated.join();
+        assertEquals("Successful replay consumes each pending command once", 3, totalQuantity(storage.loadAccount(ACCOUNT)));
+    }
+
+    @Test
     public void retryRestoresDataHandlerSqliteReadsWithoutReplacingLiveState() throws Exception {
         SqliteStorage storage = failProtectedStorage();
         plugin.getDataHandler().loadAccountData(ACCOUNT);
