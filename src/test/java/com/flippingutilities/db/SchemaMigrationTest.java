@@ -62,11 +62,8 @@ public class SchemaMigrationTest {
 
     private void assertRecipeComponentLookupsAreIndexed() throws Exception {
         for (String direction : new String[]{"inputs", "outputs"}) {
-            String alias = direction.equals("inputs") ? "rfi" : "rfo";
-            // Match loadRecipeFlipInputs/loadRecipeFlipOutputs, including the trade join.
-            String query = "SELECT " + alias + ".item_id, " + alias + ".offer_uuid, " + alias + ".amount_consumed, " +
-                "t.price, t.timestamp, t.qty AS trade_qty FROM recipe_flip_" + direction + " " + alias + " " +
-                "LEFT JOIN trades t ON t.uuid = " + alias + ".offer_uuid WHERE " + alias + ".recipe_flip_id = ?";
+            String table = "recipe_flip_" + direction;
+            String query = "SELECT item_id, offer_uuid, amount_consumed, offer_json FROM " + table + " WHERE recipe_flip_id = ?";
             boolean indexed = false;
             StringBuilder plan = new StringBuilder();
             try (PreparedStatement statement = storage.getConnection().prepareStatement("EXPLAIN QUERY PLAN " + query)) {
@@ -75,7 +72,7 @@ public class SchemaMigrationTest {
                     while (results.next()) {
                         String detail = results.getString("detail");
                         plan.append(detail).append('\n');
-                        if (detail.startsWith("SEARCH " + alias + " ") && detail.contains("recipe_flip_id=?")) {
+                        if (detail.startsWith("SEARCH " + table + " ") && detail.contains("recipe_flip_id=?")) {
                             indexed = true;
                         }
                     }

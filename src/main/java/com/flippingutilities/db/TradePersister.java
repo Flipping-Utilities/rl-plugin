@@ -291,7 +291,7 @@ public class TradePersister
 	public void writeToFile(String displayName, Object data) throws IOException {
 		log.debug("Writing to file for {}", displayName);
 		File accountFile = new File(accountDirectory, displayName + ".json");
-		File tempFile = new File(PARENT_DIRECTORY, displayName + ".json.tmp");
+		File tempFile = new File(accountDirectory, displayName + ".json.tmp");
 		
 		try (BufferedWriter bufferedWriter = Files.newBufferedWriter(tempFile.toPath(), StandardCharsets.UTF_8);
 			JsonWriter jsonWriter = new JsonWriter(bufferedWriter)) {

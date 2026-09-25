@@ -12,8 +12,8 @@ import java.util.Map;
  * show how much of an offer event was consumed bc when creating recipe flips you can
  * specify that you only want some of the offer to be used.
  * 
- * Stores only the offerUuid instead of the full OfferEvent to reduce JSON file size.
- * The full OfferEvent is resolved on load via hydrateOffer().
+ * Retains the offer snapshot because recipe components can outlive their history entries.
+ * UUID-only files from older versions are still resolved on load via hydrateOffer().
  */
 @Data
 @NoArgsConstructor
@@ -22,7 +22,7 @@ public class PartialOffer {
     private String offerUuid;
     
     @SerializedName("offer")
-    @Expose(serialize = false, deserialize = true)
+    @Expose
     private OfferEvent offer;
     
     @Expose
@@ -40,10 +40,9 @@ public class PartialOffer {
     }
 
     public PartialOffer clone() {
-        return new PartialOffer(
-                offer != null ? offer.clone() : null,
-                amountConsumed
-        );
+        PartialOffer copy = new PartialOffer(offerUuid, amountConsumed);
+        copy.offer = offer != null ? offer.clone() : null;
+        return copy;
     }
 
     public void hydrateOffer(Map<String, OfferEvent> offersByUuid) {
@@ -74,5 +73,4 @@ public class PartialOffer {
         return adjustedOfferEvent;
     }
 }
-
 

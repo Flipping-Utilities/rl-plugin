@@ -251,6 +251,56 @@ public class RealDataMigrationTest {
         return count;
     }
 
+    private static void assertRecipeParity(String account, AccountData expected, AccountData actual) {
+        for (RecipeFlipGroup group : expected.getRecipeFlipGroups()) {
+            if (group.getRecipeFlips().isEmpty()) continue;
+            RecipeFlipGroup restoredGroup = actual.getRecipeFlipGroups().stream()
+                .filter(candidate -> java.util.Objects.equals(group.getRecipeKey(), candidate.getRecipeKey()))
+                .findFirst().orElseThrow(() -> new AssertionError(account + ": missing recipe " + group.getRecipeKey()));
+            for (RecipeFlip flip : group.getRecipeFlips()) {
+                if (flip.getTimeOfCreation() == null) continue;
+                String context = account + ": " + group.getRecipeKey() + " at " + flip.getTimeOfCreation();
+                RecipeFlip restored = restoredGroup.getRecipeFlips().stream()
+                    .filter(candidate -> candidate.getTimeOfCreation().toEpochMilli() == flip.getTimeOfCreation().toEpochMilli())
+                    .findFirst().orElseThrow(() -> new AssertionError(context + ": missing flip"));
+                assertRecipeComponents(context + " inputs", flip.getInputs(), restored.getInputs());
+                assertRecipeComponents(context + " outputs", flip.getOutputs(), restored.getOutputs());
+                assertEquals(context + " coin cost", flip.getCoinCost(), restored.getCoinCost());
+                assertEquals(context + " expense", flip.getExpense(), restored.getExpense());
+                assertEquals(context + " revenue", flip.getRevenue(), restored.getRevenue());
+                assertEquals(context + " profit", flip.getProfit(), restored.getProfit());
+                assertEquals(context + " tax", flip.getTaxPaid(), restored.getTaxPaid());
+            }
+        }
+    }
+
+    private static void assertRecipeComponents(String context, Map<Integer, Map<String, PartialOffer>> expected,
+                                               Map<Integer, Map<String, PartialOffer>> actual) {
+        long componentCount = 0;
+        for (Map.Entry<Integer, Map<String, PartialOffer>> item : expected.entrySet()) {
+            for (PartialOffer component : item.getValue().values()) {
+                if (component == null || component.getAmountConsumed() <= 0) continue;
+                componentCount++;
+                String detail = context + " item=" + item.getKey() + " uuid=" + component.getOfferUuid();
+                assertNotNull(detail + " missing item", actual.get(item.getKey()));
+                PartialOffer restored = actual.get(item.getKey()).get(component.getOfferUuid());
+                assertNotNull(detail + " missing component", restored);
+                assertNotNull(detail + " missing source offer", component.getOffer());
+                assertNotNull(detail + " missing restored offer", restored.getOffer());
+                assertEquals(detail + " consumed", component.getAmountConsumed(), restored.getAmountConsumed());
+                OfferEvent before = component.getOffer();
+                OfferEvent after = restored.getOffer();
+                assertEquals(detail + " price", before.getPreTaxPrice(), after.getPreTaxPrice());
+                assertEquals(detail + " original quantity", before.getCurrentQuantityInTrade(), after.getCurrentQuantityInTrade());
+                assertEquals(detail + " item", before.getItemId(), after.getItemId());
+                assertEquals(detail + " side", before.isBuy(), after.isBuy());
+                assertEquals(detail + " state", before.getState(), after.getState());
+                assertEquals(detail + " time (milliseconds)", before.getTime().toEpochMilli(), after.getTime().toEpochMilli());
+            }
+        }
+        assertEquals(context + " component count", componentCount, actual.values().stream().mapToLong(Map::size).sum());
+    }
+
     private static long expectedFavoriteRows(AccountData data) {
         Set<Integer> favorited = new HashSet<>();
         for (FlippingItem item : data.getTrades()) {
@@ -334,6 +384,7 @@ public class RealDataMigrationTest {
 
             AccountData loaded = storage.loadAccount(name);
             assertNotNull("loadAccount must return data for " + name, loaded);
+            assertRecipeParity(name, data, loaded);
             long flipProfit = expectedFlipProfit(loaded);
             assertEquals("Restored flip profit must match the JSON flip computation for " + name,
                 expectedFlipProfit(data), flipProfit);

@@ -101,6 +101,7 @@ public final class SqliteSchema {
         "  item_id INTEGER," +
         "  offer_uuid TEXT," +
         "  amount_consumed INTEGER," +
+        "  offer_json TEXT NOT NULL," +
         "  FOREIGN KEY(recipe_flip_id) REFERENCES recipe_flips(id)" +
         ");";
 
@@ -111,6 +112,7 @@ public final class SqliteSchema {
         "  item_id INTEGER," +
         "  offer_uuid TEXT," +
         "  amount_consumed INTEGER," +
+        "  offer_json TEXT NOT NULL," +
         "  FOREIGN KEY(recipe_flip_id) REFERENCES recipe_flips(id)" +
         ");";
 

@@ -179,13 +179,13 @@ public class AccountData {
     private void hydratePartialOffers(Map<String, OfferEvent> hydratedOffers, ItemManager itemManager) {
         for (RecipeFlipGroup rfg : recipeFlipGroups) {
             for (RecipeFlip flip : rfg.getRecipeFlips()) {
-                hydrateComponentOffers(flip.getInputs(), true, hydratedOffers, itemManager);
-                hydrateComponentOffers(flip.getOutputs(), false, hydratedOffers, itemManager);
+                hydrateComponentOffers(flip.getInputs(), hydratedOffers, itemManager);
+                hydrateComponentOffers(flip.getOutputs(), hydratedOffers, itemManager);
             }
         }
     }
 
-    private void hydrateComponentOffers(Map<Integer, Map<String, PartialOffer>> components, boolean isBuy,
+    private void hydrateComponentOffers(Map<Integer, Map<String, PartialOffer>> components,
                                         Map<String, OfferEvent> hydratedOffers, ItemManager itemManager) {
         if (components == null) {
             return;
@@ -197,22 +197,17 @@ public class AccountData {
             offerMap.values().forEach(po -> {
                 po.hydrateOffer(hydratedOffers);
                 if (po.getOffer() == null) {
-                    // Backing trade was deleted; synthesize a stub so the flip still renders with a real item name.
-                    log.debug("Partial offer references deleted offer event uuid={}; creating stub for item {}",
+                    // Preserve an unresolved reference so persistence can detect missing data.
+                    // A fabricated zero-price offer would be saved as if it were the real trade.
+                    log.warn("Recipe references missing offer uuid={} for item {}",
                         po.getOfferUuid(), itemId);
-                    OfferEvent stub = new OfferEvent();
-                    stub.setUuid(po.getOfferUuid());
-                    stub.setItemId(itemId);
-                    stub.setBuy(isBuy);
-                    stub.setPrice(0);
-                    stub.setTime(Instant.EPOCH);
-                    stub.setItemName(resolveItemName(itemManager, itemId));
-                    po.setOffer(stub);
                     return;
                 }
                 OfferEvent o = hydratedOffers.get(po.getOfferUuid());
                 if (o != null) {
                     po.hydrateUnderlyingOfferEvent(o.getMadeBy(), o.getItemName());
+                } else {
+                    po.getOffer().setItemName(resolveItemName(itemManager, itemId));
                 }
             });
         });
