@@ -31,44 +31,37 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-/**
- * Updates the cache in real time as files are changed in the directory being monitored. It monitors the directory
- * where the accounts' data is stored and fires any registered callbacks when it detects a change for an account.
- * The reason it accepts callbacks is so that this class is not tied to any specific component's way of handling a file
- * change. This decoupling allows the cache updater to be used easily by any component that wishes to fire an action
- * when a file for an account is changed.
- */
+/** Watches account files and notifies subscribers until this job is stopped. */
 @Slf4j
 public class CacheUpdaterJob
 {
-	ScheduledExecutorService executor;
-
-	List<Consumer<String>> subscribers = new ArrayList<>();
-
-	boolean isBeingShutdownByClient = false;
-
-	Future realTimeUpdateTask;
-
-	Map<String, Long> lastEvents = new HashMap<>();
-
-	int requiredMinMsSinceLastUpdate = 5;
-	int failureCount;
-	int failureThreshold = 2;
-
+	private final ScheduledExecutorService executor;
+	private final Path directory;
+	private final List<Consumer<String>> subscribers = new CopyOnWriteArrayList<>();
+	private final Map<String, Long> lastEvents = new HashMap<>();
+	private volatile boolean stopped;
+	private Future<?> realTimeUpdateTask;
+	private int failureCount;
 
 	public CacheUpdaterJob()
 	{
-		this.executor = Executors.newSingleThreadScheduledExecutor();
+		this(TradePersister.PARENT_DIRECTORY.toPath(), Executors.newSingleThreadScheduledExecutor());
+	}
+
+	CacheUpdaterJob(Path directory, ScheduledExecutorService executor)
+	{
+		this.directory = directory;
+		this.executor = executor;
 	}
 
 	public void subscribe(Consumer<String> callback)
@@ -76,114 +69,111 @@ public class CacheUpdaterJob
 		subscribers.add(callback);
 	}
 
-	public void start()
+	public synchronized void start()
 	{
-		realTimeUpdateTask = executor.schedule(this::updateCacheRealTime, 1000, TimeUnit.MILLISECONDS);
-	}
-
-	public void stop()
-	{
-		isBeingShutdownByClient = true;
-		realTimeUpdateTask.cancel(true);
-	}
-
-	public void updateCacheRealTime()
-	{
-		try
+		if (!stopped && realTimeUpdateTask == null)
 		{
-			log.debug("starting cache updater job!");
-			WatchService watchService = FileSystems.getDefault().newWatchService();
-
-			Path path = TradePersister.PARENT_DIRECTORY.toPath();
-
-			path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_MODIFY);
-
-			WatchKey key;
-			while ((key = watchService.take()) != null)
-			{
-				for (WatchEvent<?> event : key.pollEvents())
-				{
-					log.debug("change in directory for {} with event: {}", event.context(), event.kind());
-					if (!isDuplicateEvent(event.context().toString()))
-					{
-						log.debug("not duplicate event, firing callbacks");
-						subscribers.forEach(subscriber -> subscriber.accept(event.context().toString()));
-					}
-					else
-					{
-						log.debug("duplicate event, not firing callbacks");
-					}
-
-				}
-				//put the key back in the queue so we can take out more events when they occur
-				key.reset();
-				failureCount = 0;
-			}
-		}
-
-		catch (IOException | InterruptedException e)
-		{
-			if (!isBeingShutdownByClient)
-			{
-				log.warn("exception in updateCacheRealTime, Error = {}", e);
-				onUnexpectedError();
-			}
-
-			else
-			{
-				onClientShutdown();
-			}
-		}
-
-		catch (Exception e)
-		{
-			log.warn("unknown exception in updateCacheRealTime, task is going to stop. Error = {}", e);
-		}
-	}
-
-	private void onUnexpectedError()
-	{
-		log.debug("Failure number: {} Error not caused by client shutdown", failureCount);
-		failureCount++;
-		if (failureCount > failureThreshold)
-		{
-			log.warn("number of failures exceeds failure threshold, not scheduling task again");
-			return;
-		}
-
-		else
-		{
-			log.debug("failure count below threshold, scheduling task again");
 			realTimeUpdateTask = executor.schedule(this::updateCacheRealTime, 1000, TimeUnit.MILLISECONDS);
 		}
 	}
 
-	private void onClientShutdown()
+	/** Terminal and idempotent, including before start or during a pending retry. */
+	public synchronized void stop()
 	{
-		log.debug("shutting down cache updater due to the client shutdown");
+		stopped = true;
+		if (realTimeUpdateTask != null)
+		{
+			realTimeUpdateTask.cancel(true);
+		}
+		executor.shutdownNow();
+	}
+
+	public void updateCacheRealTime()
+	{
+		if (stopped)
+		{
+			return;
+		}
+		try (WatchService watchService = directory.getFileSystem().newWatchService())
+		{
+			directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_MODIFY);
+			while (!stopped)
+			{
+				WatchKey key = watchService.take();
+				for (WatchEvent<?> event : key.pollEvents())
+				{
+					// Overflow has no filename; it must not terminate the watcher.
+					if (event.kind() == StandardWatchEventKinds.OVERFLOW)
+					{
+						log.warn("Account directory watcher overflowed; some file changes may have been missed");
+						continue;
+					}
+					String fileName = event.context().toString();
+					if (stopped || isDuplicateEvent(fileName))
+					{
+						continue;
+					}
+					for (Consumer<String> subscriber : subscribers)
+					{
+						if (stopped)
+						{
+							break;
+						}
+						try
+						{
+							subscriber.accept(fileName);
+						}
+						catch (RuntimeException e)
+						{
+							log.warn("Account file change subscriber failed for {}", fileName, e);
+						}
+					}
+				}
+				if (!key.reset())
+				{
+					throw new IOException("Account directory is no longer watchable: " + directory);
+				}
+				failureCount = 0;
+			}
+		}
+		catch (InterruptedException e)
+		{
+			Thread.currentThread().interrupt();
+			retryAfterFailure(e);
+		}
+		catch (IOException | RuntimeException e)
+		{
+			retryAfterFailure(e);
+		}
+	}
+
+	private synchronized void retryAfterFailure(Exception failure)
+	{
+		if (stopped)
+		{
+			return;
+		}
+		log.warn("Account directory watcher failed", failure);
+		if (++failureCount <= 2)
+		{
+			realTimeUpdateTask = executor.schedule(this::updateCacheRealTime, 1000, TimeUnit.MILLISECONDS);
+		}
+		else
+		{
+			log.warn("Account directory watcher exceeded its retry limit");
+			executor.shutdown();
+		}
 	}
 
 	private boolean isDuplicateEvent(String fileName)
 	{
-		long lastModified = TradePersister.lastModified(fileName);
-		if (lastEvents.containsKey(fileName))
+		long lastModified = directory.resolve(fileName).toFile().lastModified();
+		Long previous = lastEvents.get(fileName);
+		if (previous != null && Math.abs(lastModified - previous) < 5)
 		{
-			long prevModificationTime = lastEvents.get(fileName);
-			long diffSinceLastModification = Math.abs(lastModified - prevModificationTime);
-			if (diffSinceLastModification < requiredMinMsSinceLastUpdate)
-			{
-				return true;
-			}
-			else
-			{
-				lastEvents.put(fileName, lastModified);
-				return false;
-			}
+			return true;
 		}
-		else
-		{
-			lastEvents.put(fileName, lastModified);
-			return false;
-		}
+		lastEvents.put(fileName, lastModified);
+		return false;
 	}
 }
