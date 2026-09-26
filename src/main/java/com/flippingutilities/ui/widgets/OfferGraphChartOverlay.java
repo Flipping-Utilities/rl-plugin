@@ -1,5 +1,7 @@
 package com.flippingutilities.ui.widgets;
 
+import com.flippingutilities.ui.uiutilities.UIUtilities;
+
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.jobs.TimeseriesFetcher;
@@ -7,7 +9,6 @@ import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesPoint;
 import com.flippingutilities.ui.uiutilities.ChartLoadingAnimation;
 import com.flippingutilities.ui.uiutilities.CustomColors;
-import com.flippingutilities.ui.uiutilities.PriceFormatter;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.flippingutilities.ui.widgets.graph.AreaMarker;
 import com.flippingutilities.ui.widgets.graph.ChartConfig;
@@ -77,9 +78,9 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     private Rectangle graphBounds = new Rectangle();
     private Rectangle chartBounds = new Rectangle();
     private final int[] intervalButtonStartPosition = new int[4];
-    private int priceToSet = -1;
+    private long priceToSet = -1;
     private int currentItemId = -1;
-    private int currentOfferPrice = 0;
+    private long currentOfferPrice = 0;
     private boolean isBuyOffer = true;
     private GraphDuration selectedDuration;
 
@@ -93,10 +94,10 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
      * Duration options for the graph.
      */
     public enum GraphDuration {
-        ONE_DAY("1d", Timestep.TWENTY_FOUR_HOURS, 24 * 60 * 60),
-        ONE_WEEK("1w", Timestep.SEVEN_DAYS, 7 * 24 * 60 * 60),
-        ONE_MONTH("1m", Timestep.THIRTY_DAYS, 30 * 24 * 60 * 60),
-        ONE_YEAR("1y", Timestep.ONE_YEAR, 365 * 24 * 60 * 60);
+        ONE_DAY("1d", Timestep.FIVE_MINUTES, 24 * 60 * 60),
+        ONE_WEEK("1w", Timestep.ONE_HOUR, 7 * 24 * 60 * 60),
+        ONE_MONTH("1m", Timestep.SIX_HOURS, 30 * 24 * 60 * 60),
+        ONE_YEAR("1y", Timestep.TWENTY_FOUR_HOURS, 365 * 24 * 60 * 60);
 
         private final String label;
         private final Timestep timestep;
@@ -121,23 +122,20 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         }
 
         /**
-         * Converts a Timestep to the corresponding GraphDuration.
-         * (Wiki API format granular format to total chart length)
+         * Converts the persisted time-range selection to the corresponding graph duration.
          */
         public static GraphDuration fromTimestep(Timestep timestep) {
             if (timestep == null) {
                 return ONE_DAY;
             }
             switch (timestep) {
-                case SEVEN_DAYS:
+                case ONE_HOUR:
                     return ONE_WEEK;
-                case THIRTY_DAYS:
-                    return ONE_MONTH;
-                case ONE_YEAR:
-                    return ONE_YEAR;
-                case TWENTY_FOUR_HOURS:
                 case SIX_HOURS:
-                case SIX_MONTHS:
+                    return ONE_MONTH;
+                case TWENTY_FOUR_HOURS:
+                    return ONE_YEAR;
+                case FIVE_MINUTES:
                 default:
                     return ONE_DAY;
             }
@@ -272,15 +270,14 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         return (offerType == 0);
     }
 
-    private int getOfferPriceFromClient(int itemId) {
-        int offerPrice = 0;
+    private long getOfferPriceFromClient(int itemId) {
+        long offerPrice = 0;
         
         int selectedSlot = client.getVarbitValue(VarbitID.GE_SELECTEDSLOT) - 1;
         if (selectedSlot >= 0 && selectedSlot < client.getGrandExchangeOffers().length) {
             GrandExchangeOffer offer = client.getGrandExchangeOffers()[selectedSlot];
             if (offer != null && offer.getItemId() == itemId) {
-                // 64-bit price (max cash update) saturates into the int-based model
-                offerPrice = (int) Math.min(offer.getPrice(), (long) Integer.MAX_VALUE);
+                offerPrice = offer.getPrice();
             }
         }
         
@@ -291,7 +288,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         return offerPrice;
     }
 
-    private void show(int itemId, int offerPrice, boolean isBuy) {
+    private void show(int itemId, long offerPrice, boolean isBuy) {
         this.currentItemId = itemId;
         this.currentOfferPrice = offerPrice;
         this.isBuyOffer = isBuy;
@@ -614,7 +611,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
             // Check if click is in chart area - set price
             else if (chartBounds != null && chartBounds.contains(p) && chart != null && chart.hasData() && isOfferCreation()) {
                 e.consume();
-                int price = Math.max(chart.calculatePriceFromY(p.y, chartBounds), 0);
+                long price = Math.max(chart.calculatePriceFromY(p.y, chartBounds), 0);
                 this.priceToSet = price;
             }
         }
@@ -655,14 +652,14 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         }
         chart.setHoveredPoint(hoveredPoint);
 
-        int hoveredPrice = chart.calculatePriceFromY(mouseY, chartBounds);
+        long hoveredPrice = chart.calculatePriceFromY(mouseY, chartBounds);
         updateChartMarkers(hoveredPrice);
 
         String buyPrice = hoveredPoint.getAvgHighPrice() != null
-                ? PriceFormatter.quantityToRSDecimalStack(hoveredPoint.getAvgHighPrice(), true)
+                ? UIUtilities.quantityToRSDecimalStack(hoveredPoint.getAvgHighPrice(), true)
                 : null;
         String sellPrice = hoveredPoint.getAvgLowPrice() != null
-                ? PriceFormatter.quantityToRSDecimalStack(hoveredPoint.getAvgLowPrice(), true)
+                ? UIUtilities.quantityToRSDecimalStack(hoveredPoint.getAvgLowPrice(), true)
                 : null;
         String timeAgo = TimeFormatters.formatTimeAgo(hoveredPoint.getTimestamp());
 
@@ -682,11 +679,11 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         }
 
         String instabuyPrice = lastIB != null && lastIB.getAvgHighPrice() != null
-                ? PriceFormatter.quantityToRSDecimalStack(lastIB.getAvgHighPrice(), true)
+                ? UIUtilities.quantityToRSDecimalStack(lastIB.getAvgHighPrice(), true)
                 : null;
         String ibTimeAgo = lastIB != null ? TimeFormatters.formatTimeAgo(lastIB.getTimestamp()) : "-";
         String instasellPrice = lastIS != null && lastIS.getAvgLowPrice() != null
-                ? PriceFormatter.quantityToRSDecimalStack(lastIS.getAvgLowPrice(), true)
+                ? UIUtilities.quantityToRSDecimalStack(lastIS.getAvgLowPrice(), true)
                 : null;
         String isTimeAgo = lastIS != null ? TimeFormatters.formatTimeAgo(lastIS.getTimestamp()) : "-";
 
@@ -698,7 +695,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         // When we want to set the price of the item, we first open the chatbox via "Enter price", then set the price
         // This is setting the price: It must wait until the chatbox is open
         if (this.priceToSet != -1 && event.getScriptId() == 108) {
-            int price = this.priceToSet;
+            long price = this.priceToSet;
             this.priceToSet = -1;
             clientThread.invokeLater(() -> {
                 Widget chat = client.getWidget(InterfaceID.Chatbox.MES_TEXT2);
@@ -739,17 +736,17 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
                 || Constants.NEW_TAX_EXEMPT_ITEMS.contains(itemId);
     }
 
-    private int calculateTaxThreshold(int basePrice, int itemId) {
+    private long calculateTaxThreshold(long basePrice, int itemId) {
         if (isBond(itemId)) {
-            return (int) (basePrice * 0.10);
+            return basePrice / 10;
         }
         if (isTaxExempt(itemId)) {
             return 0;
         }
-        return (int) Math.min(basePrice * Constants.GE_TAX, Constants.GE_TAX_CAP);
+        return (long) Math.min(basePrice * Constants.GE_TAX, Constants.GE_TAX_CAP);
     }
 
-    private void updateChartMarkers(int hoveredPrice) {
+    private void updateChartMarkers(long hoveredPrice) {
         if (chart == null) {
             return;
         }
@@ -759,28 +756,28 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         if (priceToSet != -1) {
             HorizontalMarker desiredPriceMarker = HorizontalMarker.desiredPrice(
                     priceToSet,
-                    "Set: " + QuantityFormatter.quantityToRSDecimalStack(priceToSet, true),
+                    "Set: " + UIUtilities.quantityToRSDecimalStack(priceToSet, true),
                     CustomColors.CHART_DESIRED_PRICE_LINE
             );
             markers.add(desiredPriceMarker);
         }
 
         if (config.showTax() && hoveredPrice > 0 && !isTaxExempt(currentItemId)) {
-            int taxThreshold = calculateTaxThreshold(hoveredPrice, currentItemId);
+            long taxThreshold = calculateTaxThreshold(hoveredPrice, currentItemId);
 
             if (taxThreshold > 0) {
-                int regionMinPrice;
-                int regionMaxPrice;
+                long regionMinPrice;
+                long regionMaxPrice;
                 String label;
 
                 if (isBuyOffer) {
                     regionMinPrice = hoveredPrice;
                     regionMaxPrice = hoveredPrice + taxThreshold;
-                    label = "+" + QuantityFormatter.quantityToRSDecimalStack(taxThreshold, true);
+                    label = "+" + UIUtilities.quantityToRSDecimalStack(taxThreshold, true);
                 } else {
                     regionMinPrice = Math.max(0, hoveredPrice - taxThreshold);
                     regionMaxPrice = hoveredPrice;
-                    label = "-" + QuantityFormatter.quantityToRSDecimalStack(taxThreshold, true);
+                    label = "-" + UIUtilities.quantityToRSDecimalStack(taxThreshold, true);
                 }
 
                 AreaMarker taxRegion = AreaMarker.taxRegion(
@@ -807,7 +804,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
             List<ChartMarker> markers = new ArrayList<>();
             HorizontalMarker desiredPriceMarker = HorizontalMarker.desiredPrice(
                     priceToSet,
-                    "Set: " + QuantityFormatter.quantityToRSDecimalStack(priceToSet, true),
+                    "Set: " + UIUtilities.quantityToRSDecimalStack(priceToSet, true),
                     CustomColors.CHART_DESIRED_PRICE_LINE
             );
             markers.add(desiredPriceMarker);

@@ -1,6 +1,7 @@
 package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.model.TimeseriesResponse;
+import com.flippingutilities.model.Timestep;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.ChartLoadingAnimation;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
@@ -17,6 +18,7 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.Shape;
 import java.awt.BasicStroke;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -82,8 +84,8 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
         String suggestionText = "";
         Color suggestionColor = CustomColors.TOMATO;
 
-        Long wikiHigh = wikiItemInfo.getHigh();
-        Long wikiLow = wikiItemInfo.getLow();
+        long wikiHigh = wikiItemInfo.getHigh();
+        long wikiLow = wikiItemInfo.getLow();
 
         // Check if offer is completed first
         if (slot.isCompleted()) {
@@ -133,11 +135,11 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
 
         // Add price and age rows
         String buyPriceText =
-            wikiHigh == null || wikiHigh == 0
+            !wikiItemInfo.hasHigh()
                 ? "No data"
                 : QuantityFormatter.formatNumber(wikiHigh) + " gp";
         String sellPriceText =
-            wikiLow == null || wikiLow == 0
+            !wikiItemInfo.hasLow()
                 ? "No data"
                 : QuantityFormatter.formatNumber(wikiLow) + " gp";
         String buyAgeText =
@@ -218,7 +220,7 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
         addRow("", null, Color.WHITE, null);
     }
 
-    public void setGraphData(TimeseriesResponse timeseries, com.flippingutilities.model.Timestep timestep, int offerPrice) {
+    public void setGraphData(TimeseriesResponse timeseries, Timestep timestep, long offerPrice) {
         chart.setDataSeries(timeseries, timestep, offerPrice);
     }
 
@@ -320,7 +322,7 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
         chart.setPreferredLocation(new Point(chartX, chartY));
         if (chart.hasData()) {
             chart.setPreferredLocation(new Point(chartX, chartY));
-            java.awt.Shape originalClip = graphics.getClip();
+            Shape originalClip = graphics.getClip();
             graphics.setClip(chartX, chartY, fixedChartWidth, fixedChartHeight);
             chart.render(graphics);
             graphics.setClip(originalClip);

@@ -19,7 +19,7 @@ dependencies {
     annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
 
     implementation "org.apache.commons:commons-csv:1.4"
-    implementation 'org.xerial:sqlite-jdbc:3.45.1.0'
+    implementation 'org.xerial:sqlite-jdbc:3.46.0.0'
 
     testImplementation 'junit:junit:4.12'
     testImplementation 'org.slf4j:slf4j-simple:1.7.12'
@@ -39,20 +39,6 @@ test {
 tasks.withType(JavaCompile) {
 	options.encoding = 'UTF-8'
 	options.release.set(11)
-}
-
-// Embed the SQLite JDBC driver (classes + native libraries for all platforms) into the
-// plugin jar. RuneLite does not provide sqlite-jdbc on the client classpath, so without
-// this the plugin would throw ClassNotFoundException at runtime when SQLite mode is used.
-// commons-csv is intentionally NOT embedded to preserve the pre-existing packaging shape.
-jar {
-	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-	exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
-	from {
-		configurations.runtimeClasspath
-			.findAll { it.name.startsWith('sqlite-jdbc') }
-			.collect { zipTree(it) }
-	}
 }
 
 tasks.register('runPlugin', JavaExec) {

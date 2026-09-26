@@ -201,7 +201,7 @@ public class OfferPanel extends JPanel {
         recipeFlipButton.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+                if (plugin.isAccountWideView()) {
                     JOptionPane.showMessageDialog(null, "You cannot create recipe flips in the Accountwide view");
                     return;
                 }
@@ -227,7 +227,7 @@ public class OfferPanel extends JPanel {
         deleteIcon.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+                if (plugin.isAccountWideView()) {
                     JOptionPane.showMessageDialog(null, "You cannot delete offers in the Accountwide view");
                     return;
                 }

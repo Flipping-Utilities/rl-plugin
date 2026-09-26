@@ -1,5 +1,6 @@
 package com.flippingutilities.model;
 
+import com.flippingutilities.utilities.LenientLongAdapter;
 import com.google.gson.annotations.JsonAdapter;
 import lombok.Getter;
 
@@ -12,10 +13,10 @@ import lombok.Getter;
 public final class TimeseriesPoint {
     private final long timestamp;
 
-    @JsonAdapter(com.flippingutilities.utilities.LenientLongAdapter.class)
+    @JsonAdapter(LenientLongAdapter.class)
     private final Long avgHighPrice;
 
-    @JsonAdapter(com.flippingutilities.utilities.LenientLongAdapter.class)
+    @JsonAdapter(LenientLongAdapter.class)
     private final Long avgLowPrice;
 
     public TimeseriesPoint(long timestamp, Long avgHighPrice, Long avgLowPrice) {

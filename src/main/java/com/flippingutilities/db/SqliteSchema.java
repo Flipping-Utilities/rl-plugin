@@ -1,5 +1,6 @@
 package com.flippingutilities.db;
 
+import com.flippingutilities.model.FlippingItem;
 
 import java.util.Arrays;
 import java.util.List;
@@ -98,7 +99,8 @@ public final class SqliteSchema {
         "  next_refresh INTEGER," +
         "  items_bought INTEGER," +
         "  items_bought_complete INTEGER DEFAULT 0," +
-        "  FOREIGN KEY(account_id) REFERENCES accounts(id)" +
+        "  FOREIGN KEY(account_id) REFERENCES accounts(id)," +
+        "  UNIQUE(account_id, item_id)" +
         ");";
 
     public static final String CREATE_TABLE_ITEM_FAVORITES =
@@ -107,7 +109,7 @@ public final class SqliteSchema {
         "  account_id INTEGER NOT NULL," +
         "  item_id INTEGER NOT NULL," +
         "  is_favorite INTEGER DEFAULT 0," +
-        "  favorite_code TEXT DEFAULT '1'," +
+        "  favorite_code TEXT DEFAULT '" + FlippingItem.DEFAULT_FAVORITE_CODE + "'," +
         "  FOREIGN KEY(account_id) REFERENCES accounts(id)," +
         "  UNIQUE(account_id, item_id)" +
         ");";

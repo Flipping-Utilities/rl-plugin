@@ -6,7 +6,7 @@ public enum SlotPredictedState {
     OUT_OF_RANGE,
     BETTER_THAN_WIKI;
 
-    public static SlotPredictedState getPredictedState(boolean buy, int listedPrice, int instaSell, int instaBuy) {
+    public static SlotPredictedState getPredictedState(boolean buy, long listedPrice, long instaSell, long instaBuy) {
         boolean isBetterThanWiki = buy ? listedPrice > Math.max(instaBuy, instaSell) : listedPrice < Math.min(instaSell, instaBuy);
         boolean isInRange = buy ? listedPrice >= Math.min(instaSell, instaBuy) : listedPrice <= Math.max(instaBuy, instaSell);
 
