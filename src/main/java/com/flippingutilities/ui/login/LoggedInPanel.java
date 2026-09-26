@@ -4,14 +4,11 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
-import java.awt.Cursor;
 import java.awt.Font;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -65,31 +62,10 @@ public class LoggedInPanel extends JPanel {
         errorMessage.setForeground(CustomColors.TOMATO);
         errorMessage.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        JLabel retryLink = new JLabel("<html><u>Retry</u></html>", JLabel.CENTER);
-        retryLink.setFont(new Font("Whitney", Font.PLAIN, 12));
-        retryLink.setForeground(Color.WHITE);
-        retryLink.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        JButton retryLink = new JButton("Retry");
+        retryLink.setToolTipText("Check the Flipping Utilities session again");
         retryLink.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        retryLink.addMouseListener(
-                new MouseAdapter() {
-                    @Override
-                    public void mouseClicked(MouseEvent e) {
-                        // Bad method name, but this re-triggers the login flow
-                        plugin.getApiAuthHandler().checkApiSession();
-                    }
-
-                    @Override
-                    public void mouseEntered(MouseEvent e) {
-                        retryLink.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-                    }
-
-                    @Override
-                    public void mouseExited(MouseEvent e) {
-                        retryLink.setForeground(Color.WHITE);
-                    }
-                }
-        );
+        retryLink.addActionListener(event -> plugin.getApiAuthHandler().checkApiSession());
 
         errorPanel.add(errorMessage);
         errorPanel.add(Box.createVerticalStrut(10));
@@ -120,48 +96,26 @@ public class LoggedInPanel extends JPanel {
 
     private JPanel createSignOutButton() {
         JPanel signoutButtonWrapper = new JPanel();
-        JLabel signOutButton = new JLabel("Sign Out", JLabel.CENTER);
-        signOutButton.setBorder(new EmptyBorder(10, 10, 10, 10));
-        signOutButton.setFont(new Font("Whitney", Font.BOLD, 12));
-        signOutButton.setBackground(CustomColors.TOMATO);
-        signOutButton.setOpaque(true);
-        Runnable r = showLoggedOutPanel;
-        signOutButton.addMouseListener(
-                new MouseAdapter() {
-                    @Override
-                    public void mouseClicked(MouseEvent e) {
-                        int result = JOptionPane.showOptionDialog(
-                                signOutButton,
-                                "Signing out will require you to re-enter the token\ngiven to you by the Flopper discord bot",
-                                "Are you sure?",
-                                JOptionPane.YES_NO_OPTION,
-                                JOptionPane.WARNING_MESSAGE,
-                                null,
-                                new String[] { "Yes", "No" },
-                                "No"
-                        );
-
-                        if (result == JOptionPane.YES_OPTION) {
-                            plugin.getDataHandler().getAccountWideData().setJwt(null);
-                            plugin
-                                    .getDataHandler()
-                                    .markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
-                            plugin.getApiAuthHandler().setHasValidJWT(false);
-                            r.run();
-                        }
-                    }
-
-                    @Override
-                    public void mouseEntered(MouseEvent e) {
-                        signOutButton.setBackground(CustomColors.TOMATO.brighter());
-                    }
-
-                    @Override
-                    public void mouseExited(MouseEvent e) {
-                        signOutButton.setBackground(CustomColors.TOMATO);
-                    }
-                }
-        );
+        JButton signOutButton = new JButton("Sign out");
+        signOutButton.setToolTipText("Sign out of Flipping Utilities");
+        signOutButton.addActionListener(event -> {
+            int result = JOptionPane.showOptionDialog(
+                    signOutButton,
+                    "Signing out will require you to re-enter the token\ngiven to you by the Flopper discord bot",
+                    "Are you sure?",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE,
+                    null,
+                    new String[] { "Yes", "No" },
+                    "No"
+            );
+            if (result == JOptionPane.YES_OPTION) {
+                plugin.getDataHandler().getAccountWideData().setJwt(null);
+                plugin.getDataHandler().markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
+                plugin.getApiAuthHandler().setHasValidJWT(false);
+                showLoggedOutPanel.run();
+            }
+        });
 
         signoutButtonWrapper.add(signOutButton);
         return signoutButtonWrapper;
@@ -207,6 +161,8 @@ public class LoggedInPanel extends JPanel {
         toggleLabel.setForeground(CustomColors.CHEESE);
 
         JToggleButton toggleButton = UIUtilities.createToggleButton();
+        toggleLabel.setLabelFor(toggleButton);
+        toggleButton.getAccessibleContext().setAccessibleName("Slot enhancement");
         toggleButton.setSelected(plugin.shouldEnhanceSlots());
         toggleButton.addItemListener(
                 i -> plugin.toggleEnhancedSlots(toggleButton.isSelected())
