@@ -37,7 +37,6 @@ public final class TimeLabelGenerator {
             case FIVE_MINUTES:
                 return HOUR_FORMATTER.format(instant.atZone(zoneId));
             case ONE_HOUR:
-                return DAY_FORMATTER.format(instant.atZone(zoneId));
             case SIX_HOURS:
                 return DAY_FORMATTER.format(instant.atZone(zoneId));
             case TWENTY_FOUR_HOURS:

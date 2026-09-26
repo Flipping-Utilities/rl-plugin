@@ -922,14 +922,14 @@ public class FlippingItemPanel extends JPanel
 			wikiSellVal.setText("N/A");
 			return;
 		}
-		wikiBuyVal.setText(wikiItemInfo.getHigh()==0? "No data":QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
-		wikiSellVal.setText(wikiItemInfo.getLow()==0? "No data":QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
+		wikiBuyVal.setText(!wikiItemInfo.hasHigh() ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
+		wikiSellVal.setText(!wikiItemInfo.hasLow() ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
 
-		if (wikiItemInfo.getHigh() != 0 && wikiItemInfo.getLow() != 0) {
+		if (wikiItemInfo.hasHigh() && wikiItemInfo.hasLow()) {
 			long profitEach = GeTax.getPostTaxPrice(wikiItemInfo.getHigh()) - wikiItemInfo.getLow();
 			wikiProfitEachVal.setText(UIUtilities.quantityToRSDecimalStack(profitEach, false) + " gp");
 
-			float roi = ((float)profitEach/ wikiItemInfo.getLow()) * 100;
+			float roi = (profitEach / (float) wikiItemInfo.getLow()) * 100;
 			wikiRoiLabelVal.setText(String.format("%.2f", roi) + "%");
 			//Color gradient red-yellow-green depending on ROI.
 			wikiRoiLabelVal.setForeground(UIUtilities.gradiatePercentage(roi, plugin.getConfig().roiGradientMax()));
@@ -968,14 +968,14 @@ public class FlippingItemPanel extends JPanel
 		if (wikiItemInfo == null) {
 			return;
 		}
-		if (wikiItemInfo.getHighTime() == 0) {
+		if (wikiItemInfo.getHighTime() == null || wikiItemInfo.getHighTime() == 0) {
 			wikiBuyTimeVal.setText("No data");
 		}
 		else {
 			wikiBuyTimeVal.setText(TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getHighTime())));
 		}
-		if (wikiItemInfo.getLowTime() == 0) {
-			wikiBuyTimeVal.setText("No data");
+		if (wikiItemInfo.getLowTime() == null || wikiItemInfo.getLowTime() == 0) {
+			wikiSellTimeVal.setText("No data");
 		}
 		else {
 			wikiSellTimeVal.setText(TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getLowTime())));

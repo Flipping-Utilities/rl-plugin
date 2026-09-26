@@ -3,23 +3,28 @@ package com.flippingutilities.model;
 import lombok.Getter;
 
 /**
- * represents different time intervals for fetching and displaying timeseries data.
- * each timestep defines the granularity of data points, the display period, and chart configuration.
+ * Lookback window for the wiki v2 timeseries endpoint (/osrs/timeseries?lookback=...).
+ *
+ * v2 replaced v1's granularity parameter ("timestep=5m") with lookback periods; the API
+ * now decides the point spacing and reports it in the response. intervalSeconds holds the
+ * spacing the API currently returns for each lookback, as a cache-expiry fallback.
+ * Enum names are persisted in RuneLite configuration, so the original granularity names
+ * retain their original display windows when requesting v2 lookbacks.
  */
 @Getter
 public enum Timestep {
-    FIVE_MINUTES("5m", "Last 24 Hours", 5 * 60, 24 * 60 * 60, 8),
-    ONE_HOUR("1h", "Last 7 Days", 60 * 60, 7 * 24 * 60 * 60, 7),
-    SIX_HOURS("6h", "Last 1 Month", 6 * 60 * 60, 30 * 24 * 60 * 60, 4),
-    TWENTY_FOUR_HOURS("24h", "Last Year", 24 * 60 * 60, 365 * 24 * 60 * 60, 6);
+    FIVE_MINUTES("24h", "Last 24 Hours", 5 * 60, 24 * 60 * 60, 8),
+    ONE_HOUR("7d", "Last 7 Days", 60 * 60, 7 * 24 * 60 * 60, 7),
+    SIX_HOURS("30d", "Last 1 Month", 6 * 60 * 60, 30 * 24 * 60 * 60, 4),
+    TWENTY_FOUR_HOURS("1y", "Last Year", 24 * 60 * 60, 365 * 24 * 60 * 60, 6);
 
-    /** api parameter value for this timestep (e.g., "5m", "1h") */
+    /** api lookback parameter value (e.g., "24h", "7d") */
     private final String apiValue;
     /** display name shown to user (e.g., "Last 24 Hours") */
     private final String displayName;
-    /** time interval between data points in seconds */
+    /** point spacing the API currently returns for this lookback, in seconds */
     private final long intervalSeconds;
-    /** maximum time range covered by this timestep in seconds */
+    /** lookback span in seconds */
     private final long maxTimeRangeSeconds;
     /** number of labels to display on chart axis */
     private final int labelCount;

@@ -27,8 +27,9 @@ import java.util.function.BiConsumer;
 @Slf4j
 public class WikiDataFetcherJob {
     public static int requestInterval = 60; //seconds
-    static final String API = "https://prices.runescape.wiki/api/v1/osrs/latest";
-    static final String DEADMAN_API = "https://prices.runescape.wiki/api/v1/dmm/latest";
+    // Both markets use v2. The Deadman endpoint may return 404 outside active events.
+    static final String API = "https://prices.runescape.wiki/api/v2/osrs/latest";
+    static final String DEADMAN_API = "https://prices.runescape.wiki/api/v2/dmm/latest";
     FlippingPlugin plugin;
     ScheduledExecutorService executor;
     OkHttpClient httpClient;

@@ -70,6 +70,9 @@ public class OptionHandler {
         if (plugin.getLastWikiRequestWrapper() != null) {
             WikiRequest wr = plugin.getLastWikiRequestWrapper().getWikiRequest();
             WikiItemMargins wikiItemMargins = wr.getData().get(itemId);
+            if (wikiItemMargins == null) {
+                throw new InvalidOptionException("wiki has no data for this item");
+            }
             long wikiPrice = getBuyPrice ? wikiItemMargins.getHigh() : wikiItemMargins.getLow();
             if (wikiPrice == 0) {
                 throw new InvalidOptionException(String.format("no insta %s data for this item", getBuyPrice ? "buy" : "sell"));

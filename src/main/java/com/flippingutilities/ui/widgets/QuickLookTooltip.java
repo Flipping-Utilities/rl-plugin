@@ -134,22 +134,22 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
         }
 
         // Add price and age rows
-        String buyPriceText = 
-            wikiHigh == 0
+        String buyPriceText =
+            !wikiItemInfo.hasHigh()
                 ? "No data"
                 : QuantityFormatter.formatNumber(wikiHigh) + " gp";
         String sellPriceText =
-            wikiLow == 0
+            !wikiItemInfo.hasLow()
                 ? "No data"
                 : QuantityFormatter.formatNumber(wikiLow) + " gp";
         String buyAgeText =
-            wikiItemInfo.getHighTime() == 0
+            wikiItemInfo.getHighTime() == null || wikiItemInfo.getHighTime() == 0
                 ? "No data"
                 : TimeFormatters.formatDuration(
                         Instant.ofEpochSecond(wikiItemInfo.getHighTime())
             );
         String sellAgeText =
-            wikiItemInfo.getLowTime() == 0
+            wikiItemInfo.getLowTime() == null || wikiItemInfo.getLowTime() == 0
                 ? "No data"
                 : TimeFormatters.formatDuration(
                         Instant.ofEpochSecond(wikiItemInfo.getLowTime())
