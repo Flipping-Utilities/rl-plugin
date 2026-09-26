@@ -119,6 +119,39 @@ public class SandboxPluginTest {
     }
 
     @Test
+    public void rejectsUnreadableJsonWithoutAHealthyBackupAndLeavesSourcesUntouched() throws Exception {
+        for (boolean corruptBackup : new boolean[]{false, true}) {
+            Path source = folder.newFolder(corruptBackup ? "corrupt-backup-source" : "missing-backup-source").toPath();
+            write(source.resolve(ACCOUNT + ".json"), legacyAccount(ACCOUNT));
+            write(source.resolve("Unreadable.json"), "{");
+            if (corruptBackup) write(source.resolve("Unreadable.backup.json"), "null");
+            Map<String, String> before = hashes(source);
+            probe(source, DataSource.JSON, "reject-json");
+            assertEquals("A failed import must not alter source saves or backups", before, hashes(source));
+        }
+    }
+
+    @Test
+    public void unreadableJsonRecoversFromHealthyBackupWithoutChangingTheSource() throws Exception {
+        Path source = folder.newFolder("healthy-backup-source").toPath();
+        write(source.resolve(ACCOUNT + ".json"), "{");
+        write(source.resolve(ACCOUNT + ".backup.json"), legacyAccount(ACCOUNT));
+        Map<String, String> before = hashes(source);
+        probe(source, DataSource.JSON, "verify");
+        assertEquals("Recovery must only use the disposable copy", before, hashes(source));
+    }
+
+    @Test
+    public void rejectsUnreadableAccountWideDataWithoutChangingTheSource() throws Exception {
+        Path source = folder.newFolder("corrupt-accountwide-source").toPath();
+        write(source.resolve(ACCOUNT + ".json"), legacyAccount(ACCOUNT));
+        write(source.resolve("accountwide.json"), "{");
+        Map<String, String> before = hashes(source);
+        probe(source, DataSource.JSON, "reject-accountwide");
+        assertEquals("Failed account-wide imports must leave source files intact", before, hashes(source));
+    }
+
+    @Test
     public void nativeSidebarLoadsSavedHistoryAndSupportsFavoriteClicks() throws Exception {
         Assume.assumeTrue("Set FLIPPING_SANDBOX_UI_TEST=true on a desktop to exercise real Swing windows",
             "true".equals(System.getenv("FLIPPING_SANDBOX_UI_TEST")));
@@ -314,6 +347,15 @@ public class SandboxPluginTest {
                     }
                 } else if ("reject-account".equals(action)) {
                     rejectUnsafeAccounts(data, source);
+                } else if ("reject-json".equals(action) || "reject-accountwide".equals(action)) {
+                    try (SandboxPlugin ignored = SandboxPlugin.load(data)) {
+                        fail("Unreadable imported data must reject sandbox startup");
+                    } catch (IOException | IllegalStateException expected) {
+                        String reason = "reject-json".equals(action)
+                            ? "Cannot read account snapshot or backup for Unreadable"
+                            : "Could not load sandbox accountwide data";
+                        assertTrue("Startup must identify the unreadable data: " + expected, expected.getMessage().contains(reason));
+                    }
                 } else if ("wiki".equals(action)) {
                     try (SandboxPlugin host = SandboxPlugin.load(data)) { exerciseWiki(host, data); }
                 } else if (action.startsWith("exchange")) {
