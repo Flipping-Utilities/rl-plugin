@@ -122,8 +122,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         }
 
         /**
-         * Converts a Timestep to the corresponding GraphDuration.
-         * (Wiki API format granular format to total chart length)
+         * Converts the persisted time-range selection to the corresponding graph duration.
          */
         public static GraphDuration fromTimestep(Timestep timestep) {
             if (timestep == null) {

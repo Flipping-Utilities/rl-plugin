@@ -95,10 +95,10 @@ public class QuickLookPanel extends JPanel {
         wikiMarginToLabel.put(wikiItemInfo.getHigh(), wikiInstaBuy);
         wikiMarginToLabel.put(wikiItemInfo.getLow(), wikiInstaSell);
 
-        wikiInstaBuyAge.setText(wikiItemInfo.getHighTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getHighTime())));
-        wikiInstaSellAge.setText(wikiItemInfo.getLowTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getLowTime())));
-        wikiInstaBuy.setText(wikiItemInfo.getHigh() == 0 ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
-        wikiInstaSell.setText(wikiItemInfo.getLow() == 0 ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
+        wikiInstaBuyAge.setText(wikiItemInfo.getHighTime() == null || wikiItemInfo.getHighTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getHighTime())));
+        wikiInstaSellAge.setText(wikiItemInfo.getLowTime() == null || wikiItemInfo.getLowTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getLowTime())));
+        wikiInstaBuy.setText(!wikiItemInfo.hasHigh() ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
+        wikiInstaSell.setText(!wikiItemInfo.hasLow() ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
 
         toMakeOfferCompetitiveTest.setText("");
         offerCompetitivenessText.setText("");
