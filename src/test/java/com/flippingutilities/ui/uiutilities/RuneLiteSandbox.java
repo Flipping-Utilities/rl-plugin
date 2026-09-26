@@ -1,10 +1,8 @@
 package com.flippingutilities.ui.uiutilities;
 
-import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.laf.RuneLiteLAF;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -25,10 +23,14 @@ public final class RuneLiteSandbox {
         if (data == null) return;
         System.setProperty("user.home", data.getRuneLiteDirectory().getParent().toString());
         SandboxPlugin[] host = new SandboxPlugin[1];
+        SandboxGrandExchangePanel[] exchangePanel = new SandboxGrandExchangePanel[1];
         AtomicBoolean closed = new AtomicBoolean();
         Runnable cleanup = () -> {
             if (!closed.compareAndSet(false, true)) return;
             try {
+                SwingUtilities.invokeAndWait(() -> {
+                    if (exchangePanel[0] != null) exchangePanel[0].close();
+                });
                 if (host[0] != null) host[0].close();
                 data.close();
             } catch (Exception error) { error.printStackTrace(); }
@@ -44,25 +46,10 @@ public final class RuneLiteSandbox {
                     RuneLiteLAF.setup();
                     JFrame frame = new JFrame("RuneLite sandbox — Flipping Utilities");
                     frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-                    JPanel game = new JPanel(new GridBagLayout());
-                    game.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-                    JTextArea info = new JTextArea("Offline RuneLite sandbox\n\n"
-                        + "Use the real sidebar to browse and edit saved accounts.\n"
-                        + "All changes are discarded when this window closes.\n\n"
-                        + "Source: " + data.getSource() + "\n"
-                        + "Working copy: " + data.getRuneLiteDirectory() + "\n\n"
-                        + "Game login, live prices and item sprites are unavailable.\n"
-                        + "Drag the divider to resize the sidebar.");
-                    info.setEditable(false);
-                    info.setLineWrap(true);
-                    info.setWrapStyleWord(true);
-                    info.setColumns(42);
-                    info.setBorder(new EmptyBorder(24, 24, 24, 24));
-                    info.setBackground(game.getBackground());
-                    game.add(info);
                     JPanel sidebar = host[0].mount();
+                    exchangePanel[0] = new SandboxGrandExchangePanel(host[0].exchange(), data);
                     sidebar.setMinimumSize(new Dimension(225, 0));
-                    JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, game, sidebar);
+                    JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, exchangePanel[0], sidebar);
                     split.setResizeWeight(1);
                     split.setDividerLocation(665);
                     frame.setContentPane(split);
@@ -70,6 +57,7 @@ public final class RuneLiteSandbox {
                     frame.setSize(1000, 850);
                     frame.addWindowListener(new WindowAdapter() {
                         @Override public void windowClosed(WindowEvent event) {
+                            exchangePanel[0].close();
                             // Production panels create owned and shared-owner dialogs. End them with this host.
                             for (Window window : Window.getWindows()) window.dispose();
                             new Thread(cleanup, "sandbox-close").start();
