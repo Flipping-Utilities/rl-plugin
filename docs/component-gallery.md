@@ -1,6 +1,6 @@
 # RuneLite sandbox and Swing component gallery
 
-Run the real plugin sidebar in an offline RuneLite shell, using disposable copies of saved data. The sandbox and synthetic component gallery use RuneLite's look and feel and stay on the test runtime classpath, outside the plugin JAR.
+Run the real plugin sidebar in a local RuneLite shell, using disposable copies of saved data and public OSRS Wiki prices. The sandbox and synthetic component gallery use RuneLite's look and feel and stay on the test runtime classpath, outside the plugin JAR.
 
 ## Run with real data
 
@@ -33,17 +33,27 @@ The window and console show the source and temporary directory. Closing the wind
 
 An explicit database selects SQLite, including databases without the plugin's migration marker. Folder mode honors `flipping.dataSource=JSON` in `settings.properties`; otherwise it uses an available `flipping.db` unless it has a `.needs-resync` marker, and falls back to JSON. Inactive databases are skipped, so a corrupt stale database cannot block JSON testing. The sandbox does not rebuild a selected database from JSON. Unsafe account names are rejected before startup backups. Other display preferences use plugin defaults.
 
-This is an offline host, with real local models and editing actions. It does not run the game or publish offers, refresh credentials, fetch live prices or download item sprites. Icons use a placeholder; item names come from saved records or a small built-in list, with unknown items shown as `Item <id>`. Saved GE limits are retained; limits for unsaved items are unavailable. Recipe history and local recipes load from the copy; remote recipe catalogs and global item search are unavailable. Slot updates come from the local simulator. Explicit CSV exports can be saved outside the temporary directory through the normal file chooser.
+The host uses real local models and editing actions. It does not run the game, publish offers, or contact the plugin's backend and authentication services. Public Wiki requests use a separate client with no saved credentials or cookies. Recipe history and local recipes load from the copy; remote recipe catalogs are unavailable. Slot updates come from the local simulator. Explicit CSV exports can be saved outside the temporary directory through the normal file chooser.
 
 ## Simulate Grand Exchange trades
 
-Choose the account receiving trades in the simulator's **Account** dropdown. This is independent of the sidebar's account filter. Select one of the eight slots, choose a saved or common item (or type its numeric ID), select **Buy** or **Sell**, and enter the quantity and price before clicking **Place offer**.
+Choose the account receiving trades in the simulator's **Account** dropdown. This is independent of the sidebar's account filter. Select one of the eight slots, choose an item from the Wiki catalog (or type its name or numeric ID), select **Buy** or **Sell**, and enter the quantity and price before clicking **Place offer**. Saved items and a small built-in list remain available if the catalog cannot load.
 
 For the selected offer, set **Items / second** and click **Set rate** to fill it automatically once per second; use `0` to pause. To advance manually, enter a **Chunk** quantity and click **Fill chunk**, or use **Fill remaining**. **Cancel offer** stops the unfilled part. Completed and canceled offers stay in their slots until you click **Collect**. These actions update the real sidebar through the plugin's offer handling.
 
 Loaded offers start paused, and switching simulated accounts pauses the previous account's rates. **Fill price (gp/item)** controls the price of future fills; click **Apply price** after changing it. A loaded offer with no filled items may have no saved price, shown as `0`, so set a positive fill price before advancing it. Partially filled offers initially use their saved average price. You can change the fill price to test price improvements. The simulator limits an offer's total gross value to `2,147,483,647` gp to fit the plugin's integer model. Validation errors appear below the controls.
 
 The simulator has no inventory or cash balance and does not match offers against a market. Changes stay in the temporary copy and disappear when the sandbox closes. Hover over the source and temporary-copy paths at the bottom to see their full values.
+
+## Wiki data and price charts
+
+The launcher reads the public Wiki `/mapping` catalog once per session for item names, GE limits, and icon filenames. The full catalog becomes available in the simulator's item dropdown. Icons download only when needed and are cached in memory. Latest market prices refresh automatically and are cached for 60 seconds; they update the real sidebar's price widgets and offer advice. These reads use only the public `prices.runescape.wiki` API and `oldschool.runescape.wiki` images. Simulated offers never change market prices.
+
+Click a Wiki buy or sell price on the sidebar's **Flipping** tab to open its chart, or click **Prices / chart** in the simulator to inspect the selected slot or the item chosen for a new offer. The window uses the plugin's existing Quick Look and time-series chart widgets. Choose **Last 24 Hours**, **Last 7 Days**, **Last 1 Month**, or **Last Year**, and hover over the chart for timestamps and Insta Buy / Insta Sell prices. Opening a chart for an active simulated offer also shows its price as a reference line.
+
+Use **Refresh** in the chart to retry a failed price or history request. Successful history responses remain cached until the next selected time interval plus 15 seconds. **Refresh Wiki** in the simulator retries catalog and latest-price loads. Failed icon requests can retry after 60 seconds when the icon is needed again.
+
+If the Wiki is unavailable, saved data and simulated trading still work. Item names and GE limits fall back to saved records or the small built-in item list; unknown names appear as `Item <id>` and unsaved limits remain unavailable. Icons keep their placeholders. The status line reports unavailable or stale prices, and previously loaded sidebar prices remain visible. Chart failures show a retry message instead of closing the sandbox.
 
 ## Run synthetic component states
 
@@ -111,6 +121,12 @@ For timers, executors or subscriptions, use a `GalleryFixture` factory returning
 `SandboxSourceChooserTest` exercises default selection, pasted paths, folder/file drops, retries and cancellation cleanup. `SandboxDataTest` checks source selection, independent copies, committed WAL data, failure cleanup and link handling. `SandboxPluginTest` launches fresh JVMs to check JSON/SQLite loading, edits, deletion, restart isolation, unsafe account names and incorrect-home rejection.
 
 On a desktop, run `FLIPPING_SANDBOX_UI_TEST=true ./gradlew test --tests '*SandboxPluginTest' --rerun-tasks`. These checks exercise saved and empty-source exchanges through the real plugin: partial and timed fills, pauses, price changes, cancellation, collection, buy/sell accounting, account switching, invalid inputs and shutdown. They verify both JSON and SQLite writes stay in the temporary copy. The native interaction check opens the source chooser, places and fills an offer through the GE form, clicks a sidebar favorite, switches tabs and captures PNGs at the launcher's default 1000×850 size in the system temporary directory.
+
+`SandboxWikiDataTest` uses in-memory HTTP responses to check request restrictions, coalescing, cache expiry and eviction, malformed data, image limits, retries, and shutdown. `SandboxPricePanelTest` checks the production chart and Quick Look rendering, hover values, period changes, failed-request retries, empty history, and discarded late responses. These tests make no internet requests by default. To check the live Wiki mapping, icon, latest prices, and history for an Abyssal whip, run:
+
+```sh
+FLIPPING_SANDBOX_WIKI_TEST=true ./gradlew test --tests '*SandboxWikiDataTest.optionalLiveWikiSmokeTest' --rerun-tasks
+```
 
 `UiGalleryTest` verifies that all registered fixtures render at both widths, queued construction updates appear in the capture, resources close after rendering failures, reset/switch operations discard previous component state, and width controls/export capture the current interactive state. Existing component tests remain responsible for application behavior. The older `SidebarPreview` entry point still produces its original audit image.
 

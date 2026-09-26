@@ -18,6 +18,7 @@ import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.awt.AWTEvent;
 import java.awt.Component;
 import java.awt.Container;
@@ -58,8 +59,14 @@ import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 import javax.swing.JSpinner;
 import javax.swing.JSplitPane;
+import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 
 import static org.junit.Assert.*;
@@ -120,6 +127,17 @@ public class SandboxPluginTest {
         Map<String, String> before = hashes(source);
         probe(source, DataSource.JSON, "ui");
         assertEquals(before, hashes(source));
+    }
+
+    @Test
+    public void wikiMetadataIconsAndPriceWidgetsWorkInsideTheDisposableHost() throws Exception {
+        Assume.assumeTrue("Set FLIPPING_SANDBOX_UI_TEST=true to exercise Wiki data in the real sidebar",
+            "true".equals(System.getenv("FLIPPING_SANDBOX_UI_TEST")));
+        Path source = folder.newFolder("wiki-sandbox-source").toPath();
+        write(source.resolve(ACCOUNT + ".json"), legacyAccount(ACCOUNT).replace("Abyssal whip", "Saved item name"));
+        Map<String, String> before = hashes(source);
+        probe(source, DataSource.JSON, "wiki");
+        assertEquals("Metadata and prices must not change source saves", before, hashes(source));
     }
 
     @Test
@@ -195,7 +213,7 @@ public class SandboxPluginTest {
 
     private void probe(Path source, DataSource backend, String action) throws Exception {
         Path output = Files.createTempFile("sandbox-plugin-probe-", ".log");
-        boolean headful = "ui".equals(action) || action.startsWith("exchange");
+        boolean headful = "ui".equals(action) || "wiki".equals(action) || action.startsWith("exchange");
         Process child = new ProcessBuilder(Paths.get(System.getProperty("java.home"), "bin", "java").toString(),
             "-Djava.awt.headless=" + !headful, "-cp", testClasspath(), Probe.class.getName(),
             source.toString(), backend.name(), action).redirectErrorStream(true).redirectOutput(output.toFile()).start();
@@ -203,7 +221,7 @@ public class SandboxPluginTest {
             boolean completed = child.waitFor(45, TimeUnit.SECONDS);
             if (!completed) child.destroyForcibly().waitFor(5, TimeUnit.SECONDS);
             String log = Files.readString(output);
-            if ("ui".equals(action)) System.out.print(log);
+            if ("ui".equals(action) || "wiki".equals(action)) System.out.print(log);
             assertTrue("Sandbox probe timed out:\n" + log, completed);
             assertEquals("Sandbox probe failed:\n" + log, 0, child.exitValue());
         } finally {
@@ -296,6 +314,8 @@ public class SandboxPluginTest {
                     }
                 } else if ("reject-account".equals(action)) {
                     rejectUnsafeAccounts(data, source);
+                } else if ("wiki".equals(action)) {
+                    try (SandboxPlugin host = SandboxPlugin.load(data)) { exerciseWiki(host, data); }
                 } else if (action.startsWith("exchange")) {
                     try (SandboxPlugin host = SandboxPlugin.load(data)) {
                         assertEquals(backend, host.plugin.getConfig().dataSource());
@@ -326,6 +346,118 @@ public class SandboxPluginTest {
                 }
             }
             assertFalse("Closing the sandbox must remove its temporary home", Files.exists(temporaryHome));
+        }
+
+        private static void exerciseWiki(SandboxPlugin host, SandboxData data) throws Exception {
+            BufferedImage icon = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D paint = icon.createGraphics();
+            paint.setColor(java.awt.Color.MAGENTA);
+            paint.fillRect(0, 0, 16, 16);
+            paint.dispose();
+            ByteArrayOutputStream encoded = new ByteArrayOutputStream();
+            ImageIO.write(icon, "png", encoded);
+            long now = Instant.now().getEpochSecond();
+            CountDownLatch releaseIcons = new CountDownLatch(1);
+            OkHttpClient http = new OkHttpClient.Builder().addInterceptor(chain -> {
+                String path = chain.request().url().encodedPath();
+                if (path.startsWith("/images/")) try {
+                    if (!releaseIcons.await(10, TimeUnit.SECONDS)) throw new IOException("Icon test timed out");
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException(error);
+                }
+                String json;
+                if (path.endsWith("mapping")) json = "[{\"id\":4151,\"name\":\"Wiki whip\",\"limit\":70,\"icon\":\"Abyssal whip.png\"},"
+                    + "{\"id\":554,\"name\":\"Fire rune\",\"limit\":50000,\"icon\":\"Fire rune.png\"}]";
+                else if (path.endsWith("latest")) json = "{\"data\":{\"4151\":{\"high\":150,\"low\":130,\"highTime\":" + now + ",\"lowTime\":" + now + "}}}";
+                else json = "{\"data\":[{\"timestamp\":" + (now - 600) + ",\"avgHighPrice\":145,\"avgLowPrice\":125},"
+                    + "{\"timestamp\":" + now + ",\"avgHighPrice\":150,\"avgLowPrice\":130}]}";
+                ResponseBody body = path.startsWith("/images/")
+                    ? ResponseBody.create(MediaType.parse("image/png"), encoded.toByteArray())
+                    : ResponseBody.create(MediaType.parse("application/json"), json);
+                return new Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                    .code(200).message("Controlled Wiki").body(body).build();
+            }).build();
+            SandboxGrandExchangePanel[] game = new SandboxGrandExchangePanel[1];
+            JSplitPane[] shell = new JSplitPane[1];
+            AtomicReference<Integer> completedIconPixel = new AtomicReference<>();
+            AtomicReference<Throwable> asynchronousFailure = new AtomicReference<>();
+            Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+            Thread.setDefaultUncaughtExceptionHandler((thread, error) -> asynchronousFailure.compareAndSet(null, error));
+            try {
+                SwingUtilities.invokeAndWait(() -> {
+                    RuneLiteLAF.setup();
+                    try { host.mount(); } catch (Exception error) { throw new RuntimeException(error); }
+                    host.startWikiData(new SandboxWikiData(http));
+                    net.runelite.client.util.AsyncBufferedImage pendingIcon = host.plugin.getItemManager().getImage(ITEM);
+                    pendingIcon.onLoaded(() -> completedIconPixel.set(pendingIcon.getRGB(18, 16)));
+                    game[0] = new SandboxGrandExchangePanel(host, data);
+                    host.exchange().place(0, true, ITEM, 10, 140);
+                    shell[0] = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, game[0], host.plugin.getMasterPanel());
+                    shell[0].setDividerLocation(665);
+                    JFrame frame = new JFrame("Wiki sandbox integration");
+                    frame.setContentPane(shell[0]);
+                    frame.setSize(1000, 850);
+                    frame.setVisible(true);
+                });
+                SwingUtilities.invokeAndWait(releaseIcons::countDown);
+                awaitSwing(() -> host.wikiStatus().contains("Wiki items: 2") && host.wikiStatus().contains("Wiki prices loaded")
+                    && Integer.valueOf(java.awt.Color.MAGENTA.getRGB()).equals(completedIconPixel.get())
+                    && named(game[0], JLabel.class, "Wiki data status").getText().contains("Wiki prices loaded")
+                    && named(game[0], JToggleButton.class, "Slot 1").getText().contains("Buy"));
+                SwingUtilities.invokeAndWait(() -> {
+                    assertEquals("Wiki whip", host.plugin.getDataHandler().viewAccountData(ACCOUNT).getTrades().get(0).getItemName());
+                    assertEquals(50000, host.plugin.getItemManager().getItemStats(554).getGeLimit());
+                    JLabel value = named(host.plugin.getFlippingPanel(), JLabel.class, "Wiki price chart 4151");
+                    assertEquals("150 gp", value.getText());
+                    value.dispatchEvent(new MouseEvent(value, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(),
+                        0, 2, 2, 1, false, MouseEvent.BUTTON1));
+                });
+                awaitSwing(() -> chartDialog() != null && find(chartDialog(), JLabel.class,
+                    label -> "Chart status".equals(label.getName()) && label.getText().startsWith("Wiki Insta Buy")) != null);
+                Path screenshot = Files.createTempFile("sandbox-wiki-prices-", ".png");
+                Path shellScreenshot = Files.createTempFile("sandbox-wiki-items-", ".png");
+                SwingUtilities.invokeAndWait(() -> {
+                    JDialog chart = chartDialog();
+                    assertEquals("Wiki whip (4151)", named(chart, JLabel.class, "Price item").getText());
+                    try {
+                        ImageIO.write(UiGallery.capture((javax.swing.JComponent) chart.getContentPane(), 720, 700), "png", screenshot.toFile());
+                        ImageIO.write(UiGallery.capture(shell[0], 1000, 850), "png", shellScreenshot.toFile());
+                    } catch (IOException error) { throw new RuntimeException(error); }
+                    named(game[0], JButton.class, "Prices / chart").doClick();
+                    assertEquals("Buy offer: 140 gp", named(chart, JLabel.class, "Offer reference").getText());
+                });
+                System.out.println("Native Wiki chart screenshot: " + screenshot);
+                System.out.println("Native Wiki items screenshot: " + shellScreenshot);
+                assertTrue(host.plugin.getDataHandler().storeData());
+                assertEquals("Wiki whip", host.plugin.tradePersister.loadAccount(ACCOUNT).getTrades().get(0).getItemName());
+            } finally {
+                releaseIcons.countDown();
+                SwingUtilities.invokeAndWait(() -> {
+                    if (game[0] != null) game[0].close();
+                    for (Window window : Window.getWindows()) window.dispose();
+                });
+                Thread.setDefaultUncaughtExceptionHandler(previous);
+            }
+            if (asynchronousFailure.get() != null) throw new AssertionError("Wiki Swing callback failed", asynchronousFailure.get());
+        }
+
+        private static JDialog chartDialog() {
+            for (Window window : Window.getWindows()) {
+                if (window instanceof JDialog && window.isShowing() && "Sandbox price chart".equals(window.getName())) return (JDialog) window;
+            }
+            return null;
+        }
+
+        private static void awaitSwing(java.util.function.BooleanSupplier ready) throws Exception {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (System.nanoTime() < deadline) {
+                java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
+                SwingUtilities.invokeAndWait(() -> done.set(ready.getAsBoolean()));
+                if (done.get()) return;
+                Thread.sleep(20);
+            }
+            fail("Timed out waiting for Wiki data in the Swing UI");
         }
 
         private static void exerciseExchange(SandboxPlugin host, boolean emptySource) throws Exception {
@@ -559,7 +691,7 @@ public class SandboxPluginTest {
                     } catch (Exception failure) {
                         throw new RuntimeException(failure);
                     }
-                    game[0] = new SandboxGrandExchangePanel(host.exchange(), data);
+                    game[0] = new SandboxGrandExchangePanel(host, data);
                     layout[0] = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, game[0], panel[0]);
                     layout[0].setDividerLocation(665);
                     JFrame frame = new JFrame("Sandbox integration test");
