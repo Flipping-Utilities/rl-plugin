@@ -4,18 +4,14 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
-import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
-import net.runelite.client.ui.components.IconTextField;
 
 import javax.swing.*;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.time.Instant;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -101,6 +97,7 @@ public class LoginPanel extends JPanel {
 
     public void showLoggedOutView() {
         SwingUtilities.invokeLater(() -> {
+            showingLoggedInView = false;
             removeAll();
             add(createLoggedOutPanel());
             revalidate();
@@ -236,68 +233,16 @@ public class LoginPanel extends JPanel {
         JLabel fuIcon = new JLabel(Icons.FU_ICON, JLabel.CENTER);
         header.add(fuIcon);
 
-        JPanel middlePanel = new JPanel(new BorderLayout());
-        middlePanel.setBorder(new EmptyBorder(20, 0, 20, 0));
-        middlePanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-
-        IconTextField tokenField = new IconTextField();
-        tokenField.setBackground(CustomColors.DARK_GRAY);
-        tokenField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1, 1, 1, 1, ColorScheme.DARKER_GRAY_COLOR.darker()),
-                BorderFactory.createEmptyBorder(10, 0, 10, 0)));
-        tokenField.setPreferredSize(new Dimension(170, 40));
-
-        JLabel tokenFieldDescriptor = new JLabel("TOKEN", JLabel.LEFT);
-        tokenFieldDescriptor.setFont(new Font("Whitney", Font.BOLD, 12));
-        tokenFieldDescriptor.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
-        tokenFieldDescriptor.setBorder(new EmptyBorder(0, 0, 5, 0));
-
-        middlePanel.add(tokenFieldDescriptor, BorderLayout.NORTH);
-        middlePanel.add(tokenField, BorderLayout.CENTER);
-
-        JPanel loginButtonWrapper = new JPanel();
-        loginButtonWrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
-
-        JLabel loginButton = new JLabel("Login", JLabel.CENTER);
-        loginButton.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 0, 0, ColorScheme.GRAND_EXCHANGE_PRICE.darker()), new EmptyBorder(10, 20, 10, 20))
-        );
-        loginButton.setFont(new Font("Whitney", Font.BOLD, 12));
-        loginButton.setBackground(ColorScheme.GRAND_EXCHANGE_PRICE);
-        loginButton.setOpaque(true);
-        loginButton.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                int result = JOptionPane.showOptionDialog(
-                        loginButton,
+        TokenLoginForm form = new TokenLoginForm(
+                () -> JOptionPane.showOptionDialog(
+                        tokenPanel,
                         "Logging into flipping utilities will submit GE transactions and your IP address\n" +
                                 "to flipping utilities, a 3rd party not controlled or verified by the RuneLite developers",
                         "Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
-                        null, new String[]{"Yes", "No"}, "No");
-
-                if (result == JOptionPane.YES_OPTION) {
-                    plugin.getApiAuthHandler().loginWithToken(tokenField.getText().trim()).exceptionally((exception) -> {
-                        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(loginButton, "Authentication error, contact us on discord for help!", "Authentication error 😔", JOptionPane.ERROR_MESSAGE));
-                        return null;
-                    });
-                }
-            }
-
-            @Override
-            public void mouseEntered(MouseEvent e) {
-                loginButton.setBackground(ColorScheme.GRAND_EXCHANGE_PRICE.brighter());
-            }
-
-            @Override
-            public void mouseExited(MouseEvent e) {
-                loginButton.setBackground(ColorScheme.GRAND_EXCHANGE_PRICE);
-            }
-        });
-
-        loginButtonWrapper.add(loginButton);
-
+                        null, new String[]{"Yes", "No"}, "No") == JOptionPane.YES_OPTION,
+                token -> plugin.getApiAuthHandler().loginWithToken(token));
         tokenPanel.add(header, BorderLayout.NORTH);
-        tokenPanel.add(middlePanel, BorderLayout.CENTER);
-        tokenPanel.add(loginButtonWrapper, BorderLayout.SOUTH);
+        tokenPanel.add(form, BorderLayout.CENTER);
 
         return tokenPanel;
     }
