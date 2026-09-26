@@ -222,7 +222,7 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
 
     public void setGraphData(TimeseriesResponse timeseries, com.flippingutilities.model.Timestep timestep, int offerPrice) {
         chart.setDataSeries(timeseries, timestep, offerPrice);
-        graphLoadState = GraphLoadState.fromResponse(timeseries);
+        graphLoadState = chart.hasData() ? GraphLoadState.READY : GraphLoadState.EMPTY;
     }
 
     public void beginGraphLoad() {
@@ -333,7 +333,10 @@ public class QuickLookTooltip implements LayoutableRenderableEntity {
         int chartY = position.y + panelHeight - fixedChartHeight;
 
         chart.setPreferredLocation(new Point(chartX, chartY));
-        if (graphLoadState == GraphLoadState.READY && chart.hasData()) {
+        if (graphLoadState == GraphLoadState.READY && !chart.hasData()) {
+            graphLoadState = GraphLoadState.EMPTY;
+        }
+        if (graphLoadState == GraphLoadState.READY) {
             chart.setPreferredLocation(new Point(chartX, chartY));
             java.awt.Shape originalClip = graphics.getClip();
             graphics.setClip(chartX, chartY, fixedChartWidth, fixedChartHeight);

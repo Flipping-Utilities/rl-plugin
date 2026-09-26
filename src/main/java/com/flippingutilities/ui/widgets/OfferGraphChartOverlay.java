@@ -342,9 +342,9 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         final int itemId = currentItemId;
         final GraphDuration duration = selectedDuration;
         graphDataLoader.load(itemId, duration.getTimestep(), response -> {
-            graphLoadState = GraphLoadState.fromResponse(response);
             chart.setDataSeries(response, duration.getTimestep(),
                 currentOfferPrice, duration.getMaxTimeRangeSeconds());
+            graphLoadState = chart.hasData() ? GraphLoadState.READY : GraphLoadState.EMPTY;
         }, failure -> graphLoadState = GraphLoadState.FAILED);
     }
 
@@ -444,6 +444,11 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
 
         drawDurationButtons(graphics, graphX, graphY);
 
+        if (graphLoadState == GraphLoadState.READY && !chart.hasData()) {
+            graphLoadState = GraphLoadState.EMPTY;
+            priceToSet = -1;
+            clearPriceInfo();
+        }
         drawPriceInfo(graphics, graphX, graphY, graphWidth);
 
         int chartY = graphY + BUTTON_ROW_HEIGHT + 2;
@@ -452,7 +457,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
 
         Shape originalClip = graphics.getClip();
         graphics.setClip(chartBounds);
-        if (graphLoadState == GraphLoadState.READY && chart.hasData()) {
+        if (graphLoadState == GraphLoadState.READY) {
             chart.setPreferredLocation(new Point(chartBounds.x, chartBounds.y));
             chart.setPreferredSize(new Dimension(chartBounds.width, chartBounds.height));
 
