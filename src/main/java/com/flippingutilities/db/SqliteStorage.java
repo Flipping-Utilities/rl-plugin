@@ -19,7 +19,7 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /**
  * SQLite facade owning connection, schema, and recovery lifecycle.
@@ -52,9 +52,6 @@ public class SqliteStorage {
     private final File dbFile;
     private Connection connection;
     private boolean schemaInitAttempted;
-    // Cache of display_name -> account_id to avoid a SELECT per repository call.
-    // Invalidated whenever upsertAccount creates/updates a row.
-    private final Map<String, Integer> accountIdCache = new ConcurrentHashMap<>();
     // Collaborators share this instance's connection and are called under its monitor.
     private final SqliteAccountStore accounts;
     private final SqliteItemStateStore itemState;
@@ -71,7 +68,7 @@ public class SqliteStorage {
         itemState = new SqliteItemStateStore(this);
         recipes = new SqliteRecipeStore(this);
         offers = new SqliteOfferStore(this, itemState, recipes);
-        accounts = new SqliteAccountStore(this, accountIdCache, offers, recipes, itemState);
+        accounts = new SqliteAccountStore(this, offers, recipes, itemState);
     }
 
     /**
@@ -164,18 +161,8 @@ public class SqliteStorage {
                 connection = null;
             }
         }
-        // Reset init/cache state so a subsequent open on a (possibly replaced) file starts clean.
+        // Reset initialization state for a subsequent open on a possibly replaced file.
         schemaInitAttempted = false;
-        accountIdCache.clear();
-    }
-
-    /**
-     * Drop all cached account-id mappings. Must be called after the accounts table is
-     * emptied/recreated outside of normal upserts (e.g. the DELETE/REGENERATE maintenance
-     * actions), otherwise stale ids cause FK violations on later writes.
-     */
-    public synchronized void invalidateAccountCache() {
-        accountIdCache.clear();
     }
 
     /**
@@ -344,7 +331,7 @@ public class SqliteStorage {
      * @param playerId Player ID from RuneLite API
      */
     public synchronized void upsertAccount(String displayName, String playerId) {
-        accounts.upsertAccount(displayName, playerId);
+        inAccountTransaction(() -> accounts.upsertAccount(displayName, playerId));
     }
 
     /**
@@ -354,11 +341,11 @@ public class SqliteStorage {
      *         (callers fall back to JSON in that case)
      */
     public synchronized AccountData loadAccount(String displayName) {
-        return accounts.loadAccount(displayName);
+        return inAccountTransaction(() -> accounts.loadAccount(displayName));
     }
 
     public synchronized void upsertItemVisibility(String displayName, int itemId, boolean visible) {
-        itemState.upsertItemVisibility(displayName, itemId, visible);
+        inAccountTransaction(() -> itemState.upsertItemVisibility(displayName, itemId, visible));
     }
 
     /**
@@ -366,7 +353,7 @@ public class SqliteStorage {
      * @return Map of itemId -> {nextRefresh (Instant, nullable), itemsBought (int)}
      */
     public synchronized Map<Integer, Map<String, Object>> loadAllGeLimitStates(String displayName) {
-        return itemState.loadAllGeLimitStates(displayName);
+        return inAccountTransaction(() -> itemState.loadAllGeLimitStates(displayName));
     }
 
     /**
@@ -374,12 +361,12 @@ public class SqliteStorage {
      * @return List of display names sorted alphabetically
      */
     public synchronized List<String> listAccounts() {
-        return accounts.listAccounts();
+        return inAccountTransaction(() -> accounts.listAccounts());
     }
 
     /** Records the original offer, preserving classification and continuity across reloads. */
     public synchronized void recordTrade(String displayName, OfferEvent offer) {
-        offers.recordTrade(displayName, offer);
+        inAccountTransaction(() -> offers.recordTrade(displayName, offer));
     }
 
     /**
@@ -389,7 +376,7 @@ public class SqliteStorage {
      * @param offer The offer event to store, including completed offers awaiting collection
      */
     public synchronized void upsertSlot(String displayName, int slotIndex, OfferEvent offer, boolean historyVisible) {
-        offers.upsertSlot(displayName, slotIndex, offer, historyVisible);
+        inAccountTransaction(() -> offers.upsertSlot(displayName, slotIndex, offer, historyVisible));
     }
 
     /**
@@ -398,7 +385,7 @@ public class SqliteStorage {
      * @param slotIndex GE slot index (0-7)
      */
     public synchronized void clearSlot(String displayName, int slotIndex) {
-        offers.clearSlot(displayName, slotIndex);
+        inAccountTransaction(() -> offers.clearSlot(displayName, slotIndex));
     }
 
     /**
@@ -409,7 +396,7 @@ public class SqliteStorage {
      * @param itemsBought Number of items bought this limit window
      */
     public synchronized void upsertGeLimitState(String displayName, int itemId, Instant nextRefresh, int itemsBought, int itemsBoughtThroughCompleteOffers) {
-        itemState.upsertGeLimitState(displayName, itemId, nextRefresh, itemsBought, itemsBoughtThroughCompleteOffers);
+        inAccountTransaction(() -> itemState.upsertGeLimitState(displayName, itemId, nextRefresh, itemsBought, itemsBoughtThroughCompleteOffers));
     }
 
     synchronized int getOrCreateAccountId(String displayName) {
@@ -426,7 +413,7 @@ public class SqliteStorage {
      * @param accumulatedTimeMillis Total accumulated session time in milliseconds
      */
     public synchronized void updateAccountSessionTime(String displayName, long accumulatedTimeMillis) {
-        accounts.updateAccountSessionTime(displayName, accumulatedTimeMillis);
+        inAccountTransaction(() -> accounts.updateAccountSessionTime(displayName, accumulatedTimeMillis));
     }
 
     /**
@@ -437,7 +424,7 @@ public class SqliteStorage {
      * @param favoriteCode Quick search code
      */
     public synchronized void upsertFavorite(String displayName, int itemId, boolean isFavorite, String favoriteCode) {
-        itemState.upsertFavorite(displayName, itemId, isFavorite, favoriteCode);
+        inAccountTransaction(() -> itemState.upsertFavorite(displayName, itemId, isFavorite, favoriteCode));
     }
 
     /**
@@ -445,7 +432,7 @@ public class SqliteStorage {
      * @return Map of itemId -> Map with "isFavorite" and "favoriteCode"
      */
     public synchronized Map<Integer, Map<String, Object>> loadAllFavorites(String displayName) {
-        return itemState.loadAllFavorites(displayName);
+        return inAccountTransaction(() -> itemState.loadAllFavorites(displayName));
     }
 
     /**
@@ -454,22 +441,22 @@ public class SqliteStorage {
      * TradePersister.deleteFile for the JSON backend.
      */
     public synchronized void deleteAccountData(String displayName) {
-        accounts.deleteAccountData(displayName);
+        inAccountTransaction(() -> accounts.deleteAccountData(displayName));
     }
 
     /** Applies the live model's exact history replacement without deleting recipe snapshots. */
     public synchronized void recordOfferUpdate(String displayName, OfferEvent offer, List<String> replacedUuids) {
-        offers.recordOfferUpdate(displayName, offer, replacedUuids);
+        inAccountTransaction(() -> offers.recordOfferUpdate(displayName, offer, replacedUuids));
     }
 
     /** Retains a collected fill even when the last event was a partial cancellation correction. */
     public synchronized void archiveOfferAndClearSlot(String displayName, int slotIndex, OfferEvent archived) {
-        offers.archiveOfferAndClearSlot(displayName, slotIndex, archived);
+        inAccountTransaction(() -> offers.archiveOfferAndClearSlot(displayName, slotIndex, archived));
     }
 
     /** Deletes offers and every recipe that references them, scoped to one account. */
     public synchronized void deleteTradesByUuid(String displayName, List<String> uuids) {
-        offers.deleteTradesByUuid(displayName, uuids);
+        inAccountTransaction(() -> offers.deleteTradesByUuid(displayName, uuids));
     }
 
     /**
@@ -478,7 +465,7 @@ public class SqliteStorage {
      * the migration and insertRecipeFlip use, so migrated and live-created flips are covered.
      */
     public synchronized void deleteRecipeFlip(String displayName, String recipeKey, Instant timeOfCreation) {
-        recipes.deleteRecipeFlip(displayName, recipeKey, timeOfCreation);
+        inAccountTransaction(() -> recipes.deleteRecipeFlip(displayName, recipeKey, timeOfCreation));
     }
 
     /**
@@ -488,17 +475,64 @@ public class SqliteStorage {
      * RecipeFlipGroup.deleteFlips' isAfter check.
      */
     public synchronized void deleteRecipeFlipsSince(String displayName, String recipeKey, Instant since) {
-        recipes.deleteRecipeFlipsSince(displayName, recipeKey, since);
+        inAccountTransaction(() -> recipes.deleteRecipeFlipsSince(displayName, recipeKey, since));
     }
 
     /** Persists a live recipe atomically, using the same writer as migration. */
     public synchronized void insertRecipeFlip(String displayName, String recipeKey, RecipeFlip flip) {
-        recipes.insertRecipeFlip(displayName, recipeKey, flip);
+        inAccountTransaction(() -> recipes.insertRecipeFlip(displayName, recipeKey, flip));
     }
 
     /** Caller owns the transaction; returns false when this flip was already persisted. */
     static boolean insertRecipeFlip(Connection conn, int accountId, String recipeKey, RecipeFlip flip) throws SQLException {
         return SqliteRecipeStore.insertRecipeFlip(conn, accountId, recipeKey, flip);
+    }
+
+    /**
+     * Keeps identity lookup and every dependent statement in one database snapshot.
+     * If another client replaces an account during a write, SQLite rejects upgrading
+     * the stale snapshot instead of letting its recycled ID address a different account.
+     * Migration may already own a transaction; only the creator commits or rolls it back.
+     */
+    private <T> T inAccountTransaction(Supplier<T> operation) {
+        try {
+            Connection conn = getConnection();
+            if (!conn.getAutoCommit()) {
+                return operation.get();
+            }
+            conn.setAutoCommit(false);
+            try {
+                T result = operation.get();
+                conn.commit();
+                return result;
+            } catch (SQLException | RuntimeException | Error failure) {
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackFailure) {
+                    failure.addSuppressed(rollbackFailure);
+                    // Never let restoring autocommit commit an unsuccessful rollback.
+                    try {
+                        conn.close();
+                    } catch (SQLException closeFailure) {
+                        failure.addSuppressed(closeFailure);
+                    }
+                }
+                throw failure;
+            } finally {
+                if (!conn.isClosed()) {
+                    conn.setAutoCommit(true);
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Could not complete SQLite account transaction", e);
+        }
+    }
+
+    private void inAccountTransaction(Runnable operation) {
+        inAccountTransaction(() -> {
+            operation.run();
+            return null;
+        });
     }
 
 }
