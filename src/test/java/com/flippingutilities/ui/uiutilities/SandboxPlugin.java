@@ -132,7 +132,9 @@ final class SandboxPlugin implements AutoCloseable {
             handler.setSqliteStorage(storage);
             for (String account : storage.listAccounts()) accounts.put(account, storage.loadAccount(account));
         } else {
-            accounts = plugin.tradePersister.loadAllAccounts();
+            // The ordinary loader skips unreadable saves. A sandbox import must fail instead
+            // of silently showing an empty account; this strict read still accepts valid backups.
+            accounts = plugin.tradePersister.loadAllAccountsForMigration();
         }
         for (String account : accounts.keySet()) {
             // Production backups use account names as filenames. Test databases can contain
@@ -152,6 +154,9 @@ final class SandboxPlugin implements AutoCloseable {
         inject("itemManager", SandboxGameApi.itemManager(client, clientThread, items,
             id -> itemImage(id, clientThread)));
         handler.loadData();
+        if (plugin.tradePersister.isAccountProtected("accountwide")) {
+            throw new IOException("Could not load sandbox accountwide data. See the preceding error.");
+        }
         for (String account : handler.getCurrentAccounts()) {
             if (plugin.tradePersister.isAccountProtected(account)) {
                 throw new IOException("Could not load sandbox account: " + account + ". See the preceding error.");
