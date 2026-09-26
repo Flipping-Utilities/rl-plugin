@@ -18,10 +18,15 @@ import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.io.IOException;
+import java.awt.AWTEvent;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Graphics2D;
+import java.awt.Toolkit;
 import java.awt.Window;
+import java.awt.event.AWTEventListener;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -42,11 +47,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import javax.imageio.ImageIO;
+import javax.swing.JButton;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.SwingUtilities;
@@ -210,7 +218,7 @@ public class SandboxPluginTest {
 
         private static void run(Path source, DataSource backend, String action) throws Exception {
             Path temporaryHome;
-            try (SandboxData data = SandboxData.copyOf(source)) {
+            try (SandboxData data = "ui".equals(action) ? chooseThroughDialog(source) : SandboxData.copyOf(source)) {
                 temporaryHome = data.getRuneLiteDirectory().getParent();
                 if ("reject".equals(action)) {
                     System.setProperty("user.home", temporaryHome.resolve("wrong-home").toString());
@@ -250,6 +258,61 @@ public class SandboxPluginTest {
                 }
             }
             assertFalse("Closing the sandbox must remove its temporary home", Files.exists(temporaryHome));
+        }
+
+        private static SandboxData chooseThroughDialog(Path source) throws Exception {
+            AtomicReference<JDialog> openedDialog = new AtomicReference<>();
+            CountDownLatch opened = new CountDownLatch(1);
+            AWTEventListener listener = event -> {
+                if (event.getID() == WindowEvent.WINDOW_OPENED && event.getSource() instanceof JDialog) {
+                    JDialog dialog = (JDialog) event.getSource();
+                    if ("Open RuneLite sandbox".equals(dialog.getTitle())) {
+                        openedDialog.set(dialog);
+                        opened.countDown();
+                    }
+                }
+            };
+            Toolkit.getDefaultToolkit().addAWTEventListener(listener, AWTEvent.WINDOW_EVENT_MASK);
+            FutureTask<SandboxData> selection = new FutureTask<>(() -> SandboxSourceChooser.choose(source));
+            new Thread(selection, "sandbox-chooser-test").start();
+            boolean selected = false;
+            try {
+                assertTrue("Source chooser must appear before loading RuneLite", opened.await(10, TimeUnit.SECONDS));
+                Path screenshot = Files.createTempFile("sandbox-source-chooser-", ".png");
+                SwingUtilities.invokeAndWait(() -> {
+                    JDialog dialog = openedDialog.get();
+                    assertTrue(dialog.isShowing());
+                    Container contents = dialog.getContentPane();
+                    // Keep this capture plain Swing too: RuneLite must still see the temporary user.home later.
+                    BufferedImage image = new BufferedImage(contents.getWidth(), contents.getHeight(), BufferedImage.TYPE_INT_RGB);
+                    Graphics2D graphics = image.createGraphics();
+                    try {
+                        contents.printAll(graphics);
+                    } finally {
+                        graphics.dispose();
+                    }
+                    try {
+                        assertTrue(ImageIO.write(image, "png", screenshot.toFile()));
+                    } catch (IOException failure) {
+                        throw new RuntimeException(failure);
+                    }
+                    JButton openDefault = find(contents, JButton.class, button -> "Open default".equals(button.getText()));
+                    assertNotNull("Default source must be available in the actual chooser", openDefault);
+                    openDefault.doClick();
+                });
+                SandboxData data = selection.get(10, TimeUnit.SECONDS);
+                assertNotNull("Opening the default must return a disposable copy", data);
+                assertEquals(source.toAbsolutePath().normalize(), data.getSource());
+                selected = true;
+                System.out.println("Native source chooser screenshot: " + screenshot);
+                return data;
+            } finally {
+                Toolkit.getDefaultToolkit().removeAWTEventListener(listener);
+                if (!selected && openedDialog.get() != null) {
+                    SwingUtilities.invokeAndWait(() -> openedDialog.get().dispatchEvent(
+                        new WindowEvent(openedDialog.get(), WindowEvent.WINDOW_CLOSING)));
+                }
+            }
         }
 
         private static void rejectUnsafeAccounts(SandboxData data, Path source) throws Exception {

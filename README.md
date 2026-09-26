@@ -128,9 +128,10 @@ Quickly lookup your favorited items just by typing "1" in the ge search!
 
 # Development
 
-Run `./gradlew uiGallery` for an offline RuneLite shell with the real plugin sidebar and a temporary
-copy of your `~/.runelite/flipping` data. Use `--args='--source /path/to/folder-or.db'` for a specific
-RuneLite folder, flipping folder, or SQLite file. Edits are discarded when you close the window.
+Run `./gradlew uiGallery` to choose data for an offline RuneLite shell with the real plugin sidebar.
+Click **Open default** to copy your `~/.runelite` data, or enter, browse for, or drop a RuneLite folder,
+flipping folder, or SQLite file, then click **Open copy**. Edits stay in a temporary copy and are
+discarded when you close the window. Use `--args='--source /path/to/folder-or.db'` to skip the chooser.
 Use `--args='--fixtures'` for synthetic component states, or `./gradlew renderUiGallery` for headless
 PNGs. See the [sandbox and gallery guide](docs/component-gallery.md).
 

@@ -10,9 +10,13 @@ Use JDK 11 and the checked-in Gradle wrapper:
 ./gradlew uiGallery
 ```
 
-By default this reads `~/.runelite`, copies the plugin saves and `settings.properties` into a new temporary home, and opens the real account selector, flipping, stats and slots panels. Select an account to browse and edit its history. Stats initially shows **All** history. Drag the divider to resize the sidebar.
+With no arguments, a source chooser opens. Click **Open default** to use `~/.runelite`. For another source, type or paste its path into **Source**, click **Browse…** to select a folder or file, or drag one local folder or file onto the chooser. Then click **Open copy**.
 
-Choose another source, including paths with spaces:
+The chooser copies the plugin saves and `settings.properties` into a new temporary home in the background, with loading feedback. Errors stay in the chooser so you can correct the source and retry. Closing or cancelling the chooser exits without opening a sandbox and removes any copy in progress.
+
+The sandbox opens the real account selector, flipping, stats and slots panels. Select an account to browse and edit its history. Stats initially shows **All** history. Drag the divider to resize the sidebar.
+
+Use `--source` to skip the chooser, including for paths with spaces:
 
 ```sh
 # A RuneLite root directory
@@ -25,7 +29,7 @@ Choose another source, including paths with spaces:
 
 Every source is copied, including explicitly selected folders and files. The source is never opened by the running plugin. The launcher redirects `user.home` before RuneLite initializes its static paths, so even JSON saves, backups, migrations and deletion actions target the copy. SQLite uses a read-only backup connection to include committed WAL transactions in a consistent snapshot. The source does not need to be closed first. SQLite may create its `-shm` bookkeeping file and an empty `-wal` beside a closed WAL database while reading it; saved database contents are unchanged.
 
-The window and console show the source and temporary directory. Closing the window or normally terminating the JVM removes the working copy. A forced kill or power loss can leave a `flipping-sandbox-*` temporary directory behind; the original files are still unaffected. Reopening starts with a fresh copy. An empty folder opens an empty sidebar; a missing source produces an error with the source-selection command. Relevant symbolic links are rejected; select their actual target instead.
+The window and console show the source and temporary directory. Closing the window or normally terminating the JVM removes the working copy. A forced kill or power loss can leave a `flipping-sandbox-*` temporary directory behind; the original files are still unaffected. Reopening starts with a fresh copy. An empty folder opens an empty sidebar; a missing source produces an error. Relevant symbolic links are rejected; select their actual target instead.
 
 An explicit database selects SQLite, including databases without the plugin's migration marker. Folder mode honors `flipping.dataSource=JSON` in `settings.properties`; otherwise it uses an available `flipping.db` unless it has a `.needs-resync` marker, and falls back to JSON. Inactive databases are skipped, so a corrupt stale database cannot block JSON testing. The sandbox does not rebuild a selected database from JSON. Unsafe account names are rejected before startup backups. Other display preferences use plugin defaults.
 
@@ -94,7 +98,7 @@ GalleryFixture.component("paginator-first", "Paginator / First page",
 
 For timers, executors or subscriptions, use a `GalleryFixture` factory returning `new GalleryFixture.Mounted(component, cleanup)`. Construction, interaction, painting and cleanup run on Swing's event dispatch thread; cleanup must finish promptly. `Mounted.close()` is idempotent. Keep expensive image encoding or other file work outside that thread. Every mount must create fresh components and mutable fixture data; never reuse a panel between unrelated stories. Avoid real plugin startup, credentials, account files, background services or external links.
 
-`SandboxDataTest` checks source selection, independent copies, committed WAL data, failure cleanup and link handling. `SandboxPluginTest` launches fresh JVMs to check JSON/SQLite loading, edits, deletion, restart isolation and incorrect-home rejection. On a desktop, run the optional real-sidebar interaction check with `FLIPPING_SANDBOX_UI_TEST=true ./gradlew test --tests '*SandboxPluginTest' --rerun-tasks`; it mounts saved history, clicks a favorite control, switches tabs and captures a PNG in the system temporary directory.
+`SandboxSourceChooserTest` exercises default selection, pasted paths, folder/file drops, retries and cancellation cleanup. `SandboxDataTest` checks source selection, independent copies, committed WAL data, failure cleanup and link handling. `SandboxPluginTest` launches fresh JVMs to check JSON/SQLite loading, edits, deletion, restart isolation and incorrect-home rejection. On a desktop, run the optional interaction check with `FLIPPING_SANDBOX_UI_TEST=true ./gradlew test --tests '*SandboxPluginTest' --rerun-tasks`; it opens the source chooser, selects the default, mounts saved history, clicks a favorite control, switches tabs and captures PNGs in the system temporary directory.
 
 `UiGalleryTest` verifies that all registered fixtures render at both widths, queued construction updates appear in the capture, resources close after rendering failures, reset/switch operations discard previous component state, and width controls/export capture the current interactive state. Existing component tests remain responsible for application behavior. The older `SidebarPreview` entry point still produces its original audit image.
 
