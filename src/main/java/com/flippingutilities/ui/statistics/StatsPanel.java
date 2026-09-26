@@ -239,18 +239,25 @@ public class StatsPanel extends JPanel
 		});
 	}
 
+	/**
+	 * The panel shown when a user's search query returns no results.
+	 */
+	private JPanel createEmptySearchPanel(String records) {
+		return new EmptyStatePanel("No matching " + records,
+			"No " + records + " match your search in this interval. Clear the search to see other results.",
+			"Clear search", () -> {
+				searchBar.setText("");
+				updateSearch(searchBar);
+			});
+	}
+
 	private boolean hasHistory(List<? extends Searchable> history) {
 		return history != null && history.stream().anyMatch(item -> item != null && item.isInInterval(Instant.EPOCH));
 	}
 
 	private JPanel createEmptyResultsPanel(String records) {
 		if (currentlySearching) {
-			return new EmptyStatePanel("No matching " + records,
-				"No " + records + " match your search in this interval. Clear the search to see other results.",
-				"Clear search", () -> {
-					searchBar.setText("");
-					updateSearch(searchBar);
-				});
+			return createEmptySearchPanel(records);
 		}
 		return new EmptyStatePanel("No results in this interval",
 			"This account has " + records + " outside the selected interval. Show all time to see them.",
