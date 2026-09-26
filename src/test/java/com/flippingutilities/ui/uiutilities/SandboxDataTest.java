@@ -135,6 +135,60 @@ public class SandboxDataTest {
     }
 
     @Test
+    public void ignoresCorruptDatabaseWhenSettingsSelectJson() throws Exception {
+        Path source = temporaryFolder.newFolder("json-selected").toPath();
+        Path plugin = Files.createDirectory(source.resolve("flipping"));
+        Path settings = source.resolve("settings.properties");
+        write(settings, "flipping.dataSource=JSON\n");
+        byte[] settingsHash = hash(settings);
+
+        assertJsonSnapshotSkipsCorruptDatabase(source, plugin);
+
+        assertFalse(Files.exists(plugin.resolve("flipping.db.needs-resync")));
+        assertArrayEquals(settingsHash, hash(settings));
+    }
+
+    @Test
+    public void ignoresCorruptDatabaseWhenResyncMarkerSelectsJson() throws Exception {
+        Path plugin = temporaryFolder.newFolder("json-resync").toPath();
+        Path marker = plugin.resolve("flipping.db.needs-resync");
+        write(marker, "resync required");
+        byte[] markerHash = hash(marker);
+
+        assertJsonSnapshotSkipsCorruptDatabase(plugin, plugin);
+
+        assertFalse(Files.exists(plugin.resolve("settings.properties")));
+        assertArrayEquals(markerHash, hash(marker));
+    }
+
+    private static void assertJsonSnapshotSkipsCorruptDatabase(Path source, Path plugin) throws Exception {
+        Path database = plugin.resolve("flipping.db");
+        Path account = plugin.resolve("Alice.json");
+        write(database, "Damaged inactive SQLite database.");
+        write(account, "{\"trades\":[]}");
+        byte[] databaseHash = hash(database);
+        byte[] accountHash = hash(account);
+
+        try (SandboxData snapshot = SandboxData.copyOf(source)) {
+            Path directory = snapshot.getRuneLiteDirectory();
+            assertFalse(snapshot.isDatabaseSource());
+            assertFalse(Files.exists(directory.resolve("flipping/flipping.db")));
+            assertEquals("{\"trades\":[]}", read(directory.resolve("flipping/Alice.json")));
+            if (Files.exists(source.resolve("settings.properties"))) {
+                assertEquals(read(source.resolve("settings.properties")), read(directory.resolve("settings.properties")));
+            }
+            if (Files.exists(plugin.resolve("flipping.db.needs-resync"))) {
+                assertEquals("resync required", read(directory.resolve("flipping/flipping.db.needs-resync")));
+            }
+            write(directory.resolve("flipping/Alice.json"), "{\"edited\":true}");
+        }
+        assertArrayEquals(databaseHash, hash(database));
+        assertArrayEquals(accountHash, hash(account));
+        assertFalse(Files.exists(plugin.resolve("flipping.db-wal")));
+        assertFalse(Files.exists(plugin.resolve("flipping.db-shm")));
+    }
+
+    @Test
     public void reportsMissingSourcesAndCleansUpInvalidDatabaseCopies() throws Exception {
         Path missing = temporaryFolder.getRoot().toPath().resolve("missing");
         try {

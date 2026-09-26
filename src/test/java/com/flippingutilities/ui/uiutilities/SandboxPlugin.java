@@ -28,7 +28,6 @@ import okhttp3.*;
 import javax.swing.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -71,15 +70,9 @@ final class SandboxPlugin implements AutoCloseable {
 
     private void initialize(SandboxData data) throws Exception {
         Path directory = data.getRuneLiteDirectory();
-        Properties settings = new Properties();
-        if (Files.isRegularFile(directory.resolve("settings.properties"))) {
-            try (InputStream input = Files.newInputStream(directory.resolve("settings.properties"))) { settings.load(input); }
-        }
         Path database = directory.resolve("flipping/flipping.db");
-        String configured = settings.getProperty("flipping.dataSource");
-        boolean sqlite = data.isDatabaseSource() || Files.isRegularFile(database)
-            && !"JSON".equalsIgnoreCase(configured)
-            && !Files.exists(directory.resolve("flipping/flipping.db.needs-resync"));
+        // Snapshot creation only includes the selected backend's database.
+        boolean sqlite = Files.isRegularFile(database);
         FlippingConfig config = new FlippingConfig() {
             @Override public DataSource dataSource() { return sqlite ? DataSource.SQLITE : DataSource.JSON; }
             @Override public boolean autoSaveEnabled() { return false; }
@@ -120,6 +113,14 @@ final class SandboxPlugin implements AutoCloseable {
             for (String account : storage.listAccounts()) accounts.put(account, storage.loadAccount(account));
         } else {
             accounts = plugin.tradePersister.loadAllAccounts();
+        }
+        for (String account : accounts.keySet()) {
+            // Production backups use account names as filenames. Test databases can contain
+            // names that the game would never issue, including paths outside the sandbox.
+            if (account == null || account.isEmpty() || account.indexOf('/') >= 0
+                || account.indexOf('\\') >= 0 || account.indexOf(':') >= 0 || account.indexOf('\0') >= 0) {
+                throw new IOException("Unsafe account name in sandbox data: " + account);
+            }
         }
         Map<Integer, FlippingItem> items = new HashMap<>();
         for (AccountData account : accounts.values()) {

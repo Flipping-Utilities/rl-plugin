@@ -4,6 +4,7 @@ import org.sqlite.SQLiteConfig;
 import org.sqlite.SQLiteConnection;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -15,6 +16,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Properties;
 
 /** Owns the disposable data directory used by the standalone plugin sandbox. */
 public final class SandboxData implements AutoCloseable {
@@ -63,11 +65,19 @@ public final class SandboxData implements AutoCloseable {
                 if (!Files.isDirectory(pluginDirectory)) {
                     throw new IOException("Plugin data path is not a directory: " + pluginDirectory);
                 }
-                copyPluginDirectory(pluginDirectory, destination);
                 Path settings = absoluteSource.resolve("settings.properties");
+                Properties properties = new Properties();
                 if (Files.exists(settings, LinkOption.NOFOLLOW_LINKS)) {
-                    copyFile(settings, snapshot.getRuneLiteDirectory().resolve("settings.properties"));
+                    Path copiedSettings = snapshot.getRuneLiteDirectory().resolve("settings.properties");
+                    copyFile(settings, copiedSettings);
+                    try (InputStream input = Files.newInputStream(copiedSettings)) {
+                        properties.load(input);
+                    }
                 }
+                // A stale or damaged DB must not block previewing the active JSON saves.
+                boolean useDatabase = !"JSON".equalsIgnoreCase(properties.getProperty("flipping.dataSource", "").trim())
+                    && !Files.exists(pluginDirectory.resolve("flipping.db.needs-resync"), LinkOption.NOFOLLOW_LINKS);
+                copyPluginDirectory(pluginDirectory, destination, useDatabase);
             }
             return snapshot;
         } catch (Exception | Error failure) {
@@ -80,11 +90,11 @@ public final class SandboxData implements AutoCloseable {
         }
     }
 
-    private static void copyPluginDirectory(Path source, Path destination) throws Exception {
+    private static void copyPluginDirectory(Path source, Path destination, boolean useDatabase) throws Exception {
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(source)) {
             for (Path entry : entries) {
                 String name = entry.getFileName().toString();
-                if ("flipping.db".equals(name)) {
+                if (useDatabase && "flipping.db".equals(name)) {
                     requireOrdinaryPath(entry);
                     copyDatabase(entry, destination.resolve(name));
                 } else if (name.endsWith(".json") || name.endsWith(".json.pre-migration")

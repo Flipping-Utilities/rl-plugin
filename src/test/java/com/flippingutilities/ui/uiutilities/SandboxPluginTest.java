@@ -17,6 +17,7 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
+import java.io.IOException;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Window;
@@ -29,6 +30,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -82,6 +86,17 @@ public class SandboxPluginTest {
         Map<String, String> before = hashes(source);
         probe(source, DataSource.JSON, "reject");
         assertEquals(before, hashes(source));
+    }
+
+    @Test
+    public void rejectsDatabaseAccountNamesThatCouldEscapeTheTemporaryDirectory() throws Exception {
+        Path source = folder.newFolder("unsafe-account-source").toPath();
+        Path database = source.resolve("account.db");
+        createDatabase(database);
+        write(source.resolve("outside.json"), "sentinel: do not overwrite");
+        Map<String, String> before = hashes(source);
+        probe(database, DataSource.SQLITE, "reject-account");
+        assertSourceUnchanged(source, before);
     }
 
     @Test
@@ -208,6 +223,8 @@ public class SandboxPluginTest {
                     } catch (IllegalStateException expected) {
                         assertTrue(expected.getMessage().contains("fresh JVM"));
                     }
+                } else if ("reject-account".equals(action)) {
+                    rejectUnsafeAccounts(data, source);
                 } else {
                     try (SandboxPlugin host = SandboxPlugin.load(data)) {
                         FlippingPlugin plugin = host.plugin;
@@ -233,6 +250,30 @@ public class SandboxPluginTest {
                 }
             }
             assertFalse("Closing the sandbox must remove its temporary home", Files.exists(temporaryHome));
+        }
+
+        private static void rejectUnsafeAccounts(SandboxData data, Path source) throws Exception {
+            Path pluginDirectory = data.getRuneLiteDirectory().resolve("flipping");
+            Path outside = source.getParent().toRealPath().resolve("outside");
+            Path sentinel = source.getParent().resolve("outside.json");
+            String original = Files.readString(sentinel);
+            String escapingName = pluginDirectory.toRealPath().relativize(outside).toString();
+            // Only the disposable database is modified; all potential escape targets belong to this test.
+            for (String accountName : new String[]{escapingName, "..\\outside", "unsafe:name", "unsafe\0name", ""}) {
+                try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + pluginDirectory.resolve("flipping.db"));
+                    PreparedStatement update = connection.prepareStatement("UPDATE accounts SET display_name = ?")) {
+                    update.setString(1, accountName);
+                    assertEquals(1, update.executeUpdate());
+                }
+                try (SandboxPlugin ignored = SandboxPlugin.load(data)) {
+                    fail("Unsafe account names must be rejected before startup saves: " + accountName);
+                } catch (IOException expected) {
+                    assertTrue(expected.getMessage().contains("Unsafe account name"));
+                }
+                assertEquals("Startup must not overwrite files outside the sandbox", original, Files.readString(sentinel));
+                assertFalse("Startup must not create escaped backup files", Files.exists(source.getParent().resolve("outside.backup.json")));
+                assertFalse("Startup must not create escaped migration backups", Files.exists(source.getParent().resolve("outside.json.pre-migration")));
+            }
         }
 
         private static void mountAndClick(SandboxPlugin host) throws Exception {
