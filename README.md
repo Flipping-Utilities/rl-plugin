@@ -152,8 +152,6 @@ This section will talk about the purpose of various parts of the codebase, speci
   settings and recovery marker, and delegates to account, offer, recipe and item-state stores.
   Its synchronized entry points keep those stores on the same connection and transaction boundary.
   `OfferJsonCodec` handles persisted offer snapshots; `MigrationService` imports JSON accounts.
-  SQLite native libraries target the packaged RuneLite launchers: Windows x86/x64/ARM64,
-  macOS x64/ARM64, and glibc Linux x64/ARM64. Other manual Java installations can use JSON storage.
 
 **ui/**
 - This folder contains all the UI code for the plugin which is the code that draws the "plugin" you see, such as the slots
