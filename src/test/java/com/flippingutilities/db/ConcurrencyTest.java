@@ -8,20 +8,27 @@ import org.junit.Test;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static com.flippingutilities.db.StorageTestOffers.complete;
 
 /**
- * Verifies that SqliteStorage handles concurrent access safely (all public methods are
- * synchronized; this test exercises that contract under contention).
+ * Exercises contention between threads sharing a storage instance and independent clients.
  */
 public class ConcurrencyTest {
 
@@ -141,5 +148,91 @@ public class ConcurrencyTest {
             latch.await(30, TimeUnit.SECONDS));
         pool.shutdown();
         assertEquals("No errors during concurrent insert+query", 0, errors.get());
+    }
+
+    @Test
+    public void independentClientsCanWriteDifferentAccountsWithoutSnapshotUpgradeFailures() throws Exception {
+        SqliteStorage otherClient = new SqliteStorage(dbFile);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            otherClient.initializeSchema();
+            otherClient.upsertAccount("OtherAcct", null);
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch start = new CountDownLatch(1);
+            Future<?> first = pool.submit(() -> {
+                writeRepeatedly(storage, "ConcurrentAcct", ready, start);
+                return null;
+            });
+            Future<?> second = pool.submit(() -> {
+                writeRepeatedly(otherClient, "OtherAcct", ready, start);
+                return null;
+            });
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            // Future.get exposes any storage failure instead of merely counting completed threads.
+            first.get(30, TimeUnit.SECONDS);
+            second.get(30, TimeUnit.SECONDS);
+
+            for (String account : new String[]{"ConcurrentAcct", "OtherAcct"}) {
+                AccountData loaded = storage.loadAccount(account);
+                assertEquals(999L, loaded.getAccumulatedSessionTimeMillis());
+                assertEquals(40, loaded.getTrades().get(0).getHistory().getCompressedOfferEvents().size());
+            }
+            assertTrue(storage.getConnection().getAutoCommit());
+            assertTrue(otherClient.getConnection().getAutoCommit());
+        } finally {
+            pool.shutdownNow();
+            pool.awaitTermination(5, TimeUnit.SECONDS);
+            otherClient.close();
+        }
+    }
+
+    @Test
+    public void failedWriteReservationDiscardsTheDriversPartialTransactionState() throws Exception {
+        SqliteStorage otherClient = new SqliteStorage(dbFile);
+        Connection firstConnection = storage.getConnection();
+        try (Statement settings = firstConnection.createStatement()) {
+            settings.execute("PRAGMA busy_timeout=25");
+        }
+        try {
+            Connection writer = otherClient.getConnection();
+            writer.setAutoCommit(false);
+            try {
+                otherClient.upsertFavorite("OtherAcct", 4151, true, "held");
+                try {
+                    storage.updateAccountSessionTime("ConcurrentAcct", 123L);
+                    fail("The reserved writer must outlast this client's short busy timeout");
+                } catch (IllegalStateException failure) {
+                    assertTrue(failure.getCause() instanceof SQLException);
+                    assertTrue(failure.getCause().getMessage().contains("SQLITE_BUSY"));
+                }
+                assertTrue("A failed BEGIN must not leave JDBC claiming to own a transaction",
+                    firstConnection.isClosed());
+                assertNotNull("A subsequent read can reconnect while the other client still writes",
+                    storage.loadAccount("ConcurrentAcct"));
+                assertTrue(storage.getConnection().getAutoCommit());
+                assertFalse(writer.getAutoCommit());
+            } finally {
+                writer.rollback();
+                writer.setAutoCommit(true);
+            }
+            storage.updateAccountSessionTime("ConcurrentAcct", 456L);
+            assertEquals(456L, storage.loadAccount("ConcurrentAcct").getAccumulatedSessionTimeMillis());
+        } finally {
+            otherClient.close();
+        }
+    }
+
+    private void writeRepeatedly(SqliteStorage client, String account, CountDownLatch ready,
+                                 CountDownLatch start) throws InterruptedException {
+        ready.countDown();
+        start.await();
+        for (int i = 0; i < 1000; i++) {
+            client.updateAccountSessionTime(account, i);
+            if (i % 25 == 0) {
+                client.recordTrade(account, complete(account, 4151, account + "-" + i,
+                    1700000000000L + i, 1, 50000, true));
+            }
+        }
     }
 }

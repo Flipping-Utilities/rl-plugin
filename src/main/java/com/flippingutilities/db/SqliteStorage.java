@@ -6,6 +6,9 @@ import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.model.RecipeFlip;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.sqlite.SQLiteConfig.TransactionMode;
+import org.sqlite.SQLiteConnection;
+import org.sqlite.SQLiteConnectionConfig;
 
 import java.io.File;
 import java.io.IOException;
@@ -490,17 +493,18 @@ public class SqliteStorage {
 
     /**
      * Keeps identity lookup and every dependent statement in one database snapshot.
-     * If another client replaces an account during a write, SQLite rejects upgrading
-     * the stale snapshot instead of letting its recycled ID address a different account.
+     * Writers reserve the database before looking up identity, so another client's
+     * ordinary writes cannot invalidate a read snapshot that still needs upgrading.
+     * Readers use deferred snapshots without blocking writers.
      * Migration may already own a transaction; only the creator commits or rolls it back.
      */
-    private <T> T inAccountTransaction(Supplier<T> operation) {
+    private <T> T inAccountTransaction(TransactionMode mode, Supplier<T> operation) {
         try {
             Connection conn = getConnection();
             if (!conn.getAutoCommit()) {
                 return operation.get();
             }
-            conn.setAutoCommit(false);
+            beginAccountTransaction(conn, mode);
             try {
                 T result = operation.get();
                 conn.commit();
@@ -528,8 +532,34 @@ public class SqliteStorage {
         }
     }
 
+    private void beginAccountTransaction(Connection conn, TransactionMode mode) throws SQLException {
+        SQLiteConnectionConfig config = conn.unwrap(SQLiteConnection.class).getConnectionConfig();
+        TransactionMode previousMode = config.getTransactionMode();
+        try {
+            config.setTransactionMode(mode);
+            conn.setAutoCommit(false);
+        } catch (SQLException failure) {
+            // Xerial changes its JDBC autocommit flag before BEGIN succeeds. Discard a
+            // failed start so the next operation cannot join a transaction that never began.
+            try {
+                conn.close();
+            } catch (SQLException closeFailure) {
+                failure.addSuppressed(closeFailure);
+            }
+            throw failure;
+        } finally {
+            // commit()/rollback() start another transaction in Xerial; do not let their
+            // cleanup acquire a second write reservation after the real work has finished.
+            config.setTransactionMode(previousMode);
+        }
+    }
+
+    private <T> T inAccountTransaction(Supplier<T> operation) {
+        return inAccountTransaction(TransactionMode.DEFERRED, operation);
+    }
+
     private void inAccountTransaction(Runnable operation) {
-        inAccountTransaction(() -> {
+        inAccountTransaction(TransactionMode.IMMEDIATE, () -> {
             operation.run();
             return null;
         });

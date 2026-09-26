@@ -41,6 +41,23 @@ tasks.withType(JavaCompile) {
 	options.release.set(11)
 }
 
+// Match the native platforms distributed by the RuneLite launcher.
+// Apply to every JAR task, including Plugin Hub's injected packaging task.
+def sqliteNativeRoot = 'org/sqlite/native/'
+def sqliteNativePlatforms = [
+    'Windows/x86', 'Windows/x86_64', 'Windows/aarch64',
+    'Mac/x86_64', 'Mac/aarch64',
+    'Linux/x86_64', 'Linux/aarch64'
+]
+def sqliteNativePaths = sqliteNativePlatforms.collect { "${sqliteNativeRoot}${it}/" }
+
+tasks.withType(Jar).configureEach {
+    exclude { entry ->
+        !entry.isDirectory() && entry.path.startsWith(sqliteNativeRoot) &&
+            !sqliteNativePaths.any { entry.path.startsWith(it) }
+    }
+}
+
 tasks.register('runPlugin', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'com.flippingutilities.PluginRunner'
