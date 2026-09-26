@@ -1,6 +1,6 @@
 # Price history states
 
-The offer graph and quick-look tooltip distinguish loading, usable prices, no reported prices, and a failed request. A failed offer graph has a **Retry** button. A failed quick-look tooltip asks the player to click its magnifier to retry without leaving the slot. Empty histories stay cached until the normal expiry; they do not trigger another request each frame.
+The offer graph and quick-look tooltip distinguish loading, usable prices, no reported prices, and a failed request. A failed offer graph has a **Retry** button. A failed quick-look tooltip asks the player to click its magnifier to retry without leaving the slot. History is empty when no priced samples fall within the selected period, even if the API returns older trades. The chart and status use the same period check, including when the last visible sample ages out. Empty histories stay cached until the normal expiry; they do not trigger another request each frame.
 
 ![Native offer graph and quick-look previews for loading, empty, failed, and ready states](price-history-states.png)
 
