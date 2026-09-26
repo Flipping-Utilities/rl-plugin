@@ -16,7 +16,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Types;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,6 +26,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+
+import static com.flippingutilities.db.SqliteBindings.bind;
 
 /**
  * Service to migrate data from JSON-based storage to SQLite.
@@ -369,13 +370,7 @@ public class MigrationService {
     private void updateAccountSessionTime(Connection conn, int accountId, long accumulatedMillis, Instant sessionStart) throws SQLException {
         String sql = "UPDATE accounts SET accumulated_time = ?, session_start = ? WHERE id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, accumulatedMillis);
-            if (sessionStart == null) {
-                ps.setNull(2, Types.BIGINT);
-            } else {
-                ps.setLong(2, sessionStart.toEpochMilli());
-            }
-            ps.setInt(3, accountId);
+            bind(ps, accumulatedMillis, sessionStart == null ? null : sessionStart.toEpochMilli(), accountId);
             ps.executeUpdate();
         }
     }
@@ -387,14 +382,8 @@ public class MigrationService {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             int count = 0;
             for (TradeRecord trade : trades) {
-                ps.setInt(1, trade.accountId);
-                ps.setInt(2, trade.itemId);
-                ps.setString(3, trade.uuid);
-                ps.setLong(4, trade.timestamp);
-                ps.setInt(5, trade.qty);
-                ps.setLong(6, trade.price);
-                ps.setBoolean(7, trade.isBuy);
-                ps.setString(8, trade.offerJson);
+                bind(ps, trade.accountId, trade.itemId, trade.uuid, trade.timestamp,
+                    trade.qty, trade.price, trade.isBuy, trade.offerJson);
                 ps.addBatch();
                 count++;
 

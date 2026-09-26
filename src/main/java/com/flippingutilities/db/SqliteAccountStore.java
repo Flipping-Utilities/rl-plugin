@@ -17,6 +17,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.flippingutilities.db.SqliteBindings.bind;
+
 /**
  * Account identity, session state, account reconstruction, and whole-account deletion.
  * Called within the owning SqliteStorage monitor and transaction; shares its connection.
@@ -53,9 +55,7 @@ final class SqliteAccountStore {
         try {
             Connection conn = storage.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, displayName);
-                ps.setString(2, playerId);
-                ps.setLong(3, Instant.now().toEpochMilli());
+                bind(ps, displayName, playerId, Instant.now().toEpochMilli());
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -81,7 +81,7 @@ final class SqliteAccountStore {
         try {
             Connection conn = storage.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sessionSql)) {
-                ps.setInt(1, accountId);
+                bind(ps, accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         long sessionStartMillis = rs.getLong("session_start");
@@ -164,7 +164,7 @@ final class SqliteAccountStore {
         try {
             Connection conn = storage.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, displayName);
+                bind(ps, displayName);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         return rs.getInt("id");
@@ -189,8 +189,7 @@ final class SqliteAccountStore {
         try {
             Connection conn = storage.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setLong(1, accumulatedTimeMillis);
-                ps.setInt(2, accountId);
+                bind(ps, accumulatedTimeMillis, accountId);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -221,7 +220,7 @@ final class SqliteAccountStore {
             execDelete(conn, "DELETE FROM item_favorites WHERE account_id = ?", accountId);
             execDelete(conn, "DELETE FROM item_visibility WHERE account_id = ?", accountId);
             try (PreparedStatement ps = conn.prepareStatement("DELETE FROM settings WHERE key = ?")) {
-                ps.setString(1, SqliteSettings.accountMigrationKey(displayName));
+                bind(ps, SqliteSettings.accountMigrationKey(displayName));
                 ps.executeUpdate();
             }
             execDelete(conn, "DELETE FROM accounts WHERE id = ?", accountId);
@@ -233,7 +232,7 @@ final class SqliteAccountStore {
 
     private void execDelete(Connection conn, String sql, int accountId) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, accountId);
+            bind(ps, accountId);
             ps.executeUpdate();
         }
     }
