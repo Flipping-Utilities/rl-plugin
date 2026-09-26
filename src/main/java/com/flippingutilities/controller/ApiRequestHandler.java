@@ -153,7 +153,7 @@ public class ApiRequestHandler {
 
             @Override
             public void onResponse(Call call, Response response) {
-                try (Response ignored = response) {
+                try (response) {
                     if (!response.isSuccessful()) {
                         future.completeExceptionally(new BadStatusCodeException(request, response, getResponseBody(response)));
                         return;

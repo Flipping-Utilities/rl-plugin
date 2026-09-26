@@ -26,10 +26,8 @@
 
 package com.flippingutilities.controller;
 
-import com.flippingutilities.DataSource;
 import com.flippingutilities.SqliteMaintenanceAction;
 import com.flippingutilities.FlippingConfig;
-import com.flippingutilities.db.MigrationService;
 import com.flippingutilities.db.SqliteStorage;
 import net.runelite.client.RuneLite;
 import com.flippingutilities.db.TradePersister;
@@ -49,8 +47,6 @@ import com.flippingutilities.ui.widgets.SlotStateDrawer;
 import com.flippingutilities.ui.widgets.OfferGraphChartOverlay;
 import com.flippingutilities.utilities.*;
 import com.flippingutilities.jobs.WikiDataFetcherJob;
-import com.google.common.primitives.Shorts;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.gson.Gson;
 import com.google.inject.Provides;
 import lombok.Getter;
@@ -77,7 +73,6 @@ import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.tooltip.TooltipManager;
 import net.runelite.client.util.ImageUtil;
-import net.runelite.client.game.ItemStats;
 import okhttp3.*;
 
 import javax.inject.Inject;
@@ -91,16 +86,11 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
 
 @Slf4j
 @PluginDescriptor(
@@ -137,7 +127,6 @@ public class FlippingPlugin extends Plugin {
 
     @Inject
     private TooltipManager tooltipManager;
-
 
     @Inject
     @Getter
@@ -194,14 +183,11 @@ public class FlippingPlugin extends Plugin {
     @Getter
     private List<OfferEvent> eventsReceivedBeforeFullLogin = new ArrayList<>();
 
-    //building the account wide trade list is an expensive operation so we store it in this variable and only recompute
-    //it if we have gotten an update since the last account wide trade list build.
-    @Setter
-    boolean updateSinceLastItemAccountWideBuild = true;
-    @Setter
-    boolean updateSinceLastRecipeFlipGroupAccountWideBuild = true;
-    List<FlippingItem> prevBuiltAccountWideItemList;
-    List<RecipeFlipGroup> prevBuildAccountWideRecipeFlipGroup;
+    private final AccountViewHandler accountViewHandler = new AccountViewHandler(this);
+    private final TradeHistoryHandler tradeHistoryHandler = new TradeHistoryHandler(this);
+    private final FavoriteHandler favoriteHandler = new FavoriteHandler(this);
+    private final RecipeFlipHandler recipeFlipHandler = new RecipeFlipHandler(this);
+    private final SessionTimeHandler sessionTimeHandler = new SessionTimeHandler(this);
 
     //updates the cache by monitoring the directory and loading a file's contents into the cache if it has been changed
     private CacheUpdaterJob cacheUpdaterJob;
@@ -212,7 +198,6 @@ public class FlippingPlugin extends Plugin {
     private ScheduledFuture autoSaveTask;
     @Getter
     private Instant nextScheduledAutoSave;
-    private Instant startUpTime = Instant.now();
 
     @Getter
     private int loginTickCount;
@@ -242,72 +227,40 @@ public class FlippingPlugin extends Plugin {
     @Getter
     private RecipeHandler recipeHandler;
     private FlippingItemHandler flippingItemHandler;
+
     @Getter
     private SlotStateDrawer slotStateDrawer;
     @Inject
     private OfferGraphChartOverlay offerGraphChartOverlay;
 
-    // SQLite storage backend (optional - used when dataSource=SQLITE)
-    @Getter
-    private SqliteStorage sqliteStorage;
+    private final StorageController storageController = new StorageController(this, this::createSqliteStorage);
 
-    private final Set<SqliteStorage> failedStorages = ConcurrentHashMap.newKeySet();
-
-    // RuneLite's executor can have multiple workers. Serialize database imports, writes and
-    // closes explicitly so a live mutation cannot be overwritten by an earlier import.
-    private ExecutorService storageExecutor;
-
-    private synchronized ExecutorService getStorageExecutor() {
-        if (storageExecutor == null) {
-            storageExecutor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-                .setNameFormat("flipping-storage-%d").setDaemon(true).build());
-        }
-        return storageExecutor;
+    public void setUpdateSinceLastItemAccountWideBuild(boolean changed) {
+        accountViewHandler.setItemsChanged(changed);
     }
 
-    public synchronized void submitStorageTask(Consumer<SqliteStorage> task) {
-        SqliteStorage storage = sqliteStorage;
-        if (storage != null) {
-            getStorageExecutor().execute(() -> {
-                if (failedStorages.contains(storage)) {
-                    return;
-                }
-                try {
-                    task.accept(storage);
-                } catch (Exception e) {
-                    recoverFromStorageFailure(storage, e);
-                }
-            });
-        }
+    public void setUpdateSinceLastRecipeFlipGroupAccountWideBuild(boolean changed) {
+        accountViewHandler.setRecipesChanged(changed);
+    }
+
+    FlippingItemHandler getFlippingItemHandler() {
+        return flippingItemHandler;
+    }
+
+    public SqliteStorage getSqliteStorage() {
+        return storageController.getSqliteStorage();
+    }
+
+    public void submitStorageTask(Consumer<SqliteStorage> task) {
+        storageController.submitStorageTask(task);
     }
 
     boolean isStorageFailed(SqliteStorage storage) {
-        return storage != null && failedStorages.contains(storage);
+        return storageController.isStorageFailed(storage);
     }
 
-    /** Keep a durable recovery marker outside the database, which may itself be read-only. */
     void recoverFromStorageFailure(SqliteStorage storage, Exception failure) {
-        if (!failedStorages.add(storage)) {
-            return;
-        }
-        log.warn("SQLite persistence failed; saving JSON and rebuilding SQLite on next startup", failure);
-        try {
-            storage.markOutOfSync();
-        } catch (Exception markerFailure) {
-            log.error("Could not mark SQLite for recovery; switching the configured backend to JSON", markerFailure);
-            configManager.setConfiguration(CONFIG_GROUP, "dataSource", DataSource.JSON);
-        }
-        clientThread.invokeLater(() -> {
-            if (sqliteStorage != storage) {
-                return;
-            }
-            dataHandler.preserveAccountsForRecovery();
-            closeStorage();
-            dataHandler.storeData();
-            if (masterPanel != null) {
-                masterPanel.updateSqliteIndicator();
-            }
-        });
+        storageController.recoverFromStorageFailure(storage, failure);
     }
 
     @Override
@@ -320,7 +273,7 @@ public class FlippingPlugin extends Plugin {
 
         optionHandler = new OptionHandler(this);
         dataHandler = new DataHandler(this);
-        initializeStorage();
+        storageController.initializeStorage();
         gameUiChangesHandler = new GameUiChangesHandler(this, eventBus);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
         apiAuthHandler = new ApiAuthHandler(this);
@@ -355,9 +308,7 @@ public class FlippingPlugin extends Plugin {
             dataHandler.loadData();
             // Load the authoritative view before starting an import. Imports never replace
             // that view, so offers arriving while they run remain visible.
-            if (sqliteStorage != null) {
-                queueMigration(sqliteStorage, false);
-            }
+            storageController.migrateLoadedData();
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
             if (config.autoSaveEnabled()) {
@@ -378,234 +329,8 @@ public class FlippingPlugin extends Plugin {
         });
     }
 
-    private void initializeStorage() {
-        if (config.dataSource().isSqlite()) {
-            try {
-                TradePersister.setupFlippingFolder();
-                sqliteStorage = createSqliteStorage();
-                sqliteStorage.initializeSchema();
-                if ("true".equalsIgnoreCase(sqliteStorage.getSetting("migration_completed"))
-                        && !sqliteStorage.requiresFullResync()) {
-                    dataHandler.setSqliteStorage(sqliteStorage);
-                }
-            } catch (Exception e) {
-                if (sqliteStorage != null) {
-                    recoverFromStorageFailure(sqliteStorage, e);
-                } else {
-                    log.warn("Cannot initialize SQLite storage; keeping JSON", e);
-                }
-            }
-        }
-    }
-
     protected SqliteStorage createSqliteStorage() {
         return new SqliteStorage(new File(RuneLite.RUNELITE_DIR, "flipping/flipping.db"));
-    }
-
-    /** Switch persistence without replacing the live model or restarting unrelated jobs. */
-    private void switchStorageBackend() {
-        clientThread.invokeLater(() -> {
-            synchronized (this) {
-                dataHandler.getAllAccountData();
-                if (!dataHandler.storeData() && config.dataSource().isSqlite()) {
-                    log.warn("Cannot switch to SQLite until the JSON snapshot is saved");
-                    // Config already selects SQLite. A later restart must still prefer the
-                    // JSON snapshot once autosave or shutdown successfully retries it.
-                    try {
-                        createSqliteStorage().markOutOfSync();
-                    } catch (Exception e) {
-                        log.error("Cannot mark the aborted switch for retry; keeping JSON selected", e);
-                        configManager.setConfiguration(CONFIG_GROUP, "dataSource", DataSource.JSON);
-                    }
-                    return;
-                }
-                closeStorage();
-                if (config.dataSource().isSqlite()) {
-                    sqliteStorage = createSqliteStorage();
-                    // Enqueue the import before exposing the backend to incoming writes.
-                    // The same lock protects submitStorageTask's capture and enqueue.
-                    queueMigration(sqliteStorage, true);
-                }
-            }
-            if (masterPanel != null) {
-                masterPanel.updateSqliteIndicator();
-            }
-        });
-    }
-
-    private synchronized Future<?> closeStorage() {
-        SqliteStorage oldStorage = sqliteStorage;
-        sqliteStorage = null;
-        dataHandler.setSqliteStorage(null);
-        return oldStorage == null ? null : getStorageExecutor().submit(() -> {
-            oldStorage.close();
-            failedStorages.remove(oldStorage);
-        });
-    }
-
-    private synchronized Future<?> shutDownStorage() {
-        Future<?> closed = closeStorage();
-        if (storageExecutor != null) {
-            storageExecutor.shutdown(); // Drain pending writes and the final close.
-            storageExecutor = null;
-        }
-        return closed;
-    }
-
-    private void queueMigration(SqliteStorage storage, boolean fullResync) {
-        getStorageExecutor().execute(() -> {
-            if (failedStorages.contains(storage)) {
-                return;
-            }
-            boolean completed = runMigrationIfNeeded(storage, fullResync);
-            completeMigration(storage, completed);
-        });
-    }
-
-    private void completeMigration(SqliteStorage storage, boolean completed) {
-        if (!completed) {
-            recoverFromStorageFailure(storage, new IllegalStateException("SQLite migration incomplete"));
-            return;
-        }
-        clientThread.invokeLater(() -> {
-            // A later switch, failed write or shutdown owns the active backend now.
-            if (sqliteStorage != storage || failedStorages.contains(storage)) {
-                return;
-            }
-            dataHandler.setSqliteStorage(storage);
-            if (masterPanel != null) {
-                masterPanel.updateSqliteIndicator();
-            }
-        });
-    }
-
-    /** Runs only on the storage executor; never reloads or replaces the live account model. */
-    private boolean runMigrationIfNeeded(SqliteStorage storage, boolean fullResync) {
-        try {
-            storage.initializeSchema();
-            boolean rebuild = fullResync || storage.requiresFullResync();
-            if (rebuild || "true".equalsIgnoreCase(storage.getSetting("migration_pending"))
-                    || !"true".equalsIgnoreCase(storage.getSetting("migration_completed"))) {
-                // Read once before clearing SQLite; an unreadable source must not erase it.
-                Map<String, AccountData> snapshot = tradePersister.loadAllAccountsForMigration();
-                if (rebuild) {
-                    storage.markOutOfSync();
-                    for (String name : storage.listAccounts()) {
-                        storage.deleteAccountData(name);
-                    }
-                    storage.clearSetting("migration_completed");
-                    storage.clearSetting("migration_completed_at");
-                }
-                new MigrationService(storage, tradePersister).migrate(snapshot);
-            }
-            boolean completed = "true".equalsIgnoreCase(storage.getSetting("migration_completed"));
-            if (completed) {
-                storage.clearSetting("migration_pending");
-                storage.markSynchronized();
-            }
-            return completed;
-        } catch (Exception e) {
-            log.warn("SQLite migration failed; keeping the live JSON view", e);
-            return false;
-        }
-    }
-
-    /**
-     * SQLite maintenance entry point from the config dropdown. Confirms the destructive
-     * action, then runs it on a background thread.
-     */
-    private void handleSqliteMaintenance(SqliteMaintenanceAction action) {
-        if (sqliteStorage == null) {
-            javax.swing.JOptionPane.showMessageDialog(masterPanel,
-                "SQLite storage is not active. Switch the data source to SQLite first.",
-                "SQLite maintenance", javax.swing.JOptionPane.WARNING_MESSAGE);
-            resetSqliteMaintenanceConfig();
-            return;
-        }
-
-        String msg = action == SqliteMaintenanceAction.DELETE
-            ? "Delete all SQLite database files? This clears stored trades. Your JSON files are not affected."
-            : "Regenerate the SQLite database from JSON? This deletes the current database and rebuilds it from your JSON files.";
-        int choice = javax.swing.JOptionPane.showConfirmDialog(masterPanel, msg,
-            "Confirm SQLite maintenance", javax.swing.JOptionPane.YES_NO_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE);
-        if (choice != javax.swing.JOptionPane.YES_OPTION) {
-            resetSqliteMaintenanceConfig();
-            return;
-        }
-
-        log.info("Starting SQLite maintenance: {}", action);
-        clientThread.invokeLater(() -> {
-            dataHandler.getAllAccountData();
-            if (!dataHandler.storeData()) {
-                log.warn("Cannot rebuild SQLite until the JSON snapshot is saved");
-                resetSqliteMaintenanceConfig();
-                return;
-            }
-            submitStorageTask(storage -> doSqliteMaintenance(storage, action));
-        });
-    }
-
-    /**
-     * Deletes the SQLite files and (for REGENERATE) re-runs JSON -> SQLite migration.
-     * Must run off the client/EDT thread (DB I/O).
-     */
-    private void doSqliteMaintenance(SqliteStorage storage, SqliteMaintenanceAction action) {
-        try {
-            // Close the connection so the files can be deleted (Windows won't delete open files).
-            storage.close();
-            deleteSqliteFiles(storage);
-            storage.initializeSchema();
-            // The accounts table was recreated empty; stale cached ids would FK-violate.
-            storage.invalidateAccountCache();
-
-            if (action == SqliteMaintenanceAction.REGENERATE) {
-                storage.setSetting("migration_pending", "true");
-                completeMigration(storage, runMigrationIfNeeded(storage, false));
-            } else {
-                reloadAfterMaintenance(storage);
-            }
-        } catch (Exception e) {
-            recoverFromStorageFailure(storage, e);
-        } finally {
-            resetSqliteMaintenanceConfig();
-        }
-    }
-
-    private void deleteSqliteFiles(SqliteStorage storage) {
-        File db = storage.getDbFile();
-        File[] files = {
-            db,
-            new File(db.getPath() + "-wal"),
-            new File(db.getPath() + "-shm")
-        };
-        for (File f : files) {
-            if (f.exists() && !f.delete()) {
-                log.warn("Could not delete {}", f.getAbsolutePath());
-            }
-        }
-    }
-
-    private void reloadAfterMaintenance(SqliteStorage storage) {
-        clientThread.invokeLater(() -> {
-            if (sqliteStorage != storage) {
-                return true;
-            }
-            try {
-                dataHandler.reloadFromSqlite();
-                masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
-                statPanel.rebuildItemsDisplay(viewItemsForCurrentView());
-                flippingPanel.rebuild(viewItemsForCurrentView());
-            } catch (Exception e) {
-                log.warn("Reload after SQLite maintenance failed", e);
-            }
-            return true;
-        });
-    }
-
-    private void resetSqliteMaintenanceConfig() {
-        if (configManager != null) {
-            configManager.setConfiguration(CONFIG_GROUP, "sqliteMaintenance", SqliteMaintenanceAction.NONE.name());
-        }
     }
 
     @Override
@@ -626,7 +351,7 @@ public class FlippingPlugin extends Plugin {
         masterPanel.dispose();
 
         dataHandler.storeData();
-        shutDownStorage();
+        storageController.shutDownStorage();
 
         clientToolbar.removeNavigation(navButton);
     }
@@ -642,7 +367,7 @@ public class FlippingPlugin extends Plugin {
             slotTimersTask = null;
         }
         dataHandler.storeData();
-        Future<?> closed = shutDownStorage();
+        Future<?> closed = storageController.shutDownStorage();
         if (closed != null) {
             clientShutdownEvent.waitFor(closed);
         }
@@ -771,7 +496,7 @@ public class FlippingPlugin extends Plugin {
             try {
                 flippingPanel.updateTimerDisplays();
                 statPanel.updateTimeDisplay();
-                updateSessionTime();
+                sessionTimeHandler.updateSessionTime();
                 if (config.autoSaveEnabled()) {
                     statPanel.updateAutoSaveDisplay();
                 }
@@ -803,33 +528,23 @@ public class FlippingPlugin extends Plugin {
     }
 
     public List<FlippingItem> getItemsForCurrentView() {
-        return accountCurrentlyViewed.equals(ACCOUNT_WIDE) ? createAccountWideFlippingItemList() : dataHandler.getAccountData(accountCurrentlyViewed).getTrades();
+        return accountViewHandler.getItemsForCurrentView();
     }
 
     public List<FlippingItem> viewItemsForCurrentView() {
-        return accountCurrentlyViewed.equals(ACCOUNT_WIDE) ? createAccountWideFlippingItemList() : dataHandler.viewAccountData(accountCurrentlyViewed).getTrades();
+        return accountViewHandler.viewItemsForCurrentView();
     }
 
     public List<RecipeFlipGroup> viewRecipeFlipGroupsForCurrentView() {
-        return accountCurrentlyViewed.equals(ACCOUNT_WIDE) ? createAccountWideRecipeFlipGroupList() : dataHandler.viewAccountData(accountCurrentlyViewed).getRecipeFlipGroups();
+        return accountViewHandler.viewRecipeFlipGroupsForCurrentView();
     }
 
     public Duration viewAccumulatedTimeForCurrentView() {
-        if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
-            long millis = dataHandler.viewAllAccountData().stream().map(AccountData::getAccumulatedSessionTimeMillis).reduce(0L, (d1, d2) -> d1 + d2);
-            return Duration.of(millis, ChronoUnit.MILLIS);
-        } else {
-            long millis = dataHandler.viewAccountData(accountCurrentlyViewed).getAccumulatedSessionTimeMillis();
-            return Duration.of(millis, ChronoUnit.MILLIS);
-        }
+        return accountViewHandler.viewAccumulatedTimeForCurrentView();
     }
 
     public Instant viewStartOfSessionForCurrentView() {
-        if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
-            return startUpTime;
-        } else {
-            return dataHandler.viewAccountData(accountCurrentlyViewed).getSessionStartTime();
-        }
+        return accountViewHandler.viewStartOfSessionForCurrentView();
     }
 
     @Provides
@@ -838,11 +553,7 @@ public class FlippingPlugin extends Plugin {
     }
 
     public void truncateTradeList() {
-        if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
-            dataHandler.getAllAccountData().forEach(accountData -> flippingItemHandler.deleteRemovedItems(accountData.getTrades()));
-        } else {
-            flippingItemHandler.deleteRemovedItems(getItemsForCurrentView());
-        }
+        tradeHistoryHandler.truncateTradeList();
     }
 
     /**
@@ -928,7 +639,7 @@ public class FlippingPlugin extends Plugin {
                     masterPanel.getAccountSelector().setVisible(true);
                 }
 
-                updateSinceLastItemAccountWideBuild = true;
+                setUpdateSinceLastItemAccountWideBuild(true);
 
                 //rebuildItemsDisplay if you are currently looking at the account who's cache just got updated or the account wide view.
                 if (accountCurrentlyViewed.equals(ACCOUNT_WIDE) || accountCurrentlyViewed.equals(displayNameOfChangedAcc)) {
@@ -941,111 +652,12 @@ public class FlippingPlugin extends Plugin {
         }, 1000, TimeUnit.MILLISECONDS);
     }
 
-    //TODO this caching logic can be generalized and put into another component. There are also a bunch of
-    //other places where I want to cache things.
-    private List<RecipeFlipGroup> createAccountWideRecipeFlipGroupList() {
-        if (!updateSinceLastRecipeFlipGroupAccountWideBuild) {
-            return prevBuildAccountWideRecipeFlipGroup;
-        }
-        if (dataHandler.getCurrentAccounts().size() == 0) {
-            return new ArrayList<>();
-        }
-        List<RecipeFlipGroup> built = recipeHandler.createAccountWideRecipeFlipGroupList(dataHandler.viewAllAccountData());
-        // Assign the cache BEFORE clearing the dirty flag: background readers (the stats
-        // totals run on the executor) checking the flag would otherwise see "not dirty"
-        // with a null cache during the very first build and NPE.
-        prevBuildAccountWideRecipeFlipGroup = built;
-        updateSinceLastRecipeFlipGroupAccountWideBuild = false;
-        return built;
-    }
-
-    private List<FlippingItem> createAccountWideFlippingItemList() {
-        //since this is an expensive operation, cache its results and only recompute it if there has been an update
-        //to one of the account's tradelists, (updateSinceLastAccountWideBuild is set in onGrandExchangeOfferChanged)
-        if (!updateSinceLastItemAccountWideBuild) {
-            return prevBuiltAccountWideItemList;
-        }
-
-        if (dataHandler.getCurrentAccounts().size() == 0) {
-            return new ArrayList<>();
-        }
-
-        List<FlippingItem> built = flippingItemHandler.createAccountWideFlippingItemList(dataHandler.viewAllAccountData());
-        // Assign the cache BEFORE clearing the dirty flag (see createAccountWideRecipeFlipGroupList).
-        prevBuiltAccountWideItemList = built;
-        updateSinceLastItemAccountWideBuild = false;
-        return built;
-    }
-
     public List<FlippingItem> sortItems(List<FlippingItem> items, SORT sort, Instant startOfInterval) {
         return flippingItemHandler.sortItems(items, sort, startOfInterval);
     }
 
     public List<RecipeFlipGroup> sortRecipeFlipGroups(List<RecipeFlipGroup> recipeFlipGroups, SORT sort, Instant startOfInterval) {
         return recipeHandler.sortRecipeFlipGroups(recipeFlipGroups, sort, startOfInterval);
-    }
-
-    /**
-     * Decides whether the user is currently flipping or not. To be flipping a user has to be logged in
-     * and have at least one incomplete offer in the GE
-     *
-     * @return whether the user if currently flipping or not
-     */
-    private boolean currentlyFlipping() {
-        if (currentlyLoggedInAccount == null) {
-            return false;
-        }
-
-        Collection<OfferEvent> lastOffers = dataHandler.viewAccountData(currentlyLoggedInAccount).getLastOffers().values();
-        return lastOffers.stream().anyMatch(offerInfo -> !offerInfo.isComplete());
-    }
-
-    /**
-     * Calculates and updates the session time display in the statistics tab when a user is viewing
-     * the "Session" time interval.
-     */
-    private void updateSessionTime() {
-        if (!currentlyFlipping()) {
-            handleNotFlipping();
-            return;
-        }
-
-        updateActiveFlippingSessionTime();
-    }
-
-    private void handleNotFlipping() {
-        if (currentlyLoggedInAccount == null) {
-            return;
-        }
-        dataHandler.getAccountData(currentlyLoggedInAccount).setLastSessionTimeUpdate(null);
-    }
-
-    private void updateActiveFlippingSessionTime() {
-        AccountData account = dataHandler.viewAccountData(currentlyLoggedInAccount);
-        Instant lastUpdate = account.getLastSessionTimeUpdate();
-
-        if (lastUpdate == null) {
-            lastUpdate = Instant.now();
-        }
-
-        long additionalTime = Duration.between(lastUpdate, Instant.now()).toMillis();
-        long newTotalTime = account.getAccumulatedSessionTimeMillis() + additionalTime;
-
-        dataHandler.getAccountData(currentlyLoggedInAccount).setAccumulatedSessionTimeMillis(newTotalTime);
-        dataHandler.getAccountData(currentlyLoggedInAccount).setLastSessionTimeUpdate(Instant.now());
-
-        // Persist session time to SQLite if active
-        String accountName = currentlyLoggedInAccount;
-        submitStorageTask(storage -> storage.updateAccountSessionTime(accountName, newTotalTime));
-
-        if (shouldUpdateSessionTimeDisplay()) {
-            statPanel.updateSessionTimeDisplay(viewAccumulatedTimeForCurrentView());
-        }
-    }
-
-    private boolean shouldUpdateSessionTimeDisplay() {
-        return accountCurrentlyViewed.equals(ACCOUNT_WIDE)
-            || accountCurrentlyViewed.equals(currentlyLoggedInAccount);
     }
 
     /**
@@ -1097,35 +709,11 @@ public class FlippingPlugin extends Plugin {
     }
 
     public void setFavoriteOnAllAccounts(FlippingItem item, boolean favoriteStatus) {
-        for (String accountName : dataHandler.getCurrentAccounts()) {
-            AccountData account = dataHandler.viewAccountData(accountName);
-            account.
-                    getTrades().
-                    stream().
-                    filter(accountItem -> accountItem.getItemId() == item.getItemId()).
-                    findFirst().
-                    ifPresent(accountItem -> {
-                        accountItem.setFavorite(favoriteStatus);
-                        markAccountTradesAsHavingChanged(accountName);
-                        persistFavoriteOnAccount(accountName, accountItem);
-                    });
-        }
+        favoriteHandler.setFavoriteOnAllAccounts(item, favoriteStatus);
     }
 
     public void setFavoriteCodeOnAllAccounts(FlippingItem item, String favoriteCode) {
-        for (String accountName : dataHandler.getCurrentAccounts()) {
-            AccountData account = dataHandler.viewAccountData(accountName);
-            account.
-                    getTrades().
-                    stream().
-                    filter(accountItem -> accountItem.getItemId() == item.getItemId()).
-                    findFirst().
-                    ifPresent(accountItem -> {
-                        accountItem.setFavoriteCode(favoriteCode);
-                        markAccountTradesAsHavingChanged(accountName);
-                        persistFavoriteOnAccount(accountName, accountItem);
-                    });
-        }
+        favoriteHandler.setFavoriteCodeOnAllAccounts(item, favoriteCode);
     }
 
     /**
@@ -1134,18 +722,12 @@ public class FlippingPlugin extends Plugin {
      * upsert, SQLite mode restarts revert the toggle (JSON stays authoritative in memory only).
      */
     public void persistFavoriteOnAccount(String accountName, FlippingItem item) {
-        if (accountName == null || item == null) {
-            return;
-        }
-        int itemId = item.getItemId();
-        boolean favorite = item.isFavorite();
-        String code = item.getFavoriteCode();
-        submitStorageTask(storage -> storage.upsertFavorite(accountName, itemId, favorite, code));
+        favoriteHandler.persistFavoriteOnAccount(accountName, item);
     }
 
     /** Single-account quick-search code change; see {@link #persistFavoriteOnAccount}. */
     public void persistFavoriteCodeOnAccount(String accountName, FlippingItem item) {
-        persistFavoriteOnAccount(accountName, item);
+        favoriteHandler.persistFavoriteCodeOnAccount(accountName, item);
     }
 
     /**
@@ -1153,16 +735,7 @@ public class FlippingPlugin extends Plugin {
      * does not reappear after a restart. No-op in JSON mode. Best-effort.
      */
     public void deleteRecipeFlipFromStorage(String recipeKey, RecipeFlip flip) {
-        if (sqliteStorage == null) {
-            return;
-        }
-        final String account = pluginAccountForRecipeWrites();
-        if (account == null || flip == null || flip.getTimeOfCreation() == null) {
-            return;
-        }
-        final String key = recipeKey;
-        final Instant created = flip.getTimeOfCreation();
-        submitStorageTask(storage -> storage.deleteRecipeFlip(account, key, created));
+        recipeFlipHandler.deleteRecipeFlipFromStorage(recipeKey, flip);
     }
 
     /**
@@ -1170,111 +743,20 @@ public class FlippingPlugin extends Plugin {
      * reset) to SQLite, scoped to that group's recipe key. No-op in JSON mode. Best-effort.
      */
     public void deleteRecipeFlipsSinceFromStorage(String recipeKey, Instant since) {
-        if (sqliteStorage == null) {
-            return;
-        }
-        final String account = pluginAccountForRecipeWrites();
-        if (account == null || recipeKey == null) {
-            return;
-        }
-        final String key = recipeKey;
-        final Instant start = since;
-        submitStorageTask(storage -> storage.deleteRecipeFlipsSince(account, key, start));
-    }
-
-    /**
-     * Recipe flip deletions only make sense on a real account (the account-wide view blocks
-     * them in the UI), so target the currently viewed account.
-     */
-    private String pluginAccountForRecipeWrites() {
-        String viewed = getAccountCurrentlyViewed();
-        if (viewed == null || viewed.equalsIgnoreCase(ACCOUNT_WIDE)) {
-            return null;
-        }
-        return viewed;
+        recipeFlipHandler.deleteRecipeFlipsSinceFromStorage(recipeKey, since);
     }
 
     public void addSelectedGeTabOffers(List<OfferEvent> selectedOffers) {
-        for (OfferEvent offerEvent : selectedOffers) {
-            addSelectedGeTabOffer(offerEvent);
-        }
-
-        //have to add a delay before rebuilding as item limit and name may not have been set yet in addSelectedGeTabOffer due to
-        //clientThread being async and not offering a future to wait on when you submit a runnable...
-        executor.schedule(() -> {
-            flippingPanel.rebuild(viewItemsForCurrentView());
-            statPanel.rebuildItemsDisplay(viewItemsForCurrentView());
-        }, 500, TimeUnit.MILLISECONDS);
-    }
-
-    private void addSelectedGeTabOffer(OfferEvent selectedOffer) {
-        if (currentlyLoggedInAccount == null) {
-            return;
-        }
-        Optional<FlippingItem> flippingItem = dataHandler.getAccountData(currentlyLoggedInAccount).getTrades().stream().filter(item -> item.getItemId() == selectedOffer.getItemId()).findFirst();
-        if (flippingItem.isPresent()) {
-            flippingItem.get().updateHistory(selectedOffer);
-            flippingItem.get().updateLatestProperties(selectedOffer);
-            //incase it was set to false before
-            flippingItem.get().setValidFlippingPanelItem(true);
-        } else {
-            int tradeItemId = selectedOffer.getItemId();
-            FlippingItem item = new FlippingItem(tradeItemId, "", -1, currentlyLoggedInAccount);
-            item.setValidFlippingPanelItem(true);
-            item.updateLatestProperties(selectedOffer);
-            item.updateHistory(selectedOffer);
-            dataHandler.getAccountData(currentlyLoggedInAccount).getTrades().add(0, item);
-
-            //itemmanager can only be used on the client thread.
-            //i can't put everything in the runnable given to the client thread cause then it executes async and if there
-            //are multiple offers for the same flipping item that doesn't yet exist in trades list, it might create multiple
-            //of them.
-            clientThread.invokeLater(() -> {
-                String itemName = itemManager.getItemComposition(tradeItemId).getName();
-                ItemStats itemStats = itemManager.getItemStats(tradeItemId);
-                int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
-                item.setItemName(itemName);
-                item.setTotalGELimit(geLimit);
-            });
-        }
-        recordTrade(currentlyLoggedInAccount, selectedOffer);
+        tradeHistoryHandler.addSelectedGeTabOffers(selectedOffers);
     }
 
     /** Snapshot the offer before handing it to the ordered storage queue. */
     public void recordTrade(String account, OfferEvent offer) {
-        OfferEvent snapshot = offer.clone();
-        submitStorageTask(storage -> {
-            // Partial quantities are cumulative and restored from the active slot instead.
-            if (snapshot.isComplete() && snapshot.getCurrentQuantityInTrade() > 0) {
-                storage.recordTrade(account, snapshot);
-            }
-            storage.upsertItemVisibility(account, snapshot.getItemId(), true);
-        });
+        tradeHistoryHandler.recordTrade(account, offer);
     }
 
     public void setItemVisible(FlippingItem item, boolean visible) {
-        // Account-wide items are merged copies; update each underlying account too.
-        for (String account : accountsInCurrentView()) {
-            for (FlippingItem stored : dataHandler.getAccountData(account).getTrades()) {
-                if (stored.getItemId() == item.getItemId()) {
-                    setItemVisible(account, stored, visible);
-                }
-            }
-        }
-        item.setValidFlippingPanelItem(visible);
-        updateSinceLastItemAccountWideBuild = true;
-    }
-
-    private Collection<String> accountsInCurrentView() {
-        return ACCOUNT_WIDE.equals(accountCurrentlyViewed)
-            ? new ArrayList<>(dataHandler.getCurrentAccounts())
-            : Collections.singletonList(accountCurrentlyViewed);
-    }
-
-    private void setItemVisible(String account, FlippingItem item, boolean visible) {
-        item.setValidFlippingPanelItem(visible);
-        int itemId = item.getItemId();
-        submitStorageTask(storage -> storage.upsertItemVisibility(account, itemId, visible));
+        tradeHistoryHandler.setItemVisible(item, visible);
     }
 
     public void showGeHistoryTabPanel() {
@@ -1293,11 +775,7 @@ public class FlippingPlugin extends Plugin {
     }
 
     public List<OfferEvent> findOfferMatches(OfferEvent offerEvent, int limit) {
-        Optional<FlippingItem> flippingItem = dataHandler.getAccountData(currentlyLoggedInAccount).getTrades().stream().filter(item -> item.getItemId() == offerEvent.getItemId()).findFirst();
-        if (!flippingItem.isPresent()) {
-            return new ArrayList<>();
-        }
-        return flippingItem.get().getOfferMatches(offerEvent, limit);
+        return tradeHistoryHandler.findOfferMatches(offerEvent, limit);
     }
 
     public Font getFont() {
@@ -1308,46 +786,11 @@ public class FlippingPlugin extends Plugin {
      * Used by the stats panel to invalidate all offers for a certain interval when a user hits the reset button.
      */
     public void deleteOffers(Instant startOfInterval) {
-        if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
-            for (AccountData accountData : dataHandler.getAllAccountData()) {
-                accountData.getTrades().forEach(item -> {
-                    deleteOffers(item.getIntervalHistory(startOfInterval), item);
-                });
-            }
-        } else {
-            getItemsForCurrentView().forEach(item -> {
-                deleteOffers(item.getIntervalHistory(startOfInterval), item);
-            });
-        }
-
-        updateSinceLastItemAccountWideBuild = true;
-        updateSinceLastRecipeFlipGroupAccountWideBuild = true;
-        truncateTradeList();
+        tradeHistoryHandler.deleteOffers(startOfInterval);
     }
 
     public void deleteOffers(List<OfferEvent> offers, FlippingItem item) {
-        deleteOffers(offers, viewRecipeFlipGroupsForCurrentView(), item);
-    }
-
-    private void deleteOffers(List<OfferEvent> offers, List<RecipeFlipGroup> recipeFlipGroups, FlippingItem item) {
-        item.deleteOffers(offers);
-        recipeHandler.deleteInvalidRecipeFlips(offers, recipeFlipGroups);
-        markAccountTradesAsHavingChanged(accountCurrentlyViewed);
-        updateSinceLastItemAccountWideBuild = true;
-        updateSinceLastRecipeFlipGroupAccountWideBuild = true;
-
-        // Mirror the deletion into SQLite off-thread. The offer uuids identify
-        // the exact trade rows; recipes referencing those offers are deleted with them.
-        if (sqliteStorage != null) {
-            List<String> uuids = offers.stream()
-                .map(OfferEvent::getUuid)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-            if (!uuids.isEmpty()) {
-                String accountName = item.getFlippedBy() != null ? item.getFlippedBy() : accountCurrentlyViewed;
-                submitStorageTask(storage -> storage.deleteTradesByUuid(accountName, uuids));
-            }
-        }
+        tradeHistoryHandler.deleteOffers(offers, item);
     }
 
     /**
@@ -1355,30 +798,11 @@ public class FlippingPlugin extends Plugin {
      * reset button
      */
     public void setAllFlippingItemsAsHidden() {
-        for (String account : accountsInCurrentView()) {
-            dataHandler.getAccountData(account).getTrades().forEach(item -> setItemVisible(account, item, false));
-        }
-        updateSinceLastItemAccountWideBuild = true;
-        truncateTradeList();
+        tradeHistoryHandler.setAllFlippingItemsAsHidden();
     }
 
     public void exportToCsv(File parentDirectory, Instant startOfInterval, String startOfIntervalName) throws IOException {
-        if (parentDirectory.equals(TradePersister.PARENT_DIRECTORY)) {
-            throw new RuntimeException("Cannot save csv file in the flipping directory, pick another directory");
-        }
-        //create new flipping item list with only history from that interval
-        List<FlippingItem> items = new ArrayList<>();
-        for (FlippingItem item : viewItemsForCurrentView()) {
-            List<OfferEvent> offersInInterval = item.getIntervalHistory(startOfInterval);
-            if (offersInInterval.isEmpty()) {
-                continue;
-            }
-            FlippingItem itemWithOnlySelectedIntervalHistory = new FlippingItem(item.getItemId(), item.getItemName(), item.getTotalGELimit(), item.getFlippedBy());
-            itemWithOnlySelectedIntervalHistory.getHistory().setCompressedOfferEvents(offersInInterval);
-            items.add(itemWithOnlySelectedIntervalHistory);
-        }
-
-        TradePersister.exportToCsv(new File(parentDirectory, accountCurrentlyViewed + ".csv"), items, startOfIntervalName);
+        tradeHistoryHandler.exportToCsv(parentDirectory, startOfInterval, startOfIntervalName);
     }
 
     public int calculateOptionValue(Option option) throws InvalidOptionException {
@@ -1436,7 +860,7 @@ public class FlippingPlugin extends Plugin {
 
     public void deleteAccount(String displayName) {
         dataHandler.deleteAccount(displayName);
-        if (sqliteStorage != null) {
+        if (getSqliteStorage() != null) {
             // SQLite mode must delete its copy too, otherwise the account resurrects on the
             // next reloadFromSqlite()/restart. Best-effort on the executor.
             submitStorageTask(storage -> storage.deleteAccountData(displayName));
@@ -1499,24 +923,7 @@ public class FlippingPlugin extends Plugin {
         return recipeHandler.getOfferIdToPartialOffer(viewRecipeFlipGroupsForCurrentView(), itemId);
     }
     public void addRecipeFlip(RecipeFlip recipeFlip, Recipe recipe) {
-        if (ACCOUNT_WIDE.equals(accountCurrentlyViewed)) {
-            // The account-wide pseudo view has no AccountData to attach the flip to (and
-            // persisting it would create a bogus "Accountwide" account in the DB).
-            log.warn("Cannot create a recipe flip from the account-wide view; switch to a specific account first");
-            return;
-        }
-        AccountData account = dataHandler.getAccountData(accountCurrentlyViewed);
-        recipeHandler.addRecipeFlip(account.getRecipeFlipGroups(), recipeFlip, recipe);
-        updateSinceLastRecipeFlipGroupAccountWideBuild = true;
-
-        // Persist live-created recipe flips to SQLite, otherwise they are lost on the next
-        // reload in SQLite mode (they only lived in memory/JSON). Best-effort on the executor.
-        if (sqliteStorage != null) {
-            final String accountName = accountCurrentlyViewed;
-            final String recipeKey = RecipeHandler.createRecipeKey(recipe);
-            final RecipeFlip snapshot = recipeFlip.clone();
-            submitStorageTask(storage -> storage.insertRecipeFlip(accountName, recipeKey, snapshot));
-        }
+        recipeFlipHandler.addRecipeFlip(recipeFlip, recipe);
     }
 
     /**
@@ -1525,28 +932,7 @@ public class FlippingPlugin extends Plugin {
      * favorites it, we need to add it to the history.
      */
     public void addFavoritedItem(FlippingItem flippingItem) {
-        if (accountCurrentlyViewed.equals(FlippingPlugin.ACCOUNT_WIDE)) {
-            for (String accountName : dataHandler.getCurrentAccounts()) {
-                addFavoritedItem(flippingItem, accountName);
-            }
-        }
-        else {
-            addFavoritedItem(flippingItem, accountCurrentlyViewed);
-        }
-    }
-
-    private void addFavoritedItem(FlippingItem flippingItem, String accountName) {
-        List<FlippingItem> items = dataHandler.getAccountData(accountName).getTrades();
-        Optional<FlippingItem> existingItem = items.stream().filter(item -> item.getItemId() == flippingItem.getItemId()).findFirst();
-        if (existingItem.isPresent()) {
-            existingItem.get().setFavorite(true);
-        }
-        else {
-            flippingItem.setFlippedBy(accountName);
-            items.add(0, flippingItem);
-            markAccountTradesAsHavingChanged(accountName);
-            updateSinceLastItemAccountWideBuild = true;
-        }
+        favoriteHandler.addFavoritedItem(flippingItem);
     }
 
     public void toggleEnhancedSlots(boolean shouldEnhance) {
@@ -1566,22 +952,7 @@ public class FlippingPlugin extends Plugin {
 
     @Subscribe
     public void onGrandExchangeSearched(GrandExchangeSearched event) {
-        final String input = client.getVarcStrValue(VarClientStr.INPUT_TEXT);
-        Set<Integer> ids = dataHandler.viewAccountData(currentlyLoggedInAccount).
-                getTrades()
-                .stream()
-                .filter(item -> item.isFavorite() && input.equals(item.getFavoriteCode()))
-                .map(FlippingItem::getItemId)
-                .collect(Collectors.toSet());
-
-        if (ids.isEmpty()) {
-            return;
-        }
-
-        client.setGeSearchResultIndex(0);
-        client.setGeSearchResultCount(ids.size());
-        client.setGeSearchResultIds(Shorts.toArray(ids));
-        event.consume();
+        favoriteHandler.onGrandExchangeSearched(event);
     }
     @Subscribe
     public void onConfigChanged(ConfigChanged event) {
@@ -1593,14 +964,14 @@ public class FlippingPlugin extends Plugin {
         handleAutoSaveConfigChange(event);
         // Live-switch the storage backend when the data source config changes.
         if (event.getKey().equals("dataSource")) {
-            switchStorageBackend();
+            storageController.switchStorageBackend();
             return;
         }
 
         if (event.getKey().equals("sqliteMaintenance")) {
             SqliteMaintenanceAction action = config.sqliteMaintenance();
             if (action != SqliteMaintenanceAction.NONE) {
-                handleSqliteMaintenance(action);
+                storageController.handleSqliteMaintenance(action);
             }
         }
 
