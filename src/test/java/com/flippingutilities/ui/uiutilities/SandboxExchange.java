@@ -24,16 +24,18 @@ final class SandboxExchange implements AutoCloseable {
     private final FlippingPlugin plugin;
     private final Map<Integer, FlippingItem> items;
     private final AtomicInteger tick;
+    private final AtomicInteger catalogVersion;
     private final int[] rates = new int[8];
     private final Map<AccountData, FillSettings> accountFills = new IdentityHashMap<>();
     private FillSettings fills;
     private boolean closed;
 
-    SandboxExchange(FlippingPlugin plugin, Map<Integer, FlippingItem> items, AtomicInteger tick) {
+    SandboxExchange(FlippingPlugin plugin, Map<Integer, FlippingItem> items, AtomicInteger tick, AtomicInteger catalogVersion) {
         GalleryFixture.requireEdt();
         this.plugin = plugin;
         this.items = items;
         this.tick = tick;
+        this.catalogVersion = catalogVersion;
         // A small offline starting set also makes an empty source immediately usable.
         addItem(554, "Fire rune");
         addItem(1513, "Magic logs");
@@ -43,8 +45,11 @@ final class SandboxExchange implements AutoCloseable {
 
     private void addItem(int id, String name) {
         // Retain saved GE limits; newly introduced items have an unknown limit.
-        items.putIfAbsent(id, new FlippingItem(id, name, 0, null));
+        if (items.putIfAbsent(id, new FlippingItem(id, name, 0, null)) == null) catalogVersion.incrementAndGet();
     }
+
+    int catalogVersion() { return catalogVersion.get(); }
+    net.runelite.client.util.AsyncBufferedImage image(int itemId) { return plugin.getItemManager().getImage(itemId); }
 
     List<Item> items() {
         List<Item> result = new ArrayList<>();

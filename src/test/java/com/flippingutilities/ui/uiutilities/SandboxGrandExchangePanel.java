@@ -21,6 +21,7 @@ final class SandboxGrandExchangePanel extends JPanel implements AutoCloseable {
     private static final Color MUTED = new Color(181, 181, 181);
     private static final Color ERROR = new Color(255, 158, 145);
     private final SandboxExchange exchange;
+    private final SandboxPlugin host;
     private final JComboBox<String> accounts = new JComboBox<>();
     private final JToggleButton[] slots = new JToggleButton[8];
     private final JComboBox<SandboxExchange.Item> item = new JComboBox<>();
@@ -29,6 +30,9 @@ final class SandboxGrandExchangePanel extends JPanel implements AutoCloseable {
     private final JSpinner quantity = number(1, 1);
     private final JSpinner price = number(1, 1);
     private final JButton place = new JButton("Place offer");
+    private final JButton chart = new JButton("Prices / chart");
+    private final JLabel wikiStatus = new JLabel();
+    private final JButton refreshWiki = new JButton("Refresh Wiki");
     private final JLabel selectedTitle = new JLabel();
     private final JLabel selectedInfo = new JLabel();
     private final JProgressBar progress = new JProgressBar();
@@ -47,13 +51,15 @@ final class SandboxGrandExchangePanel extends JPanel implements AutoCloseable {
     private List<String> accountNames = Collections.emptyList();
     private List<SandboxExchange.Item> items = Collections.emptyList();
     private String shownAccount;
+    private int shownCatalogVersion = -1;
     private int selectedSlot;
     private boolean syncingAccounts;
     private boolean closed;
 
-    SandboxGrandExchangePanel(SandboxExchange exchange, SandboxData data) {
+    SandboxGrandExchangePanel(SandboxPlugin host, SandboxData data) {
         super(new BorderLayout(0, 12));
-        this.exchange = exchange;
+        this.host = host;
+        this.exchange = host.exchange();
         setBackground(ColorScheme.DARKER_GRAY_COLOR);
         setBorder(new EmptyBorder(16, 16, 12, 16));
 
@@ -136,6 +142,14 @@ final class SandboxGrandExchangePanel extends JPanel implements AutoCloseable {
         status.setOpaque(false);
         identify(status, "Exchange status", "Result of the last simulation action.");
         footer.add(status, BorderLayout.NORTH);
+        JPanel wiki = panel(new BorderLayout(6, 0));
+        wikiStatus.setForeground(MUTED);
+        identify(wikiStatus, "Wiki data status", "Public Wiki item metadata and market prices.");
+        identify(refreshWiki, "Refresh Wiki data", "Retry item metadata and refresh cached market prices.");
+        refreshWiki.addActionListener(event -> host.refreshWiki());
+        wiki.add(wikiStatus, BorderLayout.CENTER);
+        wiki.add(refreshWiki, BorderLayout.EAST);
+        footer.add(wiki, BorderLayout.CENTER);
         JPanel paths = panel(new GridLayout(2, 1, 0, 2));
         paths.add(pathLabel("Source", data.getSource().toString()));
         paths.add(pathLabel("Temporary copy", data.getRuneLiteDirectory().toString()));
@@ -165,6 +179,11 @@ final class SandboxGrandExchangePanel extends JPanel implements AutoCloseable {
         }, "Remaining quantity filled. Collect the offer to reuse its slot."));
         cancel.addActionListener(event -> perform(() -> exchange.cancel(selectedSlot), "Offer canceled. Collect it to reuse its slot."));
         collect.addActionListener(event -> perform(() -> exchange.collect(selectedSlot), "Offer collected. The slot is available."));
+        chart.addActionListener(event -> perform(() -> {
+            OfferEvent offer = exchange.offer(selectedSlot);
+            host.showPriceChart(this, offer == null ? selectedItemId() : offer.getItemId(),
+                offer == null ? 0 : exchange.fillPrice(selectedSlot), offer == null ? buy.isSelected() : offer.isBuy());
+        }, "Wiki price chart opened. Simulated trades do not affect market prices."));
 
         timer = new Timer(1000, event -> {
             if (closed) return;
@@ -185,7 +204,11 @@ final class SandboxGrandExchangePanel extends JPanel implements AutoCloseable {
         JPanel panel = panel(new BorderLayout(0, 8));
         JLabel title = new JLabel("New offer");
         title.setFont(title.getFont().deriveFont(Font.BOLD));
-        panel.add(title, BorderLayout.NORTH);
+        JPanel titleRow = panel(new BorderLayout(8, 0));
+        titleRow.add(title, BorderLayout.CENTER);
+        identify(chart, "Prices / chart", "Open the price chart for this slot, or the item chosen for a new offer.");
+        titleRow.add(chart, BorderLayout.EAST);
+        panel.add(titleRow, BorderLayout.NORTH);
         item.setEditable(true);
         item.setPreferredSize(new Dimension(240, 28));
         item.setMinimumSize(new Dimension(0, 28));
@@ -264,6 +287,10 @@ final class SandboxGrandExchangePanel extends JPanel implements AutoCloseable {
 
     private void refresh() {
         syncAccounts();
+        wikiStatus.setText(host.wikiStatus());
+        wikiStatus.setToolTipText(host.wikiStatus());
+        chart.setEnabled(host.hasWikiData());
+        refreshWiki.setEnabled(host.hasWikiData());
         for (int index = 0; index < slots.length; index++) {
             OfferEvent offer = exchange.offer(index);
             String side = offer == null ? "Empty" : offer.isBuy() ? "Buy" : "Sell";
@@ -275,7 +302,9 @@ final class SandboxGrandExchangePanel extends JPanel implements AutoCloseable {
             String cardState = offer == null ? "&nbsp;" : offer.isCancelled() ? "Canceled" : offer.isComplete() ? "Complete"
                 : exchange.rate(index) == 0 ? "Paused" : compact(exchange.rate(index)) + " / sec";
             slots[index].setText("<html><b>Slot " + (index + 1) + " · " + side + "</b><br>"
-                + escape(shorten(name, 18)) + "<br>" + escape(cardProgress) + "<br>" + cardState + "</html>");
+                + escape(shorten(name, offer == null ? 18 : 13)) + "<br>" + escape(cardProgress) + "<br>" + cardState + "</html>");
+            slots[index].setIcon(offer == null ? null : new ImageIcon(exchange.image(offer.getItemId())));
+            slots[index].setIconTextGap(4);
             slots[index].setForeground(offer == null ? MUTED : offer.isBuy() ? BUY : SELL);
             slots[index].setBackground(ColorScheme.DARK_GRAY_COLOR);
             slots[index].setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(
@@ -319,13 +348,22 @@ final class SandboxGrandExchangePanel extends JPanel implements AutoCloseable {
         } finally {
             syncingAccounts = false;
         }
-        if (changed || items.isEmpty()) {
+        if (changed || shownCatalogVersion != exchange.catalogVersion() || items.isEmpty()) {
             shownAccount = account;
-            items = new ArrayList<>(exchange.items());
             Object previous = item.getEditor().getItem();
+            int previousId = -1;
+            for (SandboxExchange.Item candidate : items) {
+                if (previous != null && (previous == candidate || previous.toString().equals(candidate.toString()))) {
+                    previousId = candidate.id;
+                    break;
+                }
+            }
+            items = new ArrayList<>(exchange.items());
+            shownCatalogVersion = exchange.catalogVersion();
             item.setModel(new DefaultComboBoxModel<>(items.toArray(new SandboxExchange.Item[0])));
+            for (SandboxExchange.Item candidate : items) if (candidate.id == previousId) previous = candidate;
             if (previous != null && !previous.toString().trim().isEmpty()) item.getEditor().setItem(previous);
-            syncOfferInputs();
+            if (changed) syncOfferInputs();
         }
     }
 

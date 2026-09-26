@@ -47,7 +47,8 @@ public final class RuneLiteSandbox {
                     JFrame frame = new JFrame("RuneLite sandbox — Flipping Utilities");
                     frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
                     JPanel sidebar = host[0].mount();
-                    exchangePanel[0] = new SandboxGrandExchangePanel(host[0].exchange(), data);
+                    host[0].startWikiData(new SandboxWikiData());
+                    exchangePanel[0] = new SandboxGrandExchangePanel(host[0], data);
                     sidebar.setMinimumSize(new Dimension(225, 0));
                     JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, exchangePanel[0], sidebar);
                     split.setResizeWeight(1);
