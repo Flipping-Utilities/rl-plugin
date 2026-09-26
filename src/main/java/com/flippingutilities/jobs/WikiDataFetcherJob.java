@@ -109,7 +109,7 @@ public class WikiDataFetcherJob {
             @Override
             public void onResponse(Call call, Response response) {
                 WikiRequest result = null;
-                try (Response ignored = response) {
+                try (response) {
                     if (response.isSuccessful() && response.body() != null) {
                         result = plugin.gson.fromJson(response.body().string(), WikiRequest.class);
                     }

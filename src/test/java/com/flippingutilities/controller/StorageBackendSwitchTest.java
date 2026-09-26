@@ -69,7 +69,7 @@ public class StorageBackendSwitchTest {
         };
         setField(plugin, "config", config);
         setField(plugin, "executor", executor);
-        setField(plugin, "storageExecutor", executor);
+        setField(plugin, "storageController", new StorageController(plugin, plugin::createSqliteStorage, executor));
         setField(plugin, "clientThread", clientThread);
         setField(plugin, "flippingItemHandler", new FlippingItemHandler(plugin));
         setField(plugin, "accountCurrentlyViewed", ACCOUNT);
