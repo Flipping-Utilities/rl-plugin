@@ -167,11 +167,14 @@ test("folder DB import replays WAL and includes companion JSON metadata", () => 
     {path: "root/flipping/flipping.db-wal", bytes: bytes(fixture.wal)},
     entry("root/flipping/flipping.db-shm", "unused"),
     entry("root/flipping/accountwide.json"), entry("root/flipping/Alice.json.pre-migration"),
+    entry("root/flipping/Alice.json"), entry("root/flipping/Alice.backup.json"),
+    entry("root/flipping/backupcheckpoints.special.json"),
     entry("root/settings.properties", "flipping.dataSource=SQLITE")
   ], {sourceKind: "folder"});
   assert.deepEqual(nativeRows(plan.database), fixture.rows);
-  assert.equal(plan.files.length, 3);
-  assert.ok(plan.files.every(file => !file.path.includes(".db")));
+  assert.deepEqual(plan.files.map(file => file.path), [
+    "flipping/accountwide.json", "flipping/backupcheckpoints.special.json", "settings.properties"
+  ]);
 });
 
 test("individual arbitrary-name DB ignores folder dataSource/resync and accepts its WAL", () => {
@@ -197,7 +200,7 @@ test("auto file selection accepts arbitrary DB names with accountwide and migrat
   ]);
   assert.deepEqual(nativeRows(plan.database), fixture.rows);
   assert.equal(plan.sourceLabel, "custom-test.sqlite");
-  assert.deepEqual(plan.files.map(file => file.path), ["flipping/accountwide.json", "flipping/Alice.json.pre-migration"]);
+  assert.deepEqual(plan.files.map(file => file.path), ["flipping/accountwide.json"]);
 });
 
 test("auto selection still respects folder settings with canonical flipping.db", () => {

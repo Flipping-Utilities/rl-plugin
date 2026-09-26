@@ -1,6 +1,7 @@
 package com.flippingutilities.ui.uiutilities;
 
 import com.flippingutilities.model.Timestep;
+import com.flippingutilities.DataSource;
 import okhttp3.Interceptor;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -27,6 +28,58 @@ import static org.junit.Assert.*;
 
 /** Exercise visible controls against deterministic HTTP responses, without reaching the network. */
 public class SandboxPricePanelTest {
+    @Test
+    public void settingsControlsChangeActualWidgetsAndChartRequests() throws Exception {
+        AtomicInteger latestCalls = new AtomicInteger();
+        AtomicInteger seriesCalls = new AtomicInteger();
+        try (SandboxWikiData wiki = wiki(chain -> {
+            if (isLatest(chain)) { latestCalls.incrementAndGet(); return response(chain, latest()); }
+            seriesCalls.incrementAndGet();
+            assertEquals("1h", chain.request().url().queryParameter("timestep"));
+            return response(chain, series(200, 100));
+        })) {
+            SandboxConfig config = new SandboxConfig(DataSource.JSON);
+            config.quickLookup = false;
+            config.offerChart = false;
+            config.timestep = Timestep.ONE_HOUR;
+            SandboxPricePanel[] pricePanel = new SandboxPricePanel[1];
+            SandboxSettingsPanel[] settings = new SandboxSettingsPanel[1];
+            onEdt(() -> {
+                pricePanel[0] = new SandboxPricePanel(wiki, config);
+                settings[0] = new SandboxSettingsPanel(config, true, pricePanel[0]::settingsChanged);
+                pricePanel[0].showItem(4151, "Abyssal whip", 150, true);
+                assertFalse(find(settings[0], JComboBox.class, "Session storage backend").isEnabled());
+                assertEquals(Timestep.ONE_HOUR, find(pricePanel[0], JComboBox.class, "Chart period").getSelectedItem());
+                assertFalse(find(pricePanel[0], JPanel.class, "Price chart").isVisible());
+                assertFalse(find(pricePanel[0], QuickLookPanel.class, "Latest Wiki prices").getParent().isVisible());
+                assertTrue(status(pricePanel[0]).contains("disabled"));
+            });
+            try {
+                assertEquals(0, latestCalls.get());
+                assertEquals(0, seriesCalls.get());
+                onEdt(() -> find(settings[0], JCheckBox.class, "Quick lookup prices").doClick());
+                await(() -> text(pricePanel[0], "Latest price status").contains("loaded"));
+                assertTrue(config.quickLookupEnabled());
+                assertEquals(1, latestCalls.get());
+                assertEquals(0, seriesCalls.get());
+                onEdt(() -> find(settings[0], JCheckBox.class, "Offer page chart").doClick());
+                await(() -> status(pricePanel[0]).startsWith("Wiki Insta Buy"));
+                assertTrue(config.offerPageChartEnabled());
+                assertEquals(1, seriesCalls.get());
+                onEdt(() -> {
+                    UiGallery.capture(pricePanel[0], 900, 560);
+                    hover(pricePanel[0]);
+                    assertTrue(text(pricePanel[0], "Chart hover prices").contains("Sell tax: 2 gp"));
+                    find(settings[0], JCheckBox.class, "Show tax on chart hover").doClick();
+                    assertFalse(text(pricePanel[0], "Chart hover prices").contains("Sell tax"));
+                    find(settings[0], JCheckBox.class, "Verbose item details").doClick();
+                    assertFalse(config.verboseViewEnabled());
+                });
+                assertEquals("Tax/display changes do not refetch history", 1, seriesCalls.get());
+            } finally { onEdt(pricePanel[0]::close); }
+        }
+    }
+
     @Test
     public void rendersRealWidgetsAndHoverPricesThenChangesPeriod() throws Exception {
         AtomicInteger calls = new AtomicInteger();

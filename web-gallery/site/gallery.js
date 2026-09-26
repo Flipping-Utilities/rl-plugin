@@ -129,6 +129,8 @@ async function launch(mode, plan = { files: [], database: null, sourceLabel: "Em
       natives: {
         Java_com_flippingutilities_ui_uiutilities_BrowserGallery_ready: ready,
         Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_ready: ready,
+        Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_progress: (_lib, message) => { status.textContent = message; },
+        Java_com_flippingutilities_ui_uiutilities_BrowserSqliteImporter_progress: (_lib, message) => { status.textContent = message; },
         Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_awaitClose: () => new Promise(resolve => { closeSandbox = resolve; }),
         Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_closed: () => location.reload(),
         Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_failed: (_lib, message) => {

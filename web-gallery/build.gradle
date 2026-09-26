@@ -3,9 +3,10 @@ import groovy.json.JsonOutput
 // This artifact is independent of the plugin jar, which embeds SQLite native libraries.
 // Reuse the compiled production components and the exact desktop gallery fixtures.
 def galleryPackage = 'com/flippingutilities/ui/uiutilities/'
-def galleryClasses = ['BrowserGallery', 'BrowserSandbox', 'BrowserSqliteImporter', 'UiGallery',
+def galleryClasses = ['BrowserGallery', 'BrowserSandbox', 'BrowserSqliteImporter', 'BrowserFonts', 'UiGallery',
     'GalleryFixture', 'GalleryFixtures', 'StatisticsGalleryFixtures', 'SandboxData', 'SandboxPlugin',
-    'SandboxExchange', 'SandboxGrandExchangePanel', 'SandboxWikiData', 'SandboxPricePanel', 'SandboxGameApi']
+    'SandboxExchange', 'SandboxGrandExchangePanel', 'SandboxWikiData', 'SandboxPricePanel', 'SandboxGameApi',
+    'SandboxConfig', 'SandboxSettingsPanel']
 
 def browserGalleryJar = tasks.register('browserGalleryJar', Jar) {
     group = 'build'
@@ -23,6 +24,32 @@ def browserGalleryJar = tasks.register('browserGalleryJar', Jar) {
             fixtureSpec.include galleryPackage + name + '$*.class'
         }
         fixtureSpec.include 'com/flippingutilities/ui/flipping/SandboxFlippingPanel*.class'
+        fixtureSpec.include 'com/flippingutilities/db/SandboxTradePersister.class'
+        fixtureSpec.include 'com/flippingutilities/db/SandboxTradePersister$*.class'
+    }
+}
+
+// Use the same pinned driver as the production artifact, but omit its native engines.
+// SqliteStorage registers JDBC at class initialization; browser queries still use sql.js.
+def sqliteJdbcArtifact = providers.provider {
+    configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.find { artifact ->
+        def module = artifact.moduleVersion.id
+        module.group == 'org.xerial' && module.name == 'sqlite-jdbc'
+    }.file
+}
+def browserSqliteJdbcJar = tasks.register('browserSqliteJdbcJar', Jar) {
+    group = 'build'
+    description = 'Package SQLite JDBC Java classes and resources without native libraries.'
+    archiveFileName = 'sqlite-jdbc-java.jar'
+    destinationDirectory = layout.buildDirectory.dir('browser-gallery-artifacts')
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    manifest.attributes('Multi-Release': 'true')
+    from({ zipTree(sqliteJdbcArtifact.get()) }) {
+        exclude 'org/sqlite/native/**'
+        exclude '**/*.so', '**/*.dll', '**/*.dylib', '**/*.jnilib', '**/*.a', '**/*.lib', '**/*.o', '**/*.exe'
+        exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
     }
 }
 
@@ -49,11 +76,12 @@ def sourceCommit = providers.exec {
 tasks.register('browserGallery', Sync) {
     group = 'build'
     description = 'Build the static CheerpJ gallery distribution in build/browser-gallery.'
-    dependsOn browserGalleryJar
+    dependsOn browserGalleryJar, browserSqliteJdbcJar
     into layout.buildDirectory.dir('browser-gallery')
     duplicatesStrategy = DuplicatesStrategy.FAIL
     from rootProject.file('web-gallery/site')
     from(browserGalleryJar.flatMap { it.archiveFile }) { into 'lib' }
+    from(browserSqliteJdbcJar.flatMap { it.archiveFile }) { into 'lib' }
     from(browserRuntimeJars) { into 'lib' }
     inputs.property 'sourceCommit', sourceCommit
     doLast {
@@ -64,7 +92,8 @@ tasks.register('browserGallery', Sync) {
             args: [],
             javaVersion: 11,
             sourceCommit: sourceCommit.get(),
-            classpath: ['lib/browser-gallery.jar'] + browserRuntimeJars.get().collect { 'lib/' + it.name }
+            classpath: ['lib/browser-gallery.jar', 'lib/sqlite-jdbc-java.jar'] +
+                browserRuntimeJars.get().collect { 'lib/' + it.name }
         ]
         new File(destinationDir, 'manifest.json').setText(JsonOutput.prettyPrint(JsonOutput.toJson(manifest)) + '\n', 'UTF-8')
     }

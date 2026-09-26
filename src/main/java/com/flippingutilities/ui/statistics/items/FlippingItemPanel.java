@@ -500,14 +500,16 @@ public class FlippingItemPanel extends JPanel
 
 	private void updateFlippingLabels(long flippingExpense, long flippingRevenue, int itemsFlipped) {
 		long profitFromFlips = flippingRevenue - flippingExpense;
+		// Keep the divisor nonzero on CheerpJ's optimized empty-row path too.
+		long profitPerItem = itemsFlipped > 0 ? profitFromFlips / Math.max(1, itemsFlipped) : 0;
 		totalProfitValLabel.setText(UIUtilities.quantityToRSDecimalStack(profitFromFlips, true) + " gp");
 		totalProfitValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
 		totalProfitValLabel.setToolTipText(QuantityFormatter.formatNumber(profitFromFlips) + " gp");
 
-		String profitEach = UIUtilities.quantityToRSDecimalStack(itemsFlipped > 0 ? (profitFromFlips / itemsFlipped) : 0, true) + " gp/ea";
+		String profitEach = UIUtilities.quantityToRSDecimalStack(profitPerItem, true) + " gp/ea";
 		profitEachValLabel.setText(profitEach);
 		profitEachValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
-		profitEachValLabel.setToolTipText(QuantityFormatter.formatNumber(itemsFlipped > 0 ? profitFromFlips / itemsFlipped : 0) + " gp/ea");
+		profitEachValLabel.setToolTipText(QuantityFormatter.formatNumber(profitPerItem) + " gp/ea");
 
 		quantityFlipped.setText(QuantityFormatter.formatNumber(itemsFlipped) + " Items");
 
