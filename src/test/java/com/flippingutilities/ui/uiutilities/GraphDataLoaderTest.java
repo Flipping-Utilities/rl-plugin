@@ -85,6 +85,40 @@ public class GraphDataLoaderTest {
         assertEquals(1, otherDisplayed.size());
     }
 
+    @Test
+    public void currentFailuresAreDeliveredOnceOnClientThreadAndCanBeRetried() throws Exception {
+        Fixture fixture = new Fixture();
+        List<Throwable> failures = new ArrayList<>();
+        fixture.loader.load(4151, Timestep.ONE_HOUR, fixture.displayed::add, failures::add);
+        fixture.client.calls.get(0).fail();
+        assertTrue(failures.isEmpty());
+        fixture.thread.drain();
+        assertEquals(1, failures.size());
+        fixture.loader.load(4151, Timestep.ONE_HOUR, fixture.displayed::add, failures::add);
+        fixture.client.calls.get(1).respond(200, history(200));
+        fixture.thread.drain();
+        assertEquals(1, failures.size());
+        assertEquals(1, fixture.displayed.size());
+    }
+
+    @Test
+    public void staleFailuresCannotOverwriteANewerSelectionOrHiddenView() throws Exception {
+        Fixture fixture = new Fixture();
+        List<Throwable> failures = new ArrayList<>();
+        fixture.loader.load(4151, Timestep.ONE_HOUR, fixture.displayed::add, failures::add);
+        fixture.loader.load(2, Timestep.ONE_HOUR, fixture.displayed::add, failures::add);
+        fixture.client.calls.get(1).respond(200, history(200));
+        fixture.client.calls.get(0).fail();
+        fixture.thread.drain();
+        assertEquals(1, fixture.displayed.size());
+        assertTrue(failures.isEmpty());
+        fixture.loader.load(3, Timestep.ONE_HOUR, fixture.displayed::add, failures::add);
+        fixture.client.calls.get(2).fail();
+        fixture.loader.clear();
+        fixture.thread.drain();
+        assertTrue(failures.isEmpty());
+    }
+
     private static String history(int price) {
         return "{\"data\":[{\"timestamp\":100,\"avgHighPrice\":" + price + ",\"avgLowPrice\":40}]}";
     }
