@@ -77,11 +77,11 @@ public class AccountIsolationTest {
     }
 
     @Test
-    public void replacementAfterLookupMakesTradeWriteFailWithoutTouchingNewAccount() throws Exception {
+    public void callerOwnedDeferredWriteRejectsReplacementWithoutTouchingNewAccount() throws Exception {
         first.upsertFavorite(OLD_ACCOUNT, ITEM_ID, true, "old");
         first.afterNextAccountLookup(this::replaceAccount);
 
-        assertSnapshotWriteRejected(() -> first.recordTrade(OLD_ACCOUNT, offer("racing-trade")));
+        assertCallerSnapshotWriteRejected(() -> first.recordTrade(OLD_ACCOUNT, offer("racing-trade")));
         assertTrue(first.getConnection().getAutoCommit());
         assertNull(second.loadAccount(OLD_ACCOUNT));
         assertNewAccountUntouched();
@@ -92,11 +92,11 @@ public class AccountIsolationTest {
     }
 
     @Test
-    public void replacementAfterLookupCannotRedirectWholeAccountDeletion() throws Exception {
+    public void callerOwnedDeferredDeleteCannotRedirectWholeAccountDeletion() throws Exception {
         first.upsertFavorite(OLD_ACCOUNT, ITEM_ID, true, "old");
         first.afterNextAccountLookup(this::replaceAccount);
 
-        assertSnapshotWriteRejected(() -> first.deleteAccountData(OLD_ACCOUNT));
+        assertCallerSnapshotWriteRejected(() -> first.deleteAccountData(OLD_ACCOUNT));
         assertTrue(first.getConnection().getAutoCommit());
         assertNewAccountUntouched();
     }
@@ -200,13 +200,19 @@ public class AccountIsolationTest {
         return complete(OLD_ACCOUNT, ITEM_ID, uuid, TIME, 1, 100, true);
     }
 
-    private void assertSnapshotWriteRejected(Runnable operation) {
+    private void assertCallerSnapshotWriteRejected(Runnable operation) throws SQLException {
+        Connection connection = first.getConnection();
+        connection.setAutoCommit(false);
         try {
             operation.run();
             fail("Writing after a concurrent account replacement must reject the stale snapshot");
         } catch (IllegalStateException failure) {
+            assertFalse("A nested write must preserve its caller's transaction", connection.getAutoCommit());
             assertTrue("SQLite must reject the stale write snapshot, not corrupt another account: " + failure,
                 failure.getCause() instanceof SQLException && failure.getCause().getMessage().contains("SQLITE_BUSY"));
+        } finally {
+            connection.rollback();
+            connection.setAutoCommit(true);
         }
     }
 
