@@ -1,0 +1,71 @@
+name: Browser gallery
+
+on:
+  push:
+    branches:
+      - experiment/cheerpj-gallery
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/experiment/cheerpj-gallery'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the experimental branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 11
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: gradle
+          cache-dependency-path: |
+            **/*.gradle*
+            gradle/wrapper/gradle-wrapper.properties
+
+      - name: Verify fixtures and build the browser gallery
+        env:
+          JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+        run: >-
+          ./gradlew --no-daemon -PruneLiteVersion=1.12.39
+          test
+          --tests com.flippingutilities.ui.uiutilities.UiGalleryTest
+          --tests com.flippingutilities.ui.uiutilities.PaginatorTest
+          --tests com.flippingutilities.ui.uiutilities.QuickLookPanelTest
+          verifyBrowserGallery
+
+      - name: Upload the static gallery
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: build/browser-gallery
+
+  deploy:
+    if: github.ref == 'refs/heads/experiment/cheerpj-gallery'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Deploy the gallery
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
