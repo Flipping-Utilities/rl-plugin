@@ -20,7 +20,9 @@ public final class RuneLiteSandbox {
             throw new IllegalArgumentException("Usage: RuneLiteSandbox [--source FOLDER_OR_DB]");
         }
         if (GraphicsEnvironment.isHeadless()) throw new IllegalStateException("The RuneLite sandbox needs a display");
-        SandboxData data = SandboxData.copyOf(args.length == 0 ? SandboxData.defaultSource() : Paths.get(args[1]));
+        SandboxData data = args.length == 0 ? SandboxSourceChooser.choose(SandboxData.defaultSource())
+            : SandboxData.copyOf(Paths.get(args[1]));
+        if (data == null) return;
         System.setProperty("user.home", data.getRuneLiteDirectory().getParent().toString());
         SandboxPlugin[] host = new SandboxPlugin[1];
         AtomicBoolean closed = new AtomicBoolean();
