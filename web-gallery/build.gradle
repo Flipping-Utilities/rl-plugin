@@ -1,0 +1,80 @@
+import groovy.json.JsonOutput
+
+// This artifact is independent of the plugin jar, which embeds SQLite native libraries.
+// Reuse the compiled production components and the exact desktop gallery fixtures.
+def galleryPackage = 'com/flippingutilities/ui/uiutilities/'
+def galleryClasses = ['BrowserGallery', 'UiGallery', 'GalleryFixture', 'GalleryFixtures', 'StatisticsGalleryFixtures']
+
+def browserGalleryJar = tasks.register('browserGalleryJar', Jar) {
+    group = 'build'
+    description = 'Package production components and synthetic gallery fixtures for the browser.'
+    dependsOn tasks.named('testClasses')
+    archiveFileName = 'browser-gallery.jar'
+    destinationDirectory = layout.buildDirectory.dir('browser-gallery-artifacts')
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    from(sourceSets.main.output)
+    from(sourceSets.test.output.classesDirs) { fixtureSpec ->
+        galleryClasses.each { name ->
+            fixtureSpec.include galleryPackage + name + '.class'
+            fixtureSpec.include galleryPackage + name + '$*.class'
+        }
+    }
+}
+
+// The fixture path never starts RuneLite, injects services, opens storage or runs tests.
+// Keep pure Java dependencies (including signature types) and each dependency's resources.
+def excludedGroups = [
+    'junit', 'org.junit', 'org.hamcrest', 'org.mockito', 'net.bytebuddy', 'org.objenesis',
+    'org.projectlombok', 'org.xerial', 'net.java.dev.jna', 'org.lwjgl', 'ch.qos.logback', 'com.fifesoft'
+] as Set
+def excludedRuneLiteModules = ['discord', 'rlawt', 'rlicn', 'jshell', 'injected-client'] as Set
+def browserRuntimeJars = providers.provider {
+    configurations.testRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.findAll { artifact ->
+        def module = artifact.moduleVersion.id
+        artifact.extension == 'jar' &&
+            !excludedGroups.contains(module.group) &&
+            !(module.group == 'net.runelite' && excludedRuneLiteModules.contains(module.name))
+    }.collect { it.file }.sort { it.name }
+}
+def sourceCommit = providers.exec {
+    workingDir rootProject.projectDir
+    commandLine 'git', 'rev-parse', 'HEAD'
+}.standardOutput.asText.map { it.trim() }
+
+tasks.register('browserGallery', Sync) {
+    group = 'build'
+    description = 'Build the static CheerpJ gallery distribution in build/browser-gallery.'
+    dependsOn browserGalleryJar
+    into layout.buildDirectory.dir('browser-gallery')
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    from rootProject.file('web-gallery/site')
+    from(browserGalleryJar.flatMap { it.archiveFile }) { into 'lib' }
+    from(browserRuntimeJars) { into 'lib' }
+    inputs.property 'sourceCommit', sourceCommit
+    doLast {
+        def manifest = [
+            schemaVersion: 1,
+            mainClass: 'com.flippingutilities.ui.uiutilities.BrowserGallery',
+            args: [],
+            javaVersion: 11,
+            sourceCommit: sourceCommit.get(),
+            classpath: ['lib/browser-gallery.jar'] + browserRuntimeJars.get().collect { 'lib/' + it.name }
+        ]
+        new File(destinationDir, 'manifest.json').setText(JsonOutput.prettyPrint(JsonOutput.toJson(manifest)) + '\n', 'UTF-8')
+    }
+}
+
+// Exercise the files we actually publish, without Gradle's larger test runtime classpath.
+tasks.register('verifyBrowserGallery', JavaExec) {
+    group = 'verification'
+    description = 'Render every fixture using only the packaged browser dependencies.'
+    dependsOn tasks.named('browserGallery')
+    classpath = fileTree(layout.buildDirectory.dir('browser-gallery/lib')) { include '*.jar' }
+    mainClass = 'com.flippingutilities.ui.uiutilities.UiGallery'
+    systemProperty 'java.awt.headless', 'true'
+    systemProperty 'flatlaf.useNativeLibrary', 'false'
+    systemProperty 'user.home', layout.buildDirectory.dir('browser-gallery-test-home').get().asFile.absolutePath
+    args '--render-all', layout.buildDirectory.dir('browser-gallery-verification').get().asFile.absolutePath
+}

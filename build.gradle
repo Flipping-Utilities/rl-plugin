@@ -10,7 +10,7 @@ repositories {
 	mavenCentral()
 }
 
-def runeLiteVersion = 'latest.release'
+def runeLiteVersion = findProperty('runeLiteVersion') ?: 'latest.release'
 def lombokVersion = '1.18.30'
 
 dependencies {
@@ -82,3 +82,5 @@ tasks.register('renderUiGallery', JavaExec) {
     systemProperty 'java.awt.headless', 'true'
     args '--render-all', layout.buildDirectory.dir('ui-gallery').get().asFile.absolutePath
 }
+
+apply from: 'web-gallery/build.gradle'

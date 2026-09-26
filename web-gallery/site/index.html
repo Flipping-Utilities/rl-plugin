@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flipping Utilities · Component gallery</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./gallery.css">
+  <script defer src="https://cjrtnc.leaningtech.com/4.3/loader.js"></script>
+  <script defer src="./gallery.js"></script>
+</head>
+<body>
+  <header>
+    <div><p class="eyebrow">Flipping Utilities <span>Experiment</span></p>
+      <h1>Component gallery</h1>
+      <p>The plugin’s Swing components, running in your browser with synthetic data.</p>
+    </div>
+    <a href="https://github.com/Flipping-Utilities/rl-plugin/tree/experiment/cheerpj-gallery">View branch ↗</a>
+  </header>
+  <main>
+    <section class="launch" aria-label="Gallery controls">
+      <button id="start" type="button">Open interactive gallery</button>
+      <p id="status" role="status">First launch downloads the Java runtime. Later launches use the browser cache.</p>
+      <button id="reload" type="button" hidden>Reload page</button>
+    </section>
+    <div id="display" aria-label="Interactive Java component gallery"></div>
+    <p class="hint">Choose a state in the gallery, change its width, and interact with the real controls. Reset restores the fixture.</p>
+  </main>
+  <footer><span>Java 11 · CheerpJ 4.3 · Synthetic fixtures only</span><span id="build"></span></footer>
+</body>
+</html>
