@@ -30,6 +30,7 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.statistics.items.FlippingItemPanel;
 import com.flippingutilities.ui.statistics.items.FlippingItemContainerPanel;
+import com.flippingutilities.ui.statistics.recipes.RecipeDisplayText;
 import com.flippingutilities.ui.statistics.recipes.RecipeFlipGroupPanel;
 import com.flippingutilities.ui.statistics.recipes.RecipeGroupContainerPanel;
 import com.flippingutilities.ui.uiutilities.*;
@@ -419,9 +420,9 @@ public class StatsPanel extends JPanel
 		updateTaxPaidDisplay(taxPaid);
 		if (missingRecipeOffers) {
 			for (JLabel label : new JLabel[]{totalProfitVal, roiVal, taxPaidVal, hourlyProfitVal}) {
-				label.setText("Unknown");
+				label.setText(RecipeDisplayText.UNKNOWN);
 				label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-				label.setToolTipText("Original recipe offer details are missing; financial totals are unavailable.");
+				label.setToolTipText(RecipeDisplayText.MISSING_RECIPE_OFFER_TOTALS);
 			}
 		}
 		updateAutoSaveDisplay();

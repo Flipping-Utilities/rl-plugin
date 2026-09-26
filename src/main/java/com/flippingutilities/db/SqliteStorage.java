@@ -13,7 +13,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -187,9 +186,9 @@ public class SqliteStorage {
     public synchronized String getSetting(String key) {
         try {
             Connection conn = getConnection();
-            String sql = "SELECT value FROM settings WHERE key = ?";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, key);
+            String sql = "SELECT value FROM settings WHERE key = :key";
+            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
+                ps.bind("key", key);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         return rs.getString("value");
@@ -212,6 +211,14 @@ public class SqliteStorage {
         return null;
     }
 
+    public synchronized boolean getBooleanSetting(String key) {
+        return Boolean.parseBoolean(getSetting(key));
+    }
+
+    public synchronized void setBooleanSetting(String key, boolean value) {
+        setSetting(key, Boolean.toString(value));
+    }
+
     /**
      * Set a setting value in the settings table.
      * @param key Setting key
@@ -220,10 +227,10 @@ public class SqliteStorage {
     public synchronized void setSetting(String key, String value) {
         try {
             Connection conn = getConnection();
-            String sql = "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, key);
-                ps.setString(2, value);
+            String sql = "INSERT OR REPLACE INTO settings (key, value) VALUES (:key, :value)";
+            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
+                ps.bind("key", key);
+                ps.bind("value", value);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -247,9 +254,9 @@ public class SqliteStorage {
     public synchronized void clearSetting(String key) {
         try {
             Connection conn = getConnection();
-            String sql = "DELETE FROM settings WHERE key = ?";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, key);
+            String sql = "DELETE FROM settings WHERE key = :key";
+            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
+                ps.bind("key", key);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {

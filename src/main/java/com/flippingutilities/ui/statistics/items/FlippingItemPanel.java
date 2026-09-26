@@ -397,7 +397,7 @@ public class FlippingItemPanel extends JPanel
 			@Override
 			public void mousePressed(MouseEvent e)
 			{
-				if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+				if (plugin.isAccountWideView()) {
 					JOptionPane.showMessageDialog(null, "You cannot delete offers in the Accountwide view");
 					return;
 				}

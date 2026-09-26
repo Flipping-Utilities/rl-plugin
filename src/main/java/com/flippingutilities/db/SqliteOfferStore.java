@@ -6,7 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -43,11 +42,11 @@ final class SqliteOfferStore {
 
         // Load original offers, including those fully consumed by recipes. Recipe
         // consumption is applied by the account model without removing stored history.
-        String sql = "SELECT item_id, offer_json FROM trades WHERE account_id = ? ORDER BY item_id, timestamp, id";
+        String sql = "SELECT item_id, offer_json FROM trades WHERE account_id = :accountId ORDER BY item_id, timestamp, id";
         try {
             Connection conn = storage.getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
+            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
+                ps.bind("accountId", accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         int itemId = rs.getInt("item_id");
@@ -86,11 +85,11 @@ final class SqliteOfferStore {
             // Restore persisted favorite state (M4: favorites round-trip across reloads)
             Map<String, Object> fav = favorites.get(itemId);
             if (fav != null) {
-                Object isFavorite = fav.get("isFavorite");
+                Object isFavorite = fav.get(SqliteItemStateStore.IS_FAVORITE);
                 if (isFavorite instanceof Boolean && (Boolean) isFavorite) {
                     item.setFavorite(true);
                 }
-                Object favoriteCode = fav.get("favoriteCode");
+                Object favoriteCode = fav.get(SqliteItemStateStore.FAVORITE_CODE);
                 if (favoriteCode instanceof String) {
                     item.setFavoriteCode((String) favoriteCode);
                 }
@@ -109,20 +108,20 @@ final class SqliteOfferStore {
         // have different UUIDs; recordOfferUpdate removes their exact replaced snapshots.
         String sql = "INSERT INTO trades " +
             "(account_id, item_id, uuid, timestamp, qty, price, is_buy, offer_json) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+            "VALUES (:accountId, :itemId, :uuid, :timestamp, :quantity, :price, :buy, :offerJson) " +
             "ON CONFLICT(account_id, uuid) DO UPDATE SET " +
             "timestamp = excluded.timestamp, qty = excluded.qty, price = excluded.price, " +
             "offer_json = excluded.offer_json " +
             "WHERE excluded.qty >= trades.qty";
-        try (PreparedStatement statement = storage.getConnection().prepareStatement(sql)) {
-            statement.setInt(1, accountId);
-            statement.setInt(2, offer.getItemId());
-            statement.setString(3, offer.getUuid());
-            statement.setLong(4, offer.getTime() == null ? 0L : offer.getTime().toEpochMilli());
-            statement.setInt(5, offer.getCurrentQuantityInTrade());
-            statement.setLong(6, offer.getPreTaxPrice());
-            statement.setInt(7, offer.isBuy() ? 1 : 0);
-            statement.setString(8, OfferJsonCodec.serializeOffer(offer));
+        try (NamedStatement statement = NamedStatement.prepare(storage.getConnection(), sql)) {
+            statement.bind("accountId", accountId);
+            statement.bind("itemId", offer.getItemId());
+            statement.bind("uuid", offer.getUuid());
+            statement.bind("timestamp", offer.getTime() == null ? 0L : offer.getTime().toEpochMilli());
+            statement.bind("quantity", offer.getCurrentQuantityInTrade());
+            statement.bind("price", offer.getPreTaxPrice());
+            statement.bind("buy", offer.isBuy() ? 1 : 0);
+            statement.bind("offerJson", OfferJsonCodec.serializeOffer(offer));
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to record trade for " + displayName, e);
@@ -143,13 +142,14 @@ final class SqliteOfferStore {
         int accountId = storage.getOrCreateAccountId(displayName);
 
         final String sql = "INSERT OR REPLACE INTO active_slots " +
-            "(account_id, slot_index, offer_uuid, offer_json, history_visible) VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement ps = storage.getConnection().prepareStatement(sql)) {
-            ps.setInt(1, accountId);
-            ps.setInt(2, slotIndex);
-            ps.setString(3, offer.getUuid());
-            ps.setString(4, OfferJsonCodec.serializeOffer(offer));
-            ps.setBoolean(5, historyVisible);
+            "(account_id, slot_index, offer_uuid, offer_json, history_visible) " +
+            "VALUES (:accountId, :slotIndex, :offerUuid, :offerJson, :historyVisible)";
+        try (NamedStatement ps = NamedStatement.prepare(storage.getConnection(), sql)) {
+            ps.bind("accountId", accountId);
+            ps.bind("slotIndex", slotIndex);
+            ps.bind("offerUuid", offer.getUuid());
+            ps.bind("offerJson", OfferJsonCodec.serializeOffer(offer));
+            ps.bind("historyVisible", historyVisible ? 1 : 0);
             ps.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Could not persist active slot for " + displayName, e);
@@ -164,12 +164,12 @@ final class SqliteOfferStore {
         }
 
         final String sql = "SELECT slot_index, offer_json, history_visible " +
-            "FROM active_slots WHERE account_id = ?";
+            "FROM active_slots WHERE account_id = :accountId";
 
         try {
             Connection conn = storage.getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
+            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
+                ps.bind("accountId", accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         int idx = rs.getInt("slot_index");
@@ -205,12 +205,12 @@ final class SqliteOfferStore {
             return;
         }
 
-        final String sql = "DELETE FROM active_slots WHERE account_id = ? AND slot_index = ?";
+        final String sql = "DELETE FROM active_slots WHERE account_id = :accountId AND slot_index = :slotIndex";
         try {
             Connection conn = storage.getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
-                ps.setInt(2, slotIndex);
+            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
+                ps.bind("accountId", accountId);
+                ps.bind("slotIndex", slotIndex);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -238,9 +238,9 @@ final class SqliteOfferStore {
             try {
                 for (int i = 0; i < replacedUuids.size(); i += 500) {
                     List<String> chunk = replacedUuids.subList(i, Math.min(i + 500, replacedUuids.size()));
-                    String placeholders = String.join(",", Collections.nCopies(chunk.size(), "?"));
-                    try (PreparedStatement ps = conn.prepareStatement(
-                        "DELETE FROM trades WHERE account_id = ? AND uuid IN (" + placeholders + ")")) {
+                    String placeholders = NamedStatement.placeholders("uuid", chunk.size());
+                    try (NamedStatement ps = NamedStatement.prepare(conn,
+                        "DELETE FROM trades WHERE account_id = :accountId AND uuid IN (" + placeholders + ")")) {
                         bindAccountUuids(ps, accountId, chunk);
                         ps.executeUpdate();
                     }
@@ -284,19 +284,19 @@ final class SqliteOfferStore {
             try {
                 for (int i = 0; i < uuids.size(); i += 500) {
                     List<String> chunk = uuids.subList(i, Math.min(i + 500, uuids.size()));
-                    String placeholders = String.join(",", Collections.nCopies(chunk.size(), "?"));
+                    String placeholders = NamedStatement.placeholders("uuid", chunk.size());
                     // Preserve active-slot continuity while hiding the deleted partial fill.
-                    try (PreparedStatement ps = conn.prepareStatement(
-                        "UPDATE active_slots SET history_visible = 0 WHERE account_id = ? AND offer_uuid IN (" + placeholders + ")")) {
+                    try (NamedStatement ps = NamedStatement.prepare(conn,
+                        "UPDATE active_slots SET history_visible = 0 WHERE account_id = :accountId AND offer_uuid IN (" + placeholders + ")")) {
                         bindAccountUuids(ps, accountId, chunk);
                         ps.executeUpdate();
                     }
                     Set<Long> recipeIds = new HashSet<>();
-                    for (String table : new String[]{"recipe_flip_inputs", "recipe_flip_outputs"}) {
-                        try (PreparedStatement ps = conn.prepareStatement(
-                            "SELECT DISTINCT c.recipe_flip_id FROM " + table + " c " +
+                    for (RecipeComponentTable table : RecipeComponentTable.values()) {
+                        try (NamedStatement ps = NamedStatement.prepare(conn,
+                            "SELECT DISTINCT c.recipe_flip_id FROM " + table.tableName() + " c " +
                             "JOIN recipe_flips rf ON rf.id = c.recipe_flip_id " +
-                            "WHERE rf.account_id = ? AND c.offer_uuid IN (" + placeholders + ")")) {
+                            "WHERE rf.account_id = :accountId AND c.offer_uuid IN (" + placeholders + ")")) {
                             bindAccountUuids(ps, accountId, chunk);
                             try (ResultSet rs = ps.executeQuery()) {
                                 while (rs.next()) {
@@ -306,8 +306,8 @@ final class SqliteOfferStore {
                         }
                     }
                     recipes.deleteRecipeFlipsById(conn, new ArrayList<>(recipeIds));
-                    try (PreparedStatement ps = conn.prepareStatement(
-                        "DELETE FROM trades WHERE account_id = ? AND uuid IN (" + placeholders + ")")) {
+                    try (NamedStatement ps = NamedStatement.prepare(conn,
+                        "DELETE FROM trades WHERE account_id = :accountId AND uuid IN (" + placeholders + ")")) {
                         bindAccountUuids(ps, accountId, chunk);
                         ps.executeUpdate();
                     }
@@ -325,10 +325,7 @@ final class SqliteOfferStore {
         }
     }
 
-    private void bindAccountUuids(PreparedStatement statement, int accountId, List<String> uuids) throws SQLException {
-        statement.setInt(1, accountId);
-        for (int i = 0; i < uuids.size(); i++) {
-            statement.setString(i + 2, uuids.get(i));
-        }
+    private void bindAccountUuids(NamedStatement statement, int accountId, List<String> uuids) throws SQLException {
+        statement.bind("accountId", accountId).bindList("uuid", uuids);
     }
 }

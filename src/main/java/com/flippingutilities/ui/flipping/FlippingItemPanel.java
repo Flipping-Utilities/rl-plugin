@@ -431,7 +431,7 @@ public class FlippingItemPanel extends JPanel
 		searchCodeTextField.setText(flippingItem.getFavoriteCode());
 		searchCodeTextField.addActionListener(e -> {
 			isHighlighted[0] = false;
-			if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+			if (plugin.isAccountWideView()) {
 				plugin.setFavoriteCodeOnAllAccounts(flippingItem, searchCodeTextField.getText());
 			}
 			else {
@@ -441,7 +441,7 @@ public class FlippingItemPanel extends JPanel
 			flippingItem.setFavoriteCode(searchCodeTextField.getText());
 			// Persist the single-account code change so a SQLite-mode restart doesn't revert it.
 			// Runs after the set above so the persisted value is the new one.
-			if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+			if (!plugin.isAccountWideView()) {
 				plugin.persistFavoriteCodeOnAccount(plugin.getAccountCurrentlyViewed(), flippingItem);
 			}
 
@@ -776,7 +776,7 @@ public class FlippingItemPanel extends JPanel
 					plugin.addFavoritedItem(flippingItem);
 				}
 
-				if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE))
+				if (plugin.isAccountWideView())
 				{
 					plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
 				}
@@ -785,12 +785,12 @@ public class FlippingItemPanel extends JPanel
 				}
 
 				//if it was a dummy item and in the accountwide view, it has already had its favorite set by setFavoriteOnAllAccounts
-				boolean wasDummyAndAccountwide = wasDummy && plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE);
+				boolean wasDummyAndAccountwide = wasDummy && plugin.isAccountWideView();
 				if (!wasDummyAndAccountwide) {
 					flippingItem.setFavorite(!flippingItem.isFavorite());
 					// Persist the single-account toggle so a SQLite-mode restart doesn't revert it.
 					// Runs after the toggle above so the persisted value is the new one.
-					if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+					if (!plugin.isAccountWideView()) {
 						plugin.persistFavoriteOnAccount(plugin.getAccountCurrentlyViewed(), flippingItem);
 					}
 				}

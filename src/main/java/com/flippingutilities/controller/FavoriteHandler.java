@@ -77,13 +77,8 @@ final class FavoriteHandler {
      * favorites it, we need to add it to the history.
      */
     public void addFavoritedItem(FlippingItem flippingItem) {
-        if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
-            for (String accountName : plugin.getDataHandler().getCurrentAccounts()) {
-                addFavoritedItem(flippingItem, accountName);
-            }
-        }
-        else {
-            addFavoritedItem(flippingItem, plugin.getAccountCurrentlyViewed());
+        for (String accountName : plugin.getAccountNamesForCurrentView()) {
+            addFavoritedItem(flippingItem, accountName);
         }
     }
 

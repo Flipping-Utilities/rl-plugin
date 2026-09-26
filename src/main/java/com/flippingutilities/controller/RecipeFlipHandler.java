@@ -52,7 +52,7 @@ final class RecipeFlipHandler {
     }
 
     public void addRecipeFlip(RecipeFlip recipeFlip, Recipe recipe) {
-        if (FlippingPlugin.ACCOUNT_WIDE.equals(plugin.getAccountCurrentlyViewed())) {
+        if (plugin.isAccountWideView()) {
             // The account-wide pseudo view has no AccountData to attach the flip to (and
             // persisting it would create a bogus "Accountwide" account in the DB).
             log.warn("Cannot create a recipe flip from the account-wide view; switch to a specific account first");

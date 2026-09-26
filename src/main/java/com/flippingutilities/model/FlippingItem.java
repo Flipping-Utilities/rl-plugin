@@ -58,6 +58,7 @@ import java.util.Optional;
 @Slf4j
 public class FlippingItem implements Searchable
 {
+	public static final String DEFAULT_FAVORITE_CODE = "1";
 
 	@SerializedName("id")
 	@Getter
@@ -94,7 +95,7 @@ public class FlippingItem implements Searchable
 
 	@Getter
 	@Setter
-	private String favoriteCode = "1";
+	private String favoriteCode = DEFAULT_FAVORITE_CODE;
 
 	//non persisted fields start here.
 	@Setter

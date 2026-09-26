@@ -270,8 +270,8 @@ public class RecipeFlipGroupPanel extends JPanel {
         itemIconTitlePanel.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
-                    JOptionPane.showMessageDialog(null, "You cannot delete recipe flips in the Accountwide view");
+                if (plugin.isAccountWideView()) {
+                    JOptionPane.showMessageDialog(null, RecipeDisplayText.ACCOUNT_WIDE_DELETE_UNAVAILABLE);
                     return;
                 }
                 int result = JOptionPane.showOptionDialog(itemIconTitlePanel, "Are you sure you want to delete this recipe's flips from this time interval?",
@@ -324,15 +324,15 @@ public class RecipeFlipGroupPanel extends JPanel {
 
         // Use the same interval-filtered flips for summary, details, and totals.
         OptionalLong recipesMade = recipeFlipGroup.getKnownRecipeCountMade(recipeFlips);
-        String countText = recipesMade.isPresent() ? QuantityFormatter.formatNumber(recipesMade.getAsLong()) : "Unknown";
-        quantityFlipped.setText(recipesMade.isPresent() ? countText + " Items" : "Unknown");
-        quantityFlipped.setToolTipText(recipesMade.isPresent() ? null : "The original recipe quantities are unavailable.");
+        String countText = recipesMade.isPresent() ? QuantityFormatter.formatNumber(recipesMade.getAsLong()) : RecipeDisplayText.UNKNOWN;
+        quantityFlipped.setText(recipesMade.isPresent() ? countText + " Items" : RecipeDisplayText.UNKNOWN);
+        quantityFlipped.setToolTipText(recipesMade.isPresent() ? null : RecipeDisplayText.MISSING_QUANTITIES);
         if (recipeFlips.stream().anyMatch(RecipeFlip::hasMissingOffers)) {
-            recipeProfitAndQuantityLabel.setText("Unknown (x " + countText + ")");
+            recipeProfitAndQuantityLabel.setText(RecipeDisplayText.UNKNOWN + " (x " + countText + ")");
             for (JLabel label : new JLabel[]{recipeProfitAndQuantityLabel, totalProfitValLabel, profitEachValLabel, roiValLabel}) {
-                if (label != recipeProfitAndQuantityLabel) label.setText("Unknown");
+                if (label != recipeProfitAndQuantityLabel) label.setText(RecipeDisplayText.UNKNOWN);
                 label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-                label.setToolTipText("Original offer details are missing; recipe financial totals are unavailable.");
+                label.setToolTipText(RecipeDisplayText.MISSING_OFFERS_TOTALS);
             }
             updateTimeLabels();
             return;
@@ -378,9 +378,9 @@ public class RecipeFlipGroupPanel extends JPanel {
             profitEachValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
             profitEachValLabel.setToolTipText(QuantityFormatter.formatNumber(profitEach) + " gp/ea");
         } else {
-            profitEachValLabel.setText("Unknown");
+            profitEachValLabel.setText(RecipeDisplayText.UNKNOWN);
             profitEachValLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-            profitEachValLabel.setToolTipText("The original recipe quantities are unavailable; profit per execution is unknown.");
+            profitEachValLabel.setToolTipText(RecipeDisplayText.MISSING_QUANTITIES_PROFIT_EACH);
         }
 
         float roi = (float) flippingExpense > 0 ? (float) profitFromFlips / flippingExpense * 100 : 0;
