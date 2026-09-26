@@ -256,8 +256,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         List<TimeseriesPoint> sorted = new ArrayList<>();
 
         // Only include points within the selected date range
-        long currentTime = System.currentTimeMillis() / 1000;
-        long minTimestamp = currentTime - maxTimeRangeSeconds;
+        long minTimestamp = earliestVisibleTimestamp();
 
         for (TimeseriesPoint point : dataPoints) {
             if (point.getTimestamp() >= minTimestamp) {
@@ -572,9 +571,17 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
     }
 
     public boolean hasData() {
-        boolean hasData = timeseries != null && timestep != null && timeseries.getData() != null
-                && !timeseries.getData().isEmpty();
-        return hasData;
+        if (timeseries == null || timestep == null || timeseries.getData() == null) {
+            return false;
+        }
+        long minTimestamp = earliestVisibleTimestamp();
+        return timeseries.getData().stream().anyMatch(point ->
+            point.getTimestamp() >= minTimestamp
+                && (point.getAvgHighPrice() != null || point.getAvgLowPrice() != null));
+    }
+
+    private long earliestVisibleTimestamp() {
+        return System.currentTimeMillis() / 1000 - maxTimeRangeSeconds;
     }
 
     @Override
