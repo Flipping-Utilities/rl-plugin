@@ -1,13 +1,40 @@
-# Swing component gallery
+# RuneLite sandbox and Swing component gallery
 
-Run real plugin components in named states without starting RuneLite, logging into the game or loading account files. The gallery uses RuneLite's look and feel and the existing test runtime classpath. It adds no application dependency and is excluded from the plugin JAR.
+Run the real plugin sidebar in an offline RuneLite shell, using disposable copies of saved data. The sandbox and synthetic component gallery use RuneLite's look and feel and stay on the test runtime classpath, outside the plugin JAR.
 
-## Run
+## Run with real data
 
 Use JDK 11 and the checked-in Gradle wrapper:
 
 ```sh
 ./gradlew uiGallery
+```
+
+By default this reads `~/.runelite`, copies the plugin saves and `settings.properties` into a new temporary home, and opens the real account selector, flipping, stats and slots panels. Select an account to browse and edit its history. Stats initially shows **All** history. Drag the divider to resize the sidebar.
+
+Choose another source, including paths with spaces:
+
+```sh
+# A RuneLite root directory
+./gradlew uiGallery --args='--source "/path/to/.runelite"'
+# A plugin data directory containing account JSON files or flipping.db
+./gradlew uiGallery --args='--source "/path/to/flipping"'
+# Any individual SQLite database filename
+./gradlew uiGallery --args='--source "/path/to/test account.sqlite"'
+```
+
+Every source is copied, including explicitly selected folders and files. The source is never opened by the running plugin. The launcher redirects `user.home` before RuneLite initializes its static paths, so even JSON saves, backups, migrations and deletion actions target the copy. SQLite uses a read-only backup connection to include committed WAL transactions in a consistent snapshot. The source does not need to be closed first. SQLite may create its `-shm` bookkeeping file and an empty `-wal` beside a closed WAL database while reading it; saved database contents are unchanged.
+
+The window and console show the source and temporary directory. Closing the window or normally terminating the JVM removes the working copy. A forced kill or power loss can leave a `flipping-sandbox-*` temporary directory behind; the original files are still unaffected. Reopening starts with a fresh copy. An empty folder opens an empty sidebar; a missing source produces an error with the source-selection command. Relevant symbolic links are rejected; select their actual target instead.
+
+An explicit database selects SQLite, including databases without the plugin's migration marker. Folder mode honors `flipping.dataSource=JSON` in `settings.properties`; otherwise it uses an available `flipping.db` unless it has a `.needs-resync` marker, and falls back to JSON. The sandbox does not rebuild a selected database from JSON. Other display preferences use plugin defaults.
+
+This is an offline host, with real local models and editing actions. It does not run the game or publish offers, refresh credentials, fetch live prices or download item sprites. Icons use a placeholder and item names/GE limits come from saved records; SQLite items without names appear as `Item <id>`. Recipe history and local recipes load from the copy; remote recipe catalogs and global item search are unavailable. Slots have no live game updates. Explicit CSV exports can be saved outside the temporary directory through the normal file chooser.
+
+## Run synthetic component states
+
+```sh
+./gradlew uiGallery --args='--fixtures'
 ```
 
 Choose a **State**, interact with its controls, and use **Reset state** to create a fresh instance with the listed initial values. Change **Width**, choose **225 px** or **300 px**, or enable **Fit available width** and resize the window. Widths are Swing logical units, so display scaling can change physical pixels. Tab and Shift+Tab move through actual controls; use Enter or Space where the component supports them.
@@ -49,7 +76,7 @@ Gradle may download its build dependencies on the first run. The fixtures themse
 
 Statistics uses a controlled plugin boundary with empty in-memory history and a fixed elapsed time. Its file-export, deletion and recipe-management controls are disabled inside the preview. Search callbacks use an owned timer that returns UI work to the event dispatch thread and is cancelled when the fixture is replaced or the window closes. Quick Look fixtures omit timestamps to avoid moving age labels between captures.
 
-The gallery intentionally shows the production component's current behavior, including layout defects. For example, a large paginator page number can expose the existing narrow page field. Fix the production component and rerun the same state to compare. The gallery does not replace gameplay validation, host focus traversal, screen-reader checks, or platform-specific native-driver tests. Accounting PR [#94](https://github.com/Flipping-Utilities/rl-plugin/pull/94) adds more reporting panels; those require their own synthetic service fixtures rather than connecting this tool to a database.
+The gallery intentionally shows the production component's current behavior, including layout defects. For example, a large paginator page number can expose the existing narrow page field. Fix the production component and rerun the same state to compare. The gallery does not replace gameplay validation, host focus traversal, screen-reader checks, or platform-specific native-driver tests. Accounting PR [#94](https://github.com/Flipping-Utilities/rl-plugin/pull/94) adds panels that are not on this branch.
 
 ## Add a fixture
 
@@ -66,6 +93,8 @@ GalleryFixture.component("paginator-first", "Paginator / First page",
 ```
 
 For timers, executors or subscriptions, use a `GalleryFixture` factory returning `new GalleryFixture.Mounted(component, cleanup)`. Construction, interaction, painting and cleanup run on Swing's event dispatch thread; cleanup must finish promptly. `Mounted.close()` is idempotent. Keep expensive image encoding or other file work outside that thread. Every mount must create fresh components and mutable fixture data; never reuse a panel between unrelated stories. Avoid real plugin startup, credentials, account files, background services or external links.
+
+`SandboxDataTest` checks source selection, independent copies, committed WAL data, failure cleanup and link handling. `SandboxPluginTest` launches fresh JVMs to check JSON/SQLite loading, edits, deletion, restart isolation and incorrect-home rejection. On a desktop, run the optional real-sidebar interaction check with `FLIPPING_SANDBOX_UI_TEST=true ./gradlew test --tests '*SandboxPluginTest' --rerun-tasks`; it mounts saved history, clicks a favorite control, switches tabs and captures a PNG in the system temporary directory.
 
 `UiGalleryTest` verifies that all registered fixtures render at both widths, queued construction updates appear in the capture, resources close after rendering failures, reset/switch operations discard previous component state, and width controls/export capture the current interactive state. Existing component tests remain responsible for application behavior. The older `SidebarPreview` entry point still produces its original audit image.
 

@@ -128,9 +128,11 @@ Quickly lookup your favorited items just by typing "1" in the ge search!
 
 # Development
 
-For an isolated native preview of sidebar components and named states, run `./gradlew uiGallery`.
-Use `./gradlew renderUiGallery` for headless PNGs at 225 px and 300 px. See the
-[component gallery guide](docs/component-gallery.md) for fixtures, export and extension instructions.
+Run `./gradlew uiGallery` for an offline RuneLite shell with the real plugin sidebar and a temporary
+copy of your `~/.runelite/flipping` data. Use `--args='--source /path/to/folder-or.db'` for a specific
+RuneLite folder, flipping folder, or SQLite file. Edits are discarded when you close the window.
+Use `--args='--fixtures'` for synthetic component states, or `./gradlew renderUiGallery` for headless
+PNGs. See the [sandbox and gallery guide](docs/component-gallery.md).
 
 ### General Structure of Codebase
 

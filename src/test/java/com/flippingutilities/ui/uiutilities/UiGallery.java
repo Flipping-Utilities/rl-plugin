@@ -25,8 +25,13 @@ public final class UiGallery {
     private UiGallery() {}
 
     public static void main(String[] args) throws Exception {
+        // Redirect home before loading any RuneLite classes: several production paths are static.
+        if (args.length == 0 || args.length == 2 && "--source".equals(args[0])) {
+            RuneLiteSandbox.main(args);
+            return;
+        }
         List<GalleryFixture> fixtures = GalleryFixtures.all();
-        if (args.length == 0) {
+        if (args.length == 1 && "--fixtures".equals(args[0])) {
             show(fixtures, fixtures.get(0));
         } else if (args.length == 2 && "--fixture".equals(args[0])) {
             GalleryFixture selected = fixtures.stream().filter(f -> f.id.equals(args[1])).findFirst()
@@ -35,7 +40,7 @@ public final class UiGallery {
         } else if (args.length == 2 && "--render-all".equals(args[0])) {
             renderAll(fixtures, Paths.get(args[1]));
         } else {
-            throw new IllegalArgumentException("Usage: UiGallery [--fixture ID | --render-all OUTPUT_DIRECTORY]");
+            throw new IllegalArgumentException("Usage: UiGallery [--source FOLDER_OR_DB | --fixtures | --fixture ID | --render-all OUTPUT_DIRECTORY]");
         }
     }
 
