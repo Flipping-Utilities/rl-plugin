@@ -3,7 +3,9 @@ import groovy.json.JsonOutput
 // This artifact is independent of the plugin jar, which embeds SQLite native libraries.
 // Reuse the compiled production components and the exact desktop gallery fixtures.
 def galleryPackage = 'com/flippingutilities/ui/uiutilities/'
-def galleryClasses = ['BrowserGallery', 'UiGallery', 'GalleryFixture', 'GalleryFixtures', 'StatisticsGalleryFixtures']
+def galleryClasses = ['BrowserGallery', 'BrowserSandbox', 'BrowserSqliteImporter', 'UiGallery',
+    'GalleryFixture', 'GalleryFixtures', 'StatisticsGalleryFixtures', 'SandboxData', 'SandboxPlugin',
+    'SandboxExchange', 'SandboxGrandExchangePanel', 'SandboxWikiData', 'SandboxPricePanel', 'SandboxGameApi']
 
 def browserGalleryJar = tasks.register('browserGalleryJar', Jar) {
     group = 'build'
@@ -20,6 +22,7 @@ def browserGalleryJar = tasks.register('browserGalleryJar', Jar) {
             fixtureSpec.include galleryPackage + name + '.class'
             fixtureSpec.include galleryPackage + name + '$*.class'
         }
+        fixtureSpec.include 'com/flippingutilities/ui/flipping/SandboxFlippingPanel*.class'
     }
 }
 
@@ -57,6 +60,7 @@ tasks.register('browserGallery', Sync) {
         def manifest = [
             schemaVersion: 1,
             mainClass: 'com.flippingutilities.ui.uiutilities.BrowserGallery',
+            sandboxClass: 'com.flippingutilities.ui.uiutilities.BrowserSandbox',
             args: [],
             javaVersion: 11,
             sourceCommit: sourceCommit.get(),
