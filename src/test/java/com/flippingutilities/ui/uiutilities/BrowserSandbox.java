@@ -64,8 +64,10 @@ public final class BrowserSandbox {
         temporaryHome = home;
         Path runeLite = home.resolve(".runelite");
         Files.createDirectories(runeLite.resolve("flipping"));
+        BrowserFonts.install();
         JsonObject manifest = new JsonParser().parse(Files.readString(Paths.get(args[0]))).getAsJsonObject();
         boolean database = manifest.get("database").getAsBoolean();
+        progress("Preparing a working copy of the selected files…");
         for (JsonElement entry : manifest.getAsJsonArray("files")) {
             JsonObject file = entry.getAsJsonObject();
             String name = file.get("path").getAsString();
@@ -79,16 +81,20 @@ public final class BrowserSandbox {
                 && !name.equals("flipping/backupcheckpoints.special.json")) continue;
             Files.copy(Paths.get(file.get("staged").getAsString()), destination);
         }
+        Map<String, AccountData> importedAccounts = null;
         if (database) {
-            Map<String, AccountData> accounts = BrowserSqliteImporter.load();
+            importedAccounts = BrowserSqliteImporter.load();
+            progress("Preparing imported accounts…");
             TradePersister persister = new TradePersister(new Gson());
-            for (Map.Entry<String, AccountData> entry : accounts.entrySet()) {
+            for (Map.Entry<String, AccountData> entry : importedAccounts.entrySet()) {
                 persister.writeToFile(entry.getKey(), entry.getValue());
             }
-            imported(accounts.size());
+            imported(importedAccounts.size());
         }
         data = SandboxData.prepared(Paths.get(manifest.get("sourceLabel").getAsString()), home, database);
-        host = SandboxPlugin.load(data);
+        progress("Loading saved trades into the sandbox…");
+        host = SandboxPlugin.load(data, true, importedAccounts);
+        progress("Opening the Grand Exchange and plugin panels…");
         SwingUtilities.invokeAndWait(() -> {
             try {
                 RuneLiteLAF.setup();
@@ -107,7 +113,9 @@ public final class BrowserSandbox {
                 frame.setVisible(true);
             } catch (Exception error) { throw new RuntimeException(error); }
         });
-        ready();
+        // Panel construction schedules its item rows on Swing's queue. Let those
+        // finish before replacing the loading message with Ready.
+        SwingUtilities.invokeAndWait(BrowserSandbox::ready);
     }
 
     /** Await this before an explicit browser reset; abrupt tab closure cannot guarantee cleanup. */
@@ -166,4 +174,5 @@ public final class BrowserSandbox {
     private static native void awaitClose();
     private static native void closed();
     private static native void failed(String message);
+    private static native void progress(String message);
 }

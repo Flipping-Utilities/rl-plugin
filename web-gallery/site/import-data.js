@@ -93,6 +93,9 @@ export function planImport(entries, {sourceKind = "auto"} = {}) {
   }
   for (const [path, bytes] of selected) {
     if (dirname(path) === pluginDirectory && isSave(basename(path))) {
+      // SQLite supplies the account histories. Do not duplicate stale JSON histories
+      // and migration backups into Java's virtual filesystem as well.
+      if (databasePath && !["accountwide.json", "backupcheckpoints.special.json"].includes(basename(path))) continue;
       files.push({path: "flipping/" + basename(path), bytes: bytes.slice()});
     }
   }

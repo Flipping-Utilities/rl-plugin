@@ -7,6 +7,7 @@ import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.MasterPanel;
+import com.flippingutilities.ui.flipping.FlippingItemPanel;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.client.RuneLite;
 import net.runelite.client.ui.components.materialtabs.MaterialTab;
@@ -55,6 +56,7 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 import javax.imageio.ImageIO;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
@@ -163,6 +165,18 @@ public class SandboxPluginTest {
     }
 
     @Test
+    public void browserStartsWithTheGeAccountAndStillAllowsAccountWideAndAccountSwitches() throws Exception {
+        Assume.assumeTrue("Set FLIPPING_SANDBOX_UI_TEST=true to exercise browser-mode account selection in Swing",
+            "true".equals(System.getenv("FLIPPING_SANDBOX_UI_TEST")));
+        Path source = folder.newFolder("browser-default-account-source").toPath();
+        write(source.resolve("alpha player.json"), legacyAccount("alpha player"));
+        write(source.resolve("Zulu player.json"), legacyAccount("Zulu player").replace("4151", "554").replace("Abyssal whip", "Fire rune"));
+        Map<String, String> before = hashes(source);
+        probe(source, DataSource.JSON, "browser-ui");
+        assertEquals("Changing the browser view must not alter imported files", before, hashes(source));
+    }
+
+    @Test
     public void wikiMetadataIconsAndPriceWidgetsWorkInsideTheDisposableHost() throws Exception {
         Assume.assumeTrue("Set FLIPPING_SANDBOX_UI_TEST=true to exercise Wiki data in the real sidebar",
             "true".equals(System.getenv("FLIPPING_SANDBOX_UI_TEST")));
@@ -246,7 +260,7 @@ public class SandboxPluginTest {
 
     private void probe(Path source, DataSource backend, String action) throws Exception {
         Path output = Files.createTempFile("sandbox-plugin-probe-", ".log");
-        boolean headful = "ui".equals(action) || "wiki".equals(action) || action.startsWith("exchange");
+        boolean headful = "ui".equals(action) || "browser-ui".equals(action) || "wiki".equals(action) || action.startsWith("exchange");
         Process child = new ProcessBuilder(Paths.get(System.getProperty("java.home"), "bin", "java").toString(),
             "-Djava.awt.headless=" + !headful, "-cp", testClasspath(), Probe.class.getName(),
             source.toString(), backend.name(), action).redirectErrorStream(true).redirectOutput(output.toFile()).start();
@@ -356,6 +370,8 @@ public class SandboxPluginTest {
                             : "Could not load sandbox accountwide data";
                         assertTrue("Startup must identify the unreadable data: " + expected, expected.getMessage().contains(reason));
                     }
+                } else if ("browser-ui".equals(action)) {
+                    try (SandboxPlugin host = SandboxPlugin.load(data, true)) { exerciseBrowserAccountSelection(host); }
                 } else if ("wiki".equals(action)) {
                     try (SandboxPlugin host = SandboxPlugin.load(data)) { exerciseWiki(host, data); }
                 } else if (action.startsWith("exchange")) {
@@ -388,6 +404,48 @@ public class SandboxPluginTest {
                 }
             }
             assertFalse("Closing the sandbox must remove its temporary home", Files.exists(temporaryHome));
+        }
+
+        private static void exerciseBrowserAccountSelection(SandboxPlugin host) throws Exception {
+            MasterPanel[] panel = new MasterPanel[1];
+            java.lang.reflect.Field aggregate = FlippingPlugin.class.getDeclaredField("prevBuiltAccountWideItemList");
+            aggregate.setAccessible(true);
+            try {
+                SwingUtilities.invokeAndWait(() -> {
+                    RuneLiteLAF.setup();
+                    try { panel[0] = host.mount(); }
+                    catch (Exception failure) { throw new RuntimeException(failure); }
+                    assertEquals("alpha player", host.plugin.getAccountCurrentlyViewed());
+                    assertEquals("alpha player", panel[0].getAccountSelector().getSelectedItem());
+                    assertEquals("The GE and initial sidebar must select the same account", "alpha player", host.exchange().account());
+                });
+                SwingUtilities.invokeAndWait(() -> {});
+                assertNull("Startup must not build and discard an account-wide aggregate", aggregate.get(host.plugin));
+                SwingUtilities.invokeAndWait(() -> {
+                    assertNotNull("The selected account's real item row must render", find(host.plugin.getFlippingPanel(),
+                        FlippingItemPanel.class, row -> row.getFlippingItem().getItemId() == ITEM));
+                    panel[0].getAccountSelector().setSelectedItem(FlippingPlugin.ACCOUNT_WIDE);
+                    assertEquals(FlippingPlugin.ACCOUNT_WIDE, host.plugin.getAccountCurrentlyViewed());
+                    assertEquals(2, host.plugin.viewItemsForCurrentView().size());
+                });
+                SwingUtilities.invokeAndWait(() -> {});
+                assertNotNull("Explicit account-wide selection still builds its combined data", aggregate.get(host.plugin));
+                SwingUtilities.invokeAndWait(() -> {
+                    panel[0].getAccountSelector().setSelectedItem("Zulu player");
+                    assertEquals("Zulu player", host.plugin.getAccountCurrentlyViewed());
+                    assertEquals(554, host.plugin.viewItemsForCurrentView().get(0).getItemId());
+                    assertEquals("Sidebar filtering does not change the simulated account", "alpha player", host.exchange().account());
+                    host.exchange().selectAccount("Zulu player");
+                    assertEquals("Zulu player", panel[0].getAccountSelector().getSelectedItem());
+                    assertEquals("Zulu player", host.exchange().account());
+                });
+                SwingUtilities.invokeAndWait(() -> {});
+            } finally {
+                SwingUtilities.invokeAndWait(() -> {
+                    if (panel[0] != null) panel[0].dispose();
+                    for (Window window : Window.getWindows()) window.dispose();
+                });
+            }
         }
 
         private static void exerciseWiki(SandboxPlugin host, SandboxData data) throws Exception {
@@ -741,6 +799,33 @@ public class SandboxPluginTest {
                     frame.setSize(1000, 850);
                     frame.setVisible(true);
                     panel[0].getAccountSelector().setSelectedItem(ACCOUNT);
+                });
+                SwingUtilities.invokeAndWait(() -> {});
+                JDialog[] settings = new JDialog[1];
+                SwingUtilities.invokeAndWait(() -> {
+                    FlippingItemPanel importedRow = find(host.plugin.getFlippingPanel(), FlippingItemPanel.class,
+                        row -> row.getFlippingItem().getItemId() == ITEM);
+                    assertNotNull("Imported history must render before changing settings", importedRow);
+                    assertFalse(importedRow.isCollapsed());
+                    named(game[0], JButton.class, "Plugin settings").doClick();
+                    for (Window window : Window.getWindows()) {
+                        if (window instanceof JDialog && "Sandbox plugin settings".equals(window.getName())) {
+                            settings[0] = (JDialog) window;
+                        }
+                    }
+                    assertNotNull("The visible Settings button must open the dialog", settings[0]);
+                    named(settings[0], JCheckBox.class, "Verbose item details").doClick();
+                });
+                SwingUtilities.invokeAndWait(() -> {});
+                SwingUtilities.invokeAndWait(() -> {
+                    FlippingItemPanel importedRow = find(host.plugin.getFlippingPanel(), FlippingItemPanel.class,
+                        row -> row.getFlippingItem().getItemId() == ITEM);
+                    assertNotNull(importedRow);
+                    assertTrue("Settings rebuild the actual imported item row", importedRow.isCollapsed());
+                    assertEquals("Settings preserve saved trade history", 1,
+                        importedRow.getFlippingItem().getHistory().getCompressedOfferEvents().size());
+                    named(settings[0], JCheckBox.class, "Verbose item details").doClick();
+                    settings[0].setVisible(false);
                 });
                 SwingUtilities.invokeAndWait(() -> {});
                 SwingUtilities.invokeAndWait(() -> {

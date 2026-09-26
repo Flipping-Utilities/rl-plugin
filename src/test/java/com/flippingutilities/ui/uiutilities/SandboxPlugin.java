@@ -1,10 +1,9 @@
 package com.flippingutilities.ui.uiutilities;
 
 import com.flippingutilities.DataSource;
-import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.controller.*;
 import com.flippingutilities.db.SqliteStorage;
-import com.flippingutilities.db.TradePersister;
+import com.flippingutilities.db.SandboxTradePersister;
 import com.flippingutilities.jobs.TimeseriesFetcher;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.FlippingItem;
@@ -30,6 +29,7 @@ import java.awt.Component;
 import java.awt.Graphics2D;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.event.ItemListener;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -69,15 +69,28 @@ final class SandboxPlugin implements AutoCloseable {
     private boolean closed;
     private SandboxPricePanel pricePanel;
     private JDialog priceDialog;
+    private JDialog settingsDialog;
+    private SandboxConfig config;
+    private boolean browser;
 
     static SandboxPlugin load(SandboxData data) throws Exception {
+        return load(data, false);
+    }
+
+    static SandboxPlugin load(SandboxData data, boolean browser) throws Exception {
+        return load(data, browser, null);
+    }
+
+    /** Imported SQLite models already have working JSON snapshots; reuse them for the first load. */
+    static SandboxPlugin load(SandboxData data, boolean browser, Map<String, AccountData> importedAccounts) throws Exception {
         // Fail closed if anything initialized RuneLite before the launcher redirected user.home.
         if (!RuneLite.RUNELITE_DIR.toPath().toAbsolutePath().equals(data.getRuneLiteDirectory().toAbsolutePath())) {
             throw new IllegalStateException("Sandbox must run in a fresh JVM with its temporary user.home");
         }
         SandboxPlugin host = new SandboxPlugin();
+        host.browser = browser;
         try {
-            host.initialize(data);
+            host.initialize(data, importedAccounts);
             return host;
         } catch (Exception | Error error) {
             host.close();
@@ -85,15 +98,14 @@ final class SandboxPlugin implements AutoCloseable {
         }
     }
 
-    private void initialize(SandboxData data) throws Exception {
+    private void initialize(SandboxData data, Map<String, AccountData> importedAccounts) throws Exception {
         Path directory = data.getRuneLiteDirectory();
         Path database = directory.resolve("flipping/flipping.db");
         // Snapshot creation only includes the selected backend's database.
         boolean sqlite = Files.isRegularFile(database);
-        FlippingConfig config = new FlippingConfig() {
-            @Override public DataSource dataSource() { return sqlite ? DataSource.SQLITE : DataSource.JSON; }
-            @Override public boolean autoSaveEnabled() { return false; }
-        };
+        if (sqlite && importedAccounts != null) throw new IOException("Imported models require a JSON working session");
+        config = new SandboxConfig(sqlite ? DataSource.SQLITE : DataSource.JSON);
+        config.read(directory.resolve("settings.properties"));
         inject("config", config);
         inject("executor", executor);
         inject("storageExecutor", storageExecutor);
@@ -108,7 +120,8 @@ final class SandboxPlugin implements AutoCloseable {
             tick::get, () -> exchange == null ? null : exchange.clientOffers(), items);
         inject("client", client);
         plugin.gson = new Gson();
-        plugin.tradePersister = new TradePersister(plugin.gson);
+        SandboxTradePersister persister = new SandboxTradePersister(plugin.gson);
+        plugin.tradePersister = persister;
         inject("httpClient", http);
         inject("recipeHandler", new RecipeHandler(plugin.gson, http, null));
         java.lang.reflect.Constructor<FlippingItemHandler> itemHandler =
@@ -134,7 +147,7 @@ final class SandboxPlugin implements AutoCloseable {
         } else {
             // The ordinary loader skips unreadable saves. A sandbox import must fail instead
             // of silently showing an empty account; this strict read still accepts valid backups.
-            accounts = plugin.tradePersister.loadAllAccountsForMigration();
+            accounts = importedAccounts == null ? persister.preloadAccounts() : persister.preloadAccounts(importedAccounts);
         }
         for (String account : accounts.keySet()) {
             // Production backups use account names as filenames. Test databases can contain
@@ -167,6 +180,15 @@ final class SandboxPlugin implements AutoCloseable {
     /** Called on Swing after disk loading has completed. */
     MasterPanel mount() throws Exception {
         GalleryFixture.requireEdt();
+        List<String> accounts = new ArrayList<>(plugin.getDataHandler().getCurrentAccounts());
+        accounts.sort(String.CASE_INSENSITIVE_ORDER);
+        String firstAccount = browser && !accounts.isEmpty() ? accounts.get(0) : null;
+        if (firstAccount != null) {
+            // Match the GE's initial account before StatsPanel asks for its session.
+            // Building an account-wide aggregate first can copy years of history
+            // only to discard it when the GE picks this individual account.
+            inject("accountCurrentlyViewed", firstAccount);
+        }
         inject("flippingPanel", new SandboxFlippingPanel(plugin, item -> {
             if (wiki != null && !closed) showPriceChart(plugin.getMasterPanel(), item.getItemId(), 0, true);
         }));
@@ -177,10 +199,23 @@ final class SandboxPlugin implements AutoCloseable {
         MasterPanel panel = new MasterPanel(plugin, plugin.getFlippingPanel(), plugin.getStatPanel(), plugin.getSlotsPanel(), login);
         inject("masterPanel", panel);
         panel.addView(plugin.getGeHistoryTabPanel(), "ge history");
-        panel.setupAccSelectorDropdown(plugin.getDataHandler().getCurrentAccounts());
+        if (firstAccount == null) {
+            panel.setupAccSelectorDropdown(plugin.getDataHandler().getCurrentAccounts());
+        } else {
+            JComboBox<String> selector = panel.getAccountSelector();
+            ItemListener[] listeners = selector.getItemListeners();
+            for (ItemListener listener : listeners) selector.removeItemListener(listener);
+            try {
+                panel.setupAccSelectorDropdown(new LinkedHashSet<>(accounts));
+                selector.setSelectedItem(firstAccount);
+            } finally {
+                for (ItemListener listener : listeners) selector.addItemListener(listener);
+            }
+        }
         panel.getAccountSelector().setVisible(true);
         // Saved history predates this preview session; make it visible immediately.
         selectAllHistory(plugin.getStatPanel());
+        if (firstAccount != null) plugin.getFlippingPanel().rebuild(plugin.viewItemsForCurrentView());
         return panel;
     }
 
@@ -273,7 +308,7 @@ final class SandboxPlugin implements AutoCloseable {
         GalleryFixture.requireEdt();
         if (closed || wiki == null) return;
         if (priceDialog == null) {
-            pricePanel = new SandboxPricePanel(wiki);
+            pricePanel = new SandboxPricePanel(wiki, config);
             priceDialog = new JDialog(SwingUtilities.getWindowAncestor(owner), "Wiki prices", java.awt.Dialog.ModalityType.MODELESS);
             SandboxPricePanel contents = pricePanel;
             JDialog dialog = priceDialog;
@@ -296,6 +331,24 @@ final class SandboxPlugin implements AutoCloseable {
         pricePanel.showItem(itemId, plugin.getItemManager().getItemComposition(itemId).getName(), price, buy);
         priceDialog.setVisible(true);
         priceDialog.toFront();
+    }
+
+    void showSettings(Component owner) {
+        GalleryFixture.requireEdt();
+        if (closed) return;
+        if (settingsDialog == null) {
+            settingsDialog = new JDialog(SwingUtilities.getWindowAncestor(owner), "Plugin settings", java.awt.Dialog.ModalityType.MODELESS);
+            settingsDialog.setName("Sandbox plugin settings");
+            settingsDialog.setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
+            settingsDialog.setContentPane(new SandboxSettingsPanel(config, browser, () -> {
+                plugin.changeView(plugin.getAccountCurrentlyViewed());
+                if (pricePanel != null) pricePanel.settingsChanged();
+            }));
+            settingsDialog.setSize(500, 610);
+            settingsDialog.setLocationRelativeTo(owner);
+        }
+        settingsDialog.setVisible(true);
+        settingsDialog.toFront();
     }
 
     private static void selectAllHistory(java.awt.Container parent) {
@@ -362,6 +415,7 @@ final class SandboxPlugin implements AutoCloseable {
             if (wikiTimer != null) wikiTimer.stop();
             if (pricePanel != null) pricePanel.close();
             if (priceDialog != null) priceDialog.dispose();
+            if (settingsDialog != null) settingsDialog.dispose();
             if (exchange != null) exchange.close();
         };
         if (SwingUtilities.isEventDispatchThread()) closeUi.run();

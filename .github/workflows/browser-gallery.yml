@@ -52,6 +52,11 @@ jobs:
           --tests com.flippingutilities.ui.uiutilities.SandboxPluginTest
           --tests com.flippingutilities.ui.uiutilities.SandboxDataTest
           --tests com.flippingutilities.ui.uiutilities.SandboxWikiDataTest
+          --tests com.flippingutilities.ui.uiutilities.SandboxConfigTest
+          --tests com.flippingutilities.ui.uiutilities.SandboxPricePanelTest
+          --tests com.flippingutilities.db.SandboxTradePersisterTest
+          --tests com.flippingutilities.ui.statistics.StatsPanelTest
+          --tests com.flippingutilities.ui.statistics.items.FlippingItemPanelTest
           verifyBrowserGallery
 
       - name: Upload the static sandbox

@@ -14,6 +14,7 @@ public final class BrowserGallery {
     private BrowserGallery() {}
 
     public static void main(String[] args) throws Exception {
+        BrowserFonts.install();
         List<GalleryFixture> fixtures = GalleryFixtures.all();
         SwingUtilities.invokeAndWait(() -> {
             RuneLiteLAF.setup();

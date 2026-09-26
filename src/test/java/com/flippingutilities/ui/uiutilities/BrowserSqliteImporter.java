@@ -21,10 +21,12 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /** Read a browser-owned SQLite snapshot through the production account reconstruction code. */
 public final class BrowserSqliteImporter {
@@ -74,21 +76,30 @@ public final class BrowserSqliteImporter {
 
     /** The page supplies Java_com_flippingutilities_ui_uiutilities_BrowserSqliteImporter_query. */
     private static native String query(String sql, String parametersJson) throws SQLException;
+    private static native void progress(String message);
 
     public static Map<String, AccountData> load() throws SQLException {
-        return load(BrowserSqliteImporter::query);
+        return load(BrowserSqliteImporter::query, BrowserSqliteImporter::progress);
     }
 
     /** Returns models only: no files, schema initialization, migrations or writes. */
     public static Map<String, AccountData> load(Query query) throws SQLException {
+        return load(query, message -> {});
+    }
+
+    static Map<String, AccountData> load(Query query, Consumer<String> progress) throws SQLException {
         Connection connection = connection(Objects.requireNonNull(query));
         try {
+            progress.accept("Checking the selected database…");
             validateSchema(connection);
             SqliteStorage storage = new SqliteStorage(new File("browser-import.db")) {
                 @Override public synchronized Connection getConnection() { return connection; }
             };
             Map<String, AccountData> accounts = new LinkedHashMap<>();
-            for (String account : storage.listAccounts()) {
+            List<String> names = storage.listAccounts();
+            for (int index = 0; index < names.size(); index++) {
+                String account = names.get(index);
+                progress.accept("Reading account " + (index + 1) + " of " + names.size() + "…");
                 validateAccountName(account);
                 accounts.put(account, storage.loadAccount(account));
             }

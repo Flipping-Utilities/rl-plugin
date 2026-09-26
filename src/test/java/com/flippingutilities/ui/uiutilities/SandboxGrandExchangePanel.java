@@ -66,7 +66,13 @@ final class SandboxGrandExchangePanel extends JPanel implements AutoCloseable {
         JPanel heading = panel(new BorderLayout(0, 8));
         JLabel title = new JLabel("Grand Exchange sandbox");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 19f));
-        heading.add(title, BorderLayout.NORTH);
+        JPanel titleRow = panel(new BorderLayout(8, 0));
+        titleRow.add(title, BorderLayout.CENTER);
+        JButton settings = new JButton("Settings");
+        identify(settings, "Plugin settings", "Configure chart and plugin panel options for this sandbox session.");
+        settings.addActionListener(event -> host.showSettings(this));
+        titleRow.add(settings, BorderLayout.EAST);
+        heading.add(titleRow, BorderLayout.NORTH);
         identify(accounts, "Simulated account", "Account receiving simulated trades; independent of the sidebar account filter.");
         heading.add(field("Account", accounts), BorderLayout.CENTER);
         JLabel hint = new JLabel("Local offers only. Changes are discarded when you close this window.");

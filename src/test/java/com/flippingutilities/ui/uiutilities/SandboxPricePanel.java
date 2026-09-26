@@ -1,5 +1,6 @@
 package com.flippingutilities.ui.uiutilities;
 
+import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesPoint;
 import com.flippingutilities.model.TimeseriesResponse;
@@ -8,6 +9,8 @@ import com.flippingutilities.ui.widgets.graph.TimeSeriesChart;
 import com.flippingutilities.utilities.SlotInfo;
 import com.flippingutilities.utilities.SlotPredictedState;
 import com.flippingutilities.utilities.WikiItemMargins;
+import com.flippingutilities.utilities.Constants;
+import com.flippingutilities.utilities.GeTax;
 import net.runelite.client.util.QuantityFormatter;
 
 import javax.swing.*;
@@ -23,7 +26,10 @@ import java.time.format.DateTimeFormatter;
 final class SandboxPricePanel extends JPanel implements AutoCloseable {
     private static final DateTimeFormatter HOVER_TIME = DateTimeFormatter.ofPattern("MMM d, HH:mm")
         .withZone(ZoneId.systemDefault());
+    private static final DateTimeFormatter HOVER_TIME_TWELVE = DateTimeFormatter.ofPattern("MMM d, h:mm a")
+        .withZone(ZoneId.systemDefault());
     private final SandboxWikiData wiki;
+    private final FlippingConfig config;
     private final JLabel title = named(new JLabel("Select an item"), "Price item");
     private final JLabel reference = named(new JLabel(" "), "Offer reference");
     private final JComboBox<Timestep> timestep = named(new JComboBox<>(Timestep.values()), "Chart period");
@@ -33,6 +39,7 @@ final class SandboxPricePanel extends JPanel implements AutoCloseable {
     private final JLabel chartStatus = named(new JLabel("Select an item to see its price history."), "Chart status");
     private final JLabel hover = named(new JLabel(" "), "Chart hover prices");
     private final ChartCanvas canvas = named(new ChartCanvas(), "Price chart");
+    private final JPanel prices = new JPanel(new BorderLayout());
     private final Timer animation = new Timer(80, event -> canvas.repaint());
     private int itemId;
     private int offerPrice;
@@ -42,9 +49,18 @@ final class SandboxPricePanel extends JPanel implements AutoCloseable {
     private boolean loading;
     private WikiItemMargins latest;
     private TimeseriesResponse series;
+    private TimeseriesPoint hovered;
+    private boolean applyingSettings;
+    private Timestep defaultTimestep;
 
     SandboxPricePanel(SandboxWikiData wiki) {
+        this(wiki, new FlippingConfig() {});
+    }
+
+    SandboxPricePanel(SandboxWikiData wiki, FlippingConfig config) {
         this.wiki = wiki;
+        this.config = config;
+        this.defaultTimestep = config.priceGraphTimestep();
         setLayout(new BorderLayout(8, 8));
         setBorder(new EmptyBorder(12, 12, 12, 12));
         setPreferredSize(new Dimension(660, 560));
@@ -56,7 +72,6 @@ final class SandboxPricePanel extends JPanel implements AutoCloseable {
         controls.add(timestep);
         controls.add(refresh);
         heading.add(controls, BorderLayout.SOUTH);
-        JPanel prices = new JPanel(new BorderLayout());
         prices.add(quickLook, BorderLayout.CENTER);
         prices.add(latestStatus, BorderLayout.SOUTH);
         JPanel north = new JPanel(new BorderLayout(8, 8));
@@ -70,9 +85,35 @@ final class SandboxPricePanel extends JPanel implements AutoCloseable {
         footer.add(new JLabel("OSRS Wiki prices · Public market data; simulated offers stay in this sandbox."));
         add(footer, BorderLayout.SOUTH);
         quickLook.updateDetails(null, null);
-        timestep.addActionListener(event -> load());
+        timestep.setSelectedItem(defaultTimestep);
+        timestep.addActionListener(event -> { if (!applyingSettings) load(); });
         refresh.addActionListener(event -> load());
         refresh.setEnabled(false);
+        applyVisibility();
+    }
+
+    void settingsChanged() {
+        requireEdt();
+        boolean reload = prices.isVisible() != config.quickLookupEnabled()
+            || canvas.isVisible() != config.offerPageChartEnabled()
+            || defaultTimestep != config.priceGraphTimestep();
+        if (defaultTimestep != config.priceGraphTimestep()) {
+            defaultTimestep = config.priceGraphTimestep();
+            applyingSettings = true;
+            timestep.setSelectedItem(defaultTimestep);
+            applyingSettings = false;
+        }
+        applyVisibility();
+        if (reload) load();
+        else updateHover(hovered);
+    }
+
+    private void applyVisibility() {
+        prices.setVisible(config.quickLookupEnabled());
+        canvas.setVisible(config.offerPageChartEnabled());
+        timestep.setEnabled(config.offerPageChartEnabled());
+        revalidate();
+        repaint();
     }
 
     void showItem(int itemId, String name, int offerPrice, boolean buy) {
@@ -97,14 +138,15 @@ final class SandboxPricePanel extends JPanel implements AutoCloseable {
         series = null;
         latest = null;
         canvas.chart = null;
-        loading = true;
+        loading = config.offerPageChartEnabled();
         quickLook.updateDetails(null, null);
         latestStatus.setText("Loading latest Wiki prices…");
         chartStatus.setText("Loading price history…");
-        hover.setText(" ");
-        animation.start();
+        updateHover(null);
+        if (loading) animation.start();
+        else animation.stop();
         canvas.repaint();
-        wiki.latest().whenComplete((response, failure) -> SwingUtilities.invokeLater(() -> {
+        if (config.quickLookupEnabled()) wiki.latest().whenComplete((response, failure) -> SwingUtilities.invokeLater(() -> {
             if (closed || request != generation) return;
             if (failure != null) {
                 latestStatus.setText("Latest prices unavailable. Refresh to retry.");
@@ -114,6 +156,10 @@ final class SandboxPricePanel extends JPanel implements AutoCloseable {
             latestStatus.setText(latest == null ? "No latest Wiki prices for this item." : "Latest Wiki prices loaded.");
             updateQuickLook();
         }));
+        if (!config.offerPageChartEnabled()) {
+            chartStatus.setText("Charts are disabled in Settings.");
+            return;
+        }
         wiki.timeseries(requestedItem, requestedStep).whenComplete((response, failure) -> SwingUtilities.invokeLater(() -> {
             if (closed || request != generation) return;
             loading = false;
@@ -134,6 +180,22 @@ final class SandboxPricePanel extends JPanel implements AutoCloseable {
             }
             canvas.repaint();
         }));
+    }
+
+    private void updateHover(TimeseriesPoint point) {
+        hovered = point;
+        if (point == null) { hover.setText(" "); return; }
+        String text = (config.twelveHourFormat() ? HOVER_TIME_TWELVE : HOVER_TIME)
+            .format(Instant.ofEpochSecond(point.getTimestamp()))
+            + " · Insta Buy: " + price(point.getAvgHighPrice())
+            + " · Insta Sell: " + price(point.getAvgLowPrice());
+        if (config.showTax() && point.getAvgLowPrice() != null) {
+            int sell = point.getAvgLowPrice();
+            int tax = Constants.TAX_EXEMPT_ITEMS.contains(itemId) || Constants.NEW_TAX_EXEMPT_ITEMS.contains(itemId)
+                ? 0 : sell - GeTax.getPostTaxPrice(sell);
+            text += " · Sell tax: " + price(tax);
+        }
+        hover.setText(text);
     }
 
     private void updateQuickLook() {
@@ -174,9 +236,7 @@ final class SandboxPricePanel extends JPanel implements AutoCloseable {
                     TimeseriesPoint point = chart.getHoveredDataPoint(event.getX(), event.getY());
                     chart.setHoveredPoint(point);
                     chart.setHoveredPriceY(point == null ? null : event.getY());
-                    hover.setText(point == null ? " " : HOVER_TIME.format(Instant.ofEpochSecond(point.getTimestamp()))
-                        + " · Insta Buy: " + price(point.getAvgHighPrice())
-                        + " · Insta Sell: " + price(point.getAvgLowPrice()));
+                    updateHover(point);
                     repaint();
                 }
 
@@ -184,7 +244,7 @@ final class SandboxPricePanel extends JPanel implements AutoCloseable {
                     if (chart == null) return;
                     chart.setHoveredPoint(null);
                     chart.setHoveredPriceY(null);
-                    hover.setText(" ");
+                    updateHover(null);
                     repaint();
                 }
             };
