@@ -2,8 +2,8 @@ package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.controller.ApiAuthHandler;
-import com.flippingutilities.controller.ApiRequestHandlerTest.ManualClient;
 import com.flippingutilities.controller.FlippingPlugin;
+import com.flippingutilities.jobs.ManualClient;
 import com.flippingutilities.jobs.TimeseriesFetcher;
 import com.flippingutilities.model.TimeseriesResponse;
 import com.flippingutilities.model.Timestep;
@@ -11,6 +11,7 @@ import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.GraphLoadState;
 import com.flippingutilities.utilities.SlotInfo;
 import com.flippingutilities.utilities.SlotPredictedState;
+import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.WikiItemMargins;
 import com.google.gson.Gson;
 import net.runelite.api.Client;
@@ -75,8 +76,8 @@ public final class ChartStateFixtures {
     public static JComponent tooltip(GraphLoadState state) {
         QuickLookTooltip tooltip = new QuickLookTooltip();
         WikiItemMargins margins = new WikiItemMargins();
-        margins.setHigh(105_500);
-        margins.setLow(104_000);
+        margins.setHigh(105_500L);
+        margins.setLow(104_000L);
         margins.setHighTime(Instant.now().getEpochSecond() - 120);
         margins.setLowTime(Instant.now().getEpochSecond() - 180);
         tooltip.update(new SlotInfo(0, SlotPredictedState.IN_RANGE, 4151, 104_500, true, false), margins);
@@ -142,7 +143,7 @@ public final class ChartStateFixtures {
             Client client = proxy(Client.class, (proxy, method, args) -> {
                 switch (method.getName()) {
                     case "getVarpValue": return 4151;
-                    case "getVarbitValue": return (Integer) args[0] == VarbitID.GE_NEWOFFER_PRICE ? 104_500 : 0;
+                    case "getVarpLongValue": return (Integer) args[0] == Constants.GE_SETUP_PRICE_VARP ? 104_500L : 0L;
                     case "getGrandExchangeOffers": return new GrandExchangeOffer[0];
                     case "getWidget": return (Integer) args[0] == InterfaceID.GeOffers.FRAME ? frame : chatbox;
                     default: return defaultValue(method.getReturnType());
