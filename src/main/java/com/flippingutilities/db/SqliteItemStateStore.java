@@ -7,10 +7,11 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+
+import static com.flippingutilities.db.SqliteBindings.bind;
 
 /**
  * Favorites, item visibility, and GE limit state independent of retained offer history.
@@ -59,9 +60,7 @@ final class SqliteItemStateStore {
         String sql = "INSERT OR REPLACE INTO item_visibility (account_id, item_id, is_visible) " +
             "VALUES (?, ?, ?)";
         try (PreparedStatement statement = storage.getConnection().prepareStatement(sql)) {
-            statement.setInt(1, accountId);
-            statement.setInt(2, itemId);
-            statement.setBoolean(3, visible);
+            bind(statement, accountId, itemId, visible);
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Could not persist item visibility for " + displayName, e);
@@ -72,7 +71,7 @@ final class SqliteItemStateStore {
         Map<Integer, FlippingItem> items = indexItems(data);
         String sql = "SELECT item_id, is_visible FROM item_visibility WHERE account_id = ?";
         try (PreparedStatement statement = storage.getConnection().prepareStatement(sql)) {
-            statement.setInt(1, accountId);
+            bind(statement, accountId);
             try (ResultSet rows = statement.executeQuery()) {
                 while (rows.next()) {
                     int itemId = rows.getInt("item_id");
@@ -131,7 +130,7 @@ final class SqliteItemStateStore {
         try {
             Connection conn = storage.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
+                bind(ps, accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         Map<String, Object> state = new HashMap<>(4);
@@ -169,15 +168,8 @@ final class SqliteItemStateStore {
         try {
             Connection conn = storage.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
-                ps.setInt(2, itemId);
-                if (nextRefresh == null) {
-                    ps.setNull(3, Types.BIGINT);
-                } else {
-                    ps.setLong(3, nextRefresh.toEpochMilli());
-                }
-                ps.setInt(4, itemsBought);
-                ps.setInt(5, itemsBoughtThroughCompleteOffers);
+                bind(ps, accountId, itemId, nextRefresh == null ? null : nextRefresh.toEpochMilli(),
+                    itemsBought, itemsBoughtThroughCompleteOffers);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -200,10 +192,8 @@ final class SqliteItemStateStore {
         try {
             Connection conn = storage.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
-                ps.setInt(2, itemId);
-                ps.setBoolean(3, isFavorite);
-                ps.setString(4, favoriteCode != null ? favoriteCode : FlippingItem.DEFAULT_FAVORITE_CODE);
+                bind(ps, accountId, itemId, isFavorite,
+                    favoriteCode != null ? favoriteCode : FlippingItem.DEFAULT_FAVORITE_CODE);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -224,7 +214,7 @@ final class SqliteItemStateStore {
         try {
             Connection conn = storage.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
+                bind(ps, accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         int itemId = rs.getInt("item_id");

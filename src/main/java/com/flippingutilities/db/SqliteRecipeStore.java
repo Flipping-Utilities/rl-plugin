@@ -19,6 +19,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.flippingutilities.db.SqliteBindings.bind;
+
 /**
  * Recipe flip snapshots and their component persistence.
  * Instance methods run within the owning SqliteStorage monitor and transaction.
@@ -45,7 +47,7 @@ final class SqliteRecipeStore {
         try {
             Connection conn = storage.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(groupSql)) {
-                ps.setInt(1, accountId);
+                bind(ps, accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     Map<String, RecipeFlipGroup> groupMap = new HashMap<>();
 
@@ -90,7 +92,7 @@ final class SqliteRecipeStore {
         String sql = "SELECT item_id, offer_uuid, amount_consumed, offer_json FROM " + table.tableName() +
             " WHERE recipe_flip_id = ?";
         try (PreparedStatement ps = storage.getConnection().prepareStatement(sql)) {
-            ps.setLong(1, recipeFlipId);
+            bind(ps, recipeFlipId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     int itemId = rs.getInt("item_id");
@@ -130,8 +132,7 @@ final class SqliteRecipeStore {
             Long recipeId = null;
             try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT id FROM recipe_flips WHERE account_id = ? AND natural_key = ?")) {
-                ps.setInt(1, accountId);
-                ps.setString(2, naturalKey);
+                bind(ps, accountId, naturalKey);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         recipeId = rs.getLong(1);
@@ -168,9 +169,7 @@ final class SqliteRecipeStore {
             List<Long> recipeIds = new ArrayList<>();
             try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT id FROM recipe_flips WHERE account_id = ? AND recipe_key = ? AND timestamp > ?")) {
-                ps.setInt(1, accountId);
-                ps.setString(2, recipeKey);
-                ps.setLong(3, sinceMillis);
+                bind(ps, accountId, recipeKey, sinceMillis);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         recipeIds.add(rs.getLong(1));
@@ -200,9 +199,7 @@ final class SqliteRecipeStore {
 
     private void execDeleteByLongs(Connection conn, String sql, List<Long> ids) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            for (int i = 0; i < ids.size(); i++) {
-                ps.setLong(i + 1, ids.get(i));
-            }
+            bind(ps, ids.toArray());
             ps.executeUpdate();
         }
     }
@@ -233,11 +230,7 @@ final class SqliteRecipeStore {
             "INSERT INTO recipe_flips (account_id, timestamp, recipe_key, coin_cost, natural_key) " +
             "VALUES (?, ?, ?, ?, ?) ON CONFLICT(natural_key) DO NOTHING",
             Statement.RETURN_GENERATED_KEYS)) {
-            ps.setInt(1, accountId);
-            ps.setLong(2, timestamp);
-            ps.setString(3, recipeKey);
-            ps.setLong(4, flip.getCoinCost());
-            ps.setString(5, naturalKey);
+            bind(ps, accountId, timestamp, recipeKey, flip.getCoinCost(), naturalKey);
             // An ignored insert leaves a stale rowid in sqlite-jdbc's generated keys.
             if (ps.executeUpdate() == 0) {
                 return false;
@@ -266,11 +259,8 @@ final class SqliteRecipeStore {
             for (Map.Entry<Integer, Map<String, PartialOffer>> entry : components.entrySet()) {
                 for (PartialOffer component : entry.getValue().values()) {
                     if (component == null || component.getAmountConsumed() <= 0) continue;
-                    ps.setLong(1, recipeId);
-                    ps.setInt(2, entry.getKey());
-                    ps.setString(3, component.getOfferUuid());
-                    ps.setInt(4, component.getAmountConsumed());
-                    ps.setString(5, OfferJsonCodec.serializeRecipeOffer(component));
+                    bind(ps, recipeId, entry.getKey(), component.getOfferUuid(), component.getAmountConsumed(),
+                        OfferJsonCodec.serializeRecipeOffer(component));
                     ps.addBatch();
                 }
             }

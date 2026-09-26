@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.flippingutilities.db.SqliteBindings.bind;
+
 /**
  * Offer history and active slots, including their atomic update and deletion paths.
  * Called within the owning SqliteStorage monitor and transaction; shares its connection.
@@ -47,7 +49,7 @@ final class SqliteOfferStore {
         try {
             Connection conn = storage.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
+                bind(ps, accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         int itemId = rs.getInt("item_id");
@@ -115,14 +117,10 @@ final class SqliteOfferStore {
             "offer_json = excluded.offer_json " +
             "WHERE excluded.qty >= trades.qty";
         try (PreparedStatement statement = storage.getConnection().prepareStatement(sql)) {
-            statement.setInt(1, accountId);
-            statement.setInt(2, offer.getItemId());
-            statement.setString(3, offer.getUuid());
-            statement.setLong(4, offer.getTime() == null ? 0L : offer.getTime().toEpochMilli());
-            statement.setInt(5, offer.getCurrentQuantityInTrade());
-            statement.setLong(6, offer.getPreTaxPrice());
-            statement.setBoolean(7, offer.isBuy());
-            statement.setString(8, OfferJsonCodec.serializeOffer(offer));
+            bind(statement, accountId, offer.getItemId(), offer.getUuid(),
+                offer.getTime() == null ? 0L : offer.getTime().toEpochMilli(),
+                offer.getCurrentQuantityInTrade(), offer.getPreTaxPrice(), offer.isBuy(),
+                OfferJsonCodec.serializeOffer(offer));
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to record trade for " + displayName, e);
@@ -146,11 +144,7 @@ final class SqliteOfferStore {
             "(account_id, slot_index, offer_uuid, offer_json, history_visible) " +
             "VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement ps = storage.getConnection().prepareStatement(sql)) {
-            ps.setInt(1, accountId);
-            ps.setInt(2, slotIndex);
-            ps.setString(3, offer.getUuid());
-            ps.setString(4, OfferJsonCodec.serializeOffer(offer));
-            ps.setBoolean(5, historyVisible);
+            bind(ps, accountId, slotIndex, offer.getUuid(), OfferJsonCodec.serializeOffer(offer), historyVisible);
             ps.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Could not persist active slot for " + displayName, e);
@@ -170,7 +164,7 @@ final class SqliteOfferStore {
         try {
             Connection conn = storage.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
+                bind(ps, accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         int idx = rs.getInt("slot_index");
@@ -210,8 +204,7 @@ final class SqliteOfferStore {
         try {
             Connection conn = storage.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, accountId);
-                ps.setInt(2, slotIndex);
+                bind(ps, accountId, slotIndex);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -307,9 +300,9 @@ final class SqliteOfferStore {
     }
 
     private void bindAccountUuids(PreparedStatement statement, int accountId, List<String> uuids) throws SQLException {
-        statement.setInt(1, accountId);
-        for (int i = 0; i < uuids.size(); i++) {
-            statement.setString(i + 2, uuids.get(i));
-        }
+        List<Object> values = new ArrayList<>(uuids.size() + 1);
+        values.add(accountId);
+        values.addAll(uuids);
+        bind(statement, values.toArray());
     }
 }

@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
+import static com.flippingutilities.db.SqliteBindings.bind;
+
 /**
  * SQLite facade owning connection, schema, and recovery lifecycle.
  * Domain stores execute under this instance's monitor so they share one transaction boundary.
@@ -179,7 +181,7 @@ public class SqliteStorage {
             Connection conn = getConnection();
             String sql = "SELECT value FROM settings WHERE key = ?";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, key);
+                bind(ps, key);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         return rs.getString("value");
@@ -220,8 +222,7 @@ public class SqliteStorage {
             Connection conn = getConnection();
             String sql = "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, key);
-                ps.setString(2, value);
+                bind(ps, key, value);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -247,7 +248,7 @@ public class SqliteStorage {
             Connection conn = getConnection();
             String sql = "DELETE FROM settings WHERE key = ?";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, key);
+                bind(ps, key);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
