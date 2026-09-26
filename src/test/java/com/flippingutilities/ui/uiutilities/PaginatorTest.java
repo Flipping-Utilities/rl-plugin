@@ -125,6 +125,11 @@ public class PaginatorTest {
             paginator.setPageSize(1);
             paginator.updateTotalPages(Integer.MAX_VALUE);
             assertEquals("of 2147483647", paginator.getPageOfLabel().getText());
+            paginator.setPageNumber(9999);
+            paginator.setSize(225, 30);
+            paginator.doLayout();
+            assertEquals("9999", input(paginator).getText());
+            assertTrue(input(paginator).getWidth() >= input(paginator).getFontMetrics(input(paginator).getFont()).stringWidth("9999"));
         });
     }
 

@@ -32,6 +32,7 @@ import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.offereditor.OfferEditorContainerPanel;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
+import com.flippingutilities.ui.uiutilities.IconButtons;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.WikiRequestWrapper;
@@ -110,7 +111,6 @@ public class FlippingPanel extends JPanel
 
 		JScrollPane scrollPane = new JScrollPane(wrapper);
 		scrollPane.setBackground(ColorScheme.DARK_GRAY_COLOR);
-		scrollPane.getVerticalScrollBar().setPreferredSize(new Dimension(2, 0));
 
 		//Contains a greeting message when the items panel is empty.
 		JPanel welcomeWrapper = new JPanel(new BorderLayout());
@@ -279,38 +279,13 @@ public class FlippingPanel extends JPanel
 		});
 	}
 
-	private JLabel createFavoriteButton() {
-		JLabel favoriteButton = new JLabel(Icons.SMALL_STAR_OFF_ICON);
-		favoriteButton.setBorder(new EmptyBorder(0,5,0,0));
-		favoriteButton.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mousePressed(MouseEvent e) {
-				if (favoriteSelected) {
-					favoriteButton.setIcon(Icons.SMALL_STAR_OFF_ICON);
-				}
-				else {
-					favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
-				}
-				favoriteSelected = !favoriteSelected;
-				rebuild(plugin.viewItemsForCurrentView());
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				if (!favoriteSelected) {
-					favoriteButton.setIcon(Icons.SMALL_STAR_HOVER_ICON);
-				}
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				if (favoriteSelected) {
-					favoriteButton.setIcon(Icons.SMALL_STAR_ON_ICON);
-				}
-				else {
-					favoriteButton.setIcon(Icons.SMALL_STAR_OFF_ICON);
-				}
-			}
+	private JToggleButton createFavoriteButton() {
+		JToggleButton favoriteButton = IconButtons.toggle("Show favorites only", Icons.SMALL_STAR_OFF_ICON,
+			Icons.SMALL_STAR_HOVER_ICON, Icons.SMALL_STAR_ON_ICON);
+		favoriteButton.addActionListener(event -> {
+			favoriteSelected = favoriteButton.isSelected();
+			paginator.setPageNumber(1);
+			rebuild(plugin.viewItemsForCurrentView());
 		});
 		return favoriteButton;
 	}
