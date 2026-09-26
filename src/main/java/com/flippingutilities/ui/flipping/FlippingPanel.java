@@ -236,7 +236,9 @@ public class FlippingPanel extends JPanel
 		for (ItemPrice itemInfo:  itemManager.search(lookup)) {
 			if (currentFlippingItems.containsKey(itemInfo.getId())) {
 				FlippingItem flippingItem = currentFlippingItems.get(itemInfo.getId());
-				flippingItem.setValidFlippingPanelItem(true);
+				if (!Boolean.TRUE.equals(flippingItem.getValidFlippingPanelItem())) {
+					plugin.setItemVisible(flippingItem, true);
+				}
 				matchesInHistory.add(flippingItem);
 			}
 			else {

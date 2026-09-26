@@ -9,9 +9,12 @@ import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.util.QuantityFormatter;
 
-import javax.swing.*;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Font;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -88,7 +91,7 @@ public class QuickLookPanel extends JPanel {
             Arrays.asList(wikiInstaBuy, wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setText("No data"));
             return;
         }
-        Map<Integer, JLabel> wikiMarginToLabel = new HashMap<>();
+        Map<Long, JLabel> wikiMarginToLabel = new HashMap<>();
         wikiMarginToLabel.put(wikiItemInfo.getHigh(), wikiInstaBuy);
         wikiMarginToLabel.put(wikiItemInfo.getLow(), wikiInstaSell);
 
@@ -100,8 +103,8 @@ public class QuickLookPanel extends JPanel {
         toMakeOfferCompetitiveTest.setText("");
         offerCompetitivenessText.setText("");
 
-        int max = Math.max(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
-        int min = Math.min(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
+        long max = Math.max(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
+        long min = Math.min(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
 
         if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(max), ColorScheme.GRAND_EXCHANGE_PRICE);

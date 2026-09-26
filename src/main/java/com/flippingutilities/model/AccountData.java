@@ -38,6 +38,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
 @Slf4j
 @Data
@@ -108,6 +110,7 @@ public class AccountData {
      * that the FlippingItems have their non persisted fields set from history.
      */
     public void prepareForUse(FlippingPlugin plugin) {
+        normalizeOfferIds();
         fixIncorrectItemNames(plugin.getItemManager());
 
         Map<String, OfferEvent> hydratedOffers = new HashMap<>();
@@ -123,13 +126,96 @@ public class AccountData {
         }
 
         hydrateRecipeFlipGroups(plugin);
-        hydratePartialOffers(hydratedOffers);
+        hydratePartialOffers(hydratedOffers, plugin.getItemManager());
         hydrateSlotTimers(plugin);
+    }
+
+    /**
+     * Legacy JSON stores independent copies of the same offer in history and lastOffers,
+     * without UUIDs. Give a slot and its unique, exact history snapshot one identity
+     * before history hydration assigns IDs. Missing or ambiguous history stays independent:
+     * slot reuse and deleted history must never attach a slot to an older partial fill.
+     * This also runs during migration, which does not hydrate accounts through the UI.
+     */
+    public void normalizeOfferIds() {
+        if (lastOffers != null) {
+            for (Map.Entry<Integer, OfferEvent> entry : lastOffers.entrySet()) {
+                OfferEvent active = entry.getValue();
+                if (active == null || active.getUuid() != null) {
+                    continue;
+                }
+                OfferEvent historical = findLegacySlotSnapshot(entry.getKey(), active);
+                if (historical != null) {
+                    if (historical.getUuid() == null) {
+                        historical.setUuid(UUID.randomUUID().toString());
+                    }
+                    active.setUuid(historical.getUuid());
+                } else {
+                    active.setUuid(UUID.randomUUID().toString());
+                }
+            }
+        }
+        if (trades != null) {
+            for (FlippingItem item : trades) {
+                if (item.getHistory() == null || item.getHistory().getCompressedOfferEvents() == null) {
+                    continue;
+                }
+                for (OfferEvent offer : item.getHistory().getCompressedOfferEvents()) {
+                    if (offer != null && offer.getUuid() == null) {
+                        offer.setUuid(UUID.randomUUID().toString());
+                    }
+                }
+            }
+        }
+    }
+
+    private OfferEvent findLegacySlotSnapshot(Integer slot, OfferEvent active) {
+        if (slot == null || slot < 0 || slot >= 8 || slot != active.getSlot()
+            || active.getTime() == null || active.getCurrentQuantityInTrade() <= 0
+            || active.isCausedByEmptySlot() || trades == null) {
+            return null;
+        }
+        OfferEvent match = null;
+        for (FlippingItem item : trades) {
+            if (item.getItemId() != active.getItemId() || item.getHistory() == null
+                || item.getHistory().getCompressedOfferEvents() == null) {
+                continue;
+            }
+            for (OfferEvent offer : item.getHistory().getCompressedOfferEvents()) {
+                if (offer == null || !samePersistedSnapshot(active, offer)) {
+                    continue;
+                }
+                if (match != null) {
+                    return null;
+                }
+                match = offer;
+            }
+        }
+        return match;
+    }
+
+    private boolean samePersistedSnapshot(OfferEvent left, OfferEvent right) {
+        // OfferEvent.equals omits persisted fields and compares post-tax prices.
+        return left.isBuy() == right.isBuy()
+            && left.getItemId() == right.getItemId()
+            && left.getSlot() == right.getSlot()
+            && left.getState() == right.getState()
+            && left.getCurrentQuantityInTrade() == right.getCurrentQuantityInTrade()
+            && left.getTotalQuantityInTrade() == right.getTotalQuantityInTrade()
+            && left.getPreTaxPrice() == right.getPreTaxPrice()
+            && left.getTime().equals(right.getTime())
+            && left.getTickArrivedAt() == right.getTickArrivedAt()
+            && left.getTicksSinceFirstOffer() == right.getTicksSinceFirstOffer()
+            && Objects.equals(left.getTradeStartedAt(), right.getTradeStartedAt())
+            && left.isBeforeLogin() == right.isBeforeLogin();
     }
 
     private void hydrateRecipeFlipGroups(FlippingPlugin plugin) {
         for (RecipeFlipGroup group : recipeFlipGroups) {
             group.hydrateRecipe(plugin.getRecipeHandler());
+            if (group.getRecipe() == null) {
+                group.synthesizeRecipe(plugin.getItemManager());
+            }
         }
     }
 
@@ -142,23 +228,100 @@ public class AccountData {
                 timer.setPlugin(plugin);
             });
         }
+
+        // Restore timer state from the persisted last offers. The JSON backend serializes the
+        // timers themselves, but the SQLite backend only persists the offers — without this
+        // wiring the GE slot timers are blank after every restart in SQLite mode. Timers that
+        // already carry an offer (JSON path) are left untouched. Completed offers keep
+        // their fixed start-to-completion duration until the slot is collected.
+        if (lastOffers != null) {
+            for (Map.Entry<Integer, OfferEvent> entry : lastOffers.entrySet()) {
+                OfferEvent offer = entry.getValue();
+                if (offer == null || offer.isCausedByEmptySlot()) {
+                    continue;
+                }
+                int slotIndex = entry.getKey();
+                if (slotIndex < 0 || slotIndex >= slotTimers.size()) {
+                    continue;
+                }
+                SlotActivityTimer timer = slotTimers.get(slotIndex);
+                if (timer.currentOffer == null) {
+                    timer.currentOffer = offer;
+                    timer.tradeStartTime = offer.getTradeStartedAt() != null
+                        ? offer.getTradeStartedAt()
+                        : offer.getTime();
+                    // lastUpdate must be non-null or createFormattedTimeString() returns null
+                    // (blank timer) and isSlotStagnant() NPEs. The offer's time is the last
+                    // known activity, so the elapsed display continues across the restart.
+                    timer.setLastUpdate(offer.getTime() != null ? offer.getTime() : Instant.now());
+                    timer.offerOccurredAtUnknownTime = offer.isBeforeLogin();
+                }
+            }
+        }
     }
 
-    private void hydratePartialOffers(Map<String, OfferEvent> hydratedOffers) {
-        List<PartialOffer> partialOffers = recipeFlipGroups.stream()
-            .flatMap(rfg -> rfg.getPartialOffers().stream())
-            .collect(Collectors.toList());
-        partialOffers.forEach(po -> {
-            po.hydrateOffer(hydratedOffers);
-            if (po.getOffer() == null) {
-                log.warn("partial offer references deleted offer event with uuid: {}", po.getOfferUuid());
-                return;
+    private void hydratePartialOffers(Map<String, OfferEvent> hydratedOffers, ItemManager itemManager) {
+        int missing = 0;
+        for (RecipeFlipGroup rfg : recipeFlipGroups) {
+            for (RecipeFlip flip : rfg.getRecipeFlips()) {
+                missing += hydrateComponentOffers(flip.getInputs(), hydratedOffers, itemManager);
+                missing += hydrateComponentOffers(flip.getOutputs(), hydratedOffers, itemManager);
             }
-            OfferEvent o = hydratedOffers.get(po.getOfferUuid());
-            if (o != null) {
-                po.hydrateUnderlyingOfferEvent(o.getMadeBy(), o.getItemName());
+        }
+        if (missing > 0) {
+            // One summary line instead of one WARN per component: accounts with historical
+            // data-loss damage carry hundreds of dead references, and the per-component
+            // spam buried actually-useful log output.
+            log.warn("{} recipe component(s) reference offers that no longer exist; "
+                + "they will render without prices", missing);
+        }
+    }
+
+    /** @return the number of components left unresolved. */
+    private int hydrateComponentOffers(Map<Integer, Map<String, PartialOffer>> components,
+                                        Map<String, OfferEvent> hydratedOffers, ItemManager itemManager) {
+        if (components == null) {
+            return 0;
+        }
+        int missing = 0;
+        for (Map.Entry<Integer, Map<String, PartialOffer>> componentEntry : components.entrySet()) {
+            int itemId = componentEntry.getKey();
+            Map<String, PartialOffer> offerMap = componentEntry.getValue();
+            if (offerMap == null) {
+                continue;
             }
-        });
+            for (PartialOffer po : offerMap.values()) {
+                po.hydrateOffer(hydratedOffers);
+                if (po.getOffer() == null) {
+                    // Preserve an unresolved reference so persistence can detect missing data.
+                    // A fabricated zero-price offer would be saved as if it were the real trade.
+                    log.debug("Recipe references missing offer uuid={} for item {}",
+                        po.getOfferUuid(), itemId);
+                    missing++;
+                    continue;
+                }
+                OfferEvent o = hydratedOffers.get(po.getOfferUuid());
+                if (o != null) {
+                    po.hydrateUnderlyingOfferEvent(o.getMadeBy(), o.getItemName());
+                } else {
+                    po.getOffer().setItemName(resolveItemName(itemManager, itemId));
+                }
+            }
+        }
+        return missing;
+    }
+
+    private String resolveItemName(ItemManager itemManager, int itemId) {
+        try {
+            if (itemManager != null && itemManager.getItemComposition(itemId) != null) {
+                String name = itemManager.getItemComposition(itemId).getName();
+                if (name != null && !name.isEmpty()) {
+                    return name;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "Item " + itemId;
     }
 
     /**
@@ -166,12 +329,19 @@ public class AccountData {
      * the item manager retrieves the item's name as "Members object". The item manager returns the correct
      * name when the user is on a member's world or logged out. As such, this method is called when the plugin starts
      * and whenever the user logs into a members world to clean up any "Members object" item names.
+     * Also fixes placeholder names like "Item 12345" from SQLite migration.
      */
     public void fixIncorrectItemNames(ItemManager itemManager) {
         trades.forEach(item -> {
-            if (item.getItemName().equals("Members object")) {
-                String actualName = itemManager.getItemComposition(item.getItemId()).getName();
-                item.setItemName(actualName);
+            String currentName = item.getItemName();
+            // Match "Members object" (f2p world artifact) or SQLite placeholder "Item <id>"
+            if (currentName.equals("Members object") || currentName.matches("Item \\d+")) {
+                try {
+                    String actualName = itemManager.getItemComposition(item.getItemId()).getName();
+                    item.setItemName(actualName);
+                } catch (RuntimeException e) {
+                    // Item composition not loaded yet; keep current name and retry on next login
+                }
             }
         });
     }

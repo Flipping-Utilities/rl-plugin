@@ -37,6 +37,7 @@ import org.junit.Test;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
@@ -121,6 +122,79 @@ public class HistoryManagerTest
 		//when no trades are present given the interval
 		tradesList = historyManager.getIntervalsHistory(baseTime);
 		assertEquals(0, historyManager.getProfit(tradesList));
+	}
+
+	@Test
+	public void combinedBuyCostCanExceedIntegerRange()
+	{
+		List<OfferEvent> offers = Arrays.asList(
+			completedOffer("Account", true, 1500, 1_000_000, 0),
+			completedOffer("Account", true, 1500, 1_000_000, 1),
+			completedOffer("Account", false, 3000, 500_000, 2));
+
+		List<Flip> flips = HistoryManager.getFlips(offers);
+		assertEquals(1, flips.size());
+		assertEquals(1_000_000, flips.get(0).getBuyPrice());
+		assertEquals(500_000, flips.get(0).getSellPrice());
+		assertEquals(3000, flips.get(0).getQuantity());
+		assertEquals(3_000_000_000L, HistoryManager.getValueOfMatchedOffers(offers, true));
+		assertEquals(-1_500_000_000L, HistoryManager.getProfit(offers));
+	}
+
+	@Test
+	public void accountWideTotalsDoNotMatchOffersFromDifferentAccounts()
+	{
+		List<OfferEvent> offers = Arrays.asList(
+			completedOffer("Alice", true, 100, 100, 0),
+			completedOffer("Bob", false, 100, 200, 1));
+
+		assertEquals(0, HistoryManager.getProfit(offers));
+		assertEquals(0, HistoryManager.getValueOfMatchedOffers(offers, true));
+		assertEquals(0, HistoryManager.getValueOfMatchedOffers(offers, false));
+		assertEquals(0, HistoryManager.countFlipQuantity(offers));
+		assertEquals(0, HistoryManager.getFlips(offers).size());
+	}
+
+	@Test
+	public void accountWideTotalsUseEachAccountsMatchedQuantityAndExactOfferValues()
+	{
+		List<OfferEvent> offers = Arrays.asList(
+			completedOffer("Alice", true, 3, 100, 0),
+			completedOffer("Bob", true, 1, 101, 1),
+			completedOffer("Bob", true, 1, 102, 2),
+			completedOffer("Alice", false, 2, 150, 3),
+			completedOffer("Bob", false, 3, 200, 4));
+
+		// Alice matches two items; Bob matches two at a total cost of 203, not 202
+		// as reconstructing the cost from his rounded average buy price would imply.
+		assertEquals(4, HistoryManager.countFlipQuantity(offers));
+		assertEquals(403, HistoryManager.getValueOfMatchedOffers(offers, true));
+		assertEquals(700, HistoryManager.getValueOfMatchedOffers(offers, false));
+		assertEquals(297, HistoryManager.getProfit(offers));
+		assertEquals(4, HistoryManager.getFlips(offers).stream().mapToInt(Flip::getQuantity).sum());
+	}
+
+	@Test
+	public void legacyOffersWithoutAccountNamesStillMatchEachOther()
+	{
+		List<OfferEvent> offers = Arrays.asList(
+			completedOffer(null, true, 2, 100, 0),
+			completedOffer(null, false, 1, 110, 1),
+			completedOffer("Known account", false, 5, 200, 2));
+
+		assertEquals(1, HistoryManager.countFlipQuantity(offers));
+		assertEquals(100, HistoryManager.getValueOfMatchedOffers(offers, true));
+		assertEquals(110, HistoryManager.getValueOfMatchedOffers(offers, false));
+		assertEquals(10, HistoryManager.getProfit(offers));
+		assertEquals(1, HistoryManager.getFlips(offers).size());
+	}
+
+	private OfferEvent completedOffer(String account, boolean buy, int quantity, int price, int secondsAfterStart)
+	{
+		OfferEvent offer = Utils.offer(buy, quantity, price, baseTime.plusSeconds(secondsAfterStart),
+			0, buy ? GrandExchangeOfferState.BOUGHT : GrandExchangeOfferState.SOLD, 0, 100, quantity);
+		offer.setMadeBy(account);
+		return offer;
 	}
 
 	@Test

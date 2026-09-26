@@ -68,6 +68,7 @@ public class SlotActivityTimer
 	//Index of the slot widget from left to right, top to bottom. (0-7)
 	@Getter
 	private int slotIndex;
+	@Setter
 	private Instant lastUpdate;
 	public Instant tradeStartTime;
 	public OfferEvent currentOffer;

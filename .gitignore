@@ -9,3 +9,7 @@ bin/
 .project
 .sisyphus
 gradle.properties
+src/test/resources/realdata/
+hs_err_pid*.log
+nul
+.factorypath

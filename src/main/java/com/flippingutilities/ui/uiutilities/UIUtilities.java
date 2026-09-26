@@ -34,10 +34,26 @@ import net.runelite.client.game.SpriteManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.IconTextField;
-import net.runelite.client.util.*;
+import net.runelite.client.util.ColorUtil;
+import net.runelite.client.util.LinkBrowser;
+import net.runelite.client.util.QuantityFormatter;
+import net.runelite.client.util.SwingUtil;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JToggleButton;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Point;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -47,8 +63,9 @@ import java.awt.image.BufferedImage;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.text.NumberFormat;
-import java.util.*;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -101,20 +118,23 @@ public class UIUtilities
 	 */
 	public static synchronized String quantityToRSDecimalStack(long quantity, boolean precise)
 	{
-		if (Long.toString(quantity).length() <= 4)
+		if (quantity > -10_000 && quantity < 10_000)
 		{
 			return QuantityFormatter.formatNumber(quantity);
 		}
 
-		long power = (long) Math.log10(quantity);
+		// Convert before abs so Long.MIN_VALUE has a positive display magnitude too.
+		double magnitude = Math.abs((double) quantity);
+		int power = (int) Math.log10(magnitude);
 
 		// Output thousandths for values above a million
 		NumberFormat format = precise && power >= 6
 			? PRECISE_DECIMAL_FORMATTER
 			: DECIMAL_FORMATTER;
 
-		return format.format(quantity / Math.pow(10, (Long.divideUnsigned(power, 3)) * 3))
-			+ new String[] {"", "K", "M", "B", "T"}[(int) (power / 3)];
+		int suffix = power / 3;
+		return format.format(quantity / Math.pow(10, suffix * 3))
+			+ new String[] {"", "K", "M", "B", "T", "Qa", "Qi"}[suffix];
 	}
 
 	public static JDialog createModalFromPanel(Component parent, JComponent panel)

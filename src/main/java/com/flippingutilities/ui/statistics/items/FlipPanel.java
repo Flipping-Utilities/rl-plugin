@@ -35,9 +35,11 @@ import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.util.QuantityFormatter;
 
-import javax.swing.*;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.SwingConstants;
 import javax.swing.border.EmptyBorder;
-import java.awt.*;
+import java.awt.BorderLayout;
 
 public class FlipPanel extends JPanel
 {
@@ -54,8 +56,8 @@ public class FlipPanel extends JPanel
 		setBorder(new EmptyBorder(2,2,2,2));
 
 
-		int profitEach = flip.getSellPrice() - flip.getBuyPrice();
-		int profitTotal = profitEach * flip.getQuantity();
+		long profitEach = flip.getSellPrice() - flip.getBuyPrice();
+		long profitTotal = profitEach * flip.getQuantity();
 
 		title.setOpaque(true);
 		title.setBackground(ColorScheme.DARKER_GRAY_COLOR);

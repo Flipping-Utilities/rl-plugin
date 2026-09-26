@@ -111,10 +111,12 @@ public class Icons {
 
     public static final ImageIcon RECIPE_HELP;
 
-    public static final ImageIcon MAGNIFYING_GLASS;
-    public static final ImageIcon MAGNIFYING_GLASS_HOVER;
+	public static final ImageIcon MAGNIFYING_GLASS;
+	public static final ImageIcon MAGNIFYING_GLASS_HOVER;
 
-    static
+	public static final ImageIcon DATABASE_ICON;
+
+	static
     {
         final BufferedImage openIcon = ImageUtil
                 .loadImageResource(FlippingPlugin.class, "/small_open_arrow.png");
@@ -286,8 +288,49 @@ public class Icons {
         final BufferedImage recipeHelp = ImageUtil.loadImageResource(FlippingPlugin.class, "/recipehelp.png");
         RECIPE_HELP = new ImageIcon(recipeHelp);
 
-        final BufferedImage magnifyingGlass = ImageUtil.loadImageResource(FlippingPlugin.class, "/magnifying-glass.png");
-        MAGNIFYING_GLASS = new ImageIcon(magnifyingGlass);
-        MAGNIFYING_GLASS_HOVER = new ImageIcon(ImageUtil.alphaOffset(magnifyingGlass,.53f));
-    }
+		final BufferedImage magnifyingGlass = ImageUtil.loadImageResource(FlippingPlugin.class, "/magnifying-glass.png");
+		MAGNIFYING_GLASS = new ImageIcon(magnifyingGlass);
+		MAGNIFYING_GLASS_HOVER = new ImageIcon(ImageUtil.alphaOffset(magnifyingGlass,.53f));
+
+		DATABASE_ICON = createDatabaseIcon(16, 16);
+	}
+
+	/**
+	 * Draws a small, minimalist outline-only database "cylinder" icon (no asset).
+	 */
+	private static ImageIcon createDatabaseIcon(int width, int height)
+	{
+		BufferedImage img = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g = img.createGraphics();
+		try
+		{
+			g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			g.setColor(new Color(147, 197, 253));
+			g.setStroke(new BasicStroke(1.25f));
+
+			int x = 2;
+			int w = width - 4;
+			int eh = 5; // ellipse height
+			int yTop = 2;
+			int yBot = height - 2 - eh;
+			int bodyTop = yTop + eh / 2;
+			int bodyBot = yBot + eh / 2;
+
+			// top disk (full outline)
+			g.drawOval(x, yTop, w, eh);
+			// sides
+			g.drawLine(x, bodyTop, x, bodyBot);
+			g.drawLine(x + w - 1, bodyTop, x + w - 1, bodyBot);
+			// bottom front curve (lower half of the bottom ellipse)
+			g.drawArc(x, yBot, w, eh, 180, 180);
+			// single middle band for the "stacked disk" look
+			int yMid = bodyTop + (bodyBot - bodyTop) / 2 - eh / 2;
+			g.drawArc(x, yMid, w, eh, 180, 180);
+		}
+		finally
+		{
+			g.dispose();
+		}
+		return new ImageIcon(img);
+	}
 }

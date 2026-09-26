@@ -37,7 +37,11 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * This class is the representation of an item that a user is flipping. It contains information about the
@@ -54,6 +58,7 @@ import java.util.*;
 @Slf4j
 public class FlippingItem implements Searchable
 {
+	public static final String DEFAULT_FAVORITE_CODE = "1";
 
 	@SerializedName("id")
 	@Getter
@@ -90,7 +95,7 @@ public class FlippingItem implements Searchable
 
 	@Getter
 	@Setter
-	private String favoriteCode = "1";
+	private String favoriteCode = DEFAULT_FAVORITE_CODE;
 
 	//non persisted fields start here.
 	@Setter
@@ -156,10 +161,16 @@ public class FlippingItem implements Searchable
 	 *
 	 * @param newOffer the new offer that just came in
 	 */
-	public void updateHistory(OfferEvent newOffer)
+	public List<String> updateHistory(OfferEvent newOffer)
 	{
 		newOffer.setItemName(itemName);
-		history.updateHistory(newOffer);
+		return history.updateHistory(newOffer);
+	}
+
+	public List<String> updateHistory(OfferEvent newOffer, OfferEvent previousOffer)
+	{
+		newOffer.setItemName(itemName);
+		return history.updateHistory(newOffer, previousOffer);
 	}
 
 	/**
@@ -304,16 +315,16 @@ public class FlippingItem implements Searchable
 		}
 	}
 
-	public Optional<Integer> getPotentialProfit(boolean includeMarginCheck, boolean shouldUseRemainingGeLimit)
+	public Optional<Long> getPotentialProfit(boolean includeMarginCheck, boolean shouldUseRemainingGeLimit)
 	{
 		if (!getLatestInstaBuy().isPresent() || !getLatestInstaSell().isPresent()) {
 			return Optional.empty();
 		}
 
-		int profitEach = getCurrentProfitEach().get();
+		long profitEach = getCurrentProfitEach().get();
 		int remainingGeLimit = getRemainingGeLimit();
 		int geLimit = shouldUseRemainingGeLimit ? remainingGeLimit : totalGELimit;
-		int profitTotal = geLimit * profitEach;
+		long profitTotal = geLimit * profitEach;
 		if (includeMarginCheck)
 		{
 			profitTotal -= profitEach;
@@ -331,7 +342,7 @@ public class FlippingItem implements Searchable
 				Optional.of((float)getCurrentProfitEach().get() / getLatestInstaSell().get().getPrice() * 100) : Optional.empty();
 	}
 
-	public Optional<Integer> getCurrentProfitEach() {
+	public Optional<Long> getCurrentProfitEach() {
 		return getLatestInstaBuy().isPresent() && getLatestInstaSell().isPresent()?
 				Optional.of(GeTax.getPostTaxPrice(getLatestInstaBuy().get().getPrice()) - getLatestInstaSell().get().getPreTaxPrice()) : Optional.empty();
 	}

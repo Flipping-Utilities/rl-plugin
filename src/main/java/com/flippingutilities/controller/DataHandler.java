@@ -26,6 +26,8 @@
 
 package com.flippingutilities.controller;
 
+import com.flippingutilities.db.SqliteStorage;
+import com.flippingutilities.db.SqliteSettings;
 import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
@@ -34,13 +36,15 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.*;
-
 /**
  * Responsible for loading data from disk, handling any operations to access/change data during the plugin's life, and storing
  * data to disk.
  */
 @Slf4j
 public class DataHandler {
+    // SQLite storage backend (optional)
+    private SqliteStorage sqliteStorage;
+    private final Set<String> accountsAwaitingRecoverySnapshot = new HashSet<>();
     FlippingPlugin plugin;
     private AccountWideData accountWideData;
     private BackupCheckpoints backupCheckpoints;
@@ -51,6 +55,20 @@ public class DataHandler {
 
     public DataHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    public void setSqliteStorage(SqliteStorage storage) {
+        if (storage == null) {
+            // Detaching cannot make an unsaved JSON snapshot safe to reload. This also
+            // covers an import that failed before this handler attached its database.
+            accountsAwaitingRecoverySnapshot.addAll(accountsWithUnsavedChanges);
+        }
+        this.sqliteStorage = storage;
+    }
+
+    public boolean isUsingSqlite() {
+        return sqliteStorage != null && plugin.getConfig().dataSource().isSqlite()
+            && !plugin.isStorageFailed(sqliteStorage);
     }
 
     public AccountWideData viewAccountWideData() {
@@ -72,7 +90,15 @@ public class DataHandler {
     public void deleteAccount(String displayName) {
         log.info("deleting account: {}", displayName);
         accountSpecificData.remove(displayName);
+        accountsAwaitingRecoverySnapshot.remove(displayName);
+        accountsWithUnsavedChanges.remove(displayName);
         TradePersister.deleteFile(displayName + ".json");
+    }
+
+    /** Keep cached accounts authoritative until each recovery snapshot is safely written. */
+    void preserveAccountsForRecovery() {
+        accountsAwaitingRecoverySnapshot.addAll(accountSpecificData.keySet());
+        accountsWithUnsavedChanges.addAll(accountSpecificData.keySet());
     }
 
     public Collection<AccountData> getAllAccountData() {
@@ -111,19 +137,13 @@ public class DataHandler {
         }
     }
 
-    public void storeData() {
-        log.debug("storing data");
-        if (accountsWithUnsavedChanges.size() > 0) {
-            log.debug("accounts with unsaved changes are {}. Saving them.", accountsWithUnsavedChanges);
-            accountsWithUnsavedChanges.forEach(accountName -> storeAccountData(accountName));
-            accountsWithUnsavedChanges.clear();
-        }
-
-        if (accountWideDataChanged) {
-            log.debug("accountwide data changed, saving it.");
-            storeData("accountwide", accountWideData);
+    /** Keep failed snapshots dirty so autosave or shutdown can retry them. */
+    public boolean storeData() {
+        accountsWithUnsavedChanges.removeIf(this::storeAccountData);
+        if (accountWideDataChanged && storeData("accountwide", accountWideData)) {
             accountWideDataChanged = false;
         }
+        return accountsWithUnsavedChanges.isEmpty() && !accountWideDataChanged;
     }
 
     public void loadData() {
@@ -182,11 +202,14 @@ public class DataHandler {
             log.debug("Fetching accountwide data");
             AccountWideData accountWideData = plugin.tradePersister.loadAccountWideData();
             boolean didActuallySetDefaults = accountWideData.setDefaults();
+            this.accountWideData = accountWideData;
+            plugin.tradePersister.accountPrepared("accountwide");
             accountWideDataChanged = didActuallySetDefaults;
             return accountWideData;
         }
         catch (Exception e) {
-            log.warn("couldn't load accountwide data, setting defaults", e);
+            plugin.tradePersister.protectAccount("accountwide");
+            log.warn("Could not prepare account-wide data; JSON saves disabled until valid data is loaded", e);
             AccountWideData accountWideData = new AccountWideData();
             accountWideData.setDefaults();
             accountWideDataChanged = true;
@@ -207,29 +230,69 @@ public class DataHandler {
             try {
                 accountData.startNewSession();
                 accountData.prepareForUse(plugin);
-                
-                // Check if migration is needed and save immediately
-                if (accountData.needsMigration()) {
-                    log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
-                        displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
-                    TradePersister.createPreMigrationBackup(displayName);
-                    accountData.markMigrated();
-                    plugin.tradePersister.writeToFile(displayName, accountData);
-                    TradePersister.deletePreMigrationBackup(displayName);
-                    log.info("Migration complete for {}", displayName);
-                }
+                accountSpecificData.put(displayName, accountData);
+                plugin.tradePersister.accountPrepared(displayName);
             }
-            catch (Exception e) {
-                log.warn("Couldn't prepare account data for {} due to {}, setting default", displayName, e);
+            catch (Exception | OutOfMemoryError e) {
+                plugin.tradePersister.protectAccount(displayName);
+                log.error("Could not prepare {}; JSON saves and backups are disabled until valid data is loaded", displayName, e);
                 AccountData newAccountData = new AccountData();
                 newAccountData.startNewSession();
                 newAccountData.prepareForUse(plugin);
                 allAccountData.put(displayName, newAccountData);
+                continue;
             }
+            persistVersionMigration(displayName, accountData);
+        }
+    }
+
+    /**
+     * Persists a format-version migration for an account that loaded and prepared
+     * successfully. A failure here (backup creation or the write itself) must NOT discard
+     * the account or disable its saves - the data itself is valid - so it is logged and the
+     * account is marked dirty for a retry on a later save.
+     */
+    private void persistVersionMigration(String displayName, AccountData accountData) {
+        try {
+            if (!accountData.needsMigration()) {
+                return;
+            }
+            log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})",
+                displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
+            plugin.tradePersister.createPreMigrationBackup(displayName);
+            accountData.markMigrated();
+            plugin.tradePersister.writeToFile(displayName, accountData);
+            log.info("Migration complete for {}", displayName);
+        } catch (Exception e) {
+            log.warn("Could not persist version migration for {}; keeping the loaded account and retrying on a later save",
+                displayName, e);
+            markDataAsHavingChanged(displayName);
         }
     }
 
     private Map<String, AccountData> fetchAllAccountData() {
+        // SQLite path: try loading from SQLite first
+        if (sqliteStorage != null && plugin.getConfig().dataSource().isSqlite()) {
+            try {
+                Map<String, AccountData> accounts = new HashMap<>();
+                for (String displayName : sqliteStorage.listAccounts()) {
+                    // guard against junk rows named after the pseudo account-wide view
+                    if (displayName.equalsIgnoreCase(FlippingPlugin.ACCOUNT_WIDE)) {
+                        continue;
+                    }
+                    AccountData data = sqliteStorage.loadAccount(displayName);
+                    if (data != null) {
+                        accounts.put(displayName, data);
+                    }
+                }
+                if (!accounts.isEmpty()) {
+                    return accounts;
+                }
+                // Empty DB: fall through to JSON so a fresh SQLite install can still bootstrap.
+            } catch (Exception e) {
+                handleSqliteReadFailure(e);
+            }
+        }
         try {
             return plugin.tradePersister.loadAllAccounts();
         }
@@ -237,6 +300,13 @@ public class DataHandler {
             log.warn("error propagated from tradePersister.loadAllAccounts() when fetching all account data, returning empty hashmap", e);
             return new HashMap<>();
         }
+    }
+
+    private void handleSqliteReadFailure(Exception failure) {
+        SqliteStorage failed = sqliteStorage;
+        sqliteStorage = null;
+        preserveAccountsForRecovery();
+        plugin.recoverFromStorageFailure(failed, failure);
     }
 
     // Used by other components to set accountWideData on DataHandler
@@ -253,57 +323,114 @@ public class DataHandler {
 
     private AccountData fetchAccountData(String displayName)
     {
+        // A write can fail before its queued client-thread recovery callback runs.
+        if (plugin.isStorageFailed(sqliteStorage) || plugin.isStorageFailed(plugin.getSqliteStorage())) {
+            preserveAccountsForRecovery();
+            setSqliteStorage(null);
+        }
+        if (accountsAwaitingRecoverySnapshot.contains(displayName)
+                && accountSpecificData.containsKey(displayName)) {
+            return accountSpecificData.get(displayName);
+        }
+        // SQLite path: attempt to load from SQLite when configured
+        if (sqliteStorage != null && plugin.getConfig().dataSource().isSqlite()) {
+            try {
+                AccountData accountData = sqliteStorage.loadAccount(displayName);
+                if (accountData != null) {
+                    accountData.prepareForUse(plugin);
+                    if (accountData.needsMigration()) {
+                        accountData.markMigrated();
+                    }
+                    // A reload refreshes history, but the running client's session may
+                    // have restarted since the session snapshot was imported.
+                    AccountData current = accountSpecificData.get(displayName);
+                    if (current != null) {
+                        accountData.setSessionStartTime(current.getSessionStartTime());
+                        accountData.setAccumulatedSessionTimeMillis(current.getAccumulatedSessionTimeMillis());
+                        accountData.setLastSessionTimeUpdate(current.getLastSessionTimeUpdate());
+                    }
+                    return accountData;
+                }
+                // SQLite returned null (account not found); fall through to JSON.
+            } catch (Exception e) {
+                handleSqliteReadFailure(e);
+                if (accountSpecificData.containsKey(displayName)) {
+                    return accountSpecificData.get(displayName);
+                }
+            }
+        }
         try {
             AccountData accountData = plugin.tradePersister.loadAccount(displayName);
             accountData.prepareForUse(plugin);
-            
-            // Check if migration is needed and save immediately
-            if (accountData.needsMigration()) {
-                log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
-                    displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
-                TradePersister.createPreMigrationBackup(displayName);
-                accountData.markMigrated();
-                plugin.tradePersister.writeToFile(displayName, accountData);
-                TradePersister.deletePreMigrationBackup(displayName);
-                log.info("Migration complete for {}", displayName);
-            }
-            
+            accountSpecificData.put(displayName, accountData);
+            plugin.tradePersister.accountPrepared(displayName);
+            persistVersionMigration(displayName, accountData);
             return accountData;
         }
-        catch (Exception e)
+        catch (Exception | OutOfMemoryError e)
         {
-            log.warn("couldn't load trades for {}, e = " + e, displayName);
-            return new AccountData();
+            plugin.tradePersister.protectAccount(displayName);
+            log.error("Could not load {}; keeping cached data and disabling JSON saves until valid data is loaded", displayName, e);
+            return accountSpecificData.getOrDefault(displayName, new AccountData());
         }
     }
 
-    private void storeAccountData(String displayName)
-    {
-        try
-        {
-            AccountData data = accountSpecificData.get(displayName);
-            if (data == null)
-            {
-                log.debug("for an unknown reason the data associated with {} has been set to null. Storing" +
-                        "an empty AccountData object instead.", displayName);
-                data = new AccountData();
-            }
-            thisClientLastStored = displayName;
-            data.setLastStoredAt(Instant.now());
-            plugin.tradePersister.writeToFile(displayName, data);
+    private boolean storeAccountData(String displayName) {
+        // The account-wide view and deleted accounts must never become JSON accounts.
+        AccountData data = accountSpecificData.get(displayName);
+        if (displayName == null || displayName.equalsIgnoreCase(FlippingPlugin.ACCOUNT_WIDE) || data == null) {
+            return true;
         }
-        catch (Exception e)
-        {
-            log.warn("couldn't store trades, error = " + e);
+        thisClientLastStored = displayName;
+        data.setLastStoredAt(Instant.now());
+        boolean stored = storeData(displayName, data);
+        if (stored) {
+            accountsAwaitingRecoverySnapshot.remove(displayName);
         }
+        return stored;
     }
 
-    private void storeData(String fileName, Object data) {
+    private boolean storeData(String fileName, Object data) {
         try {
             plugin.tradePersister.writeToFile(fileName, data);
+            return true;
+        } catch (Exception e) {
+            log.warn("Couldn't store data to {}; retaining it for retry", fileName, e);
+            return false;
         }
-        catch (Exception e) {
-            log.warn("couldn't store data to {} bc of {}",fileName, e);
+    }
+
+    public void reloadFromSqlite() {
+        if (sqliteStorage == null || !plugin.getConfig().dataSource().isSqlite()) {
+            log.debug("Skipping SQLite reload because storage is not enabled");
+            return;
         }
+
+        List<String> sqliteAccounts = sqliteStorage.listAccounts();
+        Map<String, AccountData> reloadedAccounts = new HashMap<>();
+        log.info("Reloading {} accounts from SQLite", sqliteAccounts.size());
+
+        for (String displayName : sqliteAccounts) {
+            if (displayName.equalsIgnoreCase(FlippingPlugin.ACCOUNT_WIDE)) {
+                continue;
+            }
+            reloadedAccounts.put(displayName, fetchAccountData(displayName));
+        }
+
+        // Carry over in-memory accounts ONLY while their migration has not actually
+        // completed. Once migration_completed is set, SQLite reflects the authoritative
+        // import; carrying over in-memory accounts then (e.g. one read from the pre-wipe
+        // database during a backend switch) would resurrect accounts the user deleted.
+        boolean migrationCompleted = sqliteStorage.getBooleanSetting(SqliteSettings.MIGRATION_COMPLETED);
+        if (!migrationCompleted) {
+            for (Map.Entry<String, AccountData> entry : accountSpecificData.entrySet()) {
+                if (sqliteStorage.getSetting(SqliteSettings.accountMigrationKey(entry.getKey())) == null) {
+                    reloadedAccounts.putIfAbsent(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+        accountSpecificData = reloadedAccounts;
+        accountsWithUnsavedChanges.clear();
     }
 }

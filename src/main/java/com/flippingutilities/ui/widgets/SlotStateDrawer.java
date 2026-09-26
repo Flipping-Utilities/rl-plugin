@@ -8,16 +8,28 @@ import com.flippingutilities.utilities.SlotPredictedState;
 import com.flippingutilities.utilities.WikiItemMargins;
 import com.flippingutilities.utilities.WikiRequest;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.*;
+import net.runelite.api.Client;
+import net.runelite.api.FontID;
+import net.runelite.api.SpriteID;
+import net.runelite.api.GrandExchangeOffer;
+import net.runelite.api.GrandExchangeOfferState;
+import net.runelite.api.widgets.JavaScriptCallback;
 import net.runelite.api.events.BeforeRender;
 import net.runelite.api.gameval.InterfaceID;
-import net.runelite.api.widgets.*;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetPositionMode;
+import net.runelite.api.widgets.WidgetSizeMode;
+import net.runelite.api.widgets.WidgetTextAlignment;
+import net.runelite.api.widgets.WidgetType;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.ui.overlay.tooltip.Tooltip;
 import net.runelite.client.ui.overlay.tooltip.TooltipManager;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * This class is responsible for enhancing slots in the GE interface by adding
@@ -351,7 +363,7 @@ public class SlotStateDrawer {
             return Optional.empty();
         }
 
-        int listedPrice = offer.getPrice();
+        long listedPrice = offer.getPrice();
         GrandExchangeOfferState offerState = offer.getState();
         boolean isBuy = offerState == GrandExchangeOfferState.BUYING || offerState == GrandExchangeOfferState.BOUGHT;
         boolean isCompleted = offerState == GrandExchangeOfferState.BOUGHT || offerState == GrandExchangeOfferState.SOLD;

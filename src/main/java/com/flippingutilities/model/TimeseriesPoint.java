@@ -5,10 +5,10 @@ import lombok.Getter;
 @Getter
 public final class TimeseriesPoint {
     private final long timestamp;
-    private final Integer avgHighPrice;
-    private final Integer avgLowPrice;
+    private final Long avgHighPrice;
+    private final Long avgLowPrice;
 
-    public TimeseriesPoint(long timestamp, Integer avgHighPrice, Integer avgLowPrice) {
+    public TimeseriesPoint(long timestamp, Long avgHighPrice, Long avgLowPrice) {
         this.timestamp = timestamp;
         this.avgHighPrice = avgHighPrice;
         this.avgLowPrice = avgLowPrice;

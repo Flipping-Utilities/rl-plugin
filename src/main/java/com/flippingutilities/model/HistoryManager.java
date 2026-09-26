@@ -29,13 +29,25 @@ package com.flippingutilities.model;
 
 import com.flippingutilities.utilities.ListUtils;
 import com.google.gson.annotations.SerializedName;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -56,13 +68,17 @@ public class HistoryManager
 
 	@SerializedName("nGLR")
 	@Getter
+	@Setter
 	private Instant nextGeLimitRefresh;
 
 	@SerializedName("iBTLW")
 	@Getter
+	@Setter
 	private int itemsBoughtThisLimitWindow;
 
 	@SerializedName("pIB")
+	@Getter
+	@Setter
 	private int itemsBoughtThroughCompleteOffers;
 
 	public HistoryManager clone()
@@ -77,18 +93,26 @@ public class HistoryManager
 		);
 	}
 
-	public void updateHistory(OfferEvent newOffer)
+	public List<String> updateHistory(OfferEvent newOffer)
 	{
+		return updateHistory(newOffer, findPreviousOfferInSlot(newOffer));
+	}
+
+	/** Live events provide their actual slot predecessor; archived fills are not replacements. */
+	public List<String> updateHistory(OfferEvent newOffer, OfferEvent previousOffer)
+	{
+		List<String> removedUuids = Collections.emptyList();
 		//if slot is -1 than the offer was added manually from GE history.
 		//Since we don't know when it came or its slot/it doesn't have a time or slot, there is no point in updating ge
 		//properties or trying to delete previous offers for the trade.
 		if (newOffer.getSlot() != -1)
 		{
 			updateGeLimitProperties(newOffer);
-			deletePreviousOffersForTrade(newOffer);
+			removedUuids = deletePreviousOffer(newOffer, previousOffer);
 		}
 
 		compressedOfferEvents.add(newOffer);
+		return removedUuids;
 	}
 
 	/**
@@ -147,46 +171,34 @@ public class HistoryManager
 		}
 	}
 
-	/**
-	 * Deletes previous offer events for the same trade as the given offer event so that each trade has only one
-	 * offer event representing it.
-	 *
-	 * @param newOfferEvent offer event just received
-	 */
-	//TODO pretty sure this has an edge cases where we think an offer is part of the same trade but it isn't...so we delete too much.
-	//Ex:
-	//IN RL: set offer to buy 100 lobsters in slot X. Offer event comes in and Five lobsters buy. log off.
-	//log onto mobile, cancel the previous lobster offer and set another for 100 lobsters again in slot X.
-	//Log back into RL with 10 lobsters being bought. This method will think those offers are for the same trade and delete
-	//the first offer event for 5 lobsters...There are ways to make this more unlikely, such as checking if all the relevant
-	//properties of the offers match (except currentQuantityInTrade). But, there is no way to be 100% sure because all
-	//those properties could match but it could still be from a different trade if they cancel and make a trade outside of
-	//RL
-	public void deletePreviousOffersForTrade(OfferEvent newOfferEvent)
+	/** History-only callers can identify at most the latest snapshot in the same slot. */
+	public List<String> deletePreviousOffersForTrade(OfferEvent newOfferEvent)
 	{
-		for (int i = compressedOfferEvents.size() - 1; i > -1; i--)
-		{
-			OfferEvent aPreviousOffer = compressedOfferEvents.get(i);
+		return deletePreviousOffer(newOfferEvent, findPreviousOfferInSlot(newOfferEvent));
+	}
 
-			// if the previous offer was cancelled while a partial offer came through, the old (now invalid quantity)
-			// cancelled offer must be deleted
-			if (newOfferEvent.isUpdateForCancelled(aPreviousOffer)) {
-				compressedOfferEvents.remove(i);
-			}
-			if (aPreviousOffer.getSlot() == newOfferEvent.getSlot() && aPreviousOffer.isBuy() == newOfferEvent.isBuy())
-			{
-				//if it belongs to the same slot and its complete, it must belong to a previous trade given that
-				//the most recent offer was for the same slot
-				if (aPreviousOffer.isComplete())
-				{
-					return;
-				}
-				else
-				{
-					compressedOfferEvents.remove(i);
-				}
+	private OfferEvent findPreviousOfferInSlot(OfferEvent newOffer)
+	{
+		if (newOffer.getSlot() == -1) return null;
+		for (int i = compressedOfferEvents.size() - 1; i >= 0; i--) {
+			OfferEvent previous = compressedOfferEvents.get(i);
+			if (previous.getSlot() == newOffer.getSlot() && previous.isBuy() == newOffer.isBuy()) {
+				return previous;
 			}
 		}
+		return null;
+	}
+
+	private List<String> deletePreviousOffer(OfferEvent newOffer, OfferEvent previous)
+	{
+		if (previous == null || previous.getUuid() == null || previous.getItemId() != newOffer.getItemId()
+			|| previous.getSlot() != newOffer.getSlot() || previous.isBuy() != newOffer.isBuy()
+			|| (previous.isComplete() && !newOffer.isUpdateForCancelled(previous))) {
+			return Collections.emptyList();
+		}
+		String uuid = previous.getUuid();
+		boolean removed = compressedOfferEvents.removeIf(offer -> uuid.equals(offer.getUuid()));
+		return removed ? Collections.singletonList(uuid) : Collections.emptyList();
 	}
 
 	/**
@@ -362,9 +374,11 @@ public class HistoryManager
 	 */
 	public static long getValueOfMatchedOffers(List<OfferEvent> tradeList, boolean isBuy)
 	{
-		return getValueOfOffersUpToLimit(
-			tradeList.stream().filter(o -> o.isBuy() == isBuy).collect(Collectors.toList()),
-			countFlipQuantity(tradeList));
+		return groupOffersByAccount(tradeList).stream()
+			.mapToLong(offers -> getValueOfOffersUpToLimit(
+				offers.stream().filter(o -> o.isBuy() == isBuy).collect(Collectors.toList()),
+				countAccountFlipQuantity(offers)))
+			.sum();
 	}
 
 	/**
@@ -379,14 +393,20 @@ public class HistoryManager
 
 	/**
 	 * Gets the amount of items in a given tradelist that have been "flipped". We take
-	 * min(itemsBought, itemsSold) bc we only want the amount of items that will actually be matched against each
-	 * other to create flips and if either buys or sells has a surplus relative to the other, that surplus won't be
-	 * matched.
+	 * min(itemsBought, itemsSold) for each account so an account's surplus cannot be matched
+	 * against another account's offers.
 	 *
 	 * @param tradeList The list of offers that the flip count is based on
 	 * @return An integer representing the total currentQuantityInTrade of items flipped in the list of offers
 	 */
 	public static int countFlipQuantity(List<OfferEvent> tradeList)
+	{
+		return groupOffersByAccount(tradeList).stream()
+			.mapToInt(HistoryManager::countAccountFlipQuantity)
+			.sum();
+	}
+
+	private static int countAccountFlipQuantity(List<OfferEvent> tradeList)
 	{
 		int numBoughtItems = 0;
 		int numSoldItems = 0;
@@ -404,6 +424,16 @@ public class HistoryManager
 		}
 
 		return Math.min(numBoughtItems, numSoldItems);
+	}
+
+	private static Collection<List<OfferEvent>> groupOffersByAccount(List<OfferEvent> offers)
+	{
+		Map<String, List<OfferEvent>> accounts = new HashMap<>();
+		for (OfferEvent offer : offers) {
+			// Legacy callers may supply unhydrated offers with no account name.
+			accounts.computeIfAbsent(offer.getMadeBy(), account -> new ArrayList<>()).add(offer);
+		}
+		return accounts.values();
 	}
 
 	/**
@@ -465,14 +495,9 @@ public class HistoryManager
 	 */
 	public static List<Flip> getFlips(List<OfferEvent> tradeList)
 	{
-		//group offers based on which account those offers belong to (this is really only relevant when getting the flips
-		//of the account wide tradelist as you don't want to match offers from diff accounts.
-
-		Map<String, List<OfferEvent>> groupedOffers = tradeList.stream().collect(Collectors.groupingBy(OfferEvent::getMadeBy));
-
-		//take each offer list and create flips out of them, then put those flips into one list.
+		// Match each account independently before combining its flips into the shared view.
 		List<Flip> flips = new ArrayList<>();
-		groupedOffers.values().forEach(offers -> flips.addAll(createFlips(offers)));
+		groupOffersByAccount(tradeList).forEach(offers -> flips.addAll(createFlips(offers)));
 
 		flips.sort(Comparator.comparing(Flip::getTime));
 
@@ -616,7 +641,7 @@ public class HistoryManager
 				continue;
 			}
 			int numBuysSeen = 0;
-			int totalRevenue = 0;
+			long totalBuyCost = 0;
 			while (buyIdx < buys.size())
 			{
 				OfferEvent buy = buys.get(buyIdx);
@@ -626,14 +651,14 @@ public class HistoryManager
 				{
 					int leftOver = numBuysSeen - sell.getCurrentQuantityInTrade();
 					int amountTaken = buy.getCurrentQuantityInTrade() - leftOver;
-					totalRevenue += amountTaken * buy.getPrice();
+					totalBuyCost += (long) amountTaken * buy.getPrice();
 					buy.setCurrentQuantityInTrade(leftOver);
-					flips.add(new Flip(totalRevenue / sell.getCurrentQuantityInTrade(), sell.getPrice(), sell.getCurrentQuantityInTrade(), sell.getTime(), false, !sell.isComplete()));
+					flips.add(new Flip(totalBuyCost / sell.getCurrentQuantityInTrade(), sell.getPrice(), sell.getCurrentQuantityInTrade(), sell.getTime(), false, !sell.isComplete()));
 					break;
 				}
 				else
 				{
-					totalRevenue += buy.getCurrentQuantityInTrade() * buy.getPrice();
+					totalBuyCost += (long) buy.getCurrentQuantityInTrade() * buy.getPrice();
 					buyIdx++;
 				}
 			}
@@ -641,7 +666,7 @@ public class HistoryManager
 			//buys only partially exhausted a sell
 			if (buyIdx == buys.size() && numBuysSeen != 0)
 			{
-				flips.add(new Flip(totalRevenue / numBuysSeen, sell.getPrice(), numBuysSeen, sell.getTime(), false, true));
+				flips.add(new Flip(totalBuyCost / numBuysSeen, sell.getPrice(), numBuysSeen, sell.getTime(), false, true));
 				break;
 			}
 		}

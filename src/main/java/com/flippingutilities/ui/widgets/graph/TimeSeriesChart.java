@@ -56,7 +56,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
     private TimeseriesResponse timeseries;
     private Timestep timestep;
-    private int offerPrice;
+    private long offerPrice;
     private long maxTimeRangeSeconds; // Custom max time range (overrides timestep default)
 
     // Hover state for vertical line indicator
@@ -280,17 +280,17 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
     }
 
     private PriceRange calculatePriceRange(List<TimeseriesPoint> dataPoints) {
-        Integer minPrice = null;
-        Integer maxPrice = null;
+        Long minPrice = null;
+        Long maxPrice = null;
 
         for (TimeseriesPoint point : dataPoints) {
             if (point.getAvgHighPrice() != null) {
-                int highPrice = point.getAvgHighPrice();
+                long highPrice = point.getAvgHighPrice();
                 maxPrice = maxPrice == null ? highPrice : Math.max(maxPrice, highPrice);
             }
 
             if (point.getAvgLowPrice() != null) {
-                int lowPrice = point.getAvgLowPrice();
+                long lowPrice = point.getAvgLowPrice();
                 minPrice = minPrice == null ? lowPrice : Math.min(minPrice, lowPrice);
             }
         }
@@ -315,9 +315,9 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
     }
 
     private PriceRange adjustPriceRange(PriceRange original) {
-        int range = original.getRange();
-        int min = original.min;
-        int max = original.max;
+        long range = original.getRange();
+        long min = original.min;
+        long max = original.max;
 
         // For very small prices (<100), start at 0
         // For larger prices, use a margin around the data
@@ -327,8 +327,9 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
             min = 0;
         } else {
             // Larger prices - add margin around the data range
-            int margin = Math.max(range / PRICE_RANGE_MARGIN_DIVISOR, MIN_PRICE_MARGIN);
-            max += margin;
+            long margin = Math.max(range / PRICE_RANGE_MARGIN_DIVISOR, MIN_PRICE_MARGIN);
+            // Padding is visual only; keep the viewport within the representable price range.
+            max = max > Long.MAX_VALUE - margin ? Long.MAX_VALUE : max + margin;
             min = Math.max(0, min - margin);
         }
 
@@ -370,27 +371,26 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
     private void drawHorizontalGridLines(Graphics2D g2d, ChartBounds bounds,
             PriceRange priceRange, FontMetrics fm) {
-        int tickInterval = tickCalculator.calculate(priceRange.getRange());
-        int startPrice = (priceRange.min / tickInterval) * tickInterval;
-        int endPrice = ((priceRange.max / tickInterval) + 1) * tickInterval;
-
+        long tickInterval = tickCalculator.calculate(priceRange.getRange());
+        long startPrice = (priceRange.min / tickInterval) * tickInterval;
         int rightEdge = bounds.getRightEdge();
 
-        for (int price = startPrice; price <= endPrice; price += tickInterval) {
-            if (price < priceRange.min || price > priceRange.max) {
-                continue;
+        for (long price = startPrice; price <= priceRange.max;) {
+            if (price >= priceRange.min) {
+                int lineY = calculateYPosition(price, bounds, priceRange);
+                g2d.setColor(config.getGridColor());
+                g2d.drawLine(bounds.x, lineY, rightEdge, lineY);
+
+                String priceText = UIUtilities.quantityToRSDecimalStack(price, true);
+                g2d.setColor(config.getLabelColor());
+                int textWidth = fm.stringWidth(priceText);
+                g2d.drawString(priceText, bounds.x - textWidth - LABEL_PADDING,
+                        lineY + fm.getAscent() / 2);
             }
-
-            int lineY = calculateYPosition(price, bounds, priceRange);
-
-            g2d.setColor(config.getGridColor());
-            g2d.drawLine(bounds.x, lineY, rightEdge, lineY);
-
-            String priceText = UIUtilities.quantityToRSDecimalStack(price, true);
-            g2d.setColor(config.getLabelColor());
-            int textWidth = fm.stringWidth(priceText);
-            g2d.drawString(priceText, bounds.x - textWidth - LABEL_PADDING,
-                    lineY + fm.getAscent() / 2);
+            if (priceRange.max - price < tickInterval) {
+                break;
+            }
+            price += tickInterval;
         }
     }
 
@@ -405,11 +405,11 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         }
     }
 
-    private int calculateYPosition(int price, ChartBounds bounds, PriceRange priceRange) {
+    private int calculateYPosition(long price, ChartBounds bounds, PriceRange priceRange) {
         int bottomEdge = bounds.getBottomEdge();
-        int range = priceRange.getRange();
-        // Cast to long before multiplication to prevent overflow with large price ranges
-        return bottomEdge - (int) ((long) (price - priceRange.min) * bounds.height / range);
+        long range = priceRange.getRange();
+        // Scale to pixel coordinates without overflowing a long monetary range.
+        return bottomEdge - (int) ((double) (price - priceRange.min) * bounds.height / range);
     }
 
     private void drawDataSeries(Graphics2D g2d, ChartBounds bounds,
@@ -434,14 +434,14 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
             int xPos = bounds.x + (int) (timePercent * bounds.width);
 
             if (point.getAvgHighPrice() != null) {
-                int highPrice = point.getAvgHighPrice();
+                long highPrice = point.getAvgHighPrice();
                 highX[highCount] = xPos;
                 highY[highCount] = calculateYPosition(highPrice, bounds, priceRange);
                 highCount++;
             }
 
             if (point.getAvgLowPrice() != null) {
-                int lowPrice = point.getAvgLowPrice();
+                long lowPrice = point.getAvgLowPrice();
                 lowX[lowCount] = xPos;
                 lowY[lowCount] = calculateYPosition(lowPrice, bounds, priceRange);
                 lowCount++;
@@ -479,7 +479,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         g2d.fillPolygon(fillX, fillY, totalPoints);
     }
 
-    private void drawLine(Graphics2D g2d, int[] xPoints, int[] yPoints, int count, java.awt.Color color) {
+    private void drawLine(Graphics2D g2d, int[] xPoints, int[] yPoints, int count, Color color) {
         if (count <= 1) {
             return;
         }
@@ -559,7 +559,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         }
     }
 
-    public void setDataSeries(TimeseriesResponse timeseries, Timestep timestep, int offerPrice,
+    public void setDataSeries(TimeseriesResponse timeseries, Timestep timestep, long offerPrice,
             long maxTimeRangeSeconds) {
         this.timeseries = timeseries;
         this.timestep = timestep;
@@ -567,7 +567,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         this.maxTimeRangeSeconds = maxTimeRangeSeconds;
     }
 
-    public void setDataSeries(TimeseriesResponse timeseries, Timestep timestep, int offerPrice) {
+    public void setDataSeries(TimeseriesResponse timeseries, Timestep timestep, long offerPrice) {
         setDataSeries(timeseries, timestep, offerPrice, timestep.getMaxTimeRangeSeconds());
     }
 
@@ -648,7 +648,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         return timestep;
     }
 
-    public void setOfferPrice(int offerPrice) {
+    public void setOfferPrice(long offerPrice) {
         this.offerPrice = offerPrice;
     }
 
@@ -683,13 +683,19 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
      * Calculates the price value from a Y position on the chart.
      * This is the inverse of calculateYPosition.
      */
-    public int calculatePriceFromY(int mouseY, ChartBounds bounds, PriceRange priceRange) {
+    public long calculatePriceFromY(int mouseY, ChartBounds bounds, PriceRange priceRange) {
         int bottomEdge = bounds.getBottomEdge();
-        int range = priceRange.getRange();
+        if (mouseY <= bounds.y) {
+            return priceRange.max;
+        }
+        if (mouseY >= bottomEdge) {
+            return priceRange.min;
+        }
+        long range = priceRange.getRange();
         // Inverse of: y = bottomEdge - (price - min) * height / range
         // price = min + (bottomEdge - y) * range / height
-        // Use long arithmetic to prevent integer overflow with large price ranges
-        int price = priceRange.min + (int) ((long) (bottomEdge - mouseY) * range / bounds.height);
+        // Pixel positions are approximate; retain the interpolated monetary value as a long.
+        long price = priceRange.min + (long) ((double) (bottomEdge - mouseY) * range / bounds.height);
         return Math.max(0, price);
     }
 
@@ -698,7 +704,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
      * chart bounds.
      * Convenience overload for click handling.
      */
-    public int calculatePriceFromY(int mouseY, Rectangle chartBounds) {
+    public long calculatePriceFromY(int mouseY, Rectangle chartBounds) {
         if (!hasData()) {
             return 0;
         }
@@ -746,7 +752,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         g2d.drawLine(bounds.x, lineY, bounds.getRightEdge(), lineY);
 
         // Calculate and display the price at this Y position
-        int price = calculatePriceFromY(lineY, bounds, priceRange);
+        long price = calculatePriceFromY(lineY, bounds, priceRange);
         String priceText = UIUtilities.quantityToRSDecimalStack(price, false);
 
         g2d.setFont(config.getLabelFont());
