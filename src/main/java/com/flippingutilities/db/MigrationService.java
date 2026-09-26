@@ -210,7 +210,6 @@ public class MigrationService {
                     } catch (SQLException re) {
                         log.warn("Rollback failed for account {}", displayName, re);
                     }
-                    storage.invalidateAccountCache();
                     return null;
                 } finally {
                     try {

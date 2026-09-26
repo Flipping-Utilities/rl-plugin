@@ -20,7 +20,7 @@ import java.util.Map;
 
 /**
  * Recipe flip snapshots and their component persistence.
- * Instance methods run under the owning SqliteStorage monitor and share its connection.
+ * Instance methods run within the owning SqliteStorage monitor and transaction.
  * The static migration writer uses its caller's connection and transaction.
  */
 final class SqliteRecipeStore {
@@ -140,18 +140,8 @@ final class SqliteRecipeStore {
             if (recipeId == null) {
                 return;
             }
-            boolean wasAutoCommit = conn.getAutoCommit();
-            conn.setAutoCommit(false);
-            try {
-                deleteRecipeFlipsById(conn, Collections.singletonList(recipeId));
-                conn.commit();
-                logger.info("Deleted SQLite recipe flip {} for {}", naturalKey, displayName);
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(wasAutoCommit);
-            }
+            deleteRecipeFlipsById(conn, Collections.singletonList(recipeId));
+            logger.info("Deleted SQLite recipe flip {} for {}", naturalKey, displayName);
         } catch (SQLException e) {
             throw new IllegalStateException("Error deleting recipe flip ", e);
         }
@@ -189,18 +179,8 @@ final class SqliteRecipeStore {
             if (recipeIds.isEmpty()) {
                 return;
             }
-            boolean wasAutoCommit = conn.getAutoCommit();
-            conn.setAutoCommit(false);
-            try {
-                deleteRecipeFlipsById(conn, recipeIds);
-                conn.commit();
-                logger.info("Deleted {} SQLite recipe flips for {} [{}] since {}", recipeIds.size(), displayName, recipeKey, since);
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(wasAutoCommit);
-            }
+            deleteRecipeFlipsById(conn, recipeIds);
+            logger.info("Deleted {} SQLite recipe flips for {} [{}] since {}", recipeIds.size(), displayName, recipeKey, since);
         } catch (SQLException e) {
             throw new IllegalStateException("Error deleting recipe flips since ", e);
         }
@@ -232,17 +212,7 @@ final class SqliteRecipeStore {
         int accountId = storage.getOrCreateAccountId(displayName);
         try {
             Connection conn = storage.getConnection();
-            boolean wasAutoCommit = conn.getAutoCommit();
-            conn.setAutoCommit(false);
-            try {
-                insertRecipeFlip(conn, accountId, recipeKey, flip);
-                conn.commit();
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(wasAutoCommit);
-            }
+            insertRecipeFlip(conn, accountId, recipeKey, flip);
         } catch (SQLException e) {
             throw new IllegalStateException("Error persisting recipe flip", e);
         }

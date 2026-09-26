@@ -19,7 +19,7 @@ import java.util.Set;
 
 /**
  * Offer history and active slots, including their atomic update and deletion paths.
- * Called only while the owning SqliteStorage monitor is held; shares its connection.
+ * Called within the owning SqliteStorage monitor and transaction; shares its connection.
  */
 final class SqliteOfferStore {
     private static final Logger logger = LoggerFactory.getLogger(SqliteOfferStore.class);
@@ -233,35 +233,25 @@ final class SqliteOfferStore {
         int accountId = storage.getOrCreateAccountId(displayName);
         try {
             Connection conn = storage.getConnection();
-            boolean wasAutoCommit = conn.getAutoCommit();
-            conn.setAutoCommit(false);
-            try {
-                for (int i = 0; i < replacedUuids.size(); i += 500) {
-                    List<String> chunk = replacedUuids.subList(i, Math.min(i + 500, replacedUuids.size()));
-                    String placeholders = NamedStatement.placeholders("uuid", chunk.size());
-                    try (NamedStatement ps = NamedStatement.prepare(conn,
-                        "DELETE FROM trades WHERE account_id = :accountId AND uuid IN (" + placeholders + ")")) {
-                        bindAccountUuids(ps, accountId, chunk);
-                        ps.executeUpdate();
-                    }
+            for (int i = 0; i < replacedUuids.size(); i += 500) {
+                List<String> chunk = replacedUuids.subList(i, Math.min(i + 500, replacedUuids.size()));
+                String placeholders = NamedStatement.placeholders("uuid", chunk.size());
+                try (NamedStatement ps = NamedStatement.prepare(conn,
+                    "DELETE FROM trades WHERE account_id = :accountId AND uuid IN (" + placeholders + ")")) {
+                    bindAccountUuids(ps, accountId, chunk);
+                    ps.executeUpdate();
                 }
-                if (offer != null && offer.getCurrentQuantityInTrade() > 0) {
-                    // Accepted partials also retain a history snapshot. Future events remove
-                    // their exact predecessors; clearing a slot must not erase filled units.
-                    recordTrade(displayName, offer);
-                }
-                if (clearedSlot != null) {
-                    clearSlot(displayName, clearedSlot);
-                } else {
-                    upsertSlot(displayName, offer.getSlot(), offer, true);
-                    itemState.upsertItemVisibility(displayName, offer.getItemId(), true);
-                }
-                conn.commit();
-            } catch (SQLException | RuntimeException e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(wasAutoCommit);
+            }
+            if (offer != null && offer.getCurrentQuantityInTrade() > 0) {
+                // Accepted partials also retain a history snapshot. Future events remove
+                // their exact predecessors; clearing a slot must not erase filled units.
+                recordTrade(displayName, offer);
+            }
+            if (clearedSlot != null) {
+                clearSlot(displayName, clearedSlot);
+            } else {
+                upsertSlot(displayName, offer.getSlot(), offer, true);
+                itemState.upsertItemVisibility(displayName, offer.getItemId(), true);
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Error persisting offer history", e);
@@ -279,47 +269,37 @@ final class SqliteOfferStore {
         }
         try {
             Connection conn = storage.getConnection();
-            boolean wasAutoCommit = conn.getAutoCommit();
-            conn.setAutoCommit(false);
-            try {
-                for (int i = 0; i < uuids.size(); i += 500) {
-                    List<String> chunk = uuids.subList(i, Math.min(i + 500, uuids.size()));
-                    String placeholders = NamedStatement.placeholders("uuid", chunk.size());
-                    // Preserve active-slot continuity while hiding the deleted partial fill.
+            for (int i = 0; i < uuids.size(); i += 500) {
+                List<String> chunk = uuids.subList(i, Math.min(i + 500, uuids.size()));
+                String placeholders = NamedStatement.placeholders("uuid", chunk.size());
+                // Preserve active-slot continuity while hiding the deleted partial fill.
+                try (NamedStatement ps = NamedStatement.prepare(conn,
+                    "UPDATE active_slots SET history_visible = 0 WHERE account_id = :accountId AND offer_uuid IN (" + placeholders + ")")) {
+                    bindAccountUuids(ps, accountId, chunk);
+                    ps.executeUpdate();
+                }
+                Set<Long> recipeIds = new HashSet<>();
+                for (RecipeComponentTable table : RecipeComponentTable.values()) {
                     try (NamedStatement ps = NamedStatement.prepare(conn,
-                        "UPDATE active_slots SET history_visible = 0 WHERE account_id = :accountId AND offer_uuid IN (" + placeholders + ")")) {
+                        "SELECT DISTINCT c.recipe_flip_id FROM " + table.tableName() + " c " +
+                        "JOIN recipe_flips rf ON rf.id = c.recipe_flip_id " +
+                        "WHERE rf.account_id = :accountId AND c.offer_uuid IN (" + placeholders + ")")) {
                         bindAccountUuids(ps, accountId, chunk);
-                        ps.executeUpdate();
-                    }
-                    Set<Long> recipeIds = new HashSet<>();
-                    for (RecipeComponentTable table : RecipeComponentTable.values()) {
-                        try (NamedStatement ps = NamedStatement.prepare(conn,
-                            "SELECT DISTINCT c.recipe_flip_id FROM " + table.tableName() + " c " +
-                            "JOIN recipe_flips rf ON rf.id = c.recipe_flip_id " +
-                            "WHERE rf.account_id = :accountId AND c.offer_uuid IN (" + placeholders + ")")) {
-                            bindAccountUuids(ps, accountId, chunk);
-                            try (ResultSet rs = ps.executeQuery()) {
-                                while (rs.next()) {
-                                    recipeIds.add(rs.getLong(1));
-                                }
+                        try (ResultSet rs = ps.executeQuery()) {
+                            while (rs.next()) {
+                                recipeIds.add(rs.getLong(1));
                             }
                         }
                     }
-                    recipes.deleteRecipeFlipsById(conn, new ArrayList<>(recipeIds));
-                    try (NamedStatement ps = NamedStatement.prepare(conn,
-                        "DELETE FROM trades WHERE account_id = :accountId AND uuid IN (" + placeholders + ")")) {
-                        bindAccountUuids(ps, accountId, chunk);
-                        ps.executeUpdate();
-                    }
                 }
-                conn.commit();
-                logger.info("Deleted SQLite offers by uuid for {}", displayName);
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(wasAutoCommit);
+                recipes.deleteRecipeFlipsById(conn, new ArrayList<>(recipeIds));
+                try (NamedStatement ps = NamedStatement.prepare(conn,
+                    "DELETE FROM trades WHERE account_id = :accountId AND uuid IN (" + placeholders + ")")) {
+                    bindAccountUuids(ps, accountId, chunk);
+                    ps.executeUpdate();
+                }
             }
+            logger.info("Deleted SQLite offers by uuid for {}", displayName);
         } catch (SQLException e) {
             throw new IllegalStateException("Error deleting trades by uuid", e);
         }

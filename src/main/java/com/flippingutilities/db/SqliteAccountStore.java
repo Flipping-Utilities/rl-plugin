@@ -18,21 +18,18 @@ import java.util.Map;
 
 /**
  * Account identity, session state, account reconstruction, and whole-account deletion.
- * Called only while the owning SqliteStorage monitor is held; shares its connection.
+ * Called within the owning SqliteStorage monitor and transaction; shares its connection.
  */
 final class SqliteAccountStore {
     private static final Logger logger = LoggerFactory.getLogger(SqliteAccountStore.class);
 
     private final SqliteStorage storage;
-    private final Map<String, Integer> accountIdCache;
     private final SqliteOfferStore offers;
     private final SqliteRecipeStore recipes;
     private final SqliteItemStateStore itemState;
 
-    SqliteAccountStore(SqliteStorage storage, Map<String, Integer> accountIdCache,
-                       SqliteOfferStore offers, SqliteRecipeStore recipes, SqliteItemStateStore itemState) {
+    SqliteAccountStore(SqliteStorage storage, SqliteOfferStore offers, SqliteRecipeStore recipes, SqliteItemStateStore itemState) {
         this.storage = storage;
-        this.accountIdCache = accountIdCache;
         this.offers = offers;
         this.recipes = recipes;
         this.itemState = itemState;
@@ -60,8 +57,6 @@ final class SqliteAccountStore {
                 ps.bind("sessionStart", Instant.now().toEpochMilli());
                 ps.executeUpdate();
             }
-            // Invalidate cache; next getAccountId() will repopulate with the upserted row.
-            accountIdCache.remove(displayName);
         } catch (SQLException e) {
             throw new IllegalStateException("Error upserting account", e);
         }
@@ -164,10 +159,6 @@ final class SqliteAccountStore {
     }
 
     Integer getAccountId(String displayName) {
-        Integer cached = accountIdCache.get(displayName);
-        if (cached != null) {
-            return cached;
-        }
         final String sql = "SELECT id FROM accounts WHERE display_name = :displayName";
         try {
             Connection conn = storage.getConnection();
@@ -175,9 +166,7 @@ final class SqliteAccountStore {
                 ps.bind("displayName", displayName);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
-                        Integer id = rs.getInt("id");
-                        accountIdCache.put(displayName, id);
-                        return id;
+                        return rs.getInt("id");
                     }
                 }
             }
@@ -220,33 +209,22 @@ final class SqliteAccountStore {
         }
         try {
             Connection conn = storage.getConnection();
-            boolean wasAutoCommit = conn.getAutoCommit();
-            conn.setAutoCommit(false);
-            try {
-                for (RecipeComponentTable table : RecipeComponentTable.values()) {
-                    execDelete(conn, "DELETE FROM " + table.tableName() + " WHERE recipe_flip_id IN " +
-                        "(SELECT id FROM recipe_flips WHERE account_id = :accountId)", accountId);
-                }
-                execDelete(conn, "DELETE FROM recipe_flips WHERE account_id = :accountId", accountId);
-                execDelete(conn, "DELETE FROM trades WHERE account_id = :accountId", accountId);
-                execDelete(conn, "DELETE FROM ge_limit_state WHERE account_id = :accountId", accountId);
-                execDelete(conn, "DELETE FROM active_slots WHERE account_id = :accountId", accountId);
-                execDelete(conn, "DELETE FROM item_favorites WHERE account_id = :accountId", accountId);
-                execDelete(conn, "DELETE FROM item_visibility WHERE account_id = :accountId", accountId);
-                try (NamedStatement ps = NamedStatement.prepare(conn, "DELETE FROM settings WHERE key = :key")) {
-                    ps.bind("key", SqliteSettings.accountMigrationKey(displayName));
-                    ps.executeUpdate();
-                }
-                execDelete(conn, "DELETE FROM accounts WHERE id = :accountId", accountId);
-                conn.commit();
-                accountIdCache.remove(displayName);
-                logger.info("Deleted all SQLite data for account {}", displayName);
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(wasAutoCommit);
+            for (RecipeComponentTable table : RecipeComponentTable.values()) {
+                execDelete(conn, "DELETE FROM " + table.tableName() + " WHERE recipe_flip_id IN " +
+                    "(SELECT id FROM recipe_flips WHERE account_id = :accountId)", accountId);
             }
+            execDelete(conn, "DELETE FROM recipe_flips WHERE account_id = :accountId", accountId);
+            execDelete(conn, "DELETE FROM trades WHERE account_id = :accountId", accountId);
+            execDelete(conn, "DELETE FROM ge_limit_state WHERE account_id = :accountId", accountId);
+            execDelete(conn, "DELETE FROM active_slots WHERE account_id = :accountId", accountId);
+            execDelete(conn, "DELETE FROM item_favorites WHERE account_id = :accountId", accountId);
+            execDelete(conn, "DELETE FROM item_visibility WHERE account_id = :accountId", accountId);
+            try (NamedStatement ps = NamedStatement.prepare(conn, "DELETE FROM settings WHERE key = :key")) {
+                ps.bind("key", SqliteSettings.accountMigrationKey(displayName));
+                ps.executeUpdate();
+            }
+            execDelete(conn, "DELETE FROM accounts WHERE id = :accountId", accountId);
+            logger.info("Deleted all SQLite data for account {}", displayName);
         } catch (SQLException e) {
             throw new IllegalStateException("Error deleting account data", e);
         }

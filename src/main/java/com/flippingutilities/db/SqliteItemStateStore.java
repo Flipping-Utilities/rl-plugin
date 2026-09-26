@@ -12,7 +12,7 @@ import java.util.Map;
 
 /**
  * Favorites, item visibility, and GE limit state independent of retained offer history.
- * Called only while the owning SqliteStorage monitor is held; shares its connection.
+ * Called within the owning SqliteStorage monitor and transaction; shares its connection.
  */
 final class SqliteItemStateStore {
     static final String IS_FAVORITE = "isFavorite";

@@ -291,8 +291,6 @@ final class StorageController {
                 storage.close();
                 deleteSqliteFiles(storage);
                 storage.initializeSchema();
-                // The accounts table was recreated empty; stale cached ids would FK-violate.
-                storage.invalidateAccountCache();
                 reloadAfterMaintenance(storage);
             }
         } catch (Exception e) {
