@@ -232,11 +232,12 @@ public class AccountData {
         // Restore timer state from the persisted last offers. The JSON backend serializes the
         // timers themselves, but the SQLite backend only persists the offers — without this
         // wiring the GE slot timers are blank after every restart in SQLite mode. Timers that
-        // already carry an offer (JSON path) are left untouched.
+        // already carry an offer (JSON path) are left untouched. Completed offers keep
+        // their fixed start-to-completion duration until the slot is collected.
         if (lastOffers != null) {
             for (Map.Entry<Integer, OfferEvent> entry : lastOffers.entrySet()) {
                 OfferEvent offer = entry.getValue();
-                if (offer == null || offer.isComplete() || offer.isCausedByEmptySlot()) {
+                if (offer == null || offer.isCausedByEmptySlot()) {
                     continue;
                 }
                 int slotIndex = entry.getKey();

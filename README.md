@@ -133,15 +133,12 @@ Quickly lookup your favorited items just by typing "1" in the ge search!
 This section will talk about the purpose of various parts of the codebase, specifically the folders.
 
 **controller/**
-- This folder contains the components that handle some specific responsibility of the plugin, mainly by handling runelite
-  events (such as new GE offers) or presenting APIs to alter/view user data. Each class in this folder is instantiated
-  by the FlippingPlugin in its `startUp` method, which is run on client startup. Each of these classes handles a specific
-  responsibility of the plugin. For example, the `NewOfferEventPipelineHandler` is responsible for consuming new offer
-  events and adding it to the data structures that model a user's trade history. The classes are used via the FlippingPlugin
-  calling their methods. For example, when the FlippingPlugin gets an offer event in the `onGrandExchangeOfferChanged`
-  method it calls `newOfferEventPipelineHandler.onGrandExchangeOfferChanged(newOffer);`.
-  Much of the logic in these controller classes used to live in the FlippingPlugin class but was moved out as the
-  FlippingPlugin class had become huge and was doing too many things.
+- `FlippingPlugin` wires the plugin lifecycle, RuneLite events, jobs and UI to domain handlers.
+  `StorageController` owns backend switching, ordered SQLite work, recovery and maintenance.
+  `TradeHistoryHandler`, `FavoriteHandler`, `RecipeFlipHandler`, `AccountViewHandler` and
+  `SessionTimeHandler` handle their respective account operations. `NewOfferEventPipelineHandler`
+  consumes live GE events. Public methods on `FlippingPlugin` delegate to these handlers so
+  existing UI and job callers keep the same entry points.
 
 
 **model/**
@@ -151,8 +148,10 @@ This section will talk about the purpose of various parts of the codebase, speci
 
 
 **db/**
-- This folder contains the class responsible for taking the models and saving them
-  to disk as JSON. It also loads JSON from disk (previously saved) and turns them into objects.
+- `TradePersister` reads and writes JSON. `SqliteStorage` owns the SQLite connection, schema,
+  settings and recovery marker, and delegates to account, offer, recipe and item-state stores.
+  Its synchronized entry points keep those stores on the same connection and transaction boundary.
+  `OfferJsonCodec` handles persisted offer snapshots; `MigrationService` imports JSON accounts.
 
 **ui/**
 - This folder contains all the UI code for the plugin which is the code that draws the "plugin" you see, such as the slots

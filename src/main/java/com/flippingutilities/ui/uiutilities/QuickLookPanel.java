@@ -9,9 +9,12 @@ import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.util.QuantityFormatter;
 
-import javax.swing.*;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Font;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -88,9 +91,9 @@ public class QuickLookPanel extends JPanel {
             Arrays.asList(wikiInstaBuy, wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setText("No data"));
             return;
         }
-        Map<Integer, JLabel> wikiMarginToLabel = new HashMap<>();
-        wikiMarginToLabel.put(wikiItemInfo.getHighCapped(), wikiInstaBuy);
-        wikiMarginToLabel.put(wikiItemInfo.getLowCapped(), wikiInstaSell);
+        Map<Long, JLabel> wikiMarginToLabel = new HashMap<>();
+        wikiMarginToLabel.put(wikiItemInfo.getHigh(), wikiInstaBuy);
+        wikiMarginToLabel.put(wikiItemInfo.getLow(), wikiInstaSell);
 
         wikiInstaBuyAge.setText(wikiItemInfo.getHighTime() == null || wikiItemInfo.getHighTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getHighTime())));
         wikiInstaSellAge.setText(wikiItemInfo.getLowTime() == null || wikiItemInfo.getLowTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getLowTime())));
@@ -100,10 +103,8 @@ public class QuickLookPanel extends JPanel {
         toMakeOfferCompetitiveTest.setText("");
         offerCompetitivenessText.setText("");
 
-        // Competitiveness compares against the offer price, which cannot exceed max cash;
-        // capped wiki values keep the comparison and label lookups consistent.
-        int max = Math.max(wikiItemInfo.getHighCapped(), wikiItemInfo.getLowCapped());
-        int min = Math.min(wikiItemInfo.getHighCapped(), wikiItemInfo.getLowCapped());
+        long max = Math.max(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
+        long min = Math.min(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
 
         if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
             UIUtilities.recolorLabel(wikiMarginToLabel.get(max), ColorScheme.GRAND_EXCHANGE_PRICE);

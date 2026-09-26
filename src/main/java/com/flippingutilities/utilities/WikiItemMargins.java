@@ -4,12 +4,11 @@ import com.google.gson.annotations.JsonAdapter;
 import lombok.Data;
 
 /**
- * Latest prices for one item from the wiki API (v2 /osrs/latest).
+ * Latest prices for one item from the wiki API.
  *
- * The wiki states prices may exceed 32 bit integers (over max cash), so high/low are Long.
- * A null high/low means the wiki has never seen that side traded; consumers that need an
- * int (offer prices, GE listings cannot exceed max cash) use the saturating capped
- * accessors.
+ * Prices retain the full long range. Null prices mean that the wiki has not seen that
+ * side traded; hasHigh/hasLow distinguish missing prices while the price getters return
+ * zero for consumers that compare market prices with offers.
  */
 @Data
 public class WikiItemMargins {
@@ -35,23 +34,13 @@ public class WikiItemMargins {
         return low != null && low > 0;
     }
 
-    /**
-     * The instant-buy price saturated into an int (GE offers cannot exceed max cash, so
-     * clamping preserves comparison semantics). 0 when the wiki has no data.
-     */
-    public int getHighCapped() {
-        return cap(high);
+    /** The instant-buy price, or zero when the wiki has no data. */
+    public long getHigh() {
+        return high == null ? 0 : high;
     }
 
-    /** The instant-sell price saturated into an int; 0 when the wiki has no data. */
-    public int getLowCapped() {
-        return cap(low);
-    }
-
-    private static int cap(Long value) {
-        if (value == null) {
-            return 0;
-        }
-        return (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, value));
+    /** The instant-sell price, or zero when the wiki has no data. */
+    public long getLow() {
+        return low == null ? 0 : low;
     }
 }

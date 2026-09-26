@@ -13,7 +13,7 @@ import java.awt.Color;
 @Builder
 @AllArgsConstructor
 public class HorizontalMarker implements ChartMarker {
-    private final int price;
+    private final long price;
     private final String label;
     private final Color lineColor;
     private final Color fillColor;
@@ -24,7 +24,7 @@ public class HorizontalMarker implements ChartMarker {
     /**
      * Creates a horizontal marker for the offer price (solid line with label).
      */
-    public static HorizontalMarker offerPrice(int price, String label, Color lineColor) {
+    public static HorizontalMarker offerPrice(long price, String label, Color lineColor) {
         return HorizontalMarker.builder()
                 .price(price)
                 .label(label)
@@ -39,7 +39,7 @@ public class HorizontalMarker implements ChartMarker {
     /**
      * Creates a horizontal marker for tax threshold (dashed line).
      */
-    public static HorizontalMarker taxThreshold(int price, String label, Color lineColor) {
+    public static HorizontalMarker taxThreshold(long price, String label, Color lineColor) {
         return HorizontalMarker.builder()
                 .price(price)
                 .label(label)
@@ -54,7 +54,7 @@ public class HorizontalMarker implements ChartMarker {
     /**
      * Creates a horizontal marker for desired price.
      */
-    public static HorizontalMarker desiredPrice(int price, String label, Color lineColor) {
+    public static HorizontalMarker desiredPrice(long price, String label, Color lineColor) {
         return HorizontalMarker.builder()
                 .price(price)
                 .label(label)

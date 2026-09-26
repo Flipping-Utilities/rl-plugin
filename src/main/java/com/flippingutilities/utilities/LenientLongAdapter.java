@@ -1,11 +1,14 @@
 package com.flippingutilities.utilities;
 
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.TypeAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
  * Reads wiki API price/timestamp fields leniently:
@@ -14,9 +17,8 @@ import java.io.IOException;
  * - numbers encoded as JSON strings,
  * - null (latest prices are null for sides the wiki has never seen traded).
  *
- * Wiki v2 prices may exceed what a 32 bit integer can hold (over max cash), so the model
- * fields are Long and no information is lost on parse; consumers that need an int use the
- * saturating capped accessors.
+ * Integer prices retain their full long precision. Fractional average prices truncate
+ * toward zero because the plugin displays whole gp.
  */
 public class LenientLongAdapter extends TypeAdapter<Long> {
     @Override
@@ -35,27 +37,15 @@ public class LenientLongAdapter extends TypeAdapter<Long> {
             in.nextNull();
             return null;
         }
-        if (token == JsonToken.STRING) {
-            String s = in.nextString();
-            if (s == null || s.trim().isEmpty()) {
+        if (token == JsonToken.STRING || token == JsonToken.NUMBER) {
+            String value = in.nextString().trim();
+            if (value.isEmpty()) {
                 return null;
             }
             try {
-                return Long.parseLong(s.trim());
-            } catch (NumberFormatException ignored) {
-                try {
-                    return (long) Double.parseDouble(s.trim());
-                } catch (NumberFormatException e) {
-                    throw new com.google.gson.JsonSyntaxException("Unparseable price value: " + s, e);
-                }
-            }
-        }
-        if (token == JsonToken.NUMBER) {
-            try {
-                return in.nextLong();
-            } catch (NumberFormatException decimal) {
-                // Decimal average price: truncate toward zero (sub-gp precision is noise).
-                return (long) in.nextDouble();
+                return new BigDecimal(value).setScale(0, RoundingMode.DOWN).longValueExact();
+            } catch (NumberFormatException | ArithmeticException e) {
+                throw new JsonSyntaxException("Unparseable price value: " + value, e);
             }
         }
         in.skipValue();

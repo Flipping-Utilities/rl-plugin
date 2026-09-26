@@ -9,14 +9,25 @@ import com.flippingutilities.model.RecipeFlipGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Types;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+
+import static com.flippingutilities.db.SqliteBindings.bind;
 
 /**
  * Service to migrate data from JSON-based storage to SQLite.
@@ -54,7 +65,7 @@ public class MigrationService {
      */
     public int migrate() {
         storage.initializeSchema();
-        if ("true".equalsIgnoreCase(storage.getSetting("migration_completed"))) {
+        if (storage.getBooleanSetting(SqliteSettings.MIGRATION_COMPLETED)) {
             return 0;
         }
         return migrate(tradePersister.loadAllAccountsForMigration());
@@ -63,24 +74,69 @@ public class MigrationService {
     /** Imports a previously read snapshot so a rebuild cannot reread a changed source. */
     public int migrate(Map<String, AccountData> accounts) {
         Objects.requireNonNull(accounts, "Account snapshot is required");
-        log.info("Starting JSON -> SQLite migration...");
-        long startTime = System.currentTimeMillis();
         storage.initializeSchema();
 
         // Idempotency guard: never re-run a completed migration.
-        if ("true".equalsIgnoreCase(storage.getSetting("migration_completed"))) {
+        if (storage.getBooleanSetting(SqliteSettings.MIGRATION_COMPLETED)) {
             log.info("Migration already completed; skipping.");
             return 0;
         }
 
-        // Best-effort pre-migration backup so a botched run can be restored.
-        createPreMigrationBackup();
+        // Additive import can still proceed if a backup cannot be created. Destructive
+        // rebuild/regeneration must let the same failure abort before deleting data.
+        try {
+            createPreMigrationBackup();
+        } catch (IllegalStateException e) {
+            log.warn("Could not create pre-migration backup (continuing additive import): {}", e.getMessage());
+        }
+        return importAccounts(accounts);
+    }
+
+    /** Replaces SQLite account data from one snapshot, backing up before any account is cleared. */
+    public int rebuild(Map<String, AccountData> accounts) {
+        Objects.requireNonNull(accounts, "Account snapshot is required");
+        synchronized (storage) {
+            storage.initializeSchema();
+            storage.markOutOfSync();
+            createPreMigrationBackup();
+            for (String displayName : storage.listAccounts()) {
+                storage.deleteAccountData(displayName);
+            }
+            storage.clearSetting(SqliteSettings.MIGRATION_COMPLETED);
+            storage.clearSetting(SqliteSettings.MIGRATION_COMPLETED_AT);
+        }
+        return importAccounts(accounts);
+    }
+
+    /** Recreates the SQLite files for maintenance after preserving their populated contents. */
+    public int regenerate(Map<String, AccountData> accounts) {
+        Objects.requireNonNull(accounts, "Account snapshot is required");
+        synchronized (storage) {
+            storage.markOutOfSync();
+            createPreMigrationBackup();
+            storage.close();
+            File dbFile = storage.getDbFile();
+            try {
+                Files.deleteIfExists(dbFile.toPath());
+                Files.deleteIfExists(new File(dbFile.getPath() + "-wal").toPath());
+                Files.deleteIfExists(new File(dbFile.getPath() + "-shm").toPath());
+            } catch (IOException e) {
+                throw new IllegalStateException("Could not recreate SQLite database", e);
+            }
+            storage.initializeSchema();
+        }
+        return importAccounts(accounts);
+    }
+
+    private int importAccounts(Map<String, AccountData> accounts) {
+        log.info("Starting JSON -> SQLite migration...");
+        long startTime = System.currentTimeMillis();
 
         if (accounts.isEmpty()) {
             log.info("No account data found to migrate.");
             // Nothing to migrate; mark complete so we don't keep retrying.
-            storage.setSetting("migration_completed", "true");
-            storage.setSetting("migration_completed_at", Instant.now().toString());
+            storage.setBooleanSetting(SqliteSettings.MIGRATION_COMPLETED, true);
+            storage.setSetting(SqliteSettings.MIGRATION_COMPLETED_AT, Instant.now().toString());
             return 0;
         }
 
@@ -96,7 +152,7 @@ public class MigrationService {
 
             // Per-account idempotency: skip accounts that have already been migrated.
             // Combined with INSERT OR IGNORE + UNIQUE constraints this makes re-runs safe.
-            if (storage.getSetting("migrated_" + displayName) != null) {
+            if (storage.getSetting(SqliteSettings.accountMigrationKey(displayName)) != null) {
                 log.debug("Account {} already migrated; skipping.", displayName);
                 accountsSkipped++;
                 continue;
@@ -116,8 +172,8 @@ public class MigrationService {
         // (prior run). Otherwise leave migration_completed unset so the next startup retries
         // the failed accounts (the migration_pending flag is preserved by the caller).
         if (accountsFailed == 0 && accountsMigrated + accountsSkipped == accounts.size()) {
-            storage.setSetting("migration_completed", "true");
-            storage.setSetting("migration_completed_at", Instant.now().toString());
+            storage.setBooleanSetting(SqliteSettings.MIGRATION_COMPLETED, true);
+            storage.setSetting(SqliteSettings.MIGRATION_COMPLETED_AT, Instant.now().toString());
         } else {
             log.warn("Migration incomplete: {}/{} accounts migrated, {} failed. Will retry on next startup.",
                 accountsMigrated, accounts.size(), accountsFailed);
@@ -157,7 +213,6 @@ public class MigrationService {
                     } catch (SQLException re) {
                         log.warn("Rollback failed for account {}", displayName, re);
                     }
-                    storage.invalidateAccountCache();
                     return null;
                 } finally {
                     try {
@@ -174,20 +229,23 @@ public class MigrationService {
     }
 
     /**
-     * Best-effort snapshot of the SQLite DB before migration. Uses VACUUM INTO so the live
-     * connection is not disturbed. Failures are logged but do not block migration.
+     * Snapshot the SQLite DB before migration. Uses VACUUM INTO so the live connection is
+     * not disturbed. Destructive callers must abort if the backup cannot be created.
      */
     private void createPreMigrationBackup() {
-        try {
-            java.io.File dbFile = storage.getDbFile();
-            String backupPath = dbFile.getAbsolutePath() + ".pre-migration-" + System.currentTimeMillis() + ".db";
-            Connection vacuumConn = storage.getConnection();
-            try (Statement stmt = vacuumConn.createStatement()) {
-                stmt.execute("VACUUM INTO '" + backupPath.replace("'", "''") + "'");
-                log.info("Created pre-migration backup at {}", backupPath);
+        synchronized (storage) {
+            try {
+                File dbFile = storage.getDbFile();
+                String backupPath = dbFile.getAbsolutePath() + ".pre-migration-" + System.currentTimeMillis()
+                    + "-" + UUID.randomUUID() + ".db";
+                Connection vacuumConn = storage.getConnection();
+                try (Statement stmt = vacuumConn.createStatement()) {
+                    stmt.execute("VACUUM INTO '" + backupPath.replace("'", "''") + "'");
+                    log.info("Created pre-migration backup at {}", backupPath);
+                }
+            } catch (Exception e) {
+                throw new IllegalStateException("Could not create SQLite pre-migration backup", e);
             }
-        } catch (Exception e) {
-            log.warn("Could not create pre-migration backup (continuing anyway): {}", e.getMessage());
         }
     }
 
@@ -212,7 +270,7 @@ public class MigrationService {
         }
 
         // Get or create account ID
-        int accountId = getOrCreateAccountId(conn, displayName);
+        int accountId = storage.getOrCreateAccountId(displayName);
 
         // Preserve session time from JSON into the accounts row (getOrCreateAccountId
         // initializes accumulated_time to 0; update it from the source AccountData).
@@ -255,7 +313,7 @@ public class MigrationService {
                 long timestamp = offer.getTime() != null ? offer.getTime().toEpochMilli() : Instant.now().toEpochMilli();
                 // Recipe components retain consumption separately from the original trade.
                 int qty = offer.getCurrentQuantityInTrade();
-                int price = offer.getPreTaxPrice();
+                long price = offer.getPreTaxPrice();
                 boolean isBuy = offer.isBuy();
                 tradesToInsert.add(new TradeRecord(accountId, item.getItemId(), offer.getUuid(), timestamp, qty, price, isBuy, SqliteStorage.serializeOffer(offer)));
 
@@ -264,7 +322,7 @@ public class MigrationService {
 
             Instant resetTime = item.getGeLimitResetTime();
             if (resetTime != null && !Instant.EPOCH.equals(resetTime)) {
-                upsertGeLimitStateBatched(conn, accountId, item.getItemId(), resetTime,
+                storage.upsertGeLimitState(displayName, item.getItemId(), resetTime,
                     item.getItemsBoughtThisLimitWindow(),
                     item.getHistory().getItemsBoughtThroughCompleteOffers());
             }
@@ -293,7 +351,7 @@ public class MigrationService {
             for (Map.Entry<Integer, OfferEvent> slotEntry : lastOffers.entrySet()) {
                 int slotIndex = slotEntry.getKey();
                 OfferEvent offer = slotEntry.getValue();
-                if (offer != null && !offer.isComplete() && !offer.isCausedByEmptySlot()) {
+                if (offer != null && !offer.isCausedByEmptySlot()) {
                     storage.upsertSlot(displayName, slotIndex, offer, historyOfferUuids.contains(offer.getUuid()));
                 }
             }
@@ -304,52 +362,15 @@ public class MigrationService {
         migrateFavoritesForAccount(displayName, accountData);
 
         // Store migration metadata
-        storage.setSetting("migrated_" + displayName, Instant.now().toString());
+        storage.setSetting(SqliteSettings.accountMigrationKey(displayName), Instant.now().toString());
 
         return new int[]{tradesCount, recipeFlipsCount};
-    }
-
-    private int getOrCreateAccountId(Connection conn, String displayName) throws SQLException {
-        // Try to get existing account ID
-        String selectSql = "SELECT id FROM accounts WHERE display_name = ?";
-        try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
-            ps.setString(1, displayName);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt(1);
-                }
-            }
-        }
-
-        // Create new account. player_id is left NULL: there is no RuneLite API that exposes
-        // the in-game account ID today. Clobbering it with the display name (as before) would
-        // lose the ability to track accounts across name changes.
-        String insertSql = "INSERT INTO accounts (display_name, player_id, session_start, accumulated_time) VALUES (?, NULL, ?, ?)";
-        long now = Instant.now().toEpochMilli();
-        try (PreparedStatement ps = conn.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, displayName);
-            ps.setLong(2, now);
-            ps.setLong(3, 0L);
-            ps.executeUpdate();
-            try (ResultSet rs = ps.getGeneratedKeys()) {
-                if (rs.next()) {
-                    return rs.getInt(1);
-                }
-            }
-        }
-        throw new SQLException("Failed to create account for displayName=" + displayName);
     }
 
     private void updateAccountSessionTime(Connection conn, int accountId, long accumulatedMillis, Instant sessionStart) throws SQLException {
         String sql = "UPDATE accounts SET accumulated_time = ?, session_start = ? WHERE id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, accumulatedMillis);
-            if (sessionStart != null) {
-                ps.setLong(2, sessionStart.toEpochMilli());
-            } else {
-                ps.setNull(2, Types.INTEGER);
-            }
-            ps.setInt(3, accountId);
+            bind(ps, accumulatedMillis, sessionStart == null ? null : sessionStart.toEpochMilli(), accountId);
             ps.executeUpdate();
         }
     }
@@ -361,18 +382,8 @@ public class MigrationService {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             int count = 0;
             for (TradeRecord trade : trades) {
-                ps.setInt(1, trade.accountId);
-                ps.setInt(2, trade.itemId);
-                if (trade.uuid == null) {
-                    ps.setNull(3, Types.VARCHAR);
-                } else {
-                    ps.setString(3, trade.uuid);
-                }
-                ps.setLong(4, trade.timestamp);
-                ps.setInt(5, trade.qty);
-                ps.setInt(6, trade.price);
-                ps.setInt(7, trade.isBuy ? 1 : 0);
-                ps.setString(8, trade.offerJson);
+                bind(ps, trade.accountId, trade.itemId, trade.uuid, trade.timestamp,
+                    trade.qty, trade.price, trade.isBuy, trade.offerJson);
                 ps.addBatch();
                 count++;
 
@@ -383,19 +394,6 @@ public class MigrationService {
             if (count % BATCH_SIZE != 0) {
                 ps.executeBatch();
             }
-        }
-    }
-
-    private void upsertGeLimitStateBatched(Connection conn, int accountId, int itemId, Instant nextRefresh,
-                                           int itemsBought, int itemsBoughtThroughCompleteOffers) throws SQLException {
-        String sql = "INSERT OR REPLACE INTO ge_limit_state (account_id, item_id, next_refresh, items_bought, items_bought_complete) VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, accountId);
-            ps.setInt(2, itemId);
-            ps.setLong(3, nextRefresh.toEpochMilli());
-            ps.setInt(4, itemsBought);
-            ps.setInt(5, itemsBoughtThroughCompleteOffers);
-            ps.executeUpdate();
         }
     }
 
@@ -480,11 +478,11 @@ public class MigrationService {
 
         int count = 0;
         for (FlippingItem item : items) {
-            // Only persist actual favorites. The previous predicate
-            // `isFavorite() || !"1".equals(getFavoriteCode())` erroneously migrated any item
-            // whose code wasn't the default "1" (including null), polluting the table.
-            if (item.isFavorite()) {
-                storage.upsertFavorite(displayName, item.getItemId(), true, item.getFavoriteCode());
+            // Unfavoriting retains a custom code for the next time the item is favorited.
+            // Null/default codes on unfavorited items need no separate favorite row.
+            String favoriteCode = item.getFavoriteCode();
+            if (item.isFavorite() || (favoriteCode != null && !FlippingItem.DEFAULT_FAVORITE_CODE.equals(favoriteCode))) {
+                storage.upsertFavorite(displayName, item.getItemId(), item.isFavorite(), favoriteCode);
                 count++;
             }
         }
@@ -498,11 +496,11 @@ public class MigrationService {
         final String uuid;
         final long timestamp;
         final int qty;
-        final int price;
+        final long price;
         final boolean isBuy;
         final String offerJson;
 
-        TradeRecord(int accountId, int itemId, String uuid, long timestamp, int qty, int price, boolean isBuy, String offerJson) {
+        TradeRecord(int accountId, int itemId, String uuid, long timestamp, int qty, long price, boolean isBuy, String offerJson) {
             this.accountId = accountId;
             this.itemId = itemId;
             this.uuid = uuid;

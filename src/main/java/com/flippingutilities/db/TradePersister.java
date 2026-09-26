@@ -31,7 +31,11 @@ import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.google.gson.Gson;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.TypeAdapter;
 import com.google.gson.annotations.Expose;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +43,7 @@ import net.runelite.client.RuneLite;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.BufferedWriter;
@@ -46,7 +51,9 @@ import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,20 +79,20 @@ public class TradePersister
 	 * EMPTY account, and the next save overwrote years of data with the empty state.
 	 * Writes the current number format.
 	 */
-	private static final com.google.gson.TypeAdapter<Instant> LEGACY_INSTANT =
-		new com.google.gson.TypeAdapter<Instant>() {
+	private static final TypeAdapter<Instant> LEGACY_INSTANT =
+		new TypeAdapter<Instant>() {
 			@Override
-			public void write(com.google.gson.stream.JsonWriter out, Instant value) throws java.io.IOException {
+			public void write(JsonWriter out, Instant value) throws IOException {
 				if (value == null) { out.nullValue(); return; }
 				out.value(value.toEpochMilli());
 			}
 
 			@Override
-			public Instant read(com.google.gson.stream.JsonReader in) throws java.io.IOException {
-				com.google.gson.stream.JsonToken token = in.peek();
-				if (token == com.google.gson.stream.JsonToken.NULL) { in.nextNull(); return null; }
-				if (token == com.google.gson.stream.JsonToken.NUMBER) { return Instant.ofEpochMilli(in.nextLong()); }
-				if (token == com.google.gson.stream.JsonToken.STRING) {
+			public Instant read(JsonReader in) throws IOException {
+				JsonToken token = in.peek();
+				if (token == JsonToken.NULL) { in.nextNull(); return null; }
+				if (token == JsonToken.NUMBER) { return Instant.ofEpochMilli(in.nextLong()); }
+				if (token == JsonToken.STRING) {
 					String s = in.nextString();
 					if (s == null || s.trim().isEmpty()) { return null; }
 					try {
@@ -94,11 +101,11 @@ public class TradePersister
 						try {
 							return Instant.ofEpochMilli(Long.parseLong(s.trim()));
 						} catch (NumberFormatException nfe) {
-							throw new com.google.gson.JsonSyntaxException("Unparseable Instant: " + s, nfe);
+							throw new JsonSyntaxException("Unparseable Instant: " + s, nfe);
 						}
 					}
 				}
-				if (token == com.google.gson.stream.JsonToken.BEGIN_OBJECT) {
+				if (token == JsonToken.BEGIN_OBJECT) {
 					long seconds = 0;
 					int nanos = 0;
 					in.beginObject();
@@ -255,10 +262,10 @@ public class TradePersister
 	}
 
 	private AccountData readAccountSnapshot(File file) throws IOException {
-		try (java.io.BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8);
-			com.google.gson.stream.JsonReader json = new com.google.gson.stream.JsonReader(reader)) {
+		try (BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8);
+			JsonReader json = new JsonReader(reader)) {
 			AccountData data = gson.fromJson(json, AccountData.class);
-			if (data == null || json.peek() != com.google.gson.stream.JsonToken.END_DOCUMENT) {
+			if (data == null || json.peek() != JsonToken.END_DOCUMENT) {
 				throw new IOException("Account snapshot is empty or incomplete: " + file);
 			}
 			return data;
@@ -290,10 +297,10 @@ public class TradePersister
 		if (accountDirectory.isDirectory() && Files.notExists(accountFile.toPath()) && !isAccountProtected("accountwide")) {
 			return new AccountWideData();
 		}
-		try (java.io.BufferedReader reader = Files.newBufferedReader(accountFile.toPath(), StandardCharsets.UTF_8);
-			com.google.gson.stream.JsonReader json = new com.google.gson.stream.JsonReader(reader)) {
+		try (BufferedReader reader = Files.newBufferedReader(accountFile.toPath(), StandardCharsets.UTF_8);
+			JsonReader json = new JsonReader(reader)) {
 			AccountWideData data = gson.fromJson(json, AccountWideData.class);
-			if (data == null || json.peek() != com.google.gson.stream.JsonToken.END_DOCUMENT) {
+			if (data == null || json.peek() != JsonToken.END_DOCUMENT) {
 				throw new IOException("Account-wide snapshot is empty or incomplete: " + accountFile);
 			}
 			return data;
@@ -349,10 +356,10 @@ public class TradePersister
 		
 		try {
 				Files.move(tempFile.toPath(), accountFile.toPath(),
-						java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-		} catch (java.nio.file.AtomicMoveNotSupportedException ame) {
+						StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		} catch (AtomicMoveNotSupportedException ame) {
 				Files.move(tempFile.toPath(), accountFile.toPath(),
-						java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+						StandardCopyOption.REPLACE_EXISTING);
 		} catch (IOException e) {
 				try { Files.deleteIfExists(tempFile.toPath()); } catch (IOException ignored) {}
 				throw e;

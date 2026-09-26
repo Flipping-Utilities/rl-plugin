@@ -165,7 +165,7 @@ public class SlotPanel extends JPanel {
         }
 
         SlotPredictedState predictedState = SlotPredictedState.getPredictedState(offerEvent.isBuy(),
-            offerEvent.getListedPrice(), margins.getLowCapped(), margins.getHighCapped());
+            offerEvent.getListedPrice(), margins.getLow(), margins.getHigh());
         SlotInfo slotInfo = new SlotInfo(offerEvent.getSlot(), predictedState, offerEvent.getItemId(),
             offerEvent.getListedPrice(), offerEvent.isBuy(), offerEvent.isComplete());
         quickLookPanel.updateDetails(slotInfo, margins);
@@ -185,7 +185,7 @@ public class SlotPanel extends JPanel {
         }
 
         SlotPredictedState predictedState = SlotPredictedState.getPredictedState(offerEvent.isBuy(),
-            offerEvent.getListedPrice(),  margins.getLowCapped(), margins.getHighCapped());
+            offerEvent.getListedPrice(),  margins.getLow(), margins.getHigh());
         if (predictedState == SlotPredictedState.IN_RANGE) {
             setColor(CustomColors.IN_RANGE_SLOTS_TAB);
         } else if (predictedState == SlotPredictedState.OUT_OF_RANGE) {

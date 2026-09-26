@@ -15,6 +15,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -355,7 +356,7 @@ public class MigrationLiveTradeInteractionTest {
         data.setRecipeFlipGroups(new ArrayList<>(Arrays.asList(group)));
 
         MigrationService service = new MigrationService(storage, new TradePersister(new GsonBuilder().create()));
-        service.migrate(java.util.Collections.singletonMap(ACCOUNT, data));
+        service.migrate(Collections.singletonMap(ACCOUNT, data));
 
         assertEquals("Account must migrate despite the dangling reference", 1L,
             count("SELECT COUNT(*) FROM accounts"));
@@ -465,7 +466,7 @@ public class MigrationLiveTradeInteractionTest {
             + "\"t\":{\"seconds\":1600000000,\"nanos\":123000000},\"s\":1,\"tQIT\":5}},"
             + "\"trades\":[{\"id\":4151,\"name\":\"Whip\",\"tGL\":70,\"h\":{\"sO\":[{\"b\":true,\"id\":4151,\"cQIT\":5,\"p\":100,"
             + "\"t\":{\"seconds\":1600000000,\"nanos\":0},\"s\":1,\"st\":\"BOUGHT\",\"tQIT\":5}]}}]}";
-        Files.write(accountFile.toPath(), legacy.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Files.write(accountFile.toPath(), legacy.getBytes(StandardCharsets.UTF_8));
 
         TradePersister persister = new TradePersister(new GsonBuilder().create(), accountsDir.toFile());
         Map<String, AccountData> accounts = persister.loadAllAccountsForMigration();

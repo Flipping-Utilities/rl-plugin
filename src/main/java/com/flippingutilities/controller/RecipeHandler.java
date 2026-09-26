@@ -11,10 +11,12 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -522,38 +524,36 @@ public class RecipeHandler {
         // previously recomputed inside every comparator (getFlipsInInterval streams all of a
         // group's flips; profit/expense stream all partial offers of all flips), turning a
         // sort into seconds of work on large datasets.
-        Map<RecipeFlipGroup, List<RecipeFlip>> intervalFlips = new java.util.IdentityHashMap<>();
+        Map<RecipeFlipGroup, List<RecipeFlip>> intervalFlips = new IdentityHashMap<>();
+        Map<RecipeFlipGroup, OptionalLong> recipeCounts = new IdentityHashMap<>();
         for (RecipeFlipGroup group : result) {
-            intervalFlips.put(group, group.getFlipsInInterval(startOfInterval));
+            List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+            intervalFlips.put(group, flips);
+            recipeCounts.put(group, group.getKnownRecipeCountMade(flips));
         }
 
         List<RecipeFlipGroup> unknownGroups = new ArrayList<>();
-        if (selectedSort == SORT.TOTAL_PROFIT || selectedSort == SORT.PROFIT_EACH || selectedSort == SORT.ROI) {
-            result.removeIf(group -> {
-                if (intervalFlips.get(group).stream().anyMatch(RecipeFlip::hasMissingOffers)) {
-                    unknownGroups.add(group);
-                    return true;
-                }
-                return false;
-            });
-        }
+        boolean needsCount = selectedSort == SORT.FLIP_COUNT || selectedSort == SORT.PROFIT_EACH;
+        boolean needsPrices = selectedSort == SORT.TOTAL_PROFIT || selectedSort == SORT.PROFIT_EACH || selectedSort == SORT.ROI;
+        result.removeIf(group -> {
+            if ((needsCount && !recipeCounts.get(group).isPresent())
+                || (needsPrices && intervalFlips.get(group).stream().anyMatch(RecipeFlip::hasMissingOffers))) {
+                unknownGroups.add(group);
+                return true;
+            }
+            return false;
+        });
 
         switch (selectedSort) {
             case TIME:
                 result.sort(Comparator.comparing(RecipeFlipGroup::getLatestFlipTime));
                 break;
             case FLIP_COUNT: {
-                Map<RecipeFlipGroup, Integer> key = new java.util.IdentityHashMap<>();
-                for (RecipeFlipGroup group : result) {
-                    Recipe recipe = group.getRecipe();
-                    key.put(group, intervalFlips.get(group).stream()
-                        .mapToInt(rf -> rf.getRecipeCountMade(recipe)).sum());
-                }
-                result.sort(Comparator.comparing(key::get));
+                result.sort(Comparator.comparingLong(group -> recipeCounts.get(group).getAsLong()));
                 break;
             }
             case TOTAL_PROFIT: {
-                Map<RecipeFlipGroup, Long> key = new java.util.IdentityHashMap<>();
+                Map<RecipeFlipGroup, Long> key = new IdentityHashMap<>();
                 for (RecipeFlipGroup group : result) {
                     key.put(group, intervalFlips.get(group).stream().mapToLong(RecipeFlip::getProfit).sum());
                 }
@@ -561,19 +561,18 @@ public class RecipeHandler {
                 break;
             }
             case PROFIT_EACH: {
-                Map<RecipeFlipGroup, Long> key = new java.util.IdentityHashMap<>();
+                Map<RecipeFlipGroup, Long> key = new IdentityHashMap<>();
                 for (RecipeFlipGroup group : result) {
                     List<RecipeFlip> flips = intervalFlips.get(group);
                     long totalProfit = flips.stream().mapToLong(RecipeFlip::getProfit).sum();
-                    long totalRecipesMade = flips.stream()
-                        .mapToInt(rf -> rf.getRecipeCountMade(group.getRecipe())).sum();
+                    long totalRecipesMade = recipeCounts.get(group).getAsLong();
                     key.put(group, totalRecipesMade > 0 ? totalProfit / totalRecipesMade : 0);
                 }
                 result.sort(Comparator.comparing(key::get));
                 break;
             }
             case ROI: {
-                Map<RecipeFlipGroup, Float> key = new java.util.IdentityHashMap<>();
+                Map<RecipeFlipGroup, Float> key = new IdentityHashMap<>();
                 for (RecipeFlipGroup group : result) {
                     List<RecipeFlip> flips = intervalFlips.get(group);
                     long totalProfit = flips.stream().mapToLong(RecipeFlip::getProfit).sum();

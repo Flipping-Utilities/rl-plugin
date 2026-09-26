@@ -354,7 +354,8 @@ public class OfferCorrectionPersistenceTest {
         AccountData restored = reopen();
         assertEquals("The old history must survive a failed replacement", 5, quantity(restored));
         assertEquals("cancelled", restored.getTrades().get(0).getHistory().getCompressedOfferEvents().get(0).getUuid());
-        assertTrue("The rejected partial must not leave an active slot", restored.getLastOffers().isEmpty());
+        assertEquals("A rejected correction must preserve the cancelled offer awaiting collection",
+            "cancelled", restored.getLastOffers().get(cancelled.getSlot()).getUuid());
         assertEquals(1, restored.getRecipeFlipGroups().get(0).getRecipeFlips().size());
     }
 
