@@ -9,12 +9,67 @@ import org.junit.Test;
 import javax.swing.*;
 import java.awt.*;
 import java.time.*;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 import static org.junit.Assert.*;
 
 public class RecipeFlipGroupPanelTest {
+    @Test public void unknownExecutionCountsKeepKnownProfitAndRoiAndRecoverWhenDefinitionIsFound() throws Exception {
+        StubPlugin plugin = new StubPlugin();
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                plugin.stats = new StatsPanel(plugin);
+                OfferEvent sale = new OfferEvent();
+                sale.setTime(Instant.EPOCH);
+                sale.setPrice(100);
+                Map<Integer, Map<String, PartialOffer>> outputs = new LinkedHashMap<>();
+                outputs.put(10, Collections.singletonMap("a", new PartialOffer(sale, 6)));
+                outputs.put(20, Collections.singletonMap("b", new PartialOffer(sale, 15)));
+                RecipeFlip flip = new RecipeFlip(Instant.now(), outputs, Collections.emptyMap(), 100);
+                RecipeFlipGroup original = new RecipeFlipGroup((String) null);
+                original.addRecipeFlip(flip);
+                original.synthesizeRecipe(null);
+                RecipeFlipGroup group = new RecipeFlipGroup(original.getRecipeKey());
+                group.addRecipeFlip(flip);
+                RecipeFlipGroupPanel panel = new RecipeFlipGroupPanel(plugin, group);
+
+                assertEquals(2, labelsWithText(panel, "Unknown"));
+                assertEquals(1, labelsWithText(panel, "Unknown count"));
+                assertEquals(1, labelsWithText(panel, "2000.00%"));
+                assertTrue(labelTexts(panel).stream().anyMatch(text -> text.endsWith("gp (x Unknown)")));
+                assertTrue(labelTexts(panel).stream().anyMatch(text -> text.endsWith("gp (Unknown gp ea)")));
+                assertFalse(labelTexts(panel).stream().anyMatch(text -> text.contains("Mismatched")));
+
+                group.setRecipe(new Recipe(Collections.emptyList(),
+                    Arrays.asList(new RecipeItem(10, 2), new RecipeItem(20, 5)), "Known"));
+                panel.updateLabels(group.getRecipeFlips());
+                assertEquals(0, labelsWithText(panel, "Unknown"));
+                assertEquals(1, labelsWithText(panel, "3 Items"));
+                assertTrue(labelTexts(panel).stream().anyMatch(text -> text.endsWith("gp (x 3)")));
+            });
+        } finally { plugin.executor.shutdownNow(); }
+    }
+
+    private int labelsWithText(Container container, String text) {
+        return (int) labelTexts(container).stream().filter(text::equals).count();
+    }
+
+    private List<String> labelTexts(Container container) {
+        List<String> texts = new ArrayList<>();
+        for (Component component : container.getComponents()) {
+            if (component instanceof JLabel && ((JLabel) component).getText() != null) {
+                texts.add(((JLabel) component).getText());
+            }
+            if (component instanceof Container) texts.addAll(labelTexts((Container) component));
+        }
+        return texts;
+    }
+
     @Test public void groupTotalsBecomeKnownWhenOriginalOffersAreRecovered() throws Exception {
         StubPlugin plugin = new StubPlugin();
         try {

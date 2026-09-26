@@ -11,7 +11,14 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemStats;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Map;
+import java.util.Objects;
 
 @Slf4j
 public class NewOfferEventPipelineHandler {
@@ -282,11 +289,11 @@ public class NewOfferEventPipelineHandler {
             if (account == null || plugin.getSqliteStorage() == null || !offer.isBuy()) {
                 return;
             }
-            java.time.Instant resetTime = null;
+            Instant resetTime = null;
             int itemsBought = 0;
             int itemsBoughtThroughComplete = 0;
             int itemId = -1;
-            java.util.Optional<com.flippingutilities.model.FlippingItem> item = plugin.getDataHandler().getAccountData(account).getTrades().stream()
+            Optional<FlippingItem> item = plugin.getDataHandler().getAccountData(account).getTrades().stream()
                 .filter(tradeItem -> tradeItem.getItemId() == offer.getItemId())
                 .findFirst();
             if (item.isPresent()) {
@@ -301,7 +308,7 @@ public class NewOfferEventPipelineHandler {
 
             final String accountName = account;
             final int finalItemId = itemId;
-            final java.time.Instant finalResetTime = resetTime;
+            final Instant finalResetTime = resetTime;
             final int finalItemsBought = itemsBought;
             final int finalItemsBoughtThroughComplete = itemsBoughtThroughComplete;
             plugin.submitStorageTask(storage -> storage.upsertGeLimitState(

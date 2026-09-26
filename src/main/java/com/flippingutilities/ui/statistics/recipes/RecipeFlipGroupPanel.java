@@ -7,7 +7,6 @@ import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
-import com.flippingutilities.utilities.Recipe;
 import lombok.Getter;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
@@ -23,6 +22,7 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.stream.Collectors;
 
 public class RecipeFlipGroupPanel extends JPanel {
@@ -319,22 +319,21 @@ public class RecipeFlipGroupPanel extends JPanel {
     public void updateLabels(List<RecipeFlip> recipeFlips) {
         quantityFlipped.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 
-        Recipe recipe = recipeFlipGroup.getRecipe();
-
         long profit;
         long expense;
-        int recipesMade;
 
         // Use the same interval-filtered flips for summary, details, and totals.
-        recipesMade = recipeFlips.stream().mapToInt(rf -> rf.getRecipeCountMade(recipe)).sum();
+        OptionalLong recipesMade = recipeFlipGroup.getKnownRecipeCountMade(recipeFlips);
+        String countText = recipesMade.isPresent() ? QuantityFormatter.formatNumber(recipesMade.getAsLong()) : "Unknown";
+        quantityFlipped.setText(recipesMade.isPresent() ? countText + " Items" : "Unknown");
+        quantityFlipped.setToolTipText(recipesMade.isPresent() ? null : "The original recipe quantities are unavailable.");
         if (recipeFlips.stream().anyMatch(RecipeFlip::hasMissingOffers)) {
-            recipeProfitAndQuantityLabel.setText("Unknown (x " + QuantityFormatter.formatNumber(recipesMade) + ")");
+            recipeProfitAndQuantityLabel.setText("Unknown (x " + countText + ")");
             for (JLabel label : new JLabel[]{recipeProfitAndQuantityLabel, totalProfitValLabel, profitEachValLabel, roiValLabel}) {
                 if (label != recipeProfitAndQuantityLabel) label.setText("Unknown");
                 label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
                 label.setToolTipText("Original offer details are missing; recipe financial totals are unavailable.");
             }
-            quantityFlipped.setText(QuantityFormatter.formatNumber(recipesMade) + " Items");
             updateTimeLabels();
             return;
         }
@@ -343,7 +342,7 @@ public class RecipeFlipGroupPanel extends JPanel {
         expense = recipeFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
         profit = flipRevenue - expense;
 
-        updateTitleLabels(profit, recipesMade);
+        updateTitleLabels(profit, countText);
         // revenue = profit + expense holds for both paths (cached: by construction;
         // computed: flipRevenue = profit + expense). Named differently from the inner-scope
         // flipRevenue to avoid confusion.
@@ -356,9 +355,9 @@ public class RecipeFlipGroupPanel extends JPanel {
      * Updates the labels on the title panel. This includes the profit label which shows how much profit you made
      * from flipping that item and the number of times you flipped that item.
      */
-    private void updateTitleLabels(long profitFromFlips, long numItemsFlipped) {
+    private void updateTitleLabels(long profitFromFlips, String countText) {
         String totalProfitString = (profitFromFlips >= 0 ? "+" : "") + UIUtilities.quantityToRSDecimalStack(profitFromFlips, true) + " gp";
-        totalProfitString += " (x " + QuantityFormatter.formatNumber(numItemsFlipped) + ")";
+        totalProfitString += " (x " + countText + ")";
 
         recipeProfitAndQuantityLabel.setText(totalProfitString);
         recipeProfitAndQuantityLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
@@ -366,18 +365,23 @@ public class RecipeFlipGroupPanel extends JPanel {
         recipeProfitAndQuantityLabel.setFont(FontManager.getRunescapeSmallFont());
     }
 
-    private void updateFlippingLabels(long flippingExpense, long flippingRevenue, int itemsFlipped) {
+    private void updateFlippingLabels(long flippingExpense, long flippingRevenue, OptionalLong itemsFlipped) {
         long profitFromFlips = flippingRevenue - flippingExpense;
         totalProfitValLabel.setText(UIUtilities.quantityToRSDecimalStack(profitFromFlips, true) + " gp");
         totalProfitValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
         totalProfitValLabel.setToolTipText(QuantityFormatter.formatNumber(profitFromFlips) + " gp");
 
-        String profitEach = UIUtilities.quantityToRSDecimalStack(itemsFlipped > 0 ? (profitFromFlips / itemsFlipped) : 0, true) + " gp/ea";
-        profitEachValLabel.setText(profitEach);
-        profitEachValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
-        profitEachValLabel.setToolTipText(QuantityFormatter.formatNumber(itemsFlipped > 0 ? profitFromFlips / itemsFlipped : 0) + " gp/ea");
-
-        quantityFlipped.setText(QuantityFormatter.formatNumber(itemsFlipped) + " Items");
+        if (itemsFlipped.isPresent()) {
+            long count = itemsFlipped.getAsLong();
+            long profitEach = count > 0 ? profitFromFlips / count : 0;
+            profitEachValLabel.setText(UIUtilities.quantityToRSDecimalStack(profitEach, true) + " gp/ea");
+            profitEachValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
+            profitEachValLabel.setToolTipText(QuantityFormatter.formatNumber(profitEach) + " gp/ea");
+        } else {
+            profitEachValLabel.setText("Unknown");
+            profitEachValLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+            profitEachValLabel.setToolTipText("The original recipe quantities are unavailable; profit per execution is unknown.");
+        }
 
         float roi = (float) flippingExpense > 0 ? (float) profitFromFlips / flippingExpense * 100 : 0;
 

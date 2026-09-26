@@ -7,7 +7,13 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.OptionalLong;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -132,24 +138,24 @@ public class RecipeFlip {
     }
 
     /**
-     * Calculates how many times this recipe was made based on output consumption.
-     * If recipe is null, infers from the outputs map.
+     * Calculates recipe executions only when an output's per-execution quantity is known.
+     * Consumed output units alone cannot determine how many recipes were made.
      */
-    public int getRecipeCountMade(Recipe recipe) {
+    public OptionalLong getKnownRecipeCountMade(Recipe recipe) {
         if (outputs.isEmpty()) {
-            return 0;
+            return OptionalLong.of(0);
         }
         
         if (recipe != null) {
             for (RecipeItem output : recipe.getOutputs()) {
                 Map<String, PartialOffer> offers = outputs.get(output.getId());
                 if (offers != null && output.getQuantity() > 0) {
-                    return offers.values().stream().mapToInt(po -> po.amountConsumed).sum() / output.getQuantity();
+                    return OptionalLong.of(offers.values().stream().mapToLong(po -> po.amountConsumed).sum()
+                        / output.getQuantity());
                 }
             }
         }
-        // Without a matching recipe definition, infer a count from output consumption only.
-        return outputs.values().iterator().next().values().stream().mapToInt(po -> po.amountConsumed).sum();
+        return OptionalLong.empty();
     }
     
     /**

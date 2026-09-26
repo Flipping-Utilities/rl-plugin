@@ -26,6 +26,7 @@
 
 package com.flippingutilities.controller;
 
+import com.flippingutilities.db.SqliteStorage;
 import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
@@ -41,7 +42,7 @@ import java.util.*;
 @Slf4j
 public class DataHandler {
     // SQLite storage backend (optional)
-    private com.flippingutilities.db.SqliteStorage sqliteStorage;
+    private SqliteStorage sqliteStorage;
     private final Set<String> accountsAwaitingRecoverySnapshot = new HashSet<>();
     FlippingPlugin plugin;
     private AccountWideData accountWideData;
@@ -55,13 +56,18 @@ public class DataHandler {
         this.plugin = plugin;
     }
 
-    public void setSqliteStorage(com.flippingutilities.db.SqliteStorage storage) {
+    public void setSqliteStorage(SqliteStorage storage) {
         if (storage == null) {
             // Detaching cannot make an unsaved JSON snapshot safe to reload. This also
             // covers an import that failed before this handler attached its database.
             accountsAwaitingRecoverySnapshot.addAll(accountsWithUnsavedChanges);
         }
         this.sqliteStorage = storage;
+    }
+
+    public boolean isUsingSqlite() {
+        return sqliteStorage != null && plugin.getConfig().dataSource().isSqlite()
+            && !plugin.isStorageFailed(sqliteStorage);
     }
 
     public AccountWideData viewAccountWideData() {
@@ -296,7 +302,7 @@ public class DataHandler {
     }
 
     private void handleSqliteReadFailure(Exception failure) {
-        com.flippingutilities.db.SqliteStorage failed = sqliteStorage;
+        SqliteStorage failed = sqliteStorage;
         sqliteStorage = null;
         preserveAccountsForRecovery();
         plugin.recoverFromStorageFailure(failed, failure);
@@ -333,6 +339,14 @@ public class DataHandler {
                     accountData.prepareForUse(plugin);
                     if (accountData.needsMigration()) {
                         accountData.markMigrated();
+                    }
+                    // A reload refreshes history, but the running client's session may
+                    // have restarted since the session snapshot was imported.
+                    AccountData current = accountSpecificData.get(displayName);
+                    if (current != null) {
+                        accountData.setSessionStartTime(current.getSessionStartTime());
+                        accountData.setAccumulatedSessionTimeMillis(current.getAccumulatedSessionTimeMillis());
+                        accountData.setLastSessionTimeUpdate(current.getLastSessionTimeUpdate());
                     }
                     return accountData;
                 }

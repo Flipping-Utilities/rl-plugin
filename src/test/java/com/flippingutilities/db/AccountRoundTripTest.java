@@ -1,10 +1,13 @@
 package com.flippingutilities.db;
 
+import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
+import com.flippingutilities.model.Flip;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.HistoryManager;
 import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import com.google.gson.Gson;
 import net.runelite.api.GrandExchangeOfferState;
 import org.junit.Rule;
@@ -133,10 +136,82 @@ public class AccountRoundTripTest {
             // A stale slot snapshot must never duplicate a completed offer's history.
             assertEquals(Collections.singletonList(complete), storage.loadAccount(ACCOUNT).getTrades().get(0).getHistory().getCompressedOfferEvents());
             storage.upsertSlot(ACCOUNT, 0, complete, false);
+            assertEquals(complete, storage.loadAccount(ACCOUNT).getLastOffers().get(0));
+            storage.upsertSlot(ACCOUNT, 0, offer("collected", GrandExchangeOfferState.EMPTY, 0, 0, 0, 9, 1), false);
             assertTrue(storage.loadAccount(ACCOUNT).getLastOffers().isEmpty());
+            assertEquals(Collections.singletonList(complete), storage.loadAccount(ACCOUNT).getTrades().get(0).getHistory().getCompressedOfferEvents());
         } finally {
             storage.close();
         }
+    }
+
+    @Test
+    public void completedSlotTimersSurviveRestartUntilCollectionWithoutDuplicatingHistory() throws Exception {
+        for (GrandExchangeOfferState state : new GrandExchangeOfferState[]{GrandExchangeOfferState.BOUGHT,
+            GrandExchangeOfferState.SOLD, GrandExchangeOfferState.CANCELLED_BUY, GrandExchangeOfferState.CANCELLED_SELL}) {
+            SqliteStorage storage = new SqliteStorage(folder.newFile("timer-" + state + ".db"));
+            try {
+                storage.initializeSchema();
+                OfferEvent completed = offer("completed", state, 5, 5, 100, 100, 125);
+                completed.setSlot(3);
+                storage.recordOfferUpdate(ACCOUNT, completed, Collections.emptyList());
+                storage.close();
+
+                AccountData restored = storage.loadAccount(ACCOUNT);
+                assertEquals(Collections.singletonList(completed), restored.getTrades().get(0).getHistory().getCompressedOfferEvents());
+                assertEquals(completed, restored.getLastOffers().get(3));
+                SlotActivityTimer timer = hydratedSlotTimers(restored).get(3);
+                assertEquals(TIME, timer.tradeStartTime);
+                assertEquals(TIME.plusSeconds(125), timer.currentOffer.getTime());
+                assertEquals("00:02:05", timer.createFormattedTimeString());
+
+                storage.deleteTradesByUuid(ACCOUNT, Collections.singletonList(completed.getUuid()));
+                AccountData hidden = storage.loadAccount(ACCOUNT);
+                assertTrue(hidden.getTrades().stream().allMatch(item -> item.getHistory().getCompressedOfferEvents().isEmpty()));
+                assertEquals("00:02:05", hydratedSlotTimers(hidden).get(3).createFormattedTimeString());
+
+                storage.upsertSlot(ACCOUNT, 3, offer("collected", GrandExchangeOfferState.EMPTY, 0, 0, 0, 101, 130), false);
+                storage.close();
+                AccountData collected = storage.loadAccount(ACCOUNT);
+                assertFalse(collected.getLastOffers().containsKey(3));
+                assertNull(hydratedSlotTimers(collected).get(3).createFormattedTimeString());
+            } finally {
+                storage.close();
+            }
+        }
+    }
+
+    @Test
+    public void migrationRestoresCompletedAndZeroFillCancelledTimersWithoutInventingOfflineTimes() throws Exception {
+        AccountData original = account();
+        OfferEvent completed = offer("complete", GrandExchangeOfferState.BOUGHT, 5, 5, 100, 100, 125);
+        original.getTrades().get(0).updateHistory(completed);
+        original.getLastOffers().put(0, completed);
+        OfferEvent cancelled = offer("cancelled-empty", GrandExchangeOfferState.CANCELLED_BUY, 0, 5, 100, 100, 180);
+        cancelled.setSlot(1);
+        original.getLastOffers().put(1, cancelled);
+        OfferEvent offline = offer("offline", GrandExchangeOfferState.SOLD, 5, 5, 100, 100, 200);
+        offline.setSlot(2);
+        offline.setBeforeLogin(true);
+        original.getLastOffers().put(2, offline);
+
+        AccountData restored = migrateAndReopen(original);
+        assertEquals(3, restored.getLastOffers().size());
+        assertEquals(Collections.singletonList(completed), restored.getTrades().get(0).getHistory().getCompressedOfferEvents());
+        List<SlotActivityTimer> timers = hydratedSlotTimers(restored);
+        assertEquals("00:02:05", timers.get(0).createFormattedTimeString());
+        assertEquals("00:03:00", timers.get(1).createFormattedTimeString());
+        assertTrue(timers.get(2).offerOccurredAtUnknownTime);
+        assertNull(timers.get(2).createFormattedTimeString());
+    }
+
+    private List<SlotActivityTimer> hydratedSlotTimers(AccountData restored) {
+        // Exercise public preparation with the persisted slots, without requiring live
+        // item-definition services for unrelated history hydration.
+        AccountData slotsOnly = new AccountData();
+        slotsOnly.getLastOffers().putAll(restored.getLastOffers());
+        slotsOnly.prepareForUse(new FlippingPlugin());
+        return slotsOnly.getSlotTimers();
     }
 
     @Test
@@ -243,8 +318,8 @@ public class AccountRoundTripTest {
         }
     }
 
-    private int firstFlipProfit(List<OfferEvent> history) {
-        com.flippingutilities.model.Flip flip = HistoryManager.getFlips(history).get(0);
+    private long firstFlipProfit(List<OfferEvent> history) {
+        Flip flip = HistoryManager.getFlips(history).get(0);
         return (flip.getSellPrice() - flip.getBuyPrice()) * flip.getQuantity();
     }
 

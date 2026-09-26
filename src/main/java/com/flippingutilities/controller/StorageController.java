@@ -1,29 +1,3 @@
-/*
- * Copyright (c) 2020, Belieal <https://github.com/Belieal>
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
 package com.flippingutilities.controller;
 
 import com.flippingutilities.DataSource;
@@ -44,6 +18,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+
+import javax.swing.JOptionPane;
 
 /** Owns backend switching, ordered SQLite work, recovery and maintenance. */
 @Slf4j
@@ -239,26 +215,27 @@ final class StorageController {
                     || !"true".equalsIgnoreCase(storage.getSetting("migration_completed"))) {
                 // Read once before clearing SQLite; an unreadable source must not erase it.
                 Map<String, AccountData> snapshot = plugin.tradePersister.loadAllAccountsForMigration();
+                MigrationService migration = new MigrationService(storage, plugin.tradePersister);
                 if (rebuild) {
-                    storage.markOutOfSync();
-                    for (String name : storage.listAccounts()) {
-                        storage.deleteAccountData(name);
-                    }
-                    storage.clearSetting("migration_completed");
-                    storage.clearSetting("migration_completed_at");
+                    migration.rebuild(snapshot);
+                } else {
+                    migration.migrate(snapshot);
                 }
-                new MigrationService(storage, plugin.tradePersister).migrate(snapshot);
             }
-            boolean completed = "true".equalsIgnoreCase(storage.getSetting("migration_completed"));
-            if (completed) {
-                storage.clearSetting("migration_pending");
-                storage.markSynchronized();
-            }
-            return completed;
+            return finishMigration(storage);
         } catch (Exception e) {
             log.warn("SQLite migration failed; keeping the live JSON view", e);
             return false;
         }
+    }
+
+    private boolean finishMigration(SqliteStorage storage) {
+        boolean completed = "true".equalsIgnoreCase(storage.getSetting("migration_completed"));
+        if (completed) {
+            storage.clearSetting("migration_pending");
+            storage.markSynchronized();
+        }
+        return completed;
     }
 
     /**
@@ -267,9 +244,9 @@ final class StorageController {
      */
     void handleSqliteMaintenance(SqliteMaintenanceAction action) {
         if (sqliteStorage == null) {
-            javax.swing.JOptionPane.showMessageDialog(plugin.getMasterPanel(),
+            JOptionPane.showMessageDialog(plugin.getMasterPanel(),
                 "SQLite storage is not active. Switch the data source to SQLite first.",
-                "SQLite maintenance", javax.swing.JOptionPane.WARNING_MESSAGE);
+                "SQLite maintenance", JOptionPane.WARNING_MESSAGE);
             resetSqliteMaintenanceConfig();
             return;
         }
@@ -277,9 +254,9 @@ final class StorageController {
         String msg = action == SqliteMaintenanceAction.DELETE
             ? "Delete all SQLite database files? This clears stored trades. Your JSON files are not affected."
             : "Regenerate the SQLite database from JSON? This deletes the current database and rebuilds it from your JSON files.";
-        int choice = javax.swing.JOptionPane.showConfirmDialog(plugin.getMasterPanel(), msg,
-            "Confirm SQLite maintenance", javax.swing.JOptionPane.YES_NO_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE);
-        if (choice != javax.swing.JOptionPane.YES_OPTION) {
+        int choice = JOptionPane.showConfirmDialog(plugin.getMasterPanel(), msg,
+            "Confirm SQLite maintenance", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (choice != JOptionPane.YES_OPTION) {
             resetSqliteMaintenanceConfig();
             return;
         }
@@ -302,17 +279,18 @@ final class StorageController {
      */
     private void doSqliteMaintenance(SqliteStorage storage, SqliteMaintenanceAction action) {
         try {
-            // Close the connection so the files can be deleted (Windows won't delete open files).
-            storage.close();
-            deleteSqliteFiles(storage);
-            storage.initializeSchema();
-            // The accounts table was recreated empty; stale cached ids would FK-violate.
-            storage.invalidateAccountCache();
-
             if (action == SqliteMaintenanceAction.REGENERATE) {
-                storage.setSetting("migration_pending", "true");
-                completeMigration(storage, runMigrationIfNeeded(storage, false));
+                // Read before touching SQLite; regeneration owns the backup and file reset.
+                Map<String, AccountData> snapshot = plugin.tradePersister.loadAllAccountsForMigration();
+                new MigrationService(storage, plugin.tradePersister).regenerate(snapshot);
+                completeMigration(storage, finishMigration(storage));
             } else {
+                // Close the connection so the files can be deleted (Windows won't delete open files).
+                storage.close();
+                deleteSqliteFiles(storage);
+                storage.initializeSchema();
+                // The accounts table was recreated empty; stale cached ids would FK-violate.
+                storage.invalidateAccountCache();
                 reloadAfterMaintenance(storage);
             }
         } catch (Exception e) {

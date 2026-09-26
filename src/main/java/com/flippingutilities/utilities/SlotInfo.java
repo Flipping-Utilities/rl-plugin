@@ -9,7 +9,7 @@ public class SlotInfo {
     int index;
     SlotPredictedState predictedState;
     int itemId;
-    int offerPrice;
+    long offerPrice;
     boolean isBuyOffer;
     boolean isCompleted;
 }

@@ -25,6 +25,7 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 
 /**
  * The visual representation of a RecipeFlip. RecipeFlipPanels
@@ -61,9 +62,12 @@ public class RecipeFlipPanel extends JPanel {
         titlePanel.setLayout(new DynamicGridLayout(2,1));
         titlePanel.setBackground(CustomColors.DARK_GRAY);
 
-        String recipeQuantity = QuantityFormatter.formatNumber(recipeFlip.getRecipeCountMade(recipe));
-
-        JLabel quantityLabel = new JLabel(recipeQuantity + "x");
+        OptionalLong recipeCount = recipeFlip.getKnownRecipeCountMade(recipe);
+        JLabel quantityLabel = new JLabel(recipeCount.isPresent()
+            ? QuantityFormatter.formatNumber(recipeCount.getAsLong()) + "x" : "Unknown count");
+        if (!recipeCount.isPresent()) {
+            quantityLabel.setToolTipText("The original recipe quantities are unavailable.");
+        }
         quantityLabel.setFont(FontManager.getRunescapeSmallFont());
 
         JPanel quantityAndTimePanel = new JPanel();
@@ -280,8 +284,8 @@ public class RecipeFlipPanel extends JPanel {
     }
 
     private JPanel createProfitPanel() {
-        long quantity = recipeFlip.getRecipeCountMade(recipe);
-        if (quantity == 0) {
+        OptionalLong quantity = recipeFlip.getKnownRecipeCountMade(recipe);
+        if (quantity.isPresent() && quantity.getAsLong() == 0) {
             JPanel panel = new JPanel(new BorderLayout());
             panel.setBackground(CustomColors.DARK_GRAY);
             JLabel label = new JLabel("Mismatched recipe flip (delete it)", SwingConstants.CENTER);
@@ -292,13 +296,18 @@ public class RecipeFlipPanel extends JPanel {
         }
         boolean missingOffers = recipeFlip.hasMissingOffers();
         long profit = missingOffers ? 0 : recipeFlip.getProfit();
-        long profitEach = profit/quantity;
         String profitString = missingOffers ? "Unknown" : UIUtilities.quantityToRSDecimalStack(profit, true) + " gp";
-        String profitEachString = missingOffers || quantity == 1? "": " (" + UIUtilities.quantityToRSDecimalStack(profitEach, false) + " gp ea)";
+        String profitEachString = "";
+        if (!quantity.isPresent()) {
+            profitEachString = " (Unknown gp ea)";
+        } else if (!missingOffers && quantity.getAsLong() != 1) {
+            profitEachString = " (" + UIUtilities.quantityToRSDecimalStack(profit / quantity.getAsLong(), false) + " gp ea)";
+        }
         String profitDescription = profit < 0? "Loss": "Profit:";
 
         JLabel profitValLabel = new JLabel(profitString + profitEachString);
         if (missingOffers) profitValLabel.setToolTipText("Original offer details are missing; profit is unavailable.");
+        else if (!quantity.isPresent()) profitValLabel.setToolTipText("The original recipe quantities are unavailable; profit per execution is unknown.");
         profitValLabel.setFont(FontManager.getRunescapeSmallFont());
 
         JLabel profitDescriptionLabel = new JLabel(profitDescription);

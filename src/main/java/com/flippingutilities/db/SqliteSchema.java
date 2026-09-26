@@ -98,7 +98,8 @@ public final class SqliteSchema {
         "  next_refresh INTEGER," +
         "  items_bought INTEGER," +
         "  items_bought_complete INTEGER DEFAULT 0," +
-        "  FOREIGN KEY(account_id) REFERENCES accounts(id)" +
+        "  FOREIGN KEY(account_id) REFERENCES accounts(id)," +
+        "  UNIQUE(account_id, item_id)" +
         ");";
 
     public static final String CREATE_TABLE_ITEM_FAVORITES =

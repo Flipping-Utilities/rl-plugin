@@ -105,9 +105,8 @@ public class SlotSenderJob {
 
             if (lastOfferEventForEachSlot.containsKey(i)) {
                 OfferEvent lastOfferEventForSlotTrackedByPlugin = lastOfferEventForEachSlot.get(i);
-                // 64-bit prices (max cash update) saturate into the int-based model
-                lastOfferEventForSlotTrackedByPlugin.setListedPrice((int) Math.min(grandExchangeOffer.getPrice(), (long) Integer.MAX_VALUE));
-                lastOfferEventForSlotTrackedByPlugin.setSpent((int) Math.min(grandExchangeOffer.getSpent(), (long) Integer.MAX_VALUE));
+                lastOfferEventForSlotTrackedByPlugin.setListedPrice(grandExchangeOffer.getPrice());
+                lastOfferEventForSlotTrackedByPlugin.setSpent(grandExchangeOffer.getSpent());
                 if (i < slotActivityTimers.size()) {
                     lastOfferEventForSlotTrackedByPlugin.setBeforeLogin(slotActivityTimers.get(i).offerOccurredAtUnknownTime);
                     lastOfferEventForSlotTrackedByPlugin.setTradeStartedAt(slotActivityTimers.get(i).tradeStartTime);

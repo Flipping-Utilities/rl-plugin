@@ -29,13 +29,25 @@ package com.flippingutilities.model;
 
 import com.flippingutilities.utilities.ListUtils;
 import com.google.gson.annotations.SerializedName;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -641,7 +653,7 @@ public class HistoryManager
 					int amountTaken = buy.getCurrentQuantityInTrade() - leftOver;
 					totalBuyCost += (long) amountTaken * buy.getPrice();
 					buy.setCurrentQuantityInTrade(leftOver);
-					flips.add(new Flip((int) (totalBuyCost / sell.getCurrentQuantityInTrade()), sell.getPrice(), sell.getCurrentQuantityInTrade(), sell.getTime(), false, !sell.isComplete()));
+					flips.add(new Flip(totalBuyCost / sell.getCurrentQuantityInTrade(), sell.getPrice(), sell.getCurrentQuantityInTrade(), sell.getTime(), false, !sell.isComplete()));
 					break;
 				}
 				else
@@ -654,7 +666,7 @@ public class HistoryManager
 			//buys only partially exhausted a sell
 			if (buyIdx == buys.size() && numBuysSeen != 0)
 			{
-				flips.add(new Flip((int) (totalBuyCost / numBuysSeen), sell.getPrice(), numBuysSeen, sell.getTime(), false, true));
+				flips.add(new Flip(totalBuyCost / numBuysSeen, sell.getPrice(), numBuysSeen, sell.getTime(), false, true));
 				break;
 			}
 		}

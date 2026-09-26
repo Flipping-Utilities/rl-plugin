@@ -20,8 +20,8 @@ public class SlotState {
     private int index;
     private String state;
     private Integer offerQty;
-    private Integer offerPrice;
-    private Integer filledPrice;
+    private Long offerPrice;
+    private Long filledPrice;
     private Date offerCreationTime;
 
     public static SlotState fromOfferEvent(OfferEvent offerEvent) {

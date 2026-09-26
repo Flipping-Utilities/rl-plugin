@@ -24,6 +24,50 @@ public class RecipePersistenceTest {
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
     @Test
+    public void syntheticRecipeCountStaysUnknownThroughJsonAndSqlite() throws Exception {
+        AccountData source = legacyAccount();
+        RecipeFlipGroup group = source.getRecipeFlipGroups().get(0);
+        group.setRecipeKey(null);
+        RecipeFlip flip = group.getRecipeFlips().get(0);
+        OfferEvent secondOutput = complete(ACCOUNT, 11804, "second-output", TIME, 15, 1000, false);
+        Map<Integer, Map<String, PartialOffer>> outputs = new LinkedHashMap<>(flip.getOutputs());
+        outputs.get(11802).get("detached-output").setAmountConsumed(6);
+        outputs.put(11804, Collections.singletonMap("second-output", new PartialOffer(secondOutput, 15)));
+        flip.setOutputs(outputs);
+        group.synthesizeRecipe(null);
+        String syntheticKey = "4151:0,4587:0|11802:0,11804:0";
+        assertEquals(syntheticKey, group.getRecipeKey());
+        assertFalse(flip.getKnownRecipeCountMade(group.getRecipe()).isPresent());
+        long expectedProfit = flip.getProfit();
+
+        File accounts = temporaryFolder.newFolder("unknown-ratios");
+        TradePersister persister = new TradePersister(gson, accounts);
+        persister.writeToFile(ACCOUNT, source);
+        AccountData json = persister.loadAccount(ACCOUNT);
+        assertUnknownRecipeCount(json, syntheticKey, expectedProfit);
+
+        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("unknown-ratios.db"));
+        try {
+            assertEquals(1, new MigrationService(storage, persister).migrate());
+            storage.close();
+            assertUnknownRecipeCount(storage.loadAccount(ACCOUNT), syntheticKey, expectedProfit);
+        } finally {
+            storage.close();
+        }
+    }
+
+    private void assertUnknownRecipeCount(AccountData account, String recipeKey, long profit) {
+        RecipeFlipGroup group = account.getRecipeFlipGroups().get(0);
+        RecipeFlip flip = group.getRecipeFlips().get(0);
+        assertEquals(recipeKey, group.getRecipeKey());
+        assertFalse(group.getKnownRecipeCountMade(group.getRecipeFlips()).isPresent());
+        assertEquals(6, flip.getOutputs().get(11802).get("detached-output").getAmountConsumed());
+        assertEquals(15, flip.getOutputs().get(11804).get("second-output").getAmountConsumed());
+        assertFalse(flip.hasMissingOffers());
+        assertEquals(profit, flip.getProfit());
+    }
+
+    @Test
     public void migrationPreservesLegacyRecipeOffersMissingFromHistory() throws Exception {
         File accounts = temporaryFolder.newFolder("accounts");
         AccountData source = legacyAccount();

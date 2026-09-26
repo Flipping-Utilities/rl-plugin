@@ -12,7 +12,14 @@ import lombok.NoArgsConstructor;
 import net.runelite.client.game.ItemManager;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.OptionalLong;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -63,7 +70,7 @@ public class RecipeFlipGroup implements Searchable {
      * when splitting a single input into several outputs.
      */
     public void synthesizeRecipe(ItemManager itemManager) {
-        if (recipe != null) {
+        if (getRecipe() != null) {
             return;
         }
 
@@ -78,8 +85,10 @@ public class RecipeFlipGroup implements Searchable {
             }
         }
 
-        List<RecipeItem> inputs = inputIds.stream().map(id -> new RecipeItem(id, 1)).collect(Collectors.toList());
-        List<RecipeItem> outputs = outputIds.stream().map(id -> new RecipeItem(id, 1)).collect(Collectors.toList());
+        // Item identity is recoverable, but per-execution ratios are not. Zero preserves
+        // that distinction in the recipe key through JSON and SQLite hydration.
+        List<RecipeItem> inputs = inputIds.stream().map(id -> new RecipeItem(id, 0)).collect(Collectors.toList());
+        List<RecipeItem> outputs = outputIds.stream().map(id -> new RecipeItem(id, 0)).collect(Collectors.toList());
 
         this.recipe = new Recipe(inputs, outputs, buildSyntheticName(itemManager, inputIds, outputIds));
         if (recipeKey == null) {
@@ -210,6 +219,19 @@ public class RecipeFlipGroup implements Searchable {
         return recipeFlips.stream()
             .filter(recipeFlip -> recipeFlip.getTimeOfCreation().isAfter(startOfInterval))
             .collect(Collectors.toList());
+    }
+
+    public OptionalLong getKnownRecipeCountMade(List<RecipeFlip> flips) {
+        long count = 0;
+        Recipe definition = getRecipe();
+        for (RecipeFlip flip : flips) {
+            OptionalLong flipCount = flip.getKnownRecipeCountMade(definition);
+            if (!flipCount.isPresent()) {
+                return OptionalLong.empty();
+            }
+            count += flipCount.getAsLong();
+        }
+        return OptionalLong.of(count);
     }
 
     public void deleteFlips(Instant startOfInterval) {

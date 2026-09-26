@@ -379,7 +379,7 @@ public class SqliteStorage {
      * Upsert an active slot with an offer event.
      * @param displayName Account display name
      * @param slotIndex GE slot index (0-7)
-     * @param offer The offer event to store (cleared if null/complete)
+     * @param offer The offer event to store, including completed offers awaiting collection
      */
     public synchronized void upsertSlot(String displayName, int slotIndex, OfferEvent offer, boolean historyVisible) {
         offers.upsertSlot(displayName, slotIndex, offer, historyVisible);

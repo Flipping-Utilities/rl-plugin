@@ -31,8 +31,16 @@ import com.flippingutilities.jobs.WikiDataFetcherJob;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.Section;
-import com.flippingutilities.ui.uiutilities.*;
-import com.flippingutilities.utilities.*;
+import com.flippingutilities.ui.uiutilities.CustomColors;
+import com.flippingutilities.ui.uiutilities.CustomFonts;
+import com.flippingutilities.ui.uiutilities.Icons;
+import com.flippingutilities.ui.uiutilities.TimeFormatters;
+import com.flippingutilities.ui.uiutilities.UIUtilities;
+import com.flippingutilities.utilities.Constants;
+import com.flippingutilities.utilities.GeTax;
+import com.flippingutilities.utilities.WikiDataSource;
+import com.flippingutilities.utilities.WikiItemMargins;
+import com.flippingutilities.utilities.WikiRequestWrapper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
@@ -42,18 +50,35 @@ import net.runelite.client.util.AsyncBufferedImage;
 import net.runelite.client.util.LinkBrowser;
 import net.runelite.client.util.QuantityFormatter;
 
-import javax.swing.*;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.SwingConstants;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.TextField;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Represents an instance of one of the many panels on the FlippingPanel. It is used to display information such as
@@ -455,7 +480,7 @@ public class FlippingItemPanel extends JPanel
 		textField.addActionListener((e1 -> {
 			isHighlighted[0] = false;
 			try {
-				int num = Integer.parseInt(textField.getText().replace(",", ""));
+				long num = Long.parseLong(textField.getText().replace(",", ""));
 				if (num <= 0) {
 					JOptionPane.showMessageDialog(this,"You cannot input zero or a negative number");
 					return;
@@ -831,7 +856,7 @@ public class FlippingItemPanel extends JPanel
 		Optional<OfferEvent> latestSell = flippingItem.getLatestSell();
 
 
-		Optional<Integer> profitEach = flippingItem.getCurrentProfitEach();
+		Optional<Long> profitEach = flippingItem.getCurrentProfitEach();
 		Optional<Float> roi =  flippingItem.getCurrentRoi();
 
 		instaSellVal.setText(latestInstaSell.isPresent() ? String.format(NUM_FORMAT, latestInstaSell.get().getPreTaxPrice()) + " gp":"N/A");
@@ -840,7 +865,7 @@ public class FlippingItemPanel extends JPanel
 		latestBuyPriceVal.setText(latestBuy.isPresent() ? String.format(NUM_FORMAT, latestBuy.get().getPrice()) + " gp" : "N/A");
 		latestSellPriceVal.setText(latestSell.isPresent() ? String.format(NUM_FORMAT, latestSell.get().getPreTaxPrice()) + " gp" : "N/A");
 
-		marginCheckProfitEachVal.setText(profitEach.isPresent()? QuantityFormatter.quantityToRSDecimalStack(profitEach.get()) + " gp": "N/A");
+		marginCheckProfitEachVal.setText(profitEach.isPresent()? UIUtilities.quantityToRSDecimalStack(profitEach.get(), false) + " gp": "N/A");
 
 		//the three of these will be set by wiki vals as they are dependent on em
 		wikiProfitEachVal.setText("N/A");
@@ -901,8 +926,8 @@ public class FlippingItemPanel extends JPanel
 		wikiSellVal.setText(wikiItemInfo.getLow()==0? "No data":QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
 
 		if (wikiItemInfo.getHigh() != 0 && wikiItemInfo.getLow() != 0) {
-			int profitEach = GeTax.getPostTaxPrice(wikiItemInfo.getHigh()) - wikiItemInfo.getLow();
-			wikiProfitEachVal.setText(QuantityFormatter.quantityToRSDecimalStack(profitEach) + " gp");
+			long profitEach = GeTax.getPostTaxPrice(wikiItemInfo.getHigh()) - wikiItemInfo.getLow();
+			wikiProfitEachVal.setText(UIUtilities.quantityToRSDecimalStack(profitEach, false) + " gp");
 
 			float roi = ((float)profitEach/ wikiItemInfo.getLow()) * 100;
 			wikiRoiLabelVal.setText(String.format("%.2f", roi) + "%");
@@ -910,8 +935,8 @@ public class FlippingItemPanel extends JPanel
 			wikiRoiLabelVal.setForeground(UIUtilities.gradiatePercentage(roi, plugin.getConfig().roiGradientMax()));
 			int geLimit = plugin.getConfig().geLimitProfit()? flippingItem.getRemainingGeLimit() : flippingItem.getTotalGELimit();
 			if (flippingItem.getTotalGELimit() > 0) {
-				int potentialProfit = profitEach * geLimit;
-				wikiPotentialProfitVal.setText(QuantityFormatter.quantityToRSDecimalStack(potentialProfit) + " gp");
+				long potentialProfit = profitEach * geLimit;
+				wikiPotentialProfitVal.setText(UIUtilities.quantityToRSDecimalStack(potentialProfit, false) + " gp");
 			}
 		}
 		updateWikiTimeLabels();
