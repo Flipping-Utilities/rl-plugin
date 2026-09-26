@@ -88,7 +88,9 @@ public final class UiGallery {
         BufferedImage[] image = new BufferedImage[1];
         try {
             SwingUtilities.invokeAndWait(() -> { RuneLiteLAF.setup(); mounted[0] = fixture.mount(); });
-            // A separate EDT turn observes invokeLater rebuilds queued by fixture construction.
+            // Search updates can enqueue their own rebuild. Drain the initial callbacks first,
+            // then capture on the next turn so both stages have run.
+            SwingUtilities.invokeAndWait(() -> {});
             SwingUtilities.invokeAndWait(() -> image[0] = capture(mounted[0].component, width, fixture.height));
             return image[0];
         } finally {
@@ -166,7 +168,7 @@ public final class UiGallery {
             JLabel widthLabel = new JLabel("Width"); widthLabel.setLabelFor(width); sizes.add(widthLabel); sizes.add(width);
             for (int preset : new int[]{225, 300}) {
                 JButton button = new JButton(preset + " px");
-                button.addActionListener(event -> { fitWidth.setSelected(false); width.setEnabled(true); width.setValue(preset); });
+                button.addActionListener(event -> { fitWidth.setSelected(false); width.setEnabled(true); width.setValue(preset); resizePreview(); });
                 sizes.add(button);
             }
             sizes.add(fitWidth);

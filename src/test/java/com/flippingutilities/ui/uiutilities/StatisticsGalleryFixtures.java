@@ -74,6 +74,7 @@ final class StatisticsGalleryFixtures {
                 JComponent component = (JComponent) child;
                 String tooltip = component.getToolTipText();
                 boolean external = "Export to CSV".equals(tooltip) || "Reset Statistics".equals(tooltip)
+                    || "Reset statistics for this interval".equals(tooltip)
                     || child instanceof JButton && "Manage Custom Recipes".equals(((JButton) child).getText());
                 if (external) {
                     for (java.awt.event.MouseListener listener : component.getMouseListeners()) component.removeMouseListener(listener);
