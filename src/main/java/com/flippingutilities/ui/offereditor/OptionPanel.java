@@ -11,9 +11,15 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.util.ColorUtil;
 
-import javax.swing.*;
+import javax.swing.Icon;
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.text.NumberFormat;
@@ -90,7 +96,7 @@ public class OptionPanel extends JPanel {
         return body;
     }
 
-    private String createResultingValueText(int resultingValue) {
+    private String createResultingValueText(long resultingValue) {
         String keyText = String.format("<span style='color:%s;'>%s</span>",ColorUtil.colorToHexCode(ColorScheme.GRAND_EXCHANGE_ALCH), option.getKey());
         String typeText = option.isQuantityOption()? "quantity":"price";
         String value = NumberFormat.getInstance(Locale.getDefault()).format(resultingValue);
@@ -127,14 +133,14 @@ public class OptionPanel extends JPanel {
     private void setResultingValue() {
         plugin.getClientThread().invokeLater(() -> {
             String errorMessage = null;
-            int val = 0;
+            long val = 0;
             try {
                 val = plugin.calculateOptionValue(option);
             } catch (InvalidOptionException e) {
                 errorMessage = e.getMessage();
             }
             String finalErrorMessage = errorMessage;
-            int finalVal = val;
+            long finalVal = val;
             SwingUtilities.invokeLater(() -> {
                 dotIcon.setIcon(Icons.GRAY_DOT);
                 if (finalErrorMessage != null) {

@@ -46,21 +46,21 @@ public class RecipeGroupContainerPanel extends JPanel {
         paginator.setPageNumber(1);
     }
 
-    public void rebuild(List<RecipeFlipGroup> recipeFlipGroups) {
-        activePanels.clear();
-        recipeGroupContainer.removeAll();
-        paginator.updateTotalPages(recipeFlipGroups.size());
+	public void rebuild(List<RecipeFlipGroup> recipeFlipGroups) {
+		activePanels.clear();
+		recipeGroupContainer.removeAll();
+		paginator.updateTotalPages(recipeFlipGroups.size());
 
-        if (!recipeFlipGroups.isEmpty()) {
-            List<RecipeFlipGroup> itemsOnCurrentPage = paginator.getCurrentPageItems(recipeFlipGroups);
-            List<RecipeFlipGroupPanel> newPanels = itemsOnCurrentPage.stream().map(rfg -> new RecipeFlipGroupPanel(plugin, rfg)).collect(Collectors.toList());
-            UIUtilities.stackPanelsVertically((List) newPanels, recipeGroupContainer, 5);
-            activePanels.addAll(newPanels);
-        }
-        else {
-            recipeGroupContainer.add(createHelpPanel());
-        }
-    }
+		if (!recipeFlipGroups.isEmpty()) {
+			List<RecipeFlipGroup> itemsOnCurrentPage = paginator.getCurrentPageItems(recipeFlipGroups);
+			List<RecipeFlipGroupPanel> newPanels = itemsOnCurrentPage.stream().map(rfg -> new RecipeFlipGroupPanel(plugin, rfg)).collect(Collectors.toList());
+			UIUtilities.stackPanelsVertically((List) newPanels, recipeGroupContainer, 5);
+			activePanels.addAll(newPanels);
+		}
+		else {
+			recipeGroupContainer.add(createHelpPanel());
+		}
+	}
 
     public void showPanel(JPanel panel) {
         activePanels.clear();

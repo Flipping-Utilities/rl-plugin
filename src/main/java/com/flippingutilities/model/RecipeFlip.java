@@ -7,7 +7,13 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.OptionalLong;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -41,10 +47,9 @@ public class RecipeFlip {
     }
 
     public RecipeFlip clone() {
-        Instant clonedInstant = Instant.ofEpochSecond(timeOfCreation.getEpochSecond());
         Map<Integer, Map<String, PartialOffer>> clonedOutputs = cloneComponents(outputs);
         Map<Integer, Map<String, PartialOffer>> clonedInputs = cloneComponents(inputs);
-        return new RecipeFlip(clonedInstant, clonedOutputs, clonedInputs, coinCost);
+        return new RecipeFlip(timeOfCreation, clonedOutputs, clonedInputs, coinCost);
     }
 
     private Map<Integer, Map<String, PartialOffer>> cloneComponents(Map<Integer, Map<String, PartialOffer>> component) {
@@ -57,6 +62,10 @@ public class RecipeFlip {
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
+    public boolean hasMissingOffers() {
+        return getPartialOffers().stream().anyMatch(po -> po.amountConsumed > 0 && po.getOffer() == null);
+    }
+
     public long getProfit() {
         return getRevenue() - getExpense();
     }
@@ -64,7 +73,7 @@ public class RecipeFlip {
     private long getIngredientsValue(boolean isBuyOffer) {
         return getPartialOffers().stream()
             .filter(po -> po.getOffer() != null && po.getOffer().isBuy() == isBuyOffer)
-            .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
+            .mapToLong(po -> (long) po.amountConsumed * po.getOffer().getPrice())
             .sum();
     }
 
@@ -79,7 +88,9 @@ public class RecipeFlip {
     public long getTaxPaid() {
         return getOutputs().values().stream()
             .mapToLong(
-                offerIdToPartialOfferMap -> offerIdToPartialOfferMap.values().stream().mapToInt(po -> po.getOffer().getTaxPaidPerItem() * po.amountConsumed).sum())
+                offerIdToPartialOfferMap -> offerIdToPartialOfferMap.values().stream()
+                    .filter(po -> po.getOffer() != null)
+                    .mapToLong(po -> (long) po.getOffer().getTaxPaidPerItem() * po.amountConsumed).sum())
             .sum();
     }
 
@@ -96,11 +107,11 @@ public class RecipeFlip {
 
         long revenue = offers.stream()
             .filter(po -> !po.getOffer().isBuy())
-            .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
+            .mapToLong(po -> (long) po.amountConsumed * po.getOffer().getPrice())
             .sum();
         long expense = offers.stream()
             .filter(po -> po.getOffer().isBuy())
-            .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
+            .mapToLong(po -> (long) po.amountConsumed * po.getOffer().getPrice())
             .sum();
         return revenue - expense;
     }
@@ -127,27 +138,24 @@ public class RecipeFlip {
     }
 
     /**
-     * Calculates how many times this recipe was made based on output consumption.
-     * If recipe is null, infers from the outputs map.
+     * Calculates recipe executions only when an output's per-execution quantity is known.
+     * Consumed output units alone cannot determine how many recipes were made.
      */
-    public int getRecipeCountMade(Recipe recipe) {
+    public OptionalLong getKnownRecipeCountMade(Recipe recipe) {
         if (outputs.isEmpty()) {
-            return 0;
+            return OptionalLong.of(0);
         }
         
-        // Get any output item ID and quantity from outputs map
-        Map.Entry<Integer, Map<String, PartialOffer>> firstOutput = outputs.entrySet().iterator().next();
-        int outputItemId = firstOutput.getKey();
-        int amountConsumed = getPartialOffers(outputItemId).stream().mapToInt(po -> po.amountConsumed).sum();
-        
-        if (recipe != null && !recipe.getOutputs().isEmpty()) {
-            // Use recipe's quantity if available
-            int quantityPerRecipe = recipe.getOutputs().get(0).getQuantity();
-            return amountConsumed / quantityPerRecipe;
+        if (recipe != null) {
+            for (RecipeItem output : recipe.getOutputs()) {
+                Map<String, PartialOffer> offers = outputs.get(output.getId());
+                if (offers != null && output.getQuantity() > 0) {
+                    return OptionalLong.of(offers.values().stream().mapToLong(po -> po.amountConsumed).sum()
+                        / output.getQuantity());
+                }
+            }
         }
-        
-        // If no recipe, assume quantity of 1 per recipe
-        return amountConsumed;
+        return OptionalLong.empty();
     }
     
     /**

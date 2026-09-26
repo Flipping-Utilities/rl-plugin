@@ -5,8 +5,8 @@ import lombok.Data;
 
 @Data
 public class WikiItemMargins {
-    int high;
+    long high;
     long highTime;
-    int low;
+    long low;
     long lowTime;
 }

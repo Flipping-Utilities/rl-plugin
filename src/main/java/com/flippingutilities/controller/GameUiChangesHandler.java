@@ -8,7 +8,9 @@ import com.flippingutilities.ui.widgets.OfferEditor;
 import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.WikiRequest;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.*;
+import net.runelite.api.Client;
+import net.runelite.api.FontID;
+import net.runelite.api.VarClientInt;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.events.VarbitChanged;
@@ -16,7 +18,11 @@ import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
-import net.runelite.api.widgets.*;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetPositionMode;
+import net.runelite.api.widgets.WidgetSizeMode;
+import net.runelite.api.widgets.WidgetTextAlignment;
+import net.runelite.api.widgets.WidgetType;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemStats;
@@ -105,8 +111,8 @@ public class GameUiChangesHandler {
                 WikiRequest wikiRequest = plugin.getLastWikiRequestWrapper().getWikiRequest();
 
                 if (offerText.equals("Buy offer")) {
-                    int instaSellPrice = 0;
-                    int wikiInstaSellPrice = 0;
+                    long instaSellPrice = 0;
+                    long wikiInstaSellPrice = 0;
                     if (selectedItem.isPresent() && selectedItem.get().getLatestInstaSell().isPresent()) {
                         instaSellPrice = selectedItem.get().getLatestInstaSell().get().getPreTaxPrice();
                     }
@@ -115,8 +121,8 @@ public class GameUiChangesHandler {
                     }
                     flippingWidget.showInstaSellPrices(instaSellPrice, wikiInstaSellPrice);
                 } else if (offerText.equals("Sell offer")) {
-                    int instaBuyPrice = 0;
-                    int wikiInstaBuyPrice = 0;
+                    long instaBuyPrice = 0;
+                    long wikiInstaBuyPrice = 0;
                     if (selectedItem.isPresent() && selectedItem.get().getLatestInstaBuy().isPresent()) {
                         instaBuyPrice = selectedItem.get().getLatestInstaBuy().get().getPrice();
                     }

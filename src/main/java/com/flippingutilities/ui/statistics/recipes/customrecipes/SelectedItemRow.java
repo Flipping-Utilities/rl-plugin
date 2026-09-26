@@ -40,7 +40,8 @@ public class SelectedItemRow extends JPanel {
         plugin.getClientThread().invoke(() -> {
             ItemManager itemManager = plugin.getItemManager();
             ItemComposition item = itemManager.getItemComposition(itemId);
-            int price = itemManager.getItemPrice(itemId);
+            // 64-bit since the max cash update; %,d formats longs fine
+            long price = itemManager.getItemPrice(itemId);
             SwingUtilities.invokeLater(() -> {
                 AsyncBufferedImage itemImage = itemManager.getImage(itemId);
                 itemImage.addTo(iconLabel);

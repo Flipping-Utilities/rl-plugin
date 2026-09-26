@@ -7,7 +7,6 @@ import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
-import com.flippingutilities.utilities.Recipe;
 import lombok.Getter;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
@@ -23,6 +22,7 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.stream.Collectors;
 
 public class RecipeFlipGroupPanel extends JPanel {
@@ -270,8 +270,8 @@ public class RecipeFlipGroupPanel extends JPanel {
         itemIconTitlePanel.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
-                    JOptionPane.showMessageDialog(null, "You cannot delete recipe flips in the Accountwide view");
+                if (plugin.isAccountWideView()) {
+                    JOptionPane.showMessageDialog(null, RecipeDisplayText.ACCOUNT_WIDE_DELETE_UNAVAILABLE);
                     return;
                 }
                 int result = JOptionPane.showOptionDialog(itemIconTitlePanel, "Are you sure you want to delete this recipe's flips from this time interval?",
@@ -319,15 +319,35 @@ public class RecipeFlipGroupPanel extends JPanel {
     public void updateLabels(List<RecipeFlip> recipeFlips) {
         quantityFlipped.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 
-        Recipe recipe = recipeFlipGroup.getRecipe();
+        long profit;
+        long expense;
 
-        int recipesMade = recipeFlips.stream().mapToInt(rf -> rf.getRecipeCountMade(recipe)).sum();
-        long revenue = recipeFlips.stream().mapToLong(RecipeFlip::getRevenue).sum();
-        long expense = recipeFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
-        long profit = revenue - expense;
+        // Use the same interval-filtered flips for summary, details, and totals.
+        OptionalLong recipesMade = recipeFlipGroup.getKnownRecipeCountMade(recipeFlips);
+        String countText = recipesMade.isPresent() ? QuantityFormatter.formatNumber(recipesMade.getAsLong()) : RecipeDisplayText.UNKNOWN;
+        quantityFlipped.setText(recipesMade.isPresent() ? countText + " Items" : RecipeDisplayText.UNKNOWN);
+        quantityFlipped.setToolTipText(recipesMade.isPresent() ? null : RecipeDisplayText.MISSING_QUANTITIES);
+        if (recipeFlips.stream().anyMatch(RecipeFlip::hasMissingOffers)) {
+            recipeProfitAndQuantityLabel.setText(RecipeDisplayText.UNKNOWN + " (x " + countText + ")");
+            for (JLabel label : new JLabel[]{recipeProfitAndQuantityLabel, totalProfitValLabel, profitEachValLabel, roiValLabel}) {
+                if (label != recipeProfitAndQuantityLabel) label.setText(RecipeDisplayText.UNKNOWN);
+                label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+                label.setToolTipText(RecipeDisplayText.MISSING_OFFERS_TOTALS);
+            }
+            updateTimeLabels();
+            return;
+        }
+        recipeProfitAndQuantityLabel.setToolTipText(null);
+        long flipRevenue = recipeFlips.stream().mapToLong(RecipeFlip::getRevenue).sum();
+        expense = recipeFlips.stream().mapToLong(RecipeFlip::getExpense).sum();
+        profit = flipRevenue - expense;
 
-        updateTitleLabels(profit, recipesMade);
-        updateFlippingLabels(expense, revenue, recipesMade);
+        updateTitleLabels(profit, countText);
+        // revenue = profit + expense holds for both paths (cached: by construction;
+        // computed: flipRevenue = profit + expense). Named differently from the inner-scope
+        // flipRevenue to avoid confusion.
+        long totalRevenue = profit + expense;
+        updateFlippingLabels(expense, totalRevenue, recipesMade);
         updateTimeLabels();
     }
 
@@ -335,9 +355,9 @@ public class RecipeFlipGroupPanel extends JPanel {
      * Updates the labels on the title panel. This includes the profit label which shows how much profit you made
      * from flipping that item and the number of times you flipped that item.
      */
-    private void updateTitleLabels(long profitFromFlips, long numItemsFlipped) {
+    private void updateTitleLabels(long profitFromFlips, String countText) {
         String totalProfitString = (profitFromFlips >= 0 ? "+" : "") + UIUtilities.quantityToRSDecimalStack(profitFromFlips, true) + " gp";
-        totalProfitString += " (x " + QuantityFormatter.formatNumber(numItemsFlipped) + ")";
+        totalProfitString += " (x " + countText + ")";
 
         recipeProfitAndQuantityLabel.setText(totalProfitString);
         recipeProfitAndQuantityLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
@@ -345,18 +365,23 @@ public class RecipeFlipGroupPanel extends JPanel {
         recipeProfitAndQuantityLabel.setFont(FontManager.getRunescapeSmallFont());
     }
 
-    private void updateFlippingLabels(long flippingExpense, long flippingRevenue, int itemsFlipped) {
+    private void updateFlippingLabels(long flippingExpense, long flippingRevenue, OptionalLong itemsFlipped) {
         long profitFromFlips = flippingRevenue - flippingExpense;
         totalProfitValLabel.setText(UIUtilities.quantityToRSDecimalStack(profitFromFlips, true) + " gp");
         totalProfitValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
         totalProfitValLabel.setToolTipText(QuantityFormatter.formatNumber(profitFromFlips) + " gp");
 
-        String profitEach = UIUtilities.quantityToRSDecimalStack(itemsFlipped > 0 ? (profitFromFlips / itemsFlipped) : 0, true) + " gp/ea";
-        profitEachValLabel.setText(profitEach);
-        profitEachValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
-        profitEachValLabel.setToolTipText(QuantityFormatter.formatNumber(itemsFlipped > 0 ? profitFromFlips / itemsFlipped : 0) + " gp/ea");
-
-        quantityFlipped.setText(QuantityFormatter.formatNumber(itemsFlipped) + " Items");
+        if (itemsFlipped.isPresent()) {
+            long count = itemsFlipped.getAsLong();
+            long profitEach = count > 0 ? profitFromFlips / count : 0;
+            profitEachValLabel.setText(UIUtilities.quantityToRSDecimalStack(profitEach, true) + " gp/ea");
+            profitEachValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
+            profitEachValLabel.setToolTipText(QuantityFormatter.formatNumber(profitEach) + " gp/ea");
+        } else {
+            profitEachValLabel.setText(RecipeDisplayText.UNKNOWN);
+            profitEachValLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+            profitEachValLabel.setToolTipText(RecipeDisplayText.MISSING_QUANTITIES_PROFIT_EACH);
+        }
 
         float roi = (float) flippingExpense > 0 ? (float) profitFromFlips / flippingExpense * 100 : 0;
 

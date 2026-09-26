@@ -26,61 +26,65 @@ public class FlippingItemHandler {
             return result;
         }
 
+        // Sort keys are computed ONCE per item. Computing them inside the comparator ran the
+        // recipe-adjusted view plus the full flip pairing (combineToFlips) O(n log n) times,
+        // which took seconds on large datasets (2k+ items with thousands of offers each).
         switch (selectedSort) {
             case TIME:
                 result.sort(Comparator.comparing(FlippingItem::getLatestActivityTime));
                 break;
 
-            case TOTAL_PROFIT:
-                result.sort(Comparator.comparing(item -> {
-                    Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-                    ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-                    List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
-                    return FlippingItem.getProfit(adjustedOffers);
-                }));
+            case TOTAL_PROFIT: {
+                Map<FlippingItem, Long> key = new IdentityHashMap<>();
+                for (FlippingItem item : result) {
+                    key.put(item, FlippingItem.getProfit(adjustedIntervalView(item, startOfInterval)));
+                }
+                result.sort(Comparator.comparing(key::get));
                 break;
+            }
 
-            case PROFIT_EACH:
-                result.sort(Comparator.comparing(item -> {
-                    Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-                    ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-                    List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
+            case PROFIT_EACH: {
+                Map<FlippingItem, Long> key = new IdentityHashMap<>();
+                for (FlippingItem item : result) {
+                    List<OfferEvent> adjustedOffers = adjustedIntervalView(item, startOfInterval);
                     long quantity = FlippingItem.countFlipQuantity(adjustedOffers);
-                    if (quantity == 0) {
-                        return Long.MIN_VALUE;
-                    }
-
-                    long profit = FlippingItem.getProfit(adjustedOffers);
-                    return profit / quantity;
-                }));
+                    key.put(item, quantity == 0 ? Long.MIN_VALUE : FlippingItem.getProfit(adjustedOffers) / quantity);
+                }
+                result.sort(Comparator.comparing(key::get));
                 break;
-            case ROI:
-                result.sort(Comparator.comparing(item -> {
-                    Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-                    List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-                    List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
-
+            }
+            case ROI: {
+                Map<FlippingItem, Float> key = new IdentityHashMap<>();
+                for (FlippingItem item : result) {
+                    List<OfferEvent> adjustedOffers = adjustedIntervalView(item, startOfInterval);
                     long profit = FlippingItem.getProfit(adjustedOffers);
                     long expense = FlippingItem.getValueOfMatchedOffers(adjustedOffers, true);
-                    if (expense == 0) {
-                        return Float.MIN_VALUE;
-                    }
-
-                    return (float) profit / expense * 100;
-                }));
+                    key.put(item, expense == 0 ? Float.MIN_VALUE : (float) profit / expense * 100);
+                }
+                result.sort(Comparator.comparing(key::get));
                 break;
-            case FLIP_COUNT:
-                result.sort(Comparator.comparing(
-                    item -> {
-                        Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-                        List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
-                        List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
-                        return FlippingItem.countFlipQuantity(adjustedOffers);
-                    }));
+            }
+            case FLIP_COUNT: {
+                Map<FlippingItem, Long> key = new IdentityHashMap<>();
+                for (FlippingItem item : result) {
+                    key.put(item, (long) FlippingItem.countFlipQuantity(adjustedIntervalView(item, startOfInterval)));
+                }
+                result.sort(Comparator.comparing(key::get));
                 break;
+            }
         }
         Collections.reverse(result);
         return result;
+    }
+
+    /**
+     * The item's interval-filtered history adjusted for recipe consumption, as used by every
+     * profit/quantity sort key.
+     */
+    private List<OfferEvent> adjustedIntervalView(FlippingItem item, Instant startOfInterval) {
+        Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
+        ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
+        return FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
     }
 
     public void deleteRemovedItems(List<FlippingItem> currItems) {

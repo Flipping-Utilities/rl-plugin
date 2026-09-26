@@ -17,13 +17,35 @@ import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.util.AsyncBufferedImage;
 import net.runelite.client.util.QuantityFormatter;
 
-import javax.swing.*;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingConstants;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.ChangeEvent;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.text.ParseException;
 import java.time.Instant;
-import java.util.*;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -41,7 +63,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
     Map<Integer, Map<String, PartialOffer>> selectedOffers;
     JButton finishButton = new JButton("Combine!");
     JLabel profitNumberLabel = new JLabel("+0");
-    JSpinner coinOffset = new JSpinner();
+    JSpinner coinOffset = new JSpinner(new SpinnerNumberModel((Number) 0L, Long.MIN_VALUE, Long.MAX_VALUE, 1L));
     Recipe recipe;
     Map<Integer, RecipeItemHeaderPanel> idToHeader;
     List<JSpinner> numberPickers = new ArrayList<>();
@@ -415,7 +437,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
         if (allMatchTargetValues.get()) {
             finishButton.setEnabled(true);
             finishButton.setForeground(Color.GREEN);
-            long profit = Math.round(calculateProfit()) - (Integer)coinOffset.getValue();
+            long profit = calculateProfit() - ((Number) coinOffset.getValue()).longValue();
             String prefix = profit < 0 ? "" : "+";
             profitNumberLabel.setText(prefix + QuantityFormatter.formatNumber(profit) + " gp");
             profitNumberLabel.setForeground(profit < 0 ? Color.RED : Color.GREEN);
@@ -481,8 +503,11 @@ public class RecipeOfferSelectionPanel extends JPanel {
         finishButton.addActionListener(e -> {
             try {
                 coinOffset.commitEdit();
-            } catch ( java.text.ParseException ex ) { log.debug("Failed to parse coin offset", ex); }
-            int coinOffsetValue = (Integer) coinOffset.getValue();
+            } catch (ParseException ex) {
+                log.debug("Failed to parse coin offset", ex);
+                return;
+            }
+            long coinOffsetValue = ((Number) coinOffset.getValue()).longValue();
             RecipeFlip recipeFlip = new RecipeFlip(recipe, selectedOffers, getCoinsCost() + coinOffsetValue);
             plugin.addRecipeFlip(recipeFlip, recipe);
             plugin.getStatPanel().rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
