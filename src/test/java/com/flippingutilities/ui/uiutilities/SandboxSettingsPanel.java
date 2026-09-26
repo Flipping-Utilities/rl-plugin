@@ -40,7 +40,7 @@ final class SandboxSettingsPanel extends JPanel {
         storage.add(backend);
         add(storage);
         note(browser
-            ? "SQLite is supported for import. This browser session converts it to temporary JSON; SQLite writing and maintenance are unavailable."
+            ? "This test always uses SQLite. JSON saves are converted automatically with the plugin's migration code. Download the conversion snapshot from the page above; simulated trades only change this disposable session."
             : "The backend is chosen when you open the sandbox. Open a SQLite database or a JSON data folder to test that backend.");
         add(Box.createVerticalStrut(12));
         note("Changes apply immediately and last for this session. Your original RuneLite settings are unchanged.");

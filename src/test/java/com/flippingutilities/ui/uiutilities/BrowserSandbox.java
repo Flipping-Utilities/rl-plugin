@@ -2,7 +2,6 @@ package com.flippingutilities.ui.uiutilities;
 
 import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.model.AccountData;
-import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -28,6 +27,7 @@ public final class BrowserSandbox {
     private static SandboxData data;
     private static SandboxGrandExchangePanel exchange;
     private static Path temporaryHome;
+    private static BrowserSqliteStorage storage;
 
     private BrowserSandbox() {}
 
@@ -81,19 +81,21 @@ public final class BrowserSandbox {
                 && !name.equals("flipping/backupcheckpoints.special.json")) continue;
             Files.copy(Paths.get(file.get("staged").getAsString()), destination);
         }
-        Map<String, AccountData> importedAccounts = null;
-        if (database) {
-            importedAccounts = BrowserSqliteImporter.load();
-            progress("Preparing imported accounts…");
-            TradePersister persister = new TradePersister(new Gson());
-            for (Map.Entry<String, AccountData> entry : importedAccounts.entrySet()) {
-                persister.writeToFile(entry.getKey(), entry.getValue());
-            }
-            imported(importedAccounts.size());
-        }
+        TradePersister persister = new TradePersister(BrowserGson.create());
+        // Validate companion preferences too, before making a conversion available for download.
+        persister.loadAccountWideData();
+        progress(database ? "Opening the SQLite working copy…" : "Reading JSON saves for conversion…");
+        Map<String, AccountData> snapshot = database ? null : persister.loadAllAccountsForMigration();
+        storage = BrowserSqliteStorage.open(runeLite.resolve("flipping/flipping.db").toFile());
+        Map<String, AccountData> importedAccounts = BrowserSqliteSession.prepare(storage, persister, snapshot,
+            BrowserSandbox::progress);
+        snapshot = null;
+        imported(importedAccounts.size());
         data = SandboxData.prepared(Paths.get(manifest.get("sourceLabel").getAsString()), home, database);
         progress("Loading saved trades into the sandbox…");
-        host = SandboxPlugin.load(data, true, importedAccounts);
+        host = SandboxPlugin.loadSqlite(data, storage, importedAccounts);
+        // Freeze a verified conversion snapshot before the GE can make simulated trades.
+        completedConversion(importedAccounts.size(), !database);
         progress("Opening the Grand Exchange and plugin panels…");
         SwingUtilities.invokeAndWait(() -> {
             try {
@@ -136,6 +138,10 @@ public final class BrowserSandbox {
             host.close();
             host = null;
         }
+        if (storage != null) {
+            storage.close();
+            storage = null;
+        }
         if (data != null) {
             data.close();
             data = null;
@@ -170,6 +176,7 @@ public final class BrowserSandbox {
 
     private static native String fetch(String url) throws IOException;
     private static native void imported(int accounts);
+    private static native void completedConversion(int accounts, boolean convertedFromJson);
     private static native void ready();
     private static native void awaitClose();
     private static native void closed();

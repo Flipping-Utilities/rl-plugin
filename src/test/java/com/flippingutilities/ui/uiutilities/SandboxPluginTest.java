@@ -3,6 +3,8 @@ package com.flippingutilities.ui.uiutilities;
 import com.flippingutilities.DataSource;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.db.SqliteStorage;
+import com.flippingutilities.db.TradePersister;
+import com.google.gson.Gson;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
@@ -236,6 +238,16 @@ public class SandboxPluginTest {
         assertTrue("An empty source must stay empty", hashes(source).isEmpty());
     }
 
+    @Test
+    public void browserJsonMigrationOpensSqliteAndPreservesTheOriginalSave() throws Exception {
+        Path source = folder.newFolder("browser-migration-source").toPath();
+        write(source.resolve(ACCOUNT + ".json"), legacyAccount(ACCOUNT));
+        write(source.resolve("settings.properties"), "flipping.dataSource=JSON\n");
+        Map<String, String> before = hashes(source);
+        probe(source, DataSource.SQLITE, "browser-migration");
+        assertEquals("Conversion must leave the selected JSON and settings unchanged", before, hashes(source));
+    }
+
     private void assertIsolatedAndRestorable(Path source, DataSource backend) throws Exception {
         Path sourceDirectory = Files.isDirectory(source) ? source : source.getParent();
         Map<String, String> before = hashes(sourceDirectory);
@@ -372,6 +384,25 @@ public class SandboxPluginTest {
                     }
                 } else if ("browser-ui".equals(action)) {
                     try (SandboxPlugin host = SandboxPlugin.load(data, true)) { exerciseBrowserAccountSelection(host); }
+                } else if ("browser-migration".equals(action)) {
+                    TradePersister persister = new TradePersister(new Gson());
+                    SqliteStorage storage = new SqliteStorage(data.getRuneLiteDirectory().resolve("flipping/flipping.db").toFile());
+                    try {
+                        Map<String, AccountData> converted = BrowserSqliteSession.prepare(storage, persister,
+                            persister.loadAllAccountsForMigration(), message -> {});
+                        // Prove host data is read from SQLite, even if the JSON working copy changes.
+                        write(data.getRuneLiteDirectory().resolve("flipping/" + ACCOUNT + ".json"), "{");
+                        try (SandboxPlugin host = SandboxPlugin.loadSqlite(data, storage, converted)) {
+                            assertEquals(DataSource.SQLITE, host.plugin.getConfig().dataSource());
+                            assertSame(storage, host.plugin.getSqliteStorage());
+                            assertEquals("true", storage.getSetting("migration_completed"));
+                            AccountData account = host.plugin.getDataHandler().viewAccountData(ACCOUNT);
+                            assertEquals(1, account.getTrades().size());
+                            assertEquals(10, account.getTrades().get(0).getHistory().getCompressedOfferEvents().get(0).getCurrentQuantityInTrade());
+                            storage.upsertFavorite(ACCOUNT, ITEM, true, "browser");
+                            assertTrue(storage.loadAccount(ACCOUNT).getTrades().get(0).isFavorite());
+                        }
+                    } finally { storage.close(); }
                 } else if ("wiki".equals(action)) {
                     try (SandboxPlugin host = SandboxPlugin.load(data)) { exerciseWiki(host, data); }
                 } else if (action.startsWith("exchange")) {

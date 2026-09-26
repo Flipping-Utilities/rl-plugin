@@ -1,12 +1,32 @@
 import { planImport } from "./import-data.js";
+import { SqliteBridge } from "./sqlite-bridge.js";
 
 const status = document.querySelector("#status");
 const launcher = document.querySelector("#launcher");
 const reload = document.querySelector("#reload");
 const drop = document.querySelector("#drop");
+const download = document.querySelector("#download-database");
+const conversionNote = document.querySelector("#conversion-note");
 let busy = false;
 let closeSandbox;
+let downloadUrl;
+function discardDownload() {
+  if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+  downloadUrl = null;
+  download.hidden = true;
+  conversionNote.hidden = true;
+}
+download.addEventListener("click", () => {
+  if (!downloadUrl) return;
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = "flipping.db";
+  document.body.append(link);
+  link.click();
+  link.remove();
+});
 reload.addEventListener("click", () => {
+  discardDownload();
   if (closeSandbox) {
     reload.disabled = true;
     status.textContent = "Discarding this session…";
@@ -95,14 +115,14 @@ async function launch(mode, plan = { files: [], database: null, sourceLabel: "Em
   busy = true;
   launcher.querySelectorAll("button, input").forEach(element => element.disabled = true);
   const started = performance.now();
-  let database;
+  let bridge;
+  let conversion;
   let failed = false;
   try {
-    if (plan.database) {
-      status.textContent = "Opening SQLite snapshot…";
+    if (mode === "sandbox") {
+      status.textContent = plan.database ? "Opening SQLite snapshot…" : "Preparing SQLite conversion…";
       const SQL = await initSqlJs({ locateFile: file => new URL("./vendor/" + file, import.meta.url).href });
-      database = new SQL.Database(plan.database);
-      database.run("PRAGMA query_only = ON");
+      bridge = new SqliteBridge(plan.database ? new SQL.Database(plan.database) : new SQL.Database());
     }
     status.textContent = "Loading Java 11…";
     if (typeof cheerpjInit !== "function") throw new Error("The CheerpJ runtime could not load. Check your connection and reload.");
@@ -113,8 +133,11 @@ async function launch(mode, plan = { files: [], database: null, sourceLabel: "Em
     if (manifest.sourceCommit) document.querySelector("#build").textContent = "Build " + manifest.sourceCommit.slice(0, 7);
     const ready = () => {
       window.galleryReadyMs = Math.round(performance.now() - started);
+      const count = conversion ? conversion.accounts + " account" + (conversion.accounts === 1 ? "" : "s") : "";
+      const outcome = conversion ? (conversion.fromJson ? "Converted " : "Loaded ") + count + " · " : "";
       status.textContent = mode === "gallery" ? "Ready · Choose a state below. Export PNG downloads an image."
-        : "Ready · " + plan.sourceLabel + ". Changes are discarded on reload." + (plan.warnings.length ? " " + plan.warnings.join(" ") : "");
+        : "Ready · SQLite · " + outcome + plan.sourceLabel + ". Changes are discarded on reload."
+          + (plan.warnings.length ? " " + plan.warnings.join(" ") : "");
       launcher.hidden = true;
       reload.hidden = false;
     };
@@ -132,10 +155,15 @@ async function launch(mode, plan = { files: [], database: null, sourceLabel: "Em
         Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_progress: (_lib, message) => { status.textContent = message; },
         Java_com_flippingutilities_ui_uiutilities_BrowserSqliteImporter_progress: (_lib, message) => { status.textContent = message; },
         Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_awaitClose: () => new Promise(resolve => { closeSandbox = resolve; }),
-        Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_closed: () => location.reload(),
+        Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_closed: () => {
+          discardDownload();
+          bridge?.close();
+          location.reload();
+        },
         Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_failed: (_lib, message) => {
           failed = true;
           closeSandbox = null;
+          discardDownload();
           status.textContent = message;
           reload.disabled = false;
           reload.hidden = false;
@@ -143,16 +171,22 @@ async function launch(mode, plan = { files: [], database: null, sourceLabel: "Em
         Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_fetch: (_lib, url) => wikiFetch(url),
         Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_imported: (_lib, accounts) => {
           window.sandboxImportedAccounts = accounts;
-          database?.close(); database = null;
         },
+        Java_com_flippingutilities_ui_uiutilities_BrowserSandbox_completedConversion: (_lib, accounts, fromJson) => {
+          const bytes = bridge.snapshot();
+          discardDownload();
+          downloadUrl = URL.createObjectURL(new Blob([bytes], {type: "application/vnd.sqlite3"}));
+          conversion = {accounts, fromJson};
+          window.sandboxImportedAccounts = accounts;
+          window.sandboxConvertedAccounts = fromJson ? accounts : 0;
+          download.textContent = fromJson ? "Download converted database" : "Download SQLite snapshot";
+          download.hidden = false;
+          conversionNote.hidden = false;
+        },
+        Java_com_flippingutilities_ui_uiutilities_BrowserSqliteStorage_execute: (_lib, operation, sql, parameters) =>
+          bridge ? bridge.execute(operation, sql, parameters) : JSON.stringify({error: "No SQLite session is open."}),
         Java_com_flippingutilities_ui_uiutilities_BrowserSqliteImporter_query: (_lib, sql, parameters) => {
-          const statement = database.prepare(sql);
-          try {
-            statement.bind(JSON.parse(parameters));
-            const columns = statement.getColumnNames(), rows = [];
-            while (statement.step()) rows.push(statement.get(null, { useBigInt: true }));
-            return JSON.stringify({ columns, rows }, (_key, value) => typeof value === "bigint" ? value.toString() : value);
-          } finally { statement.free(); }
+          return bridge.execute("query", sql, parameters);
         }
       }
     });
@@ -161,16 +195,19 @@ async function launch(mode, plan = { files: [], database: null, sourceLabel: "Em
       cheerpOSAddStringFile(staged, file.bytes);
       return { path: file.path, staged };
     });
-    cheerpOSAddStringFile("/str/import.json", JSON.stringify({ files, sourceLabel: plan.sourceLabel, database: Boolean(database) }));
+    cheerpOSAddStringFile("/str/import.json", JSON.stringify({ files, sourceLabel: plan.sourceLabel, database: Boolean(plan.database) }));
     document.querySelector("#display").hidden = false;
     cheerpjCreateDisplay(-1, -1, document.querySelector("#display"));
     status.textContent = "Opening " + (mode === "gallery" ? "Swing components" : "sandbox and imported data") + "…";
     const mainClass = mode === "gallery" ? manifest.mainClass : manifest.sandboxClass;
     const exitCode = await cheerpjRunMain(mainClass, classPath, ...(mode === "gallery" ? [] : ["/str/import.json"]));
+    discardDownload();
+    bridge?.close();
     if (!failed) status.textContent = "The " + mode + " closed" + (exitCode ? " with code " + exitCode : "") + ". Start a new session to open it again.";
     reload.hidden = false;
   } catch (error) {
-    database?.close();
+    discardDownload();
+    bridge?.close();
     status.textContent = error.message || String(error);
     reload.hidden = false;
     console.error(error);

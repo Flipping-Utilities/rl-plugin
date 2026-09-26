@@ -29,9 +29,16 @@
       <input id="folder" type="file" webkitdirectory multiple hidden>
       <input id="files" type="file" multiple hidden>
       <div id="drop" tabindex="0" role="button" aria-label="Choose or drop a RuneLite folder or database">Drop a RuneLite / flipping folder, database, or JSON saves here.</div>
-      <p class="hint">Your browser cannot open ~/.runelite automatically. Choose it once per session. Close RuneLite before importing a database; include its -wal file if present. Files stay in your browser, and reload starts a fresh copy.</p>
+      <p class="hint">Choose JSON saves to test the real SQLite conversion. A folder containing account JSON converts those saves into a fresh database. Choose a database alone to open its SQLite snapshot. Close RuneLite first and include its -wal file if present. Your originals stay unchanged.</p>
     </section>
-    <div class="session"><p id="status" role="status">First launch downloads the Java runtime. Later launches use the browser cache.</p><button id="reload" class="secondary" type="button" hidden>New session</button></div>
+    <div class="session">
+      <p id="status" role="status">First launch downloads the Java runtime. Later launches use the browser cache.</p>
+      <div class="actions">
+        <button id="download-database" class="secondary" type="button" hidden>Download converted database</button>
+        <button id="reload" class="secondary" type="button" hidden>New session</button>
+      </div>
+    </div>
+    <p id="conversion-note" class="hint" hidden>The download contains the SQLite result before simulated trades. Keep accountwide.json alongside it for custom recipes and preferences.</p>
     <div id="display" aria-label="Interactive Java sandbox" hidden></div>
     <p class="hint">Wiki item names, images, prices, and charts load live. This sandbox does not connect to your game account or place real offers.</p>
   </main>

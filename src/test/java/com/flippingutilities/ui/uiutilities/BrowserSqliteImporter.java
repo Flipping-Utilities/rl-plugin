@@ -114,7 +114,7 @@ public final class BrowserSqliteImporter {
         READ_QUERIES.add("PRAGMA table_info(" + table + ")");
     }
 
-    private static void validateSchema(Connection connection) throws SQLException {
+    public static void validateSchema(Connection connection) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("PRAGMA user_version");
              ResultSet rows = statement.executeQuery()) {
             if (!rows.next() || rows.getInt(1) != SqliteSchema.SCHEMA_VERSION) {
@@ -143,7 +143,7 @@ public final class BrowserSqliteImporter {
         }
     }
 
-    private static void validateAccountName(String name) throws SQLException {
+    public static void validateAccountName(String name) throws SQLException {
         String lower = name.toLowerCase(Locale.ROOT);
         if (name.isEmpty() || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0
             || name.indexOf(':') >= 0 || name.indexOf('\0') >= 0
@@ -189,7 +189,7 @@ public final class BrowserSqliteImporter {
         });
     }
 
-    private static ResultSet resultSet(String response) throws SQLException {
+    static ResultSet resultSet(String response) throws SQLException {
         final JsonArray columns;
         final JsonArray rows;
         try {
