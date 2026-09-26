@@ -8,6 +8,9 @@ const dirname = path => path.includes("/") ? path.slice(0, path.lastIndexOf("/")
 const join = (directory, name) => directory ? directory + "/" + name : name;
 const isSave = name => name.endsWith(".json") || name.endsWith(".json.pre-migration")
   || name === "flipping.db.needs-resync";
+const isPrimaryAccount = name => name.endsWith(".json")
+  && !["accountwide.json", "trades.json"].includes(name.toLowerCase())
+  && !name.endsWith(".backup.json") && !name.endsWith(".special.json");
 const isDatabase = bytes => bytes.length >= sqliteMagic.length
   && sqliteMagic.every((byte, index) => bytes[index] === byte);
 
@@ -26,7 +29,7 @@ export function normalizeImportPath(path) {
  * entries: [{path: relative browser path, bytes: Uint8Array}].
  * sourceKind identifies a folder picker/drop or an individual DB/file selection.
  * files are relative to the future .runelite directory; database is an independent
- * checkpointed SQLite image to decode with sql.js, never a file to persist in Java.
+ * checkpointed SQLite image to open with sql.js, never a file to persist in Java.
  */
 export function planImport(entries, {sourceKind = "auto"} = {}) {
   if (!["auto", "folder", "file"].includes(sourceKind)) throw new Error("Unknown import source kind.");
@@ -57,7 +60,8 @@ export function planImport(entries, {sourceKind = "auto"} = {}) {
     if (databases.length > 1) throw new Error("Choose one SQLite database at a time.");
     if (databases.length === 1 && (sourceKind === "file"
       || (basename(databases[0][0]) !== "flipping.db"
-        && [...selected.keys()].every(path => dirname(path) === dirname(databases[0][0])))
+        && [...selected.keys()].every(path => dirname(path) === dirname(databases[0][0]))
+        && ![...selected.keys()].some(path => isPrimaryAccount(basename(path))))
       || [...selected.keys()].every(path => path === databases[0][0]
         || ["-wal", "-shm", "-journal"].some(suffix => path === databases[0][0] + suffix)))) {
       databasePath = databases[0][0];
@@ -85,10 +89,19 @@ export function planImport(entries, {sourceKind = "auto"} = {}) {
     "settings.properties");
   const settings = selected.get(settingsPath) ?? selected.get(join(pluginDirectory, "settings.properties"));
   if (settings && !individualDatabase) files.push({path: "settings.properties", bytes: settings.slice()});
-  const jsonSelected = !individualDatabase && settings
-    && readProperties(settings).get("flipping.dataSource")?.trim().toUpperCase() === "JSON";
-  const resync = !individualDatabase && selected.has(join(pluginDirectory, "flipping.db.needs-resync"));
-  if (!databasePath && !jsonSelected && !resync && selected.has(join(pluginDirectory, "flipping.db"))) {
+  // This launcher tests conversion: account JSON wins for folders and mixed-file
+  // selections, even if RuneLite currently uses SQLite. An explicit DB stays a DB.
+  const jsonSelected = !individualDatabase && [...selected.keys()]
+    .some(path => dirname(path) === pluginDirectory && isPrimaryAccount(basename(path)));
+  if (!individualDatabase && !jsonSelected && selected.has(join(pluginDirectory, "flipping.db.needs-resync"))) {
+    throw new Error("This folder's SQLite database is marked out of sync, but no primary account JSON was selected to rebuild it. Select the complete flipping folder with its JSON saves.");
+  }
+  const existingDatabase = [...selected].some(([path, bytes]) => dirname(path) === pluginDirectory
+    && (basename(path) === "flipping.db" || isDatabase(bytes)));
+  if (jsonSelected && existingDatabase) {
+    warnings.push("Converted the selected account JSON into a fresh SQLite database; the existing database was not used.");
+  }
+  if (!databasePath && !jsonSelected && selected.has(join(pluginDirectory, "flipping.db"))) {
     databasePath = join(pluginDirectory, "flipping.db");
   }
   for (const [path, bytes] of selected) {
@@ -114,45 +127,6 @@ export function planImport(entries, {sourceKind = "auto"} = {}) {
   }
   files.sort((left, right) => left.path.localeCompare(right.path));
   return {files, database, sourceLabel: individualDatabase ? basename(databasePath) : pluginDirectory || "Selected files", warnings};
-}
-
-// java.util.Properties.load(InputStream) uses ISO-8859-1, escaped separators,
-// Unicode escapes and odd-backslash continuations, including in property names.
-function readProperties(bytes) {
-  const text = Array.from(bytes, byte => String.fromCharCode(byte)).join("");
-  const lines = text.split(/\r\n|\n|\r/);
-  const properties = new Map();
-  for (let index = 0; index < lines.length; index++) {
-    let line = lines[index].replace(/^[ \t\f]+/, "");
-    if (!line || /^[#!]/.test(line)) continue;
-    while ((line.match(/\\+$/)?.[0].length || 0) % 2 === 1) {
-      line = line.slice(0, -1);
-      if (index + 1 >= lines.length) break;
-      line += lines[++index].replace(/^[ \t\f]+/, "");
-    }
-    let end = 0;
-    while (end < line.length) {
-      if (line[end] === "\\") { end += 2; continue; }
-      if (/[=: \t\f]/.test(line[end])) break;
-      end++;
-    }
-    let valueStart = end;
-    while (/[ \t\f]/.test(line[valueStart] || "~")) valueStart++;
-    if (/[=:]/.test(line[valueStart] || "~")) valueStart++;
-    while (/[ \t\f]/.test(line[valueStart] || "~")) valueStart++;
-    properties.set(unescapeProperty(line.slice(0, end)), unescapeProperty(line.slice(valueStart)));
-  }
-  return properties;
-}
-
-function unescapeProperty(text) {
-  return text.replace(/\\(u[\s\S]{0,4}|[\s\S])/g, (_, escaped) => {
-    if (escaped[0] === "u") {
-      if (!/^u[0-9a-f]{4}$/i.test(escaped)) throw new Error("Invalid Unicode escape in settings.properties.");
-      return String.fromCharCode(parseInt(escaped.slice(1), 16));
-    }
-    return ({t: "\t", n: "\n", r: "\r", f: "\f"})[escaped] ?? escaped;
-  });
 }
 
 /** Reconstruct SQLite's last committed WAL snapshot in a new byte array. */

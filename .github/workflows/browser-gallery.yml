@@ -35,8 +35,8 @@ jobs:
             **/*.gradle*
             gradle/wrapper/gradle-wrapper.properties
 
-      - name: Verify browser file selection and SQLite WAL snapshots
-        run: node --test web-gallery/test/import-data.test.mjs
+      - name: Verify browser file selection, SQLite writes and WAL snapshots
+        run: node --test web-gallery/test/*.test.mjs
 
       - name: Verify imports, sandbox boundaries and packaged fixtures
         env:
@@ -48,6 +48,9 @@ jobs:
           --tests com.flippingutilities.ui.uiutilities.PaginatorTest
           --tests com.flippingutilities.ui.uiutilities.QuickLookPanelTest
           --tests com.flippingutilities.ui.uiutilities.BrowserSqliteImporterTest
+          --tests com.flippingutilities.ui.uiutilities.BrowserSqliteStorageTest
+          --tests com.flippingutilities.db.BrowserGsonTest
+          --tests com.flippingutilities.db.BrowserSqliteSessionTest
           --tests com.flippingutilities.ui.uiutilities.SandboxGameApiTest
           --tests com.flippingutilities.ui.uiutilities.SandboxPluginTest
           --tests com.flippingutilities.ui.uiutilities.SandboxDataTest

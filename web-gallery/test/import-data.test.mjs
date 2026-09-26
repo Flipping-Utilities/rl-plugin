@@ -131,7 +131,7 @@ test("folder import includes only plugin saves and RuneLite settings", () => {
   assert.equal(entries[4].bytes[0], "{".charCodeAt(0));
 });
 
-test("JSON selection respects Java properties escapes, continuations and last value", () => {
+test("settings bytes remain intact for Java while account JSON selects conversion", () => {
   const properties = "flipping.dataSource=SQLITE\nflipping.data\\u0053ource : JSO\\\n  N\n";
   const plan = planImport([
     entry("root/settings.properties", properties),
@@ -139,6 +139,7 @@ test("JSON selection respects Java properties escapes, continuations and last va
     entry("root/flipping/flipping.db", "stale")
   ]);
   assert.equal(plan.database, null);
+  assert.deepEqual(plan.files.find(file => file.path === "settings.properties").bytes, encode(properties));
 });
 
 test("resync marker ignores stale DB and preserves JSON/pre-migration saves", () => {
@@ -148,6 +149,17 @@ test("resync marker ignores stale DB and preserves JSON/pre-migration saves", ()
   ]);
   assert.equal(plan.database, null);
   assert.equal(plan.files.length, 3);
+});
+
+test("out-of-sync folder without primary JSON fails, while explicit database selection remains available", () => {
+  const entries = [
+    {path: "flipping/flipping.db", bytes: bytes(fixtures.emptyWal.database)},
+    entry("flipping/flipping.db.needs-resync", ""),
+    entry("flipping/accountwide.json"), entry("flipping/Alice.backup.json")
+  ];
+  assert.throws(() => planImport(entries, {sourceKind: "folder"}), /out of sync.*no primary account JSON.*rebuild/);
+  const explicitDatabase = planImport(entries, {sourceKind: "file"});
+  assert.deepEqual(nativeRows(explicitDatabase.database), fixtures.emptyWal.rows);
 });
 
 test("direct plugin-folder settings apply and unrelated nested JSON is excluded", () => {
@@ -160,14 +172,14 @@ test("direct plugin-folder settings apply and unrelated nested JSON is excluded"
   assert.throws(() => planImport([entry(".runelite/cache/secret.json")], {sourceKind: "folder"}), /No flipping folder/);
 });
 
-test("folder DB import replays WAL and includes companion JSON metadata", () => {
+test("folder without primary account JSON opens its DB and replays WAL despite companion JSON", () => {
   const fixture = fixtures.repeated;
   const plan = planImport([
     {path: "root/flipping/flipping.db", bytes: bytes(fixture.database)},
     {path: "root/flipping/flipping.db-wal", bytes: bytes(fixture.wal)},
     entry("root/flipping/flipping.db-shm", "unused"),
     entry("root/flipping/accountwide.json"), entry("root/flipping/Alice.json.pre-migration"),
-    entry("root/flipping/Alice.json"), entry("root/flipping/Alice.backup.json"),
+    entry("root/flipping/trades.json"), entry("root/flipping/Alice.backup.json"),
     entry("root/flipping/backupcheckpoints.special.json"),
     entry("root/settings.properties", "flipping.dataSource=SQLITE")
   ], {sourceKind: "folder"});
@@ -175,6 +187,43 @@ test("folder DB import replays WAL and includes companion JSON metadata", () => 
   assert.deepEqual(plan.files.map(file => file.path), [
     "flipping/accountwide.json", "flipping/backupcheckpoints.special.json", "settings.properties"
   ]);
+});
+
+test("folder primary JSON converts afresh even when settings select SQLite", () => {
+  const plan = planImport([
+    {path: "root/flipping/flipping.db", bytes: bytes(fixtures.repeated.database)},
+    entry("root/flipping/Alice.json", "damaged primary, Java may use its backup"),
+    entry("root/flipping/Alice.backup.json"), entry("root/flipping/accountwide.json"),
+    entry("root/settings.properties", "flipping.dataSource=SQLITE")
+  ], {sourceKind: "folder"});
+  assert.equal(plan.database, null);
+  assert.ok(plan.files.some(file => file.path === "flipping/Alice.json"));
+  assert.ok(plan.files.some(file => file.path === "flipping/Alice.backup.json"));
+  assert.match(plan.warnings.join(" "), /fresh SQLite.*existing database was not used/);
+});
+
+test("mixed file selection prefers primary JSON even beside an arbitrary database name", () => {
+  const entries = [
+    {path: "chosen.sqlite", bytes: bytes(fixtures.emptyWal.database)},
+    entry("Alice.json"), entry("Alice.backup.json"), entry("accountwide.json")
+  ];
+  const converted = planImport(entries);
+  assert.equal(converted.database, null);
+  assert.match(converted.warnings.join(" "), /existing database was not used/);
+  const explicitDatabase = planImport(entries, {sourceKind: "file"});
+  assert.deepEqual(nativeRows(explicitDatabase.database), fixtures.emptyWal.rows);
+  assert.deepEqual(explicitDatabase.files.map(file => file.path), ["flipping/accountwide.json"]);
+});
+
+test("metadata and backups alone do not override a folder database even with JSON settings", () => {
+  const plan = planImport([
+    {path: "root/flipping/flipping.db", bytes: bytes(fixtures.emptyWal.database)},
+    entry("root/flipping/accountwide.json"), entry("root/flipping/trades.json"),
+    entry("root/flipping/Alice.backup.json"), entry("root/flipping/Alice.json.pre-migration"),
+    entry("root/flipping/backupcheckpoints.special.json"),
+    entry("root/settings.properties", "flipping.dataSource=JSON")
+  ], {sourceKind: "folder"});
+  assert.deepEqual(nativeRows(plan.database), fixtures.emptyWal.rows);
 });
 
 test("individual arbitrary-name DB ignores folder dataSource/resync and accepts its WAL", () => {
@@ -203,7 +252,7 @@ test("auto file selection accepts arbitrary DB names with accountwide and migrat
   assert.deepEqual(plan.files.map(file => file.path), ["flipping/accountwide.json"]);
 });
 
-test("auto selection still respects folder settings with canonical flipping.db", () => {
+test("mixed selection prefers primary JSON beside canonical flipping.db", () => {
   const plan = planImport([
     {path: "flipping.db", bytes: bytes(fixtures.repeated.database)},
     entry("settings.properties", "flipping.dataSource=JSON"), entry("Alice.json")

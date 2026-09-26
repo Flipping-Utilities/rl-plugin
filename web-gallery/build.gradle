@@ -3,7 +3,8 @@ import groovy.json.JsonOutput
 // This artifact is independent of the plugin jar, which embeds SQLite native libraries.
 // Reuse the compiled production components and the exact desktop gallery fixtures.
 def galleryPackage = 'com/flippingutilities/ui/uiutilities/'
-def galleryClasses = ['BrowserGallery', 'BrowserSandbox', 'BrowserSqliteImporter', 'BrowserFonts', 'UiGallery',
+def galleryClasses = ['BrowserGallery', 'BrowserSandbox', 'BrowserSqliteImporter', 'BrowserSqliteStorage',
+    'BrowserSqliteSession', 'BrowserGson', 'BrowserFonts', 'UiGallery',
     'GalleryFixture', 'GalleryFixtures', 'StatisticsGalleryFixtures', 'SandboxData', 'SandboxPlugin',
     'SandboxExchange', 'SandboxGrandExchangePanel', 'SandboxWikiData', 'SandboxPricePanel', 'SandboxGameApi',
     'SandboxConfig', 'SandboxSettingsPanel']

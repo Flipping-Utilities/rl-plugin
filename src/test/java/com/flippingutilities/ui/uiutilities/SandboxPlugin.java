@@ -81,8 +81,19 @@ final class SandboxPlugin implements AutoCloseable {
         return load(data, browser, null);
     }
 
-    /** Imported SQLite models already have working JSON snapshots; reuse them for the first load. */
+    /** Reuse a strict JSON read for the first load. */
     static SandboxPlugin load(SandboxData data, boolean browser, Map<String, AccountData> importedAccounts) throws Exception {
+        return load(data, browser, importedAccounts, null);
+    }
+
+    /** The browser owns a writable SQLite connection instead of a native database file. */
+    static SandboxPlugin loadSqlite(SandboxData data, SqliteStorage storage,
+                                    Map<String, AccountData> importedAccounts) throws Exception {
+        return load(data, true, importedAccounts, Objects.requireNonNull(storage));
+    }
+
+    private static SandboxPlugin load(SandboxData data, boolean browser, Map<String, AccountData> importedAccounts,
+                                      SqliteStorage suppliedStorage) throws Exception {
         // Fail closed if anything initialized RuneLite before the launcher redirected user.home.
         if (!RuneLite.RUNELITE_DIR.toPath().toAbsolutePath().equals(data.getRuneLiteDirectory().toAbsolutePath())) {
             throw new IllegalStateException("Sandbox must run in a fresh JVM with its temporary user.home");
@@ -90,7 +101,7 @@ final class SandboxPlugin implements AutoCloseable {
         SandboxPlugin host = new SandboxPlugin();
         host.browser = browser;
         try {
-            host.initialize(data, importedAccounts);
+            host.initialize(data, importedAccounts, suppliedStorage);
             return host;
         } catch (Exception | Error error) {
             host.close();
@@ -98,12 +109,15 @@ final class SandboxPlugin implements AutoCloseable {
         }
     }
 
-    private void initialize(SandboxData data, Map<String, AccountData> importedAccounts) throws Exception {
+    private void initialize(SandboxData data, Map<String, AccountData> importedAccounts,
+                            SqliteStorage suppliedStorage) throws Exception {
         Path directory = data.getRuneLiteDirectory();
         Path database = directory.resolve("flipping/flipping.db");
         // Snapshot creation only includes the selected backend's database.
-        boolean sqlite = Files.isRegularFile(database);
-        if (sqlite && importedAccounts != null) throw new IOException("Imported models require a JSON working session");
+        boolean sqlite = suppliedStorage != null || Files.isRegularFile(database);
+        if (sqlite && importedAccounts != null && suppliedStorage == null) {
+            throw new IOException("Imported SQLite models require their storage connection");
+        }
         config = new SandboxConfig(sqlite ? DataSource.SQLITE : DataSource.JSON);
         config.read(directory.resolve("settings.properties"));
         inject("config", config);
@@ -119,7 +133,7 @@ final class SandboxPlugin implements AutoCloseable {
         Client client = SandboxGameApi.client(() -> plugin.getCurrentlyLoggedInAccount() != null,
             tick::get, () -> exchange == null ? null : exchange.clientOffers(), items);
         inject("client", client);
-        plugin.gson = new Gson();
+        plugin.gson = browser ? BrowserGson.create() : new Gson();
         SandboxTradePersister persister = new SandboxTradePersister(plugin.gson);
         plugin.tradePersister = persister;
         inject("httpClient", http);
@@ -139,11 +153,12 @@ final class SandboxPlugin implements AutoCloseable {
         inject("dataHandler", handler);
         Map<String, AccountData> accounts = new HashMap<>();
         if (sqlite) {
-            storage = new SqliteStorage(database.toFile());
+            storage = suppliedStorage != null ? suppliedStorage : new SqliteStorage(database.toFile());
             storage.initializeSchema();
             inject("sqliteStorage", storage);
             handler.setSqliteStorage(storage);
-            for (String account : storage.listAccounts()) accounts.put(account, storage.loadAccount(account));
+            if (importedAccounts != null) accounts.putAll(importedAccounts);
+            else for (String account : storage.listAccounts()) accounts.put(account, storage.loadAccount(account));
         } else {
             // The ordinary loader skips unreadable saves. A sandbox import must fail instead
             // of silently showing an empty account; this strict read still accepts valid backups.
@@ -167,6 +182,10 @@ final class SandboxPlugin implements AutoCloseable {
         inject("itemManager", SandboxGameApi.itemManager(client, clientThread, items,
             id -> itemImage(id, clientThread)));
         handler.loadData();
+        if (suppliedStorage != null && (plugin.getSqliteStorage() != storage || storage.requiresFullResync()
+            || !new HashSet<>(handler.getCurrentAccounts()).equals(new HashSet<>(storage.listAccounts())))) {
+            throw new IOException("Could not load the SQLite session; conversion was not accepted");
+        }
         if (plugin.tradePersister.isAccountProtected("accountwide")) {
             throw new IOException("Could not load sandbox accountwide data. See the preceding error.");
         }
