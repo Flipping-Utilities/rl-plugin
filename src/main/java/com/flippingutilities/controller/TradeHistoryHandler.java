@@ -121,7 +121,8 @@ final class TradeHistoryHandler {
      */
     public void deleteOffers(Instant startOfInterval) {
         for (AccountData account : plugin.getAccountsForCurrentView()) {
-            account.getTrades().forEach(item -> deleteOffers(item.getIntervalHistory(startOfInterval), item));
+            account.getTrades().forEach(item ->
+                deleteOffers(item.getIntervalHistory(startOfInterval), account.getRecipeFlipGroups(), item));
         }
 
         plugin.setUpdateSinceLastItemAccountWideBuild(true);
