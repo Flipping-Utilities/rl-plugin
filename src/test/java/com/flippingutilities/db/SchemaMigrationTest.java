@@ -1,5 +1,8 @@
 package com.flippingutilities.db;
 
+import com.flippingutilities.model.AccountData;
+import com.flippingutilities.model.FlippingItem;
+import com.google.gson.Gson;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -12,7 +15,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Instant;
 import java.util.Comparator;
+import java.util.Collections;
+import java.util.Map;
 
 import static org.junit.Assert.*;
 import static com.flippingutilities.db.StorageTestOffers.complete;
@@ -88,13 +94,51 @@ public class SchemaMigrationTest {
     public void testGeLimitCountersArePresentInInitialSchema() throws Exception {
         storage.initializeSchema();
         storage.upsertAccount("GeAcct", null);
-        storage.upsertGeLimitState("GeAcct", 4151, java.time.Instant.ofEpochMilli(1789500000000L), 110, 100);
+        storage.upsertGeLimitState("GeAcct", 4151, Instant.ofEpochMilli(1789500000000L), 110, 100);
 
-        java.util.Map<String, Object> state = storage.loadAllGeLimitStates("GeAcct").get(4151);
+        Map<String, Object> state = storage.loadAllGeLimitStates("GeAcct").get(4151);
         assertNotNull("GE limit state should be restored", state);
         assertEquals("items_bought must round-trip", 110, state.get("itemsBought"));
         assertEquals("items_bought_complete must round-trip",
             100, state.get("itemsBoughtThroughCompleteOffers"));
+    }
+
+    @Test
+    public void migrationAndLiveWritesShareOneGeLimitStatePerAccountItem() throws Exception {
+        storage.initializeSchema();
+        Instant refresh = Instant.parse("2026-09-25T15:00:00Z");
+        storage.upsertGeLimitState("GeAcct", 4151, refresh.minusSeconds(60), 10, 8);
+        storage.upsertGeLimitState("OtherAcct", 4151, refresh, 70, 60);
+
+        AccountData snapshot = new AccountData();
+        FlippingItem item = new FlippingItem(4151, "Whip", 70, "GeAcct");
+        item.getHistory().setNextGeLimitRefresh(refresh);
+        item.getHistory().setItemsBoughtThisLimitWindow(40);
+        item.getHistory().setItemsBoughtThroughCompleteOffers(35);
+        snapshot.getTrades().add(item);
+        assertEquals(1, new MigrationService(storage, new TradePersister(new Gson()))
+            .migrate(Collections.singletonMap("GeAcct", snapshot)));
+        assertEquals(40, storage.loadAllGeLimitStates("GeAcct").get(4151).get("itemsBought"));
+
+        storage.upsertGeLimitState("GeAcct", 4151, refresh.plusSeconds(60), 45, 35);
+        storage.close();
+        Map<String, Object> restored = storage.loadAllGeLimitStates("GeAcct").get(4151);
+        assertEquals(45, restored.get("itemsBought"));
+        assertEquals(35, restored.get("itemsBoughtThroughCompleteOffers"));
+        assertEquals(refresh.plusSeconds(60), restored.get("nextRefresh"));
+        assertEquals(70, storage.loadAllGeLimitStates("OtherAcct").get(4151).get("itemsBought"));
+        try (Statement statement = storage.getConnection().createStatement();
+             ResultSet rows = statement.executeQuery("SELECT COUNT(*) FROM ge_limit_state WHERE item_id = 4151")) {
+            assertTrue(rows.next());
+            assertEquals("Each account must have exactly one row for this item", 2, rows.getInt(1));
+        }
+        try (Statement statement = storage.getConnection().createStatement();
+             ResultSet rows = statement.executeQuery("EXPLAIN QUERY PLAN SELECT * FROM ge_limit_state " +
+                 "WHERE account_id = 1 AND item_id = 4151")) {
+            assertTrue(rows.next());
+            assertTrue("Account/item lookups must use the unique index",
+                rows.getString("detail").contains("USING INDEX"));
+        }
     }
 
     @Test

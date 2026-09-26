@@ -22,8 +22,8 @@ public class AreaMarker implements ChartMarker {
         BOTTOM  // Label below the bottom line (for sell offers - tax region below price)
     }
     
-    private final int minPrice;
-    private final int maxPrice;
+    private final long minPrice;
+    private final long maxPrice;
     private final String label;
     private final Color lineColor;
     private final Color fillColor;
@@ -35,7 +35,7 @@ public class AreaMarker implements ChartMarker {
      * Creates a tax region area marker (filled area with dashed border).
      * Label appears at top by default (for buy offers).
      */
-    public static AreaMarker taxRegion(int minPrice, int maxPrice, String label, Color lineColor, Color fillColor) {
+    public static AreaMarker taxRegion(long minPrice, long maxPrice, String label, Color lineColor, Color fillColor) {
         return taxRegion(minPrice, maxPrice, label, lineColor, fillColor, LabelPosition.TOP);
     }
     
@@ -43,7 +43,7 @@ public class AreaMarker implements ChartMarker {
      * Creates a tax region area marker with specified label position.
      * Use LabelPosition.BOTTOM for sell offers (tax region below the price).
      */
-    public static AreaMarker taxRegion(int minPrice, int maxPrice, String label, Color lineColor, Color fillColor, LabelPosition labelPosition) {
+    public static AreaMarker taxRegion(long minPrice, long maxPrice, String label, Color lineColor, Color fillColor, LabelPosition labelPosition) {
         return AreaMarker.builder()
                 .minPrice(minPrice)
                 .maxPrice(maxPrice)
@@ -59,7 +59,7 @@ public class AreaMarker implements ChartMarker {
     /**
      * Creates a generic area marker between two price levels.
      */
-    public static AreaMarker between(int minPrice, int maxPrice, String label, Color lineColor, Color fillColor) {
+    public static AreaMarker between(long minPrice, long maxPrice, String label, Color lineColor, Color fillColor) {
         return AreaMarker.builder()
                 .minPrice(minPrice)
                 .maxPrice(maxPrice)

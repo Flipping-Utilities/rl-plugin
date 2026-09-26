@@ -9,6 +9,7 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Instant;
 
@@ -17,7 +18,7 @@ final class OfferJsonCodec {
     private static final Gson GSON = new GsonBuilder()
         .registerTypeAdapter(Instant.class, new TypeAdapter<Instant>() {
             @Override
-            public void write(JsonWriter out, Instant value) throws java.io.IOException {
+            public void write(JsonWriter out, Instant value) throws IOException {
                 if (value == null) {
                     out.nullValue();
                     return;
@@ -26,7 +27,7 @@ final class OfferJsonCodec {
             }
 
             @Override
-            public Instant read(JsonReader in) throws java.io.IOException {
+            public Instant read(JsonReader in) throws IOException {
                 JsonToken token = in.peek();
                 if (token == JsonToken.NULL) {
                     in.nextNull();

@@ -62,7 +62,7 @@ public class OfferEvent
 	@SerializedName("cQIT")
 	private int currentQuantityInTrade;
 	@SerializedName("p")
-	private int price;
+	private long price;
 	@SerializedName("t")
 	private Instant time;
 	@SerializedName("s")
@@ -94,13 +94,13 @@ public class OfferEvent
 	//Used in theGeHistoryTabOfferPanel and RecipeFlipPanel
 	private transient String itemName;
 	//used in the live slot view to show what price something was listed at
-	private transient int listedPrice;
-	private transient int spent;
+	private transient long listedPrice;
+	private transient long spent;
 
 	/**
 	 * @return post tax values
 	 */
-	public int getPrice() {
+	public long getPrice() {
 		final long t = time.getEpochSecond();
 		if (buy || t < Constants.GE_TAX_START || Constants.TAX_EXEMPT_ITEMS.contains(itemId) ||
 			(t >= Constants.GE_TAX_INCREASED && Constants.NEW_TAX_EXEMPT_ITEMS.contains(itemId))) {
@@ -113,15 +113,15 @@ public class OfferEvent
 		return GeTax.getPostTaxPrice(price);
 	}
 
-	public int getPreTaxPrice() {
+	public long getPreTaxPrice() {
 		return price;
 	}
 
-	public int getTaxPaid() {
+	public long getTaxPaid() {
 		return (getPreTaxPrice() - getPrice()) * currentQuantityInTrade;
 	}
 
-	public int getTaxPaidPerItem() {
+	public long getTaxPaidPerItem() {
 		return getPreTaxPrice() - getPrice();
 	}
 
@@ -289,7 +289,7 @@ public class OfferEvent
 			isBuy,
 			offer.getItemId(),
 			offer.getQuantitySold(),
-			offer.getQuantitySold() == 0 ? 0 : saturatePrice(offer.getSpent() / offer.getQuantitySold()),
+			offer.getQuantitySold() == 0 ? 0 : offer.getSpent() / offer.getQuantitySold(),
 			Instant.now().truncatedTo(ChronoUnit.SECONDS),
 			event.getSlot(),
 			offer.getState(),
@@ -300,18 +300,8 @@ public class OfferEvent
 			false,
 			null,
 			null,
-			saturatePrice(offer.getPrice()),
-			saturatePrice(offer.getSpent()));
-	}
-
-	/**
-	 * The client API returns 64-bit prices/spent amounts (max cash update) while this model is
-	 * still int-based. Saturate instead of truncating so ultra-rare prices don't silently wrap
-	 * to negative values. Accepts ints as well, so this compiles against both API versions.
-	 */
-	private static int saturatePrice(long value)
-	{
-		return (int) Math.min(value, Integer.MAX_VALUE);
+			offer.getPrice(),
+			offer.getSpent());
 	}
 
 	/**
@@ -330,7 +320,7 @@ public class OfferEvent
 		return String.format("slot=%d, buy=%b, itemId=%d, state=%s, tq=%d",slot, buy, itemId, state, totalQuantityInTrade);
 	}
 
-	public static OfferEvent dummyOffer(boolean buyState, boolean marginCheck, int price, int id, String itemName) {
+	public static OfferEvent dummyOffer(boolean buyState, boolean marginCheck, long price, int id, String itemName) {
 		return new OfferEvent(
 				UUID.randomUUID().toString(),
 				buyState,

@@ -32,9 +32,15 @@ import net.runelite.api.FontID;
 import net.runelite.api.VarClientStr;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarClientID;
-import net.runelite.api.widgets.*;
+import net.runelite.api.widgets.JavaScriptCallback;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetPositionMode;
+import net.runelite.api.widgets.WidgetSizeMode;
+import net.runelite.api.widgets.WidgetTextAlignment;
+import net.runelite.api.widgets.WidgetType;
 
-import javax.swing.*;
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
 
 public class OfferEditor {
     private final Client client;
@@ -92,7 +98,7 @@ public class OfferEditor {
         });
     }
 
-    public void showInstaSellPrices(int instaSellPrice, int wikiInstaSellPrice) {
+    public void showInstaSellPrices(long instaSellPrice, long wikiInstaSellPrice) {
         bottomText.setText("OR click this to use the price editor hotkeys for more flexibility!");
         bottomText.setAction(1, "pic");
         bottomText.setOnOpListener((JavaScriptCallback) ev -> {
@@ -126,7 +132,7 @@ public class OfferEditor {
         }
     }
 
-    public void showInstaBuyPrices(int instaBuyPrice, int wikiInstaBuyPrice) {
+    public void showInstaBuyPrices(long instaBuyPrice, long wikiInstaBuyPrice) {
         bottomText.setText("OR click this to use the price editor hotkeys for more flexibility!");
         bottomText.setAction(1, "pic");
         bottomText.setOnOpListener((JavaScriptCallback) ev -> {

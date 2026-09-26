@@ -19,7 +19,10 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,6 +40,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
@@ -99,13 +103,13 @@ public class RealDataMigrationTest {
     private static Gson readGson() {
         return new GsonBuilder().registerTypeAdapter(Instant.class, new TypeAdapter<Instant>() {
             @Override
-            public void write(JsonWriter out, Instant value) throws java.io.IOException {
+            public void write(JsonWriter out, Instant value) throws IOException {
                 if (value == null) { out.nullValue(); return; }
                 out.value(value.toEpochMilli());
             }
 
             @Override
-            public Instant read(JsonReader in) throws java.io.IOException {
+            public Instant read(JsonReader in) throws IOException {
                 JsonToken token = in.peek();
                 if (token == JsonToken.NULL) { in.nextNull(); return null; }
                 if (token == JsonToken.NUMBER) return Instant.ofEpochMilli(in.nextLong());
@@ -138,7 +142,7 @@ public class RealDataMigrationTest {
     }
 
     private static AccountData loadAccountFile(File file, Gson gson) throws Exception {
-        try (java.io.BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8);
+        try (BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8);
              JsonReader jsonReader = new JsonReader(reader)) {
             return gson.fromJson(jsonReader, AccountData.class);
         }
@@ -146,7 +150,7 @@ public class RealDataMigrationTest {
 
     private static String sha256(File file) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        try (java.io.InputStream in = Files.newInputStream(file.toPath())) {
+        try (InputStream in = Files.newInputStream(file.toPath())) {
             byte[] buffer = new byte[65536];
             int read;
             while ((read = in.read(buffer)) > 0) {
@@ -285,7 +289,7 @@ public class RealDataMigrationTest {
         for (RecipeFlipGroup group : expected.getRecipeFlipGroups()) {
             if (group.getRecipeFlips().isEmpty()) continue;
             RecipeFlipGroup restoredGroup = actual.getRecipeFlipGroups().stream()
-                .filter(candidate -> java.util.Objects.equals(group.getRecipeKey(), candidate.getRecipeKey()))
+                .filter(candidate -> Objects.equals(group.getRecipeKey(), candidate.getRecipeKey()))
                 .findFirst().orElseThrow(() -> new AssertionError(account + ": missing recipe " + group.getRecipeKey()));
             for (RecipeFlip flip : group.getRecipeFlips()) {
                 if (flip.getTimeOfCreation() == null) continue;
@@ -339,11 +343,14 @@ public class RealDataMigrationTest {
     }
 
     private static long expectedFavoriteRows(AccountData data) {
-        Set<Integer> favorited = new HashSet<>();
+        Set<Integer> favoriteSettings = new HashSet<>();
         for (FlippingItem item : data.getTrades()) {
-            if (item != null && item.isFavorite()) favorited.add(item.getItemId());
+            if (item != null && (item.isFavorite()
+                || (item.getFavoriteCode() != null && !"1".equals(item.getFavoriteCode())))) {
+                favoriteSettings.add(item.getItemId());
+            }
         }
-        return favorited.size();
+        return favoriteSettings.size();
     }
 
     /** Visibility records preserve every source item, including hidden items without history. */
@@ -383,7 +390,7 @@ public class RealDataMigrationTest {
         File accountWideFile = new File(REALDATA_DIR, "accountwide.json");
         if (accountWideFile.exists()) {
             checksumsBefore.put("accountwide.json", sha256(accountWideFile));
-            try (java.io.BufferedReader reader = Files.newBufferedReader(accountWideFile.toPath(), StandardCharsets.UTF_8);
+            try (BufferedReader reader = Files.newBufferedReader(accountWideFile.toPath(), StandardCharsets.UTF_8);
                  JsonReader jsonReader = new JsonReader(reader)) {
                 loadedAccountWide = gson.fromJson(jsonReader, AccountWideData.class);
             }

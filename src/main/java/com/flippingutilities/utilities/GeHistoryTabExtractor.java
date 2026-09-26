@@ -36,7 +36,7 @@ public class GeHistoryTabExtractor {
         GrandExchangeOfferState offerState = getState(widgets.get(2));
         int quantity = widgets.get(4).getItemQuantity();
         int itemId = widgets.get(4).getItemId();
-        int price = getPrice(widgets.get(5), quantity);
+        long price = getPrice(widgets.get(5), quantity);
         boolean isBuy = offerState == GrandExchangeOfferState.BOUGHT;
         Instant time = Instant.now();
         int totalQuantity = quantity;
@@ -56,7 +56,7 @@ public class GeHistoryTabExtractor {
      * using OfferEvent.getPrice(), we will effectively be applying the ge tax twice.
      * @return the original price of each item in the offer
      */
-    private static int getPrice(Widget w, int quantity) {
+    private static long getPrice(Widget w, int quantity) {
         String text = w.getText();
         String numString = text;
         Matcher m;
@@ -89,7 +89,7 @@ public class GeHistoryTabExtractor {
             }
         }
 
-        int price = Integer.parseInt(s.toString());
+        long price = Long.parseLong(s.toString());
         if (isTotalPrice) {
             return price/quantity;
         }

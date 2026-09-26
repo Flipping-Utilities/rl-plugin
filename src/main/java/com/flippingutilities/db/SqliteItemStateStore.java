@@ -24,15 +24,16 @@ final class SqliteItemStateStore {
     }
 
     /**
-     * Adds a trade-less FlippingItem for every favorited item id that has no trade rows, so
-     * favorited-but-never-traded items survive reloads in SQLite mode.
+     * Restores items without trade rows when they retain a favorite or custom search code.
      */
     void restoreFavoriteOnlyItems(String displayName, AccountData data) {
         Map<Integer, Map<String, Object>> favorites = loadAllFavorites(displayName);
         for (Map.Entry<Integer, Map<String, Object>> entry : favorites.entrySet()) {
             int itemId = entry.getKey();
             boolean isFavorite = entry.getValue().get("isFavorite") instanceof Boolean && (Boolean) entry.getValue().get("isFavorite");
-            if (!isFavorite) {
+            Object favoriteCode = entry.getValue().get("favoriteCode");
+            boolean hasCustomCode = favoriteCode instanceof String && !"1".equals(favoriteCode);
+            if (!isFavorite && !hasCustomCode) {
                 continue;
             }
             boolean hasTrades = data.getTrades().stream().anyMatch(item -> item.getItemId() == itemId);
@@ -40,8 +41,7 @@ final class SqliteItemStateStore {
                 continue;
             }
             FlippingItem item = new FlippingItem(itemId, "Item " + itemId, 70, displayName);
-            item.setFavorite(true);
-            Object favoriteCode = entry.getValue().get("favoriteCode");
+            item.setFavorite(isFavorite);
             if (favoriteCode instanceof String) {
                 item.setFavoriteCode((String) favoriteCode);
             }

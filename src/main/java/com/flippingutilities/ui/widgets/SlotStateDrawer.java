@@ -10,16 +10,28 @@ import com.flippingutilities.utilities.SlotPredictedState;
 import com.flippingutilities.utilities.WikiItemMargins;
 import com.flippingutilities.utilities.WikiRequest;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.*;
+import net.runelite.api.Client;
+import net.runelite.api.FontID;
+import net.runelite.api.SpriteID;
+import net.runelite.api.GrandExchangeOffer;
+import net.runelite.api.GrandExchangeOfferState;
+import net.runelite.api.widgets.JavaScriptCallback;
 import net.runelite.api.events.BeforeRender;
 import net.runelite.api.gameval.InterfaceID;
-import net.runelite.api.widgets.*;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetPositionMode;
+import net.runelite.api.widgets.WidgetSizeMode;
+import net.runelite.api.widgets.WidgetTextAlignment;
+import net.runelite.api.widgets.WidgetType;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.ui.overlay.tooltip.Tooltip;
 import net.runelite.client.ui.overlay.tooltip.TooltipManager;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * This class is responsible for enhancing slots in the GE interface by adding
@@ -50,7 +62,7 @@ public class SlotStateDrawer {
     // while fetch callback tries to create another instance.
     private TimeseriesResponse pendingGraphData = null;
     private Timestep pendingTimestep = null;
-    private int pendingOfferPrice = 0;
+    private long pendingOfferPrice = 0;
 
     public SlotStateDrawer(
             FlippingPlugin plugin,
@@ -360,9 +372,7 @@ public class SlotStateDrawer {
             return Optional.empty();
         }
 
-        // 64-bit price (max cash update); saturating cast only affects prices > 2.1B, which
-        // classify as "better than wiki" either way
-        int listedPrice = (int) Math.min(offer.getPrice(), (long) Integer.MAX_VALUE);
+        long listedPrice = offer.getPrice();
         GrandExchangeOfferState offerState = offer.getState();
         boolean isBuy = offerState == GrandExchangeOfferState.BUYING || offerState == GrandExchangeOfferState.BOUGHT;
         boolean isCompleted = offerState == GrandExchangeOfferState.BOUGHT || offerState == GrandExchangeOfferState.SOLD;

@@ -27,6 +27,7 @@ import java.sql.Connection;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
@@ -103,13 +104,46 @@ public class StorageBackendSwitchTest {
 
         assertEquals("The client action must finish while migration is still queued", 0, persister.loads);
         assertTrue(executor.hasTasks());
+        assertFalse("SQLite is not active until its import completes", plugin.getDataHandler().isUsingSqlite());
         assertLiveStateUnchanged();
 
         finishStorageWork();
 
         assertLiveStateUnchanged();
         assertEquals("true", plugin.getSqliteStorage().getSetting("migration_completed"));
+        assertTrue(plugin.getDataHandler().isUsingSqlite());
         assertEquals(1, plugin.getSqliteStorage().loadAccount(ACCOUNT).getTrades().size());
+    }
+
+    @Test
+    public void sqliteReloadPreservesTheRunningClientsSession() {
+        account.getTrades().clear();
+        switchTo(DataSource.SQLITE);
+        finishStorageWork();
+        assertEquals(SESSION_START, plugin.getSqliteStorage().loadAccount(ACCOUNT).getSessionStartTime());
+
+        account.startNewSession();
+        Instant currentSession = account.getSessionStartTime();
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+
+        AccountData reloaded = plugin.getDataHandler().viewAccountData(ACCOUNT);
+        assertNotSame("The reload must succeed rather than retain a model after a read failure", account, reloaded);
+        assertEquals(currentSession, reloaded.getSessionStartTime());
+        assertEquals(0L, reloaded.getAccumulatedSessionTimeMillis());
+        assertNull(reloaded.getLastSessionTimeUpdate());
+
+        Instant lastUpdate = currentSession.plusSeconds(10);
+        reloaded.setAccumulatedSessionTimeMillis(456L);
+        reloaded.setLastSessionTimeUpdate(lastUpdate);
+        plugin.getSqliteStorage().updateAccountSessionTime(ACCOUNT, 999L);
+        plugin.getDataHandler().loadAccountData(ACCOUNT);
+
+        AccountData active = plugin.getDataHandler().viewAccountData(ACCOUNT);
+        assertNotSame(reloaded, active);
+        assertEquals(currentSession, active.getSessionStartTime());
+        assertEquals(456L, active.getAccumulatedSessionTimeMillis());
+        assertEquals(lastUpdate, active.getLastSessionTimeUpdate());
+        assertTrue(plugin.getDataHandler().isUsingSqlite());
     }
 
     @Test
@@ -150,6 +184,7 @@ public class StorageBackendSwitchTest {
         finishStorageWork();
 
         assertNull(plugin.getSqliteStorage());
+        assertFalse(plugin.getDataHandler().isUsingSqlite());
         assertEquals("json-edit-after-switch", item.getFavoriteCode());
         assertLiveStateUnchanged();
         plugin.getDataHandler().storeData();
@@ -171,7 +206,7 @@ public class StorageBackendSwitchTest {
         finishStorageWork();
 
         assertEquals(singletonList(ACCOUNT), plugin.getSqliteStorage().listAccounts());
-        assertEquals(singletonList(ACCOUNT), new java.util.ArrayList<>(plugin.getDataHandler().getCurrentAccounts()));
+        assertEquals(singletonList(ACCOUNT), new ArrayList<>(plugin.getDataHandler().getCurrentAccounts()));
         assertLiveStateUnchanged();
     }
 
@@ -258,6 +293,7 @@ public class StorageBackendSwitchTest {
         executor.drain();
 
         assertSame("Client fallback has not run yet", failedStorage, plugin.getSqliteStorage());
+        assertFalse("A failed backend is immediately inactive", plugin.getDataHandler().isUsingSqlite());
         assertFalse("A failed backend must reject subsequent queued writes", laterTaskRan.get());
         SqliteStorage reopened = new SqliteStorage(database);
         try {

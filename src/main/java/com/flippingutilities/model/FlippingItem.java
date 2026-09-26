@@ -37,7 +37,11 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * This class is the representation of an item that a user is flipping. It contains information about the
@@ -310,16 +314,16 @@ public class FlippingItem implements Searchable
 		}
 	}
 
-	public Optional<Integer> getPotentialProfit(boolean includeMarginCheck, boolean shouldUseRemainingGeLimit)
+	public Optional<Long> getPotentialProfit(boolean includeMarginCheck, boolean shouldUseRemainingGeLimit)
 	{
 		if (!getLatestInstaBuy().isPresent() || !getLatestInstaSell().isPresent()) {
 			return Optional.empty();
 		}
 
-		int profitEach = getCurrentProfitEach().get();
+		long profitEach = getCurrentProfitEach().get();
 		int remainingGeLimit = getRemainingGeLimit();
 		int geLimit = shouldUseRemainingGeLimit ? remainingGeLimit : totalGELimit;
-		int profitTotal = geLimit * profitEach;
+		long profitTotal = geLimit * profitEach;
 		if (includeMarginCheck)
 		{
 			profitTotal -= profitEach;
@@ -337,7 +341,7 @@ public class FlippingItem implements Searchable
 				Optional.of((float)getCurrentProfitEach().get() / getLatestInstaSell().get().getPrice() * 100) : Optional.empty();
 	}
 
-	public Optional<Integer> getCurrentProfitEach() {
+	public Optional<Long> getCurrentProfitEach() {
 		return getLatestInstaBuy().isPresent() && getLatestInstaSell().isPresent()?
 				Optional.of(GeTax.getPostTaxPrice(getLatestInstaBuy().get().getPrice()) - getLatestInstaSell().get().getPreTaxPrice()) : Optional.empty();
 	}

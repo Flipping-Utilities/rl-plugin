@@ -10,6 +10,38 @@ import java.util.*;
 import static org.junit.Assert.*;
 
 public class RecipeFinancialSortTest {
+    @Test public void unknownRatiosSortLastOnlyWhenTheSortRequiresExecutionCounts() {
+        OkHttpClient client = new OkHttpClient.Builder().addInterceptor(chain -> new Response.Builder()
+            .request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+            .body(ResponseBody.create(MediaType.get("application/json"), "[]")).build()).build();
+        try {
+            RecipeHandler handler = new RecipeHandler(new Gson(), client, Collections.emptyList());
+            OfferEvent sale = new OfferEvent();
+            sale.setTime(Instant.EPOCH);
+            sale.setPrice(100);
+            RecipeFlip profitable = new RecipeFlip(Instant.now(), Collections.singletonMap(1,
+                Collections.singletonMap("sale", new PartialOffer(sale, 6))), Collections.emptyMap(), 100);
+            RecipeFlipGroup unknown = new RecipeFlipGroup((String) null);
+            unknown.addRecipeFlip(profitable);
+            unknown.synthesizeRecipe(null);
+            Recipe recipe = new Recipe(Collections.emptyList(), Collections.singletonList(new RecipeItem(1, 2)), "Known");
+            RecipeFlipGroup known = new RecipeFlipGroup(recipe, Collections.singletonList(
+                new RecipeFlip(Instant.now(), profitable.getOutputs(), Collections.emptyMap(), 1000)));
+
+            for (SORT sort : new SORT[]{SORT.FLIP_COUNT, SORT.PROFIT_EACH}) {
+                assertEquals(Arrays.asList(known, unknown), handler.sortRecipeFlipGroups(
+                    Arrays.asList(unknown, known), sort, Instant.EPOCH));
+            }
+            for (SORT sort : new SORT[]{SORT.TOTAL_PROFIT, SORT.ROI}) {
+                assertEquals(Arrays.asList(unknown, known), handler.sortRecipeFlipGroups(
+                    Arrays.asList(known, unknown), sort, Instant.EPOCH));
+            }
+        } finally {
+            client.dispatcher().executorService().shutdownNow();
+            client.connectionPool().evictAll();
+        }
+    }
+
     @Test public void financialSortsPutMissingOffersAfterKnownLossesAndHandleEmptyIntervals() {
         OkHttpClient client = new OkHttpClient.Builder().addInterceptor(chain -> new Response.Builder()
             .request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")

@@ -9,6 +9,9 @@ import com.flippingutilities.model.RecipeFlipGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -63,8 +66,6 @@ public class MigrationService {
     /** Imports a previously read snapshot so a rebuild cannot reread a changed source. */
     public int migrate(Map<String, AccountData> accounts) {
         Objects.requireNonNull(accounts, "Account snapshot is required");
-        log.info("Starting JSON -> SQLite migration...");
-        long startTime = System.currentTimeMillis();
         storage.initializeSchema();
 
         // Idempotency guard: never re-run a completed migration.
@@ -73,8 +74,55 @@ public class MigrationService {
             return 0;
         }
 
-        // Best-effort pre-migration backup so a botched run can be restored.
-        createPreMigrationBackup();
+        // Additive import can still proceed if a backup cannot be created. Destructive
+        // rebuild/regeneration must let the same failure abort before deleting data.
+        try {
+            createPreMigrationBackup();
+        } catch (IllegalStateException e) {
+            log.warn("Could not create pre-migration backup (continuing additive import): {}", e.getMessage());
+        }
+        return importAccounts(accounts);
+    }
+
+    /** Replaces SQLite account data from one snapshot, backing up before any account is cleared. */
+    public int rebuild(Map<String, AccountData> accounts) {
+        Objects.requireNonNull(accounts, "Account snapshot is required");
+        synchronized (storage) {
+            storage.initializeSchema();
+            storage.markOutOfSync();
+            createPreMigrationBackup();
+            for (String displayName : storage.listAccounts()) {
+                storage.deleteAccountData(displayName);
+            }
+            storage.clearSetting("migration_completed");
+            storage.clearSetting("migration_completed_at");
+        }
+        return importAccounts(accounts);
+    }
+
+    /** Recreates the SQLite files for maintenance after preserving their populated contents. */
+    public int regenerate(Map<String, AccountData> accounts) {
+        Objects.requireNonNull(accounts, "Account snapshot is required");
+        synchronized (storage) {
+            storage.markOutOfSync();
+            createPreMigrationBackup();
+            storage.close();
+            File dbFile = storage.getDbFile();
+            try {
+                Files.deleteIfExists(dbFile.toPath());
+                Files.deleteIfExists(new File(dbFile.getPath() + "-wal").toPath());
+                Files.deleteIfExists(new File(dbFile.getPath() + "-shm").toPath());
+            } catch (IOException e) {
+                throw new IllegalStateException("Could not recreate SQLite database", e);
+            }
+            storage.initializeSchema();
+        }
+        return importAccounts(accounts);
+    }
+
+    private int importAccounts(Map<String, AccountData> accounts) {
+        log.info("Starting JSON -> SQLite migration...");
+        long startTime = System.currentTimeMillis();
 
         if (accounts.isEmpty()) {
             log.info("No account data found to migrate.");
@@ -174,20 +222,23 @@ public class MigrationService {
     }
 
     /**
-     * Best-effort snapshot of the SQLite DB before migration. Uses VACUUM INTO so the live
-     * connection is not disturbed. Failures are logged but do not block migration.
+     * Snapshot the SQLite DB before migration. Uses VACUUM INTO so the live connection is
+     * not disturbed. Destructive callers must abort if the backup cannot be created.
      */
     private void createPreMigrationBackup() {
-        try {
-            java.io.File dbFile = storage.getDbFile();
-            String backupPath = dbFile.getAbsolutePath() + ".pre-migration-" + System.currentTimeMillis() + ".db";
-            Connection vacuumConn = storage.getConnection();
-            try (Statement stmt = vacuumConn.createStatement()) {
-                stmt.execute("VACUUM INTO '" + backupPath.replace("'", "''") + "'");
-                log.info("Created pre-migration backup at {}", backupPath);
+        synchronized (storage) {
+            try {
+                File dbFile = storage.getDbFile();
+                String backupPath = dbFile.getAbsolutePath() + ".pre-migration-" + System.currentTimeMillis()
+                    + "-" + UUID.randomUUID() + ".db";
+                Connection vacuumConn = storage.getConnection();
+                try (Statement stmt = vacuumConn.createStatement()) {
+                    stmt.execute("VACUUM INTO '" + backupPath.replace("'", "''") + "'");
+                    log.info("Created pre-migration backup at {}", backupPath);
+                }
+            } catch (Exception e) {
+                throw new IllegalStateException("Could not create SQLite pre-migration backup", e);
             }
-        } catch (Exception e) {
-            log.warn("Could not create pre-migration backup (continuing anyway): {}", e.getMessage());
         }
     }
 
@@ -255,7 +306,7 @@ public class MigrationService {
                 long timestamp = offer.getTime() != null ? offer.getTime().toEpochMilli() : Instant.now().toEpochMilli();
                 // Recipe components retain consumption separately from the original trade.
                 int qty = offer.getCurrentQuantityInTrade();
-                int price = offer.getPreTaxPrice();
+                long price = offer.getPreTaxPrice();
                 boolean isBuy = offer.isBuy();
                 tradesToInsert.add(new TradeRecord(accountId, item.getItemId(), offer.getUuid(), timestamp, qty, price, isBuy, SqliteStorage.serializeOffer(offer)));
 
@@ -293,7 +344,7 @@ public class MigrationService {
             for (Map.Entry<Integer, OfferEvent> slotEntry : lastOffers.entrySet()) {
                 int slotIndex = slotEntry.getKey();
                 OfferEvent offer = slotEntry.getValue();
-                if (offer != null && !offer.isComplete() && !offer.isCausedByEmptySlot()) {
+                if (offer != null && !offer.isCausedByEmptySlot()) {
                     storage.upsertSlot(displayName, slotIndex, offer, historyOfferUuids.contains(offer.getUuid()));
                 }
             }
@@ -370,7 +421,7 @@ public class MigrationService {
                 }
                 ps.setLong(4, trade.timestamp);
                 ps.setInt(5, trade.qty);
-                ps.setInt(6, trade.price);
+                ps.setLong(6, trade.price);
                 ps.setInt(7, trade.isBuy ? 1 : 0);
                 ps.setString(8, trade.offerJson);
                 ps.addBatch();
@@ -480,11 +531,11 @@ public class MigrationService {
 
         int count = 0;
         for (FlippingItem item : items) {
-            // Only persist actual favorites. The previous predicate
-            // `isFavorite() || !"1".equals(getFavoriteCode())` erroneously migrated any item
-            // whose code wasn't the default "1" (including null), polluting the table.
-            if (item.isFavorite()) {
-                storage.upsertFavorite(displayName, item.getItemId(), true, item.getFavoriteCode());
+            // Unfavoriting retains a custom code for the next time the item is favorited.
+            // Null/default codes on unfavorited items need no separate favorite row.
+            String favoriteCode = item.getFavoriteCode();
+            if (item.isFavorite() || (favoriteCode != null && !"1".equals(favoriteCode))) {
+                storage.upsertFavorite(displayName, item.getItemId(), item.isFavorite(), favoriteCode);
                 count++;
             }
         }
@@ -498,11 +549,11 @@ public class MigrationService {
         final String uuid;
         final long timestamp;
         final int qty;
-        final int price;
+        final long price;
         final boolean isBuy;
         final String offerJson;
 
-        TradeRecord(int accountId, int itemId, String uuid, long timestamp, int qty, int price, boolean isBuy, String offerJson) {
+        TradeRecord(int accountId, int itemId, String uuid, long timestamp, int qty, long price, boolean isBuy, String offerJson) {
             this.accountId = accountId;
             this.itemId = itemId;
             this.uuid = uuid;

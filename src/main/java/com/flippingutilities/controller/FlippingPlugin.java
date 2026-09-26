@@ -805,7 +805,7 @@ public class FlippingPlugin extends Plugin {
         tradeHistoryHandler.exportToCsv(parentDirectory, startOfInterval, startOfIntervalName);
     }
 
-    public int calculateOptionValue(Option option) throws InvalidOptionException {
+    public long calculateOptionValue(Option option) throws InvalidOptionException {
         return optionHandler.calculateOptionValue(option, gameUiChangesHandler.highlightedItem, gameUiChangesHandler.highlightedItemId);
     }
 
@@ -837,7 +837,7 @@ public class FlippingPlugin extends Plugin {
 
                     optionExercised.ifPresent(option -> clientThread.invoke(() -> {
                         try {
-                            int optionValue = calculateOptionValue(option);
+                            long optionValue = calculateOptionValue(option);
                             client.getWidget(InterfaceID.Chatbox.MES_TEXT2).setText(optionValue + "*");
                             client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(optionValue));
                             flippingPanel.getOfferEditorContainerPanel().highlightPressedOption(keyPressed);

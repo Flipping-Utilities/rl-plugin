@@ -120,7 +120,7 @@ final class SqliteOfferStore {
             statement.setString(3, offer.getUuid());
             statement.setLong(4, offer.getTime() == null ? 0L : offer.getTime().toEpochMilli());
             statement.setInt(5, offer.getCurrentQuantityInTrade());
-            statement.setInt(6, offer.getPreTaxPrice());
+            statement.setLong(6, offer.getPreTaxPrice());
             statement.setInt(7, offer.isBuy() ? 1 : 0);
             statement.setString(8, OfferJsonCodec.serializeOffer(offer));
             statement.executeUpdate();
@@ -133,10 +133,10 @@ final class SqliteOfferStore {
      * Upsert an active slot with an offer event.
      * @param displayName Account display name
      * @param slotIndex GE slot index (0-7)
-     * @param offer The offer event to store (cleared if null/complete)
+     * @param offer The offer event to store, including completed offers awaiting collection
      */
     void upsertSlot(String displayName, int slotIndex, OfferEvent offer, boolean historyVisible) {
-        if (offer == null || offer.isComplete() || offer.isCausedByEmptySlot()) {
+        if (offer == null || offer.isCausedByEmptySlot()) {
             clearSlot(displayName, slotIndex);
             return;
         }
@@ -176,9 +176,11 @@ final class SqliteOfferStore {
                         OfferEvent offer = OfferJsonCodec.deserializeOffer(rs.getString("offer_json"));
                         offer.setMadeBy(displayName);
 
-                        if (!offer.isComplete() && !offer.isCausedByEmptySlot()) {
+                        if (!offer.isCausedByEmptySlot()) {
                             slots.put(idx, offer);
-                            if (rs.getBoolean("history_visible")) {
+                            // Completed offers already belong to trades. Keeping their slot
+                            // snapshot must not resurrect deleted history or add a duplicate.
+                            if (!offer.isComplete() && rs.getBoolean("history_visible")) {
                                 partialHistory.put(idx, offer);
                             }
                         }
