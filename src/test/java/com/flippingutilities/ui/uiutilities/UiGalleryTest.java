@@ -48,7 +48,7 @@ public class UiGalleryTest {
         GalleryFixture fixture = new GalleryFixture("queued", "Queued", "", "", 20, () -> {
             JPanel component = new JPanel();
             component.setBackground(Color.RED);
-            SwingUtilities.invokeLater(() -> component.setBackground(Color.GREEN));
+            SwingUtilities.invokeLater(() -> SwingUtilities.invokeLater(() -> component.setBackground(Color.GREEN)));
             return new GalleryFixture.Mounted(component, closes::incrementAndGet);
         });
         BufferedImage image = UiGallery.render(fixture, 30);
@@ -67,6 +67,46 @@ public class UiGalleryTest {
             assertEquals("broken fixture", expected.getCause().getMessage());
         }
         assertEquals(1, closes.get());
+    }
+
+    @Test public void statisticsSearchIsSettledAndExternalActionsStayDisabled() throws Exception {
+        GalleryFixture source = GalleryFixtures.all().stream().filter(f -> f.id.equals("statistics-search"))
+            .findFirst().orElseThrow(AssertionError::new);
+        JComponent[] component = new JComponent[1];
+        GalleryFixture observed = new GalleryFixture("observed-search", "", "", "", source.height, () -> {
+            GalleryFixture.Mounted mounted = source.mount();
+            component[0] = mounted.component;
+            return mounted;
+        });
+        UiGallery.render(observed, 225);
+        SwingUtilities.invokeAndWait(() -> {
+            String labels = labelText(component[0]);
+            assertTrue("Capture should include the final search result: " + labels,
+                labels.contains("yielded no results") || labels.contains("No matching trades"));
+            assertEquals("Export, reset and recipe management must stay unavailable", 3,
+                disabledExternalActions(component[0]));
+        });
+    }
+
+    private static String labelText(Container parent) {
+        StringBuilder text = new StringBuilder();
+        for (Component child : parent.getComponents()) {
+            if (child instanceof JLabel) text.append(((JLabel) child).getText()).append('\n');
+            if (child instanceof Container) text.append(labelText((Container) child));
+        }
+        return text.toString();
+    }
+
+    private static int disabledExternalActions(Container parent) {
+        int count = 0;
+        for (Component child : parent.getComponents()) {
+            if (child instanceof JComponent && "Unavailable in the component gallery".equals(((JComponent) child).getToolTipText())) {
+                assertFalse(child.isEnabled());
+                ++count;
+            }
+            if (child instanceof Container) count += disabledExternalActions((Container) child);
+        }
+        return count;
     }
 
     @Test public void resettingAndSwitchingReleaseMountedState() throws Exception {
@@ -117,6 +157,16 @@ public class UiGalleryTest {
                 button(workbench[0], "300 px").doClick();
                 UiGallery.capture(workbench[0], 1020, 860);
                 assertEquals(300, component[0].getWidth());
+                for (int preset : new int[]{300, 225}) {
+                    button(workbench[0], preset + " px").doClick();
+                    find(workbench[0], JCheckBox.class).doClick();
+                    UiGallery.capture(workbench[0], 1020, 860);
+                    assertTrue(component[0].getWidth() > preset);
+                    button(workbench[0], preset + " px").doClick();
+                    UiGallery.capture(workbench[0], 1020, 860);
+                    assertEquals("Leaving fit mode must apply an unchanged preset", preset, component[0].getWidth());
+                    assertFalse(find(workbench[0], JCheckBox.class).isSelected());
+                }
                 find(workbench[0], JSpinner.class).setValue(350);
                 UiGallery.capture(workbench[0], 1020, 860);
                 assertEquals(350, component[0].getWidth());
