@@ -13,8 +13,10 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -365,11 +367,15 @@ public class MigrationService {
     }
 
     private void updateAccountSessionTime(Connection conn, int accountId, long accumulatedMillis, Instant sessionStart) throws SQLException {
-        String sql = "UPDATE accounts SET accumulated_time = :accumulatedTime, session_start = :sessionStart WHERE id = :accountId";
-        try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
-            ps.bind("accumulatedTime", accumulatedMillis)
-                .bind("sessionStart", sessionStart == null ? null : sessionStart.toEpochMilli())
-                .bind("accountId", accountId);
+        String sql = "UPDATE accounts SET accumulated_time = ?, session_start = ? WHERE id = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, accumulatedMillis);
+            if (sessionStart == null) {
+                ps.setNull(2, Types.BIGINT);
+            } else {
+                ps.setLong(2, sessionStart.toEpochMilli());
+            }
+            ps.setInt(3, accountId);
             ps.executeUpdate();
         }
     }
@@ -377,18 +383,18 @@ public class MigrationService {
     private void batchInsertTrades(Connection conn, List<TradeRecord> trades) throws SQLException {
         // INSERT OR IGNORE against UNIQUE(account_id, uuid) makes re-runs idempotent: a trade
         // whose uuid already exists for this account is silently skipped instead of duplicated.
-        String sql = "INSERT OR IGNORE INTO trades (account_id, item_id, uuid, timestamp, qty, price, is_buy, offer_json) VALUES (:accountId, :itemId, :uuid, :timestamp, :quantity, :price, :buy, :offerJson)";
-        try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
+        String sql = "INSERT OR IGNORE INTO trades (account_id, item_id, uuid, timestamp, qty, price, is_buy, offer_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
             int count = 0;
             for (TradeRecord trade : trades) {
-                ps.bind("accountId", trade.accountId)
-                    .bind("itemId", trade.itemId)
-                    .bind("uuid", trade.uuid)
-                    .bind("timestamp", trade.timestamp)
-                    .bind("quantity", trade.qty)
-                    .bind("price", trade.price)
-                    .bind("buy", trade.isBuy)
-                    .bind("offerJson", trade.offerJson);
+                ps.setInt(1, trade.accountId);
+                ps.setInt(2, trade.itemId);
+                ps.setString(3, trade.uuid);
+                ps.setLong(4, trade.timestamp);
+                ps.setInt(5, trade.qty);
+                ps.setLong(6, trade.price);
+                ps.setBoolean(7, trade.isBuy);
+                ps.setString(8, trade.offerJson);
                 ps.addBatch();
                 count++;
 

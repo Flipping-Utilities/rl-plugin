@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -39,12 +40,12 @@ final class SqliteRecipeStore {
         List<RecipeFlipGroup> groups = new ArrayList<>();
 
         String groupSql = "SELECT id, recipe_key, coin_cost, timestamp FROM recipe_flips " +
-            "WHERE account_id = :accountId ORDER BY recipe_key, timestamp";
+            "WHERE account_id = ? ORDER BY recipe_key, timestamp";
 
         try {
             Connection conn = storage.getConnection();
-            try (NamedStatement ps = NamedStatement.prepare(conn, groupSql)) {
-                ps.bind("accountId", accountId);
+            try (PreparedStatement ps = conn.prepareStatement(groupSql)) {
+                ps.setInt(1, accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     Map<String, RecipeFlipGroup> groupMap = new HashMap<>();
 
@@ -87,9 +88,9 @@ final class SqliteRecipeStore {
                                                                            String displayName, RecipeComponentTable table) {
         Map<Integer, Map<String, PartialOffer>> components = new HashMap<>();
         String sql = "SELECT item_id, offer_uuid, amount_consumed, offer_json FROM " + table.tableName() +
-            " WHERE recipe_flip_id = :recipeFlipId";
-        try (NamedStatement ps = NamedStatement.prepare(storage.getConnection(), sql)) {
-            ps.bind("recipeFlipId", recipeFlipId);
+            " WHERE recipe_flip_id = ?";
+        try (PreparedStatement ps = storage.getConnection().prepareStatement(sql)) {
+            ps.setLong(1, recipeFlipId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     int itemId = rs.getInt("item_id");
@@ -127,10 +128,10 @@ final class SqliteRecipeStore {
         try {
             Connection conn = storage.getConnection();
             Long recipeId = null;
-            try (NamedStatement ps = NamedStatement.prepare(conn,
-                "SELECT id FROM recipe_flips WHERE account_id = :accountId AND natural_key = :naturalKey")) {
-                ps.bind("accountId", accountId);
-                ps.bind("naturalKey", naturalKey);
+            try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT id FROM recipe_flips WHERE account_id = ? AND natural_key = ?")) {
+                ps.setInt(1, accountId);
+                ps.setString(2, naturalKey);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         recipeId = rs.getLong(1);
@@ -165,11 +166,11 @@ final class SqliteRecipeStore {
         try {
             Connection conn = storage.getConnection();
             List<Long> recipeIds = new ArrayList<>();
-            try (NamedStatement ps = NamedStatement.prepare(conn,
-                "SELECT id FROM recipe_flips WHERE account_id = :accountId AND recipe_key = :recipeKey AND timestamp > :since")) {
-                ps.bind("accountId", accountId);
-                ps.bind("recipeKey", recipeKey);
-                ps.bind("since", sinceMillis);
+            try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT id FROM recipe_flips WHERE account_id = ? AND recipe_key = ? AND timestamp > ?")) {
+                ps.setInt(1, accountId);
+                ps.setString(2, recipeKey);
+                ps.setLong(3, sinceMillis);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         recipeIds.add(rs.getLong(1));
@@ -189,7 +190,7 @@ final class SqliteRecipeStore {
     void deleteRecipeFlipsById(Connection conn, List<Long> recipeIds) throws SQLException {
         for (int i = 0; i < recipeIds.size(); i += 500) {
             List<Long> chunk = recipeIds.subList(i, Math.min(i + 500, recipeIds.size()));
-            String placeholders = NamedStatement.placeholders("recipeId", chunk.size());
+            String placeholders = String.join(", ", Collections.nCopies(chunk.size(), "?"));
             for (RecipeComponentTable table : RecipeComponentTable.values()) {
                 execDeleteByLongs(conn, "DELETE FROM " + table.tableName() + " WHERE recipe_flip_id IN (" + placeholders + ")", chunk);
             }
@@ -198,8 +199,10 @@ final class SqliteRecipeStore {
     }
 
     private void execDeleteByLongs(Connection conn, String sql, List<Long> ids) throws SQLException {
-        try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
-            ps.bindList("recipeId", ids);
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (int i = 0; i < ids.size(); i++) {
+                ps.setLong(i + 1, ids.get(i));
+            }
             ps.executeUpdate();
         }
     }
@@ -226,15 +229,15 @@ final class SqliteRecipeStore {
         long timestamp = flip.getTimeOfCreation().toEpochMilli();
         String naturalKey = recipeNaturalKey(accountId, recipeKey, timestamp);
         long recipeId;
-        try (NamedStatement ps = NamedStatement.prepare(conn,
+        try (PreparedStatement ps = conn.prepareStatement(
             "INSERT INTO recipe_flips (account_id, timestamp, recipe_key, coin_cost, natural_key) " +
-            "VALUES (:accountId, :timestamp, :recipeKey, :coinCost, :naturalKey) ON CONFLICT(natural_key) DO NOTHING",
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT(natural_key) DO NOTHING",
             Statement.RETURN_GENERATED_KEYS)) {
-            ps.bind("accountId", accountId);
-            ps.bind("timestamp", timestamp);
-            ps.bind("recipeKey", recipeKey);
-            ps.bind("coinCost", flip.getCoinCost());
-            ps.bind("naturalKey", naturalKey);
+            ps.setInt(1, accountId);
+            ps.setLong(2, timestamp);
+            ps.setString(3, recipeKey);
+            ps.setLong(4, flip.getCoinCost());
+            ps.setString(5, naturalKey);
             // An ignored insert leaves a stale rowid in sqlite-jdbc's generated keys.
             if (ps.executeUpdate() == 0) {
                 return false;
@@ -257,17 +260,17 @@ final class SqliteRecipeStore {
         if (components == null) {
             return;
         }
-        try (NamedStatement ps = NamedStatement.prepare(conn, "INSERT INTO " + table.tableName() +
+        try (PreparedStatement ps = conn.prepareStatement("INSERT INTO " + table.tableName() +
             " (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) " +
-            "VALUES (:recipeId, :itemId, :offerUuid, :amountConsumed, :offerJson)")) {
+            "VALUES (?, ?, ?, ?, ?)")) {
             for (Map.Entry<Integer, Map<String, PartialOffer>> entry : components.entrySet()) {
                 for (PartialOffer component : entry.getValue().values()) {
                     if (component == null || component.getAmountConsumed() <= 0) continue;
-                    ps.bind("recipeId", recipeId);
-                    ps.bind("itemId", entry.getKey());
-                    ps.bind("offerUuid", component.getOfferUuid());
-                    ps.bind("amountConsumed", component.getAmountConsumed());
-                    ps.bind("offerJson", OfferJsonCodec.serializeRecipeOffer(component));
+                    ps.setLong(1, recipeId);
+                    ps.setInt(2, entry.getKey());
+                    ps.setString(3, component.getOfferUuid());
+                    ps.setInt(4, component.getAmountConsumed());
+                    ps.setString(5, OfferJsonCodec.serializeRecipeOffer(component));
                     ps.addBatch();
                 }
             }
