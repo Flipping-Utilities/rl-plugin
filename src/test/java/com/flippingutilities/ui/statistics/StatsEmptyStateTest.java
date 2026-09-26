@@ -1,6 +1,5 @@
 package com.flippingutilities.ui.statistics;
 
-import com.flippingutilities.DataSource;
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.FlippingItem;
@@ -162,7 +161,7 @@ public class StatsEmptyStateTest {
             flushEdt();
         }
         @Override public void close() throws Exception { flushEdt(); executor.shutdownNow(); }
-        @Override public FlippingConfig getConfig() { return new FlippingConfig() { @Override public DataSource dataSource() { return DataSource.JSON; } }; }
+        @Override public FlippingConfig getConfig() { return new FlippingConfig() {}; }
         @Override public ScheduledExecutorService getExecutor() { return executor; }
         @Override public String getAccountCurrentlyViewed() { return ACCOUNT_WIDE; }
         @Override public Instant viewStartOfSessionForCurrentView() { return Instant.now().minusSeconds(3600); }
