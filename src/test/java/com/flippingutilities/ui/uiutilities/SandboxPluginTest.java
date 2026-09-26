@@ -54,9 +54,12 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 import javax.imageio.ImageIO;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JSpinner;
+import javax.swing.JSplitPane;
 import javax.swing.SwingUtilities;
 
 import static org.junit.Assert.*;
@@ -65,6 +68,7 @@ import static org.junit.Assert.*;
 public class SandboxPluginTest {
     private static final String ACCOUNT = "Sandbox player";
     private static final String DELETED_ACCOUNT = "Delete me";
+    private static final String OTHER_ACCOUNT = "Other account";
     private static final int ITEM = 4151;
     @Rule public TemporaryFolder folder = new TemporaryFolder();
 
@@ -118,6 +122,55 @@ public class SandboxPluginTest {
         assertEquals(before, hashes(source));
     }
 
+    @Test
+    public void simulatedExchangeUpdatesRealJsonHistoryAndKeepsAccountsIsolated() throws Exception {
+        Assume.assumeTrue("Set FLIPPING_SANDBOX_UI_TEST=true to exercise the exchange with real sidebar panels",
+            "true".equals(System.getenv("FLIPPING_SANDBOX_UI_TEST")));
+        Path source = folder.newFolder("exchange-json-source").toPath();
+        write(source.resolve(ACCOUNT + ".json"), accountWithActiveOffer());
+        write(source.resolve(OTHER_ACCOUNT + ".json"), legacyAccount(OTHER_ACCOUNT));
+        Map<String, String> before = hashes(source);
+        probe(source, DataSource.JSON, "exchange");
+        assertEquals("Simulated offers must never persist to source saves", before, hashes(source));
+    }
+
+    @Test
+    public void simulatedExchangeUpdatesCopiedSqliteHistoryAndContinuesSavedSlots() throws Exception {
+        Assume.assumeTrue("Set FLIPPING_SANDBOX_UI_TEST=true to exercise the exchange with real sidebar panels",
+            "true".equals(System.getenv("FLIPPING_SANDBOX_UI_TEST")));
+        Path source = folder.newFolder("exchange-database-source").toPath();
+        Path database = source.resolve("saved-offers.db");
+        SqliteStorage storage = new SqliteStorage(database.toFile());
+        try {
+            storage.initializeSchema();
+            OfferEvent partial = new OfferEvent("saved-partial", true, ITEM, 2, 100,
+                Instant.parse("2020-01-01T00:01:30Z"), 3, GrandExchangeOfferState.BUYING,
+                50, 4, 10, null, false, ACCOUNT, "Abyssal whip", 100, 200);
+            storage.recordTrade(ACCOUNT, partial);
+            storage.upsertSlot(ACCOUNT, 3, partial, true);
+            storage.upsertSlot(ACCOUNT, 4, new OfferEvent("saved-unfilled", true, 554, 0, 0,
+                Instant.parse("2020-01-01T00:01:31Z"), 4, GrandExchangeOfferState.BUYING,
+                51, 0, 5, null, false, ACCOUNT, "Fire rune", 20, 0), false);
+            storage.recordTrade(OTHER_ACCOUNT, new OfferEvent("other-history", true, ITEM, 10, 100,
+                Instant.parse("2020-01-01T00:00:00Z"), 0, GrandExchangeOfferState.BOUGHT,
+                0, 10, 10, null, false, OTHER_ACCOUNT, "Abyssal whip", 100, 1000));
+        } finally {
+            storage.close();
+        }
+        Map<String, String> before = hashes(source);
+        probe(database, DataSource.SQLITE, "exchange");
+        assertSourceUnchanged(source, before);
+    }
+
+    @Test
+    public void emptySourceCreatesUsableExchangeAndClosingStopsFurtherFills() throws Exception {
+        Assume.assumeTrue("Set FLIPPING_SANDBOX_UI_TEST=true to exercise the exchange with real sidebar panels",
+            "true".equals(System.getenv("FLIPPING_SANDBOX_UI_TEST")));
+        Path source = folder.newFolder("empty-exchange-source").toPath();
+        probe(source, DataSource.JSON, "exchange-empty");
+        assertTrue("An empty source must stay empty", hashes(source).isEmpty());
+    }
+
     private void assertIsolatedAndRestorable(Path source, DataSource backend) throws Exception {
         Path sourceDirectory = Files.isDirectory(source) ? source : source.getParent();
         Map<String, String> before = hashes(sourceDirectory);
@@ -142,8 +195,9 @@ public class SandboxPluginTest {
 
     private void probe(Path source, DataSource backend, String action) throws Exception {
         Path output = Files.createTempFile("sandbox-plugin-probe-", ".log");
+        boolean headful = "ui".equals(action) || action.startsWith("exchange");
         Process child = new ProcessBuilder(Paths.get(System.getProperty("java.home"), "bin", "java").toString(),
-            "-Djava.awt.headless=" + !"ui".equals(action), "-cp", testClasspath(), Probe.class.getName(),
+            "-Djava.awt.headless=" + !headful, "-cp", testClasspath(), Probe.class.getName(),
             source.toString(), backend.name(), action).redirectErrorStream(true).redirectOutput(output.toFile()).start();
         try {
             boolean completed = child.waitFor(45, TimeUnit.SECONDS);
@@ -190,6 +244,15 @@ public class SandboxPluginTest {
             + "\"t\":1577836800000,\"s\":0,\"st\":\"BOUGHT\",\"tAA\":10,\"tQIT\":10}]}}]}";
     }
 
+    private static String accountWithActiveOffer() {
+        String active = "{\"uuid\":\"saved-partial\",\"b\":true,\"id\":4151,\"cQIT\":2,\"p\":100,"
+            + "\"t\":1577836890000,\"s\":3,\"st\":\"BUYING\",\"tAA\":50,\"tSFO\":4,\"tQIT\":10}";
+        String unfilled = "{\"uuid\":\"saved-unfilled\",\"b\":true,\"id\":554,\"cQIT\":0,\"p\":0,"
+            + "\"t\":1577836891000,\"s\":4,\"st\":\"BUYING\",\"tAA\":51,\"tSFO\":0,\"tQIT\":5}";
+        return "{\"lastOffers\":{\"3\":" + active + ",\"4\":" + unfilled + "},\"trades\":[{\"id\":4151,\"name\":\"Abyssal whip\","
+            + "\"tGL\":70,\"fB\":\"" + ACCOUNT + "\",\"h\":{\"sO\":[" + active + "]}}]}";
+    }
+
     private static void write(Path file, String content) throws Exception {
         Files.write(file, content.getBytes(StandardCharsets.UTF_8));
     }
@@ -233,6 +296,11 @@ public class SandboxPluginTest {
                     }
                 } else if ("reject-account".equals(action)) {
                     rejectUnsafeAccounts(data, source);
+                } else if (action.startsWith("exchange")) {
+                    try (SandboxPlugin host = SandboxPlugin.load(data)) {
+                        assertEquals(backend, host.plugin.getConfig().dataSource());
+                        exerciseExchange(host, "exchange-empty".equals(action));
+                    }
                 } else {
                     try (SandboxPlugin host = SandboxPlugin.load(data)) {
                         FlippingPlugin plugin = host.plugin;
@@ -253,11 +321,148 @@ public class SandboxPluginTest {
                             assertEquals(70, item.getTotalGELimit());
                         }
                         if ("mutate".equals(action)) mutate(plugin, item, data, backend);
-                        if ("ui".equals(action)) mountAndClick(host);
+                        if ("ui".equals(action)) mountAndClick(host, data);
                     }
                 }
             }
             assertFalse("Closing the sandbox must remove its temporary home", Files.exists(temporaryHome));
+        }
+
+        private static void exerciseExchange(SandboxPlugin host, boolean emptySource) throws Exception {
+            AtomicReference<Throwable> asynchronousFailure = new AtomicReference<>();
+            Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+            Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> asynchronousFailure.compareAndSet(null, failure));
+            try {
+                SwingUtilities.invokeAndWait(() -> {
+                    RuneLiteLAF.setup();
+                    try { host.mount(); }
+                    catch (Exception failure) { throw new RuntimeException(failure); }
+                    SandboxExchange exchange = host.exchange();
+                    if (emptySource) {
+                        assertEquals(Collections.singletonList(ACCOUNT), exchange.accounts());
+                        assertEquals(ACCOUNT, exchange.account());
+                        assertEquals(8, host.plugin.getClient().getGrandExchangeOffers().length);
+                        for (int slot = 0; slot < 8; slot++) assertNull(exchange.offer(slot));
+                        assertRejected(() -> exchange.place(-1, true, ITEM, 3, 100));
+                        assertRejected(() -> exchange.place(8, true, ITEM, 3, 100));
+                        assertRejected(() -> exchange.place(0, true, 0, 3, 100));
+                        exchange.place(0, true, ITEM, 3, 100);
+                        exchange.fill(0, 1);
+                        assertEquals(1, history(host.plugin, ACCOUNT).size());
+                        assertEquals(1, history(host.plugin, ACCOUNT).get(0).getCurrentQuantityInTrade());
+                        exchange.close();
+                        assertRejected(() -> exchange.fill(0, 1));
+                        assertRejected(exchange::advanceSecond);
+                        return;
+                    }
+                    exchange.selectAccount(ACCOUNT);
+                    assertEquals(2, exchange.offer(3).getCurrentQuantityInTrade());
+                    assertEquals(100, exchange.fillPrice(3));
+                    assertEquals(0, exchange.rate(3));
+                    exchange.advanceSecond();
+                    assertEquals("Restored offers start paused", 2, exchange.offer(3).getCurrentQuantityInTrade());
+                    assertRejected(() -> exchange.collect(3));
+                    assertRejected(() -> exchange.place(3, false, ITEM, 10, 150));
+                    assertRejected(() -> exchange.setRate(3, -1));
+                    assertRejected(() -> exchange.fill(3, -1));
+                    assertRejected(() -> exchange.place(0, true, ITEM, Integer.MAX_VALUE, 2));
+
+                    exchange.setRate(3, 3);
+                    exchange.advanceSecond();
+                    assertEquals(5, exchange.offer(3).getCurrentQuantityInTrade());
+                    exchange.setRate(3, 0);
+                    exchange.advanceSecond();
+                    assertEquals("Zero rate pauses fulfillment", 5, exchange.offer(3).getCurrentQuantityInTrade());
+                    exchange.setFillPrice(3, 90);
+                    exchange.fill(3, 2);
+                    assertEquals(7, exchange.offer(3).getCurrentQuantityInTrade());
+                    assertEquals(680, exchange.offer(3).getSpent());
+                    exchange.selectAccount(OTHER_ACCOUNT);
+                    exchange.selectAccount(ACCOUNT);
+                    assertEquals("Account switches retain the chosen execution price", 90, exchange.fillPrice(3));
+                    exchange.fill(3, 1);
+                    assertEquals("Account switches must not round away cumulative value", 770, exchange.offer(3).getSpent());
+                    assertEquals(96, exchange.offer(3).getPreTaxPrice());
+                    exchange.cancel(3);
+                    assertEquals(GrandExchangeOfferState.CANCELLED_BUY, exchange.offer(3).getState());
+                    assertEquals("Partial fills replace earlier snapshots", 1, history(host.plugin, ACCOUNT).size());
+                    assertEquals(8, history(host.plugin, ACCOUNT).get(0).getCurrentQuantityInTrade());
+                    exchange.collect(3);
+                    assertNull(exchange.offer(3));
+
+                    exchange.place(3, false, ITEM, 8, 150);
+                    assertEquals(GrandExchangeOfferState.SELLING, exchange.offer(3).getState());
+                    assertEquals("Placing an unfilled offer must not create history", 1, history(host.plugin, ACCOUNT).size());
+                    exchange.fill(3, 50);
+                    assertEquals("A fill is capped at remaining quantity", 8, exchange.offer(3).getCurrentQuantityInTrade());
+                    assertEquals(GrandExchangeOfferState.SOLD, exchange.offer(3).getState());
+                    assertEquals(2, history(host.plugin, ACCOUNT).size());
+                    assertEquals("Real statistics apply sell tax", 408, FlippingItem.getProfit(history(host.plugin, ACCOUNT)));
+                    exchange.collect(3);
+                    assertNull(exchange.offer(3));
+
+                    assertEquals("Persisted zero-fill offers have no known execution price", 0, exchange.fillPrice(4));
+                    assertRejected(() -> exchange.fill(4, 1));
+                    assertRejected(() -> exchange.setRate(4, 1));
+                    assertEquals(0, exchange.offer(4).getCurrentQuantityInTrade());
+                    exchange.setFillPrice(4, 20);
+                    exchange.fill(4, 3);
+                    assertEquals(3, exchange.offer(4).getCurrentQuantityInTrade());
+                    exchange.cancel(4);
+                    exchange.collect(4);
+
+                    exchange.selectAccount(OTHER_ACCOUNT);
+                    assertNull(exchange.offer(3));
+                    assertEquals(10, history(host.plugin, OTHER_ACCOUNT).get(0).getCurrentQuantityInTrade());
+                    exchange.place(0, true, ITEM, 5, 120);
+                    exchange.setRate(0, 2);
+                    exchange.advanceSecond();
+                    assertEquals(2, exchange.offer(0).getCurrentQuantityInTrade());
+                    exchange.selectAccount(ACCOUNT);
+                    assertNull(exchange.offer(0));
+                    assertEquals(2, history(host.plugin, ACCOUNT).size());
+                    exchange.selectAccount(OTHER_ACCOUNT);
+                    assertEquals(0, exchange.rate(0));
+                    exchange.advanceSecond();
+                    assertEquals("Switching accounts pauses existing offers", 2, exchange.offer(0).getCurrentQuantityInTrade());
+                });
+                SwingUtilities.invokeAndWait(() -> {});
+                assertTrue(host.plugin.getDataHandler().storeData());
+                assertEquals(emptySource ? 1 : 2, itemHistory(host.plugin.tradePersister.loadAccount(ACCOUNT)).size());
+                if (host.plugin.getSqliteStorage() != null) {
+                    CountDownLatch stored = new CountDownLatch(1);
+                    host.plugin.submitStorageTask(storage -> stored.countDown());
+                    assertTrue("Exchange events must reach the copied database", stored.await(10, TimeUnit.SECONDS));
+                    AccountData reloaded = host.plugin.getSqliteStorage().loadAccount(ACCOUNT);
+                    assertEquals(2, itemHistory(reloaded).size());
+                    assertEquals(408, FlippingItem.getProfit(itemHistory(reloaded)));
+                    assertTrue(reloaded.getLastOffers().isEmpty());
+                    AccountData other = host.plugin.getSqliteStorage().loadAccount(OTHER_ACCOUNT);
+                    assertEquals(2, other.getLastOffers().get(0).getCurrentQuantityInTrade());
+                }
+            } finally {
+                SwingUtilities.invokeAndWait(() -> { for (Window window : Window.getWindows()) window.dispose(); });
+                Thread.setDefaultUncaughtExceptionHandler(previous);
+            }
+            if (asynchronousFailure.get() != null) throw new AssertionError("Queued exchange/sidebar callback failed", asynchronousFailure.get());
+        }
+
+        private static java.util.List<OfferEvent> history(FlippingPlugin plugin, String account) {
+            return itemHistory(plugin.getDataHandler().viewAccountData(account));
+        }
+
+        private static java.util.List<OfferEvent> itemHistory(AccountData account) {
+            return account.getTrades().stream().filter(item -> item.getItemId() == ITEM).findFirst().get()
+                .getHistory().getCompressedOfferEvents();
+        }
+
+        private static void assertRejected(Runnable action) {
+            try {
+                action.run();
+                fail("Invalid exchange action must be rejected");
+            } catch (IllegalArgumentException | IllegalStateException expected) {
+                // The real offer state must remain unchanged after an invalid request.
+            }
         }
 
         private static SandboxData chooseThroughDialog(Path source) throws Exception {
@@ -339,11 +544,13 @@ public class SandboxPluginTest {
             }
         }
 
-        private static void mountAndClick(SandboxPlugin host) throws Exception {
+        private static void mountAndClick(SandboxPlugin host, SandboxData data) throws Exception {
             AtomicReference<Throwable> asynchronousFailure = new AtomicReference<>();
             Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
             Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> asynchronousFailure.compareAndSet(null, failure));
             MasterPanel[] panel = new MasterPanel[1];
+            SandboxGrandExchangePanel[] game = new SandboxGrandExchangePanel[1];
+            JSplitPane[] layout = new JSplitPane[1];
             try {
                 SwingUtilities.invokeAndWait(() -> {
                     RuneLiteLAF.setup();
@@ -352,11 +559,26 @@ public class SandboxPluginTest {
                     } catch (Exception failure) {
                         throw new RuntimeException(failure);
                     }
+                    game[0] = new SandboxGrandExchangePanel(host.exchange(), data);
+                    layout[0] = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, game[0], panel[0]);
+                    layout[0].setDividerLocation(665);
                     JFrame frame = new JFrame("Sandbox integration test");
-                    frame.setContentPane(panel[0]);
-                    frame.setSize(300, 900);
+                    frame.setContentPane(layout[0]);
+                    frame.setSize(1000, 850);
                     frame.setVisible(true);
                     panel[0].getAccountSelector().setSelectedItem(ACCOUNT);
+                });
+                SwingUtilities.invokeAndWait(() -> {});
+                SwingUtilities.invokeAndWait(() -> {
+                    named(game[0], JComboBox.class, "Offer item").getEditor().setItem("4151");
+                    named(game[0], JSpinner.class, "Offer quantity").setValue(4);
+                    named(game[0], JSpinner.class, "Offer unit price").setValue(100);
+                    named(game[0], JButton.class, "Place offer").doClick();
+                    assertEquals("The visible form must place an offer through the plugin", 0,
+                        host.exchange().offer(0).getCurrentQuantityInTrade());
+                    named(game[0], JSpinner.class, "Fill chunk quantity").setValue(2);
+                    named(game[0], JButton.class, "Fill chunk").doClick();
+                    assertEquals(2, host.exchange().offer(0).getCurrentQuantityInTrade());
                 });
                 SwingUtilities.invokeAndWait(() -> {});
                 SwingUtilities.invokeAndWait(() -> {
@@ -374,32 +596,46 @@ public class SandboxPluginTest {
                 });
                 SwingUtilities.invokeAndWait(() -> {});
                 Path screenshot = Files.createTempFile("sandbox-sidebar-", ".png");
+                Path exchangeScreenshot = Files.createTempFile("sandbox-grand-exchange-", ".png");
                 SwingUtilities.invokeAndWait(() -> {
                     assertNotNull("Statistics must contain the saved item name", find(host.plugin.getStatPanel(),
                         JLabel.class, label -> label.getText() != null && label.getText().contains("Abyssal whip")));
-                    BufferedImage image = UiGallery.capture(panel[0], 300, 900);
+                    BufferedImage image = UiGallery.capture(panel[0], 300, 850);
                     assertEquals(300, image.getWidth());
-                    assertEquals(900, image.getHeight());
+                    assertEquals(850, image.getHeight());
                     try {
                         assertTrue(ImageIO.write(image, "png", screenshot.toFile()));
+                        assertTrue(ImageIO.write(UiGallery.capture(layout[0], 1000, 850), "png", exchangeScreenshot.toFile()));
                     } catch (Exception failure) {
                         throw new RuntimeException(failure);
                     }
                     FastTabGroup tabs = find(panel[0], FastTabGroup.class, group -> true);
                     assertTrue(tabs.select(find(tabs, MaterialTab.class, tab -> "flipping".equals(tab.getText()))));
                     assertTrue(host.plugin.getFlippingPanel().isVisible());
+                    named(game[0], JButton.class, "Fill remaining").doClick();
+                    assertEquals(GrandExchangeOfferState.BOUGHT, host.exchange().offer(0).getState());
+                    named(game[0], JButton.class, "Collect offer").doClick();
+                    assertNull("Collect button must free the slot", host.exchange().offer(0));
                 });
                 System.out.println("Native sidebar screenshot: " + screenshot);
+                System.out.println("Native Grand Exchange screenshot: " + exchangeScreenshot);
                 assertTrue(host.plugin.getDataHandler().storeData());
                 assertTrue(host.plugin.tradePersister.loadAccount(ACCOUNT).getTrades().get(0).isFavorite());
             } finally {
                 SwingUtilities.invokeAndWait(() -> {
+                    if (game[0] != null) game[0].close();
                     if (panel[0] != null) panel[0].dispose();
                     for (Window window : Window.getWindows()) window.dispose();
                 });
                 Thread.setDefaultUncaughtExceptionHandler(previous);
             }
             if (asynchronousFailure.get() != null) throw new AssertionError("Queued Swing callback failed", asynchronousFailure.get());
+        }
+
+        private static <T extends Component> T named(Container parent, Class<T> type, String name) {
+            T component = find(parent, type, candidate -> name.equals(candidate.getName()));
+            assertNotNull("Expected visible control: " + name, component);
+            return component;
         }
 
         private static <T extends Component> T find(Container parent, Class<T> type, Predicate<T> matches) {

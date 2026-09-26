@@ -18,6 +18,7 @@ import com.google.gson.Gson;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.ItemComposition;
+import net.runelite.api.WorldType;
 import net.runelite.client.RuneLite;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.ItemManager;
@@ -33,6 +34,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 
 import static org.mockito.ArgumentMatchers.*;
@@ -52,6 +54,9 @@ final class SandboxPlugin implements AutoCloseable {
             .build();
     }).build();
     private SqliteStorage storage;
+    private final Map<Integer, FlippingItem> items = new HashMap<>();
+    private final AtomicInteger tick = new AtomicInteger(1);
+    private SandboxExchange exchange;
 
     static SandboxPlugin load(SandboxData data) throws Exception {
         // Fail closed if anything initialized RuneLite before the launcher redirected user.home.
@@ -88,7 +93,11 @@ final class SandboxPlugin implements AutoCloseable {
         };
         inject("clientThread", clientThread);
         Client client = mock(Client.class);
-        when(client.getGameState()).thenReturn(GameState.LOGIN_SCREEN);
+        when(client.getGameState()).thenAnswer(call -> plugin.getCurrentlyLoggedInAccount() == null
+            ? GameState.LOGIN_SCREEN : GameState.LOGGED_IN);
+        when(client.getWorldType()).thenReturn(EnumSet.of(WorldType.MEMBERS));
+        when(client.getTickCount()).thenAnswer(call -> tick.get());
+        when(client.getGrandExchangeOffers()).thenAnswer(call -> exchange == null ? null : exchange.clientOffers());
         when(client.isClientThread()).thenAnswer(call -> SwingUtilities.isEventDispatchThread());
         inject("client", client);
         plugin.gson = new Gson();
@@ -99,6 +108,10 @@ final class SandboxPlugin implements AutoCloseable {
             FlippingItemHandler.class.getDeclaredConstructor(FlippingPlugin.class);
         itemHandler.setAccessible(true);
         inject("flippingItemHandler", itemHandler.newInstance(plugin));
+        java.lang.reflect.Constructor<NewOfferEventPipelineHandler> offerHandler =
+            NewOfferEventPipelineHandler.class.getDeclaredConstructor(FlippingPlugin.class);
+        offerHandler.setAccessible(true);
+        inject("newOfferEventPipelineHandler", offerHandler.newInstance(plugin));
         inject("apiAuthHandler", new ApiAuthHandler(plugin));
         inject("apiRequestHandler", new ApiRequestHandler(plugin));
         inject("timeseriesFetcher", new TimeseriesFetcher(http, plugin));
@@ -122,7 +135,6 @@ final class SandboxPlugin implements AutoCloseable {
                 throw new IOException("Unsafe account name in sandbox data: " + account);
             }
         }
-        Map<Integer, FlippingItem> items = new HashMap<>();
         for (AccountData account : accounts.values()) {
             if (account != null) for (FlippingItem item : account.getTrades()) {
                 // Retain metadata only; large histories are loaded and owned by DataHandler below.
@@ -155,6 +167,13 @@ final class SandboxPlugin implements AutoCloseable {
         // Saved history predates this preview session; make it visible immediately.
         selectAllHistory(plugin.getStatPanel());
         return panel;
+    }
+
+    SandboxExchange exchange() {
+        GalleryFixture.requireEdt();
+        if (plugin.getMasterPanel() == null) throw new IllegalStateException("Mount the sidebar first");
+        if (exchange == null) exchange = new SandboxExchange(plugin, items, tick);
+        return exchange;
     }
 
     private static void selectAllHistory(java.awt.Container parent) {
@@ -205,6 +224,10 @@ final class SandboxPlugin implements AutoCloseable {
     }
 
     @Override public void close() throws Exception {
+        if (exchange != null) {
+            if (SwingUtilities.isEventDispatchThread()) exchange.close();
+            else SwingUtilities.invokeAndWait(exchange::close);
+        }
         executor.shutdownNow();
         storageExecutor.shutdown();
         if (!storageExecutor.awaitTermination(30, TimeUnit.SECONDS)) {

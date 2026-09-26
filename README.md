@@ -132,6 +132,8 @@ Run `./gradlew uiGallery` to choose data for an offline RuneLite shell with the 
 Click **Open default** to copy your `~/.runelite` data, or enter, browse for, or drop a RuneLite folder,
 flipping folder, or SQLite file, then click **Open copy**. Edits stay in a temporary copy and are
 discarded when you close the window. Use `--args='--source /path/to/folder-or.db'` to skip the chooser.
+The left-hand Grand Exchange simulator can place buys and sells, fill them at a chosen rate or in
+manual chunks, cancel offers, and collect completed trades while the real sidebar updates.
 Use `--args='--fixtures'` for synthetic component states, or `./gradlew renderUiGallery` for headless
 PNGs. See the [sandbox and gallery guide](docs/component-gallery.md).
 
