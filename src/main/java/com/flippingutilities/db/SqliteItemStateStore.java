@@ -4,8 +4,10 @@ import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.FlippingItem;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -55,11 +57,11 @@ final class SqliteItemStateStore {
     void upsertItemVisibility(String displayName, int itemId, boolean visible) {
         int accountId = storage.getOrCreateAccountId(displayName);
         String sql = "INSERT OR REPLACE INTO item_visibility (account_id, item_id, is_visible) " +
-            "VALUES (:accountId, :itemId, :visible)";
-        try (NamedStatement statement = NamedStatement.prepare(storage.getConnection(), sql)) {
-            statement.bind("accountId", accountId);
-            statement.bind("itemId", itemId);
-            statement.bind("visible", visible);
+            "VALUES (?, ?, ?)";
+        try (PreparedStatement statement = storage.getConnection().prepareStatement(sql)) {
+            statement.setInt(1, accountId);
+            statement.setInt(2, itemId);
+            statement.setBoolean(3, visible);
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Could not persist item visibility for " + displayName, e);
@@ -68,9 +70,9 @@ final class SqliteItemStateStore {
 
     void restoreItemVisibility(int accountId, String displayName, AccountData data) {
         Map<Integer, FlippingItem> items = indexItems(data);
-        String sql = "SELECT item_id, is_visible FROM item_visibility WHERE account_id = :accountId";
-        try (NamedStatement statement = NamedStatement.prepare(storage.getConnection(), sql)) {
-            statement.bind("accountId", accountId);
+        String sql = "SELECT item_id, is_visible FROM item_visibility WHERE account_id = ?";
+        try (PreparedStatement statement = storage.getConnection().prepareStatement(sql)) {
+            statement.setInt(1, accountId);
             try (ResultSet rows = statement.executeQuery()) {
                 while (rows.next()) {
                     int itemId = rows.getInt("item_id");
@@ -125,11 +127,11 @@ final class SqliteItemStateStore {
         }
 
         final String sql = "SELECT item_id, next_refresh, items_bought, items_bought_complete " +
-            "FROM ge_limit_state WHERE account_id = :accountId";
+            "FROM ge_limit_state WHERE account_id = ?";
         try {
             Connection conn = storage.getConnection();
-            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
-                ps.bind("accountId", accountId);
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         Map<String, Object> state = new HashMap<>(4);
@@ -159,19 +161,23 @@ final class SqliteItemStateStore {
 
         final String sql = "INSERT INTO ge_limit_state " +
             "(account_id, item_id, next_refresh, items_bought, items_bought_complete) " +
-            "VALUES (:accountId, :itemId, :nextRefresh, :itemsBought, :itemsBoughtThroughCompleteOffers) " +
+            "VALUES (?, ?, ?, ?, ?) " +
             "ON CONFLICT(account_id, item_id) DO UPDATE SET " +
             "next_refresh = excluded.next_refresh, items_bought = excluded.items_bought, " +
             "items_bought_complete = excluded.items_bought_complete";
 
         try {
             Connection conn = storage.getConnection();
-            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
-                ps.bind("accountId", accountId);
-                ps.bind("itemId", itemId);
-                ps.bind(NEXT_REFRESH, nextRefresh != null ? nextRefresh.toEpochMilli() : null);
-                ps.bind(ITEMS_BOUGHT, itemsBought);
-                ps.bind(ITEMS_BOUGHT_THROUGH_COMPLETE_OFFERS, itemsBoughtThroughCompleteOffers);
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, accountId);
+                ps.setInt(2, itemId);
+                if (nextRefresh == null) {
+                    ps.setNull(3, Types.BIGINT);
+                } else {
+                    ps.setLong(3, nextRefresh.toEpochMilli());
+                }
+                ps.setInt(4, itemsBought);
+                ps.setInt(5, itemsBoughtThroughCompleteOffers);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -190,14 +196,14 @@ final class SqliteItemStateStore {
         int accountId = storage.getOrCreateAccountId(displayName);
 
         String sql = "INSERT OR REPLACE INTO item_favorites (account_id, item_id, is_favorite, favorite_code) " +
-            "VALUES (:accountId, :itemId, :isFavorite, :favoriteCode)";
+            "VALUES (?, ?, ?, ?)";
         try {
             Connection conn = storage.getConnection();
-            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
-                ps.bind("accountId", accountId);
-                ps.bind("itemId", itemId);
-                ps.bind(IS_FAVORITE, isFavorite ? 1 : 0);
-                ps.bind(FAVORITE_CODE, favoriteCode != null ? favoriteCode : FlippingItem.DEFAULT_FAVORITE_CODE);
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, accountId);
+                ps.setInt(2, itemId);
+                ps.setBoolean(3, isFavorite);
+                ps.setString(4, favoriteCode != null ? favoriteCode : FlippingItem.DEFAULT_FAVORITE_CODE);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -214,11 +220,11 @@ final class SqliteItemStateStore {
         Map<Integer, Map<String, Object>> result = new HashMap<>();
         if (accountId == null) return result;
 
-        String sql = "SELECT item_id, is_favorite, favorite_code FROM item_favorites WHERE account_id = :accountId";
+        String sql = "SELECT item_id, is_favorite, favorite_code FROM item_favorites WHERE account_id = ?";
         try {
             Connection conn = storage.getConnection();
-            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
-                ps.bind("accountId", accountId);
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         int itemId = rs.getInt("item_id");
