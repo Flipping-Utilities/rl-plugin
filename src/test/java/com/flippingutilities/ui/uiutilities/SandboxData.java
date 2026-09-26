@@ -31,6 +31,14 @@ public final class SandboxData implements AutoCloseable {
         this.databaseSource = databaseSource;
     }
 
+    /** Browser imports have already been copied into their transient virtual home. */
+    static SandboxData prepared(Path source, Path temporaryHome, boolean databaseSource) throws IOException {
+        if (!temporaryHome.isAbsolute() || !Files.isDirectory(temporaryHome.resolve(".runelite/flipping"))) {
+            throw new IOException("Missing prepared sandbox directory");
+        }
+        return new SandboxData(source, temporaryHome, databaseSource);
+    }
+
     public static Path defaultSource() {
         return Paths.get(System.getProperty("user.home"), ".runelite");
     }

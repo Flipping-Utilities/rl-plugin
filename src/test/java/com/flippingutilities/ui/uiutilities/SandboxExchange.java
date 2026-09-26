@@ -17,8 +17,6 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.mockito.Mockito.mock;
-
 /** A fake game boundary. The real plugin owns slot state, history, accounting and persistence. */
 final class SandboxExchange implements AutoCloseable {
     private final FlippingPlugin plugin;
@@ -247,22 +245,7 @@ final class SandboxExchange implements AutoCloseable {
 
     private static GrandExchangeOffer clientOffer(int item, int quantity, int filled, int price, long spent,
                                                    GrandExchangeOfferState state) {
-        // This is the game API boundary. Return types cover RuneLite's int and long money APIs.
-        return mock(GrandExchangeOffer.class, call -> {
-            switch (call.getMethod().getName()) {
-                case "getItemId": return item;
-                case "getTotalQuantity": return quantity;
-                case "getQuantitySold": return filled;
-                case "getState": return state;
-                case "getPrice":
-                    if (call.getMethod().getReturnType() == long.class) return (long) price;
-                    return price;
-                case "getSpent":
-                    if (call.getMethod().getReturnType() == long.class) return spent;
-                    return (int) Math.min(spent, Integer.MAX_VALUE);
-                default: return org.mockito.Answers.RETURNS_DEFAULTS.answer(call);
-            }
-        });
+        return SandboxGameApi.offer(item, quantity, filled, price, spent, state);
     }
 
     @Override public void close() {

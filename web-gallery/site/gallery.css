@@ -17,3 +17,10 @@ main { overflow-x: auto; }
 .hint { margin-top: 16px; font-size: 13px; }
 footer { display: flex; justify-content: space-between; gap: 20px; font-size: 12px; color: #9b9fa9; }
 @media (max-width: 800px) { header, main, footer { padding: 20px; } header { align-items: flex-start; flex-direction: column; gap: 8px; } }
+.launch { display: block; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.secondary { background: transparent; color: #e6c26a; border-color: #65605a; }
+#drop { margin-top: 18px; padding: 24px; border: 1px dashed #656970; border-radius: 6px; color: #bdc0c6; cursor: pointer; text-align: center; }
+#drop.dragover, #drop:focus-visible { border-color: #e6c26a; background: #302d25; outline: none; }
+.session { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+[hidden] { display: none !important; }

@@ -166,7 +166,8 @@ final class SandboxPricePanel extends JPanel implements AutoCloseable {
         ChartCanvas() {
             setPreferredSize(new Dimension(620, 240));
             setMinimumSize(new Dimension(320, 160));
-            setBackground(CustomColors.CHART_BACKGROUND);
+            // An opaque Swing canvas must clear every pixel before the chart's translucent layer.
+            setBackground(Color.BLACK);
             MouseAdapter mouse = new MouseAdapter() {
                 @Override public void mouseMoved(MouseEvent event) {
                     if (chart == null || closed) return;

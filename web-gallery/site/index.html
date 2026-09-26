@@ -3,29 +3,38 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Flipping Utilities · Component gallery</title>
+  <title>Flipping Utilities · RuneLite sandbox</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="./gallery.css">
   <script defer src="https://cjrtnc.leaningtech.com/4.3/loader.js"></script>
-  <script defer src="./gallery.js"></script>
+  <script defer src="./vendor/sql-wasm.js"></script>
+  <script type="module" src="./gallery.js"></script>
 </head>
 <body>
   <header>
     <div><p class="eyebrow">Flipping Utilities <span>Experiment</span></p>
-      <h1>Component gallery</h1>
-      <p>The plugin’s Swing components, running in your browser with synthetic data.</p>
+      <h1>RuneLite sandbox</h1>
+      <p>The real plugin panels with a simulated Grand Exchange. Buy, sell, and control each fill.</p>
     </div>
     <a href="https://github.com/Flipping-Utilities/rl-plugin/tree/experiment/cheerpj-gallery">View branch ↗</a>
   </header>
   <main>
-    <section class="launch" aria-label="Gallery controls">
-      <button id="start" type="button">Open interactive gallery</button>
-      <p id="status" role="status">First launch downloads the Java runtime. Later launches use the browser cache.</p>
-      <button id="reload" type="button" hidden>Reload page</button>
+    <section id="launcher" class="launch" aria-label="Sandbox launcher">
+      <div class="actions">
+        <button id="start" type="button">Open empty sandbox</button>
+        <button id="choose-folder" class="secondary" type="button">Choose RuneLite folder</button>
+        <button id="choose-file" class="secondary" type="button">Choose database / files</button>
+        <button id="gallery" class="secondary" type="button">Component gallery</button>
+      </div>
+      <input id="folder" type="file" webkitdirectory multiple hidden>
+      <input id="files" type="file" multiple hidden>
+      <div id="drop" tabindex="0" role="button" aria-label="Choose or drop a RuneLite folder or database">Drop a RuneLite / flipping folder, database, or JSON saves here.</div>
+      <p class="hint">Your browser cannot open ~/.runelite automatically. Choose it once per session. Close RuneLite before importing a database; include its -wal file if present. Files stay in your browser, and reload starts a fresh copy.</p>
     </section>
-    <div id="display" aria-label="Interactive Java component gallery"></div>
-    <p class="hint">Choose a state in the gallery, change its width, and interact with the real controls. Reset restores the fixture.</p>
+    <div class="session"><p id="status" role="status">First launch downloads the Java runtime. Later launches use the browser cache.</p><button id="reload" class="secondary" type="button" hidden>New session</button></div>
+    <div id="display" aria-label="Interactive Java sandbox" hidden></div>
+    <p class="hint">Wiki item names, images, prices, and charts load live. This sandbox does not connect to your game account or place real offers.</p>
   </main>
-  <footer><span>Java 11 · CheerpJ 4.3 · Synthetic fixtures only</span><span id="build"></span></footer>
+  <footer><span>Java 11 · CheerpJ 4.3 · Disposable browser session</span><span id="build"></span></footer>
 </body>
 </html>

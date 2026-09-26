@@ -1,4 +1,4 @@
-name: Browser gallery
+name: Browser sandbox
 
 on:
   push:
@@ -35,7 +35,10 @@ jobs:
             **/*.gradle*
             gradle/wrapper/gradle-wrapper.properties
 
-      - name: Verify fixtures and build the browser gallery
+      - name: Verify browser file selection and SQLite WAL snapshots
+        run: node --test web-gallery/test/import-data.test.mjs
+
+      - name: Verify imports, sandbox boundaries and packaged fixtures
         env:
           JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
         run: >-
@@ -44,9 +47,14 @@ jobs:
           --tests com.flippingutilities.ui.uiutilities.UiGalleryTest
           --tests com.flippingutilities.ui.uiutilities.PaginatorTest
           --tests com.flippingutilities.ui.uiutilities.QuickLookPanelTest
+          --tests com.flippingutilities.ui.uiutilities.BrowserSqliteImporterTest
+          --tests com.flippingutilities.ui.uiutilities.SandboxGameApiTest
+          --tests com.flippingutilities.ui.uiutilities.SandboxPluginTest
+          --tests com.flippingutilities.ui.uiutilities.SandboxDataTest
+          --tests com.flippingutilities.ui.uiutilities.SandboxWikiDataTest
           verifyBrowserGallery
 
-      - name: Upload the static gallery
+      - name: Upload the static sandbox
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: build/browser-gallery
@@ -66,6 +74,6 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
-      - name: Deploy the gallery
+      - name: Deploy the sandbox
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

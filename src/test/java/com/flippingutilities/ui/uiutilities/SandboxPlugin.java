@@ -19,13 +19,8 @@ import com.flippingutilities.utilities.WikiDataSource;
 import com.flippingutilities.utilities.WikiRequestWrapper;
 import com.google.gson.Gson;
 import net.runelite.api.Client;
-import net.runelite.api.GameState;
-import net.runelite.api.ItemComposition;
-import net.runelite.api.WorldType;
 import net.runelite.client.RuneLite;
 import net.runelite.client.callback.ClientThread;
-import net.runelite.client.game.ItemManager;
-import net.runelite.client.game.ItemStats;
 import net.runelite.client.util.AsyncBufferedImage;
 import okhttp3.*;
 
@@ -45,9 +40,6 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
-
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
 
 /** Real plugin models and actions, with only the unavailable RuneLite host replaced. */
 final class SandboxPlugin implements AutoCloseable {
@@ -112,13 +104,8 @@ final class SandboxPlugin implements AutoCloseable {
             @Override public void invokeLater(BooleanSupplier task) { executor.execute(() -> task.getAsBoolean()); }
         };
         inject("clientThread", clientThread);
-        Client client = mock(Client.class);
-        when(client.getGameState()).thenAnswer(call -> plugin.getCurrentlyLoggedInAccount() == null
-            ? GameState.LOGIN_SCREEN : GameState.LOGGED_IN);
-        when(client.getWorldType()).thenReturn(EnumSet.of(WorldType.MEMBERS));
-        when(client.getTickCount()).thenAnswer(call -> tick.get());
-        when(client.getGrandExchangeOffers()).thenAnswer(call -> exchange == null ? null : exchange.clientOffers());
-        when(client.isClientThread()).thenAnswer(call -> SwingUtilities.isEventDispatchThread());
+        Client client = SandboxGameApi.client(() -> plugin.getCurrentlyLoggedInAccount() != null,
+            tick::get, () -> exchange == null ? null : exchange.clientOffers(), items);
         inject("client", client);
         plugin.gson = new Gson();
         plugin.tradePersister = new TradePersister(plugin.gson);
@@ -162,7 +149,8 @@ final class SandboxPlugin implements AutoCloseable {
             }
         }
         accounts.clear();
-        inject("itemManager", itemManager(items, clientThread));
+        inject("itemManager", SandboxGameApi.itemManager(client, clientThread, items,
+            id -> itemImage(id, clientThread)));
         handler.loadData();
         for (String account : handler.getCurrentAccounts()) {
             if (plugin.tradePersister.isAccountProtected(account)) {
@@ -315,28 +303,6 @@ final class SandboxPlugin implements AutoCloseable {
             }
             if (child instanceof java.awt.Container) selectAllHistory((java.awt.Container) child);
         }
-    }
-
-    private ItemManager itemManager(Map<Integer, FlippingItem> items, ClientThread thread) {
-        ItemManager manager = mock(ItemManager.class);
-        when(manager.getItemStats(anyInt())).thenAnswer(call -> {
-            FlippingItem item = items.get(call.getArgument(0));
-            return new ItemStats(false, 0, item == null ? 0 : item.getTotalGELimit(), null);
-        });
-        when(manager.getItemComposition(anyInt())).thenAnswer(call -> {
-            int id = call.getArgument(0);
-            FlippingItem item = items.get(id);
-            ItemComposition definition = mock(ItemComposition.class);
-            when(definition.getId()).thenReturn(id);
-            when(definition.getName()).thenReturn(item == null ? "Item " + id : item.getItemName());
-            when(definition.getNote()).thenReturn(-1);
-            when(definition.getLinkedNoteId()).thenReturn(-1);
-            return definition;
-        });
-        when(manager.getImage(anyInt())).thenAnswer(call -> itemImage(call.getArgument(0), thread));
-        when(manager.getImage(anyInt(), anyInt(), anyBoolean())).thenAnswer(call -> itemImage(call.getArgument(0), thread));
-        when(manager.canonicalize(anyInt())).thenAnswer(call -> call.getArgument(0));
-        return manager;
     }
 
     private AsyncBufferedImage itemImage(int itemId, ClientThread thread) {
