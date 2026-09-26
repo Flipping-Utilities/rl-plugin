@@ -5,15 +5,15 @@ package com.flippingutilities.ui.widgets.graph.chart;
  * used for calculating chart bounds and scaling price data for visualization.
  */
 public final class PriceRange {
-    public final int min;
-    public final int max;
+    public final long min;
+    public final long max;
 
-    public PriceRange(int min, int max) {
+    public PriceRange(long min, long max) {
         this.min = min;
         this.max = max;
     }
 
-    public int getRange() {
+    public long getRange() {
         return max - min;
     }
 }

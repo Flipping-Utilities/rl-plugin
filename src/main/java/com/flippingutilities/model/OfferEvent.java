@@ -62,7 +62,7 @@ public class OfferEvent
 	@SerializedName("cQIT")
 	private int currentQuantityInTrade;
 	@SerializedName("p")
-	private int price;
+	private long price;
 	@SerializedName("t")
 	private Instant time;
 	@SerializedName("s")
@@ -94,13 +94,13 @@ public class OfferEvent
 	//Used in theGeHistoryTabOfferPanel and RecipeFlipPanel
 	private transient String itemName;
 	//used in the live slot view to show what price something was listed at
-	private transient int listedPrice;
-	private transient int spent;
+	private transient long listedPrice;
+	private transient long spent;
 
 	/**
 	 * @return post tax values
 	 */
-	public int getPrice() {
+	public long getPrice() {
 		final long t = time.getEpochSecond();
 		if (buy || t < Constants.GE_TAX_START || Constants.TAX_EXEMPT_ITEMS.contains(itemId) ||
 			(t >= Constants.GE_TAX_INCREASED && Constants.NEW_TAX_EXEMPT_ITEMS.contains(itemId))) {
@@ -113,15 +113,15 @@ public class OfferEvent
 		return GeTax.getPostTaxPrice(price);
 	}
 
-	public int getPreTaxPrice() {
+	public long getPreTaxPrice() {
 		return price;
 	}
 
-	public int getTaxPaid() {
+	public long getTaxPaid() {
 		return (getPreTaxPrice() - getPrice()) * currentQuantityInTrade;
 	}
 
-	public int getTaxPaidPerItem() {
+	public long getTaxPaidPerItem() {
 		return getPreTaxPrice() - getPrice();
 	}
 
@@ -320,7 +320,7 @@ public class OfferEvent
 		return String.format("slot=%d, buy=%b, itemId=%d, state=%s, tq=%d",slot, buy, itemId, state, totalQuantityInTrade);
 	}
 
-	public static OfferEvent dummyOffer(boolean buyState, boolean marginCheck, int price, int id, String itemName) {
+	public static OfferEvent dummyOffer(boolean buyState, boolean marginCheck, long price, int id, String itemName) {
 		return new OfferEvent(
 				UUID.randomUUID().toString(),
 				buyState,

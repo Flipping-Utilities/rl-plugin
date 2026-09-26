@@ -38,8 +38,8 @@ import java.time.Instant;
 @AllArgsConstructor
 public class Flip
 {
-	int buyPrice;
-	int sellPrice;
+	long buyPrice;
+	long sellPrice;
 	int quantity;
 	Instant time;
 	boolean marginCheck;

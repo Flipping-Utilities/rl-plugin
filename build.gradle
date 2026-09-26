@@ -19,6 +19,7 @@ dependencies {
     annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
 
     implementation "org.apache.commons:commons-csv:1.4"
+    implementation 'org.xerial:sqlite-jdbc:3.46.0.0'
 
     testImplementation 'junit:junit:4.12'
     testImplementation 'org.slf4j:slf4j-simple:1.7.12'
@@ -29,6 +30,11 @@ dependencies {
 
 group = 'com.flippingutilities'
 version = '1.4.1'
+
+test {
+	// Real-data migration tests load multi-ten-MB account files; the 512m default is too small.
+	maxHeapSize = '2g'
+}
 
 tasks.withType(JavaCompile) {
 	options.encoding = 'UTF-8'

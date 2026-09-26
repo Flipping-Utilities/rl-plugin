@@ -12,6 +12,8 @@ import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.game.ItemStats;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Optional;
 
 public class OptionHandler {
@@ -21,8 +23,8 @@ public class OptionHandler {
         this.plugin = plugin;
     }
 
-    public int calculateOptionValue(Option option, Optional<FlippingItem> highlightedItem, int highlightedItemId) throws InvalidOptionException {
-        int val = 0;
+    public long calculateOptionValue(Option option, Optional<FlippingItem> highlightedItem, int highlightedItemId) throws InvalidOptionException {
+        long val = 0;
         String propertyString = option.getProperty();
         switch (propertyString) {
             case Option.GE_LIMIT:
@@ -54,18 +56,21 @@ public class OptionHandler {
                 break;
         }
 
-        int finalValue = applyModifier(option.getModifier(), val);
+        long finalValue = applyModifier(option.getModifier(), val);
         if (finalValue < 0) {
             throw new InvalidOptionException("resulting value was negative");
+        }
+        if (option.isQuantityOption() && finalValue > Integer.MAX_VALUE) {
+            throw new InvalidOptionException("resulting quantity exceeds the item stack limit");
         }
         return finalValue;
     }
 
-    private int wikiPriceCalculation(int itemId, boolean getBuyPrice) throws InvalidOptionException {
+    private long wikiPriceCalculation(int itemId, boolean getBuyPrice) throws InvalidOptionException {
         if (plugin.getLastWikiRequestWrapper() != null) {
             WikiRequest wr = plugin.getLastWikiRequestWrapper().getWikiRequest();
             WikiItemMargins wikiItemMargins = wr.getData().get(itemId);
-            int wikiPrice = getBuyPrice ? wikiItemMargins.getHigh() : wikiItemMargins.getLow();
+            long wikiPrice = getBuyPrice ? wikiItemMargins.getHigh() : wikiItemMargins.getLow();
             if (wikiPrice == 0) {
                 throw new InvalidOptionException(String.format("no insta %s data for this item", getBuyPrice ? "buy" : "sell"));
             }
@@ -107,7 +112,7 @@ public class OptionHandler {
         return getCashStackInInv() / offerPrice;
     }
 
-    private int instaBuyCalculation(Optional<FlippingItem> item) throws InvalidOptionException {
+    private long instaBuyCalculation(Optional<FlippingItem> item) throws InvalidOptionException {
         if (!item.isPresent()) {
             throw new InvalidOptionException("item was not bought or sold");
         } else {
@@ -119,7 +124,7 @@ public class OptionHandler {
         }
     }
 
-    private int instaSellCalculation(Optional<FlippingItem> item) throws InvalidOptionException {
+    private long instaSellCalculation(Optional<FlippingItem> item) throws InvalidOptionException {
         if (!item.isPresent()) {
             throw new InvalidOptionException("item was not bought or sold");
         } else {
@@ -131,7 +136,7 @@ public class OptionHandler {
         }
     }
 
-    private int latestSellCalculation(Optional<FlippingItem> item) throws InvalidOptionException {
+    private long latestSellCalculation(Optional<FlippingItem> item) throws InvalidOptionException {
         if (!item.isPresent()) {
             throw new InvalidOptionException("item was not bought or sold");
         } else {
@@ -143,7 +148,7 @@ public class OptionHandler {
         }
     }
 
-    private int latestBuyCalculation(Optional<FlippingItem> item) throws InvalidOptionException {
+    private long latestBuyCalculation(Optional<FlippingItem> item) throws InvalidOptionException {
         if (!item.isPresent()) {
             throw new InvalidOptionException("item was not bought or sold");
         } else {
@@ -155,31 +160,36 @@ public class OptionHandler {
         }
     }
 
-    private int applyModifier(String modifier, int value) throws InvalidOptionException {
+    private long applyModifier(String modifier, long value) throws InvalidOptionException {
+        String invalidModifier = "Modifier has to be one of +,-,*, followed by a positive number. Example: +2, -5, *9";
         if (modifier.length() < 2) {
-            throw new InvalidOptionException("Modifier has to be one of +,-,*, followed by a positive number. Example: +2, -5, *9");
+            throw new InvalidOptionException(invalidModifier);
         }
-
-        float num = 0;
         try {
-            num = Float.parseFloat(modifier.substring(1));
-            if (num < 0) {
-                throw new InvalidOptionException("Modifier has to be one of +,-,*, followed by a positive number. Example: +2, -5, *9");
+            BigDecimal amount = new BigDecimal(modifier.substring(1));
+            if (amount.signum() < 0) {
+                throw new InvalidOptionException(invalidModifier);
             }
+            BigDecimal result = BigDecimal.valueOf(value);
+            switch (modifier.charAt(0)) {
+                case '-':
+                    result = result.subtract(amount);
+                    break;
+                case '+':
+                    result = result.add(amount);
+                    break;
+                case '*':
+                    result = result.multiply(amount);
+                    break;
+                default:
+                    throw new InvalidOptionException(invalidModifier);
+            }
+            // Match Math.round without first rounding a large monetary value to a float.
+            return result.add(new BigDecimal("0.5")).setScale(0, RoundingMode.FLOOR).longValueExact();
         } catch (NumberFormatException e) {
-            throw new InvalidOptionException("Modifier has to be one of +,-,*, followed by a positive number. Example: +2, -5, *9");
-        }
-
-        char operator = modifier.charAt(0);
-        switch (operator) {
-            case '-':
-                return Math.round(value - num);
-            case '+':
-                return Math.round(value + num);
-            case '*':
-                return Math.round(value * num);
-            default:
-                throw new InvalidOptionException("Modifier has to be one of +,-,*, followed by a positive number. Example: +2, -5, *9");
+            throw new InvalidOptionException(invalidModifier);
+        } catch (ArithmeticException e) {
+            throw new InvalidOptionException("resulting value is too large");
         }
     }
 

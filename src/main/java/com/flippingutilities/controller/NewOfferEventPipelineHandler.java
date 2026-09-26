@@ -5,12 +5,20 @@ import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.ui.widgets.SlotActivityTimer;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.WorldType;
+import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemStats;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Map;
+import java.util.Objects;
 
 @Slf4j
 public class NewOfferEventPipelineHandler {
@@ -59,6 +67,9 @@ public class NewOfferEventPipelineHandler {
             newOfferEvent.setMadeBy(currentlyLoggedInAccount);
         }
 
+        // Screening replaces lastOffers; retain the known predecessor for history updates.
+        OfferEvent previousOffer = plugin.getDataHandler().getAccountData(currentlyLoggedInAccount)
+            .getLastOffers().get(newOfferEvent.getSlot());
         Optional<OfferEvent> screenedOfferEvent = screenOfferEvent(newOfferEvent);
 
         if (!screenedOfferEvent.isPresent()) {
@@ -71,7 +82,15 @@ public class NewOfferEventPipelineHandler {
 
         Optional<FlippingItem> flippingItem = currentlyLoggedInAccountsTrades.stream().filter(item -> item.getItemId() == finalizedOfferEvent.getItemId()).findFirst();
 
-        updateTradesList(currentlyLoggedInAccountsTrades, flippingItem, finalizedOfferEvent.clone());
+        List<String> replacedUuids = updateTradesList(currentlyLoggedInAccountsTrades, flippingItem, finalizedOfferEvent.clone(), previousOffer);
+
+        // Persist exactly the history replacement made above, including late cancellation
+        // corrections. Slot state, replacement, and the new snapshot commit together.
+        OfferEvent snapshot = finalizedOfferEvent.clone();
+        plugin.submitStorageTask(storage -> storage.recordOfferUpdate(currentlyLoggedInAccount, snapshot, replacedUuids));
+
+        // Keep the persisted GE limit state in sync (only buys change it)
+        persistGeLimitState(currentlyLoggedInAccount, finalizedOfferEvent);
 
         plugin.setUpdateSinceLastItemAccountWideBuild(true);
 
@@ -86,8 +105,7 @@ public class NewOfferEventPipelineHandler {
      */
     private void rebuildDisplayAfterOfferEvent(OfferEvent offerEvent) {
 
-        if (!(plugin.getAccountCurrentlyViewed().equals(plugin.getCurrentlyLoggedInAccount()) ||
-                plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE))) {
+        if (!plugin.isAccountInCurrentView(plugin.getCurrentlyLoggedInAccount())) {
             return;
         }
 
@@ -132,9 +150,12 @@ public class NewOfferEventPipelineHandler {
             if (!newOfferEvent.isCausedByEmptySlot()) {
                 lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
                 slotActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
-            }
-            if (newOfferEvent.isStartOfOffer()) {
-                newOfferEvent.setTradeStartedAt(Instant.now());
+                //set the start time BEFORE persisting so the active_slots row carries it and
+                //the slot timer can be restored after a restart
+                if (newOfferEvent.isStartOfOffer()) {
+                    newOfferEvent.setTradeStartedAt(Instant.now());
+                }
+                persistSlotState(plugin.getCurrentlyLoggedInAccount(), newOfferEvent.getSlot(), newOfferEvent, false);
             }
 
             return Optional.empty();
@@ -148,8 +169,22 @@ public class NewOfferEventPipelineHandler {
         //because we took care of the empty slot updates on login in a previous clause, this
         //will only trigger on empty slot updates when an offer is collected
         if (newOfferEvent.isCausedByEmptySlot()) {
+            OfferEvent retained = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getTrades().stream()
+                .filter(item -> item.getItemId() == lastOfferEvent.getItemId())
+                .flatMap(item -> item.getHistory().getCompressedOfferEvents().stream())
+                .filter(offer -> Objects.equals(offer.getUuid(), lastOfferEvent.getUuid()))
+                .findFirst().orElse(null);
+            // A collected slot is terminal, including a partial fill delivered just after
+            // cancellation. Finalize it so the next trade in this slot cannot replace it.
+            if (retained != null && !retained.isComplete()) {
+                retained.setState(retained.isBuy() ? GrandExchangeOfferState.CANCELLED_BUY
+                    : GrandExchangeOfferState.CANCELLED_SELL);
+            }
+            OfferEvent archived = retained == null ? null : retained.clone();
             lastOfferEventForEachSlot.remove(newOfferEvent.getSlot());
             slotActivityTimers.get(newOfferEvent.getSlot()).reset();
+            String account = plugin.getCurrentlyLoggedInAccount();
+            plugin.submitStorageTask(storage -> storage.archiveOfferAndClearSlot(account, newOfferEvent.getSlot(), archived));
             return Optional.empty();
         }
 
@@ -161,6 +196,9 @@ public class NewOfferEventPipelineHandler {
         newOfferEvent.setTradeStartedAt(lastOfferEvent.getTradeStartedAt());
         lastOfferEventForEachSlot.put(newOfferEvent.getSlot(), newOfferEvent);
         slotActivityTimers.get(newOfferEvent.getSlot()).setCurrentOffer(newOfferEvent);
+        if (newOfferEvent.getCurrentQuantityInTrade() == 0) {
+            persistSlotState(plugin.getCurrentlyLoggedInAccount(), newOfferEvent.getSlot(), newOfferEvent, false);
+        }
         return newOfferEvent.getCurrentQuantityInTrade() ==0? Optional.empty() : Optional.of(newOfferEvent);
     }
 
@@ -185,7 +223,8 @@ public class NewOfferEventPipelineHandler {
      * @param flippingItem the flipping item to be updated in the tradeslist, if it even exists
      * @param newOffer     new offer that just came in
      */
-    private void updateTradesList(List<FlippingItem> trades, Optional<FlippingItem> flippingItem, OfferEvent newOffer) {
+    private List<String> updateTradesList(List<FlippingItem> trades, Optional<FlippingItem> flippingItem,
+                                          OfferEvent newOffer, OfferEvent previousOffer) {
         if (flippingItem.isPresent()) {
             FlippingItem item = flippingItem.get();
 
@@ -194,10 +233,12 @@ public class NewOfferEventPipelineHandler {
                 item.setValidFlippingPanelItem(true);
             }
 
-            item.updateHistory(newOffer);
+            List<String> removedUuids = item.updateHistory(newOffer, previousOffer);
             item.updateLatestProperties(newOffer);
+            return removedUuids;
         } else {
             addToTradesList(trades, newOffer);
+            return Collections.emptyList();
         }
     }
 
@@ -222,5 +263,57 @@ public class NewOfferEventPipelineHandler {
         flippingItem.updateLatestProperties(newOffer);
 
         tradesList.add(0, flippingItem);
+    }
+
+    /**
+     * Persists the in-progress offer state of a slot (or clears it when the slot empties) to
+     * SQLite when enabled, so active offers survive restarts. The write is queued on the
+     * storage executor to keep DB I/O off the client thread.
+     */
+    private void persistSlotState(String account, int slotIndex, OfferEvent offer, boolean historyVisible) {
+        if (account == null || plugin.getSqliteStorage() == null) {
+            return;
+        }
+        OfferEvent snapshot = offer == null ? null : offer.clone();
+        plugin.submitStorageTask(storage -> storage.upsertSlot(account, slotIndex, snapshot, historyVisible));
+    }
+
+    /**
+     * Persists the GE limit state for the offer's item to SQLite when enabled. Only buys change
+     * GE limit state, so sells are skipped. The state is read from memory on the client thread
+     * and only the DB write is queued on the executor. Best-effort.
+     */
+    private void persistGeLimitState(String account, OfferEvent offer) {
+        try {
+            if (account == null || plugin.getSqliteStorage() == null || !offer.isBuy()) {
+                return;
+            }
+            Instant resetTime = null;
+            int itemsBought = 0;
+            int itemsBoughtThroughComplete = 0;
+            int itemId = -1;
+            Optional<FlippingItem> item = plugin.getDataHandler().getAccountData(account).getTrades().stream()
+                .filter(tradeItem -> tradeItem.getItemId() == offer.getItemId())
+                .findFirst();
+            if (item.isPresent()) {
+                resetTime = item.get().getGeLimitResetTime();
+                itemsBought = item.get().getItemsBoughtThisLimitWindow();
+                itemsBoughtThroughComplete = item.get().getHistory().getItemsBoughtThroughCompleteOffers();
+                itemId = item.get().getItemId();
+            }
+            if (resetTime == null || itemId < 0) {
+                return;
+            }
+
+            final String accountName = account;
+            final int finalItemId = itemId;
+            final Instant finalResetTime = resetTime;
+            final int finalItemsBought = itemsBought;
+            final int finalItemsBoughtThroughComplete = itemsBoughtThroughComplete;
+            plugin.submitStorageTask(storage -> storage.upsertGeLimitState(
+                accountName, finalItemId, finalResetTime, finalItemsBought, finalItemsBoughtThroughComplete));
+        } catch (Exception e) {
+            log.debug("Failed to queue GE limit state persistence (best-effort): {}", e.getMessage());
+        }
     }
 }
