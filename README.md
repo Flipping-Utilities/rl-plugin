@@ -128,6 +128,10 @@ Quickly lookup your favorited items just by typing "1" in the ge search!
 
 # Development
 
+For an isolated native preview of sidebar components and named states, run `./gradlew uiGallery`.
+Use `./gradlew renderUiGallery` for headless PNGs at 225 px and 300 px. See the
+[component gallery guide](docs/component-gallery.md) for fixtures, export and extension instructions.
+
 ### General Structure of Codebase
 
 This section will talk about the purpose of various parts of the codebase, specifically the folders.

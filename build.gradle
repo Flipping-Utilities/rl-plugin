@@ -61,3 +61,22 @@ tasks.register('runPlugin', JavaExec) {
     jvmArgs "-ea"
     args "--developer-mode"
 }
+
+// Developer fixtures stay on the test classpath and are never packaged with the plugin.
+tasks.register('uiGallery', JavaExec) {
+    group = 'verification'
+    description = 'Open the interactive Swing component and state gallery.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.flippingutilities.ui.uiutilities.UiGallery'
+}
+
+tasks.register('renderUiGallery', JavaExec) {
+    group = 'verification'
+    description = 'Render every gallery fixture at 225 and 300 px without opening a window.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.flippingutilities.ui.uiutilities.UiGallery'
+    systemProperty 'java.awt.headless', 'true'
+    args '--render-all', layout.buildDirectory.dir('ui-gallery').get().asFile.absolutePath
+}
