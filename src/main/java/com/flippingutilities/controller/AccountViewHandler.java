@@ -8,6 +8,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 /** Selects account data for the sidebar and caches the merged account-wide views. */
@@ -31,20 +33,42 @@ final class AccountViewHandler {
         updateSinceLastRecipeFlipGroupAccountWideBuild = changed;
     }
 
+    boolean isAccountWideView() {
+        return FlippingPlugin.ACCOUNT_WIDE.equals(plugin.getAccountCurrentlyViewed());
+    }
+
+    boolean isAccountInCurrentView(String accountName) {
+        return isAccountWideView() || plugin.getAccountCurrentlyViewed().equals(accountName);
+    }
+
+    /** Snapshot the selected names without marking their data for saving. */
+    List<String> getAccountNamesForCurrentView() {
+        return isAccountWideView()
+            ? new ArrayList<>(plugin.getDataHandler().getCurrentAccounts())
+            : Collections.singletonList(plugin.getAccountCurrentlyViewed());
+    }
+
+    /** Access the underlying accounts for mutation, marking each for saving. */
+    Collection<AccountData> getAccountsForCurrentView() {
+        return isAccountWideView()
+            ? plugin.getDataHandler().getAllAccountData()
+            : Collections.singletonList(plugin.getDataHandler().getAccountData(plugin.getAccountCurrentlyViewed()));
+    }
+
     public List<FlippingItem> getItemsForCurrentView() {
-        return plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE) ? createAccountWideFlippingItemList() : plugin.getDataHandler().getAccountData(plugin.getAccountCurrentlyViewed()).getTrades();
+        return isAccountWideView() ? createAccountWideFlippingItemList() : plugin.getDataHandler().getAccountData(plugin.getAccountCurrentlyViewed()).getTrades();
     }
 
     public List<FlippingItem> viewItemsForCurrentView() {
-        return plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE) ? createAccountWideFlippingItemList() : plugin.getDataHandler().viewAccountData(plugin.getAccountCurrentlyViewed()).getTrades();
+        return isAccountWideView() ? createAccountWideFlippingItemList() : plugin.getDataHandler().viewAccountData(plugin.getAccountCurrentlyViewed()).getTrades();
     }
 
     public List<RecipeFlipGroup> viewRecipeFlipGroupsForCurrentView() {
-        return plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE) ? createAccountWideRecipeFlipGroupList() : plugin.getDataHandler().viewAccountData(plugin.getAccountCurrentlyViewed()).getRecipeFlipGroups();
+        return isAccountWideView() ? createAccountWideRecipeFlipGroupList() : plugin.getDataHandler().viewAccountData(plugin.getAccountCurrentlyViewed()).getRecipeFlipGroups();
     }
 
     public Duration viewAccumulatedTimeForCurrentView() {
-        if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+        if (isAccountWideView()) {
             long millis = plugin.getDataHandler().viewAllAccountData().stream().map(AccountData::getAccumulatedSessionTimeMillis).reduce(0L, (d1, d2) -> d1 + d2);
             return Duration.of(millis, ChronoUnit.MILLIS);
         } else {
@@ -54,7 +78,7 @@ final class AccountViewHandler {
     }
 
     public Instant viewStartOfSessionForCurrentView() {
-        if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+        if (isAccountWideView()) {
             return startUpTime;
         } else {
             return plugin.getDataHandler().viewAccountData(plugin.getAccountCurrentlyViewed()).getSessionStartTime();

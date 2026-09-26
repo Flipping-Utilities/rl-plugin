@@ -8,10 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -46,34 +44,20 @@ final class SqliteAccountStore {
      * @param playerId Player ID from RuneLite API
      */
     void upsertAccount(String displayName, String playerId) {
-        // player_id is preserved on update (COALESCE) so a re-upsert with a null playerId
-        // (the common case, since OfferEvents don't carry it) doesn't wipe a known value.
-        final String sql = "INSERT OR REPLACE INTO accounts (id, display_name, player_id, session_start, accumulated_time) " +
-                "VALUES (" +
-                "  (SELECT id FROM accounts WHERE display_name = ?)," +
-                "  ?," +
-                "  COALESCE((SELECT player_id FROM accounts WHERE display_name = ?), ?)," +
-                "  COALESCE((SELECT session_start FROM accounts WHERE display_name = ?), ?)," +
-                "  COALESCE((SELECT accumulated_time FROM accounts WHERE display_name = ?), ?)" +
-                ")";
-
-        long nowMillis = Instant.now().toEpochMilli();
+        // Update the existing row in place, preserving its identity and known metadata.
+        final String sql = "INSERT INTO accounts (display_name, player_id, session_start, accumulated_time) " +
+            "VALUES (:displayName, :playerId, :sessionStart, 0) " +
+            "ON CONFLICT(display_name) DO UPDATE SET " +
+            "player_id = COALESCE(accounts.player_id, excluded.player_id), " +
+            "session_start = COALESCE(accounts.session_start, excluded.session_start), " +
+            "accumulated_time = COALESCE(accounts.accumulated_time, excluded.accumulated_time)";
 
         try {
             Connection conn = storage.getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, displayName);
-                ps.setString(2, displayName);
-                ps.setString(3, displayName);
-                if (playerId == null) {
-                    ps.setNull(4, Types.VARCHAR);
-                } else {
-                    ps.setString(4, playerId);
-                }
-                ps.setString(5, displayName);
-                ps.setLong(6, nowMillis);
-                ps.setString(7, displayName);
-                ps.setLong(8, 0L);
+            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
+                ps.bind("displayName", displayName);
+                ps.bind("playerId", playerId);
+                ps.bind("sessionStart", Instant.now().toEpochMilli());
                 ps.executeUpdate();
             }
             // Invalidate cache; next getAccountId() will repopulate with the upserted row.
@@ -97,11 +81,11 @@ final class SqliteAccountStore {
         }
 
         // Load session info
-        final String sessionSql = "SELECT session_start, accumulated_time FROM accounts WHERE id = ?";
+        final String sessionSql = "SELECT session_start, accumulated_time FROM accounts WHERE id = :accountId";
         try {
             Connection conn = storage.getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sessionSql)) {
-                ps.setInt(1, accountId);
+            try (NamedStatement ps = NamedStatement.prepare(conn, sessionSql)) {
+                ps.bind("accountId", accountId);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         long sessionStartMillis = rs.getLong("session_start");
@@ -151,7 +135,7 @@ final class SqliteAccountStore {
 
         try {
             Connection conn = storage.getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql);
+            try (NamedStatement ps = NamedStatement.prepare(conn, sql);
                  ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     String name = rs.getString(1);
@@ -184,11 +168,11 @@ final class SqliteAccountStore {
         if (cached != null) {
             return cached;
         }
-        final String sql = "SELECT id FROM accounts WHERE display_name = ?";
+        final String sql = "SELECT id FROM accounts WHERE display_name = :displayName";
         try {
             Connection conn = storage.getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, displayName);
+            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
+                ps.bind("displayName", displayName);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         Integer id = rs.getInt("id");
@@ -211,12 +195,12 @@ final class SqliteAccountStore {
     void updateAccountSessionTime(String displayName, long accumulatedTimeMillis) {
         int accountId = getOrCreateAccountId(displayName);
 
-        String sql = "UPDATE accounts SET accumulated_time = ? WHERE id = ?";
+        String sql = "UPDATE accounts SET accumulated_time = :accumulatedTime WHERE id = :accountId";
         try {
             Connection conn = storage.getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setLong(1, accumulatedTimeMillis);
-                ps.setInt(2, accountId);
+            try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
+                ps.bind("accumulatedTime", accumulatedTimeMillis);
+                ps.bind("accountId", accountId);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -239,21 +223,21 @@ final class SqliteAccountStore {
             boolean wasAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             try {
-                execDelete(conn, "DELETE FROM recipe_flip_inputs WHERE recipe_flip_id IN " +
-                    "(SELECT id FROM recipe_flips WHERE account_id = ?)", accountId);
-                execDelete(conn, "DELETE FROM recipe_flip_outputs WHERE recipe_flip_id IN " +
-                    "(SELECT id FROM recipe_flips WHERE account_id = ?)", accountId);
-                execDelete(conn, "DELETE FROM recipe_flips WHERE account_id = ?", accountId);
-                execDelete(conn, "DELETE FROM trades WHERE account_id = ?", accountId);
-                execDelete(conn, "DELETE FROM ge_limit_state WHERE account_id = ?", accountId);
-                execDelete(conn, "DELETE FROM active_slots WHERE account_id = ?", accountId);
-                execDelete(conn, "DELETE FROM item_favorites WHERE account_id = ?", accountId);
-                execDelete(conn, "DELETE FROM item_visibility WHERE account_id = ?", accountId);
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM settings WHERE key = ?")) {
-                    ps.setString(1, "migrated_" + displayName);
+                for (RecipeComponentTable table : RecipeComponentTable.values()) {
+                    execDelete(conn, "DELETE FROM " + table.tableName() + " WHERE recipe_flip_id IN " +
+                        "(SELECT id FROM recipe_flips WHERE account_id = :accountId)", accountId);
+                }
+                execDelete(conn, "DELETE FROM recipe_flips WHERE account_id = :accountId", accountId);
+                execDelete(conn, "DELETE FROM trades WHERE account_id = :accountId", accountId);
+                execDelete(conn, "DELETE FROM ge_limit_state WHERE account_id = :accountId", accountId);
+                execDelete(conn, "DELETE FROM active_slots WHERE account_id = :accountId", accountId);
+                execDelete(conn, "DELETE FROM item_favorites WHERE account_id = :accountId", accountId);
+                execDelete(conn, "DELETE FROM item_visibility WHERE account_id = :accountId", accountId);
+                try (NamedStatement ps = NamedStatement.prepare(conn, "DELETE FROM settings WHERE key = :key")) {
+                    ps.bind("key", SqliteSettings.accountMigrationKey(displayName));
                     ps.executeUpdate();
                 }
-                execDelete(conn, "DELETE FROM accounts WHERE id = ?", accountId);
+                execDelete(conn, "DELETE FROM accounts WHERE id = :accountId", accountId);
                 conn.commit();
                 accountIdCache.remove(displayName);
                 logger.info("Deleted all SQLite data for account {}", displayName);
@@ -269,8 +253,8 @@ final class SqliteAccountStore {
     }
 
     private void execDelete(Connection conn, String sql, int accountId) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, accountId);
+        try (NamedStatement ps = NamedStatement.prepare(conn, sql)) {
+            ps.bind("accountId", accountId);
             ps.executeUpdate();
         }
     }

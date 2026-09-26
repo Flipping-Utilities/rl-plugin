@@ -1,9 +1,11 @@
 package com.flippingutilities.controller;
 
 import com.flippingutilities.DataSource;
+import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.SqliteMaintenanceAction;
 import com.flippingutilities.db.MigrationService;
 import com.flippingutilities.db.SqliteStorage;
+import com.flippingutilities.db.SqliteSettings;
 import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.model.AccountData;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -94,7 +96,7 @@ final class StorageController {
             storage.markOutOfSync();
         } catch (Exception markerFailure) {
             log.error("Could not mark SQLite for recovery; switching the configured backend to JSON", markerFailure);
-            plugin.getConfigManager().setConfiguration(FlippingPlugin.CONFIG_GROUP, "dataSource", DataSource.JSON);
+            plugin.getConfigManager().setConfiguration(FlippingPlugin.CONFIG_GROUP, FlippingConfig.DATA_SOURCE, DataSource.JSON);
         }
         plugin.getClientThread().invokeLater(() -> {
             if (sqliteStorage != storage) {
@@ -115,7 +117,7 @@ final class StorageController {
                 TradePersister.setupFlippingFolder();
                 sqliteStorage = storageFactory.get();
                 sqliteStorage.initializeSchema();
-                if ("true".equalsIgnoreCase(sqliteStorage.getSetting("migration_completed"))
+                if (sqliteStorage.getBooleanSetting(SqliteSettings.MIGRATION_COMPLETED)
                         && !sqliteStorage.requiresFullResync()) {
                     plugin.getDataHandler().setSqliteStorage(sqliteStorage);
                 }
@@ -142,7 +144,7 @@ final class StorageController {
                         storageFactory.get().markOutOfSync();
                     } catch (Exception e) {
                         log.error("Cannot mark the aborted switch for retry; keeping JSON selected", e);
-                        plugin.getConfigManager().setConfiguration(FlippingPlugin.CONFIG_GROUP, "dataSource", DataSource.JSON);
+                        plugin.getConfigManager().setConfiguration(FlippingPlugin.CONFIG_GROUP, FlippingConfig.DATA_SOURCE, DataSource.JSON);
                     }
                     return;
                 }
@@ -211,8 +213,8 @@ final class StorageController {
         try {
             storage.initializeSchema();
             boolean rebuild = fullResync || storage.requiresFullResync();
-            if (rebuild || "true".equalsIgnoreCase(storage.getSetting("migration_pending"))
-                    || !"true".equalsIgnoreCase(storage.getSetting("migration_completed"))) {
+            if (rebuild || storage.getBooleanSetting(SqliteSettings.MIGRATION_PENDING)
+                    || !storage.getBooleanSetting(SqliteSettings.MIGRATION_COMPLETED)) {
                 // Read once before clearing SQLite; an unreadable source must not erase it.
                 Map<String, AccountData> snapshot = plugin.tradePersister.loadAllAccountsForMigration();
                 MigrationService migration = new MigrationService(storage, plugin.tradePersister);
@@ -230,9 +232,9 @@ final class StorageController {
     }
 
     private boolean finishMigration(SqliteStorage storage) {
-        boolean completed = "true".equalsIgnoreCase(storage.getSetting("migration_completed"));
+        boolean completed = storage.getBooleanSetting(SqliteSettings.MIGRATION_COMPLETED);
         if (completed) {
-            storage.clearSetting("migration_pending");
+            storage.clearSetting(SqliteSettings.MIGRATION_PENDING);
             storage.markSynchronized();
         }
         return completed;
@@ -333,7 +335,7 @@ final class StorageController {
 
     private void resetSqliteMaintenanceConfig() {
         if (plugin.getConfigManager() != null) {
-            plugin.getConfigManager().setConfiguration(FlippingPlugin.CONFIG_GROUP, "sqliteMaintenance", SqliteMaintenanceAction.NONE.name());
+            plugin.getConfigManager().setConfiguration(FlippingPlugin.CONFIG_GROUP, FlippingConfig.SQLITE_MAINTENANCE, SqliteMaintenanceAction.NONE.name());
         }
     }
 

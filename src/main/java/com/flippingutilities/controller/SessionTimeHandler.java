@@ -73,7 +73,6 @@ final class SessionTimeHandler {
     }
 
     private boolean shouldUpdateSessionTimeDisplay() {
-        return plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)
-            || plugin.getAccountCurrentlyViewed().equals(plugin.getCurrentlyLoggedInAccount());
+        return plugin.isAccountInCurrentView(plugin.getCurrentlyLoggedInAccount());
     }
 }

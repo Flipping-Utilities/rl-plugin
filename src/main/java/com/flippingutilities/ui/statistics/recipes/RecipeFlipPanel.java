@@ -64,9 +64,9 @@ public class RecipeFlipPanel extends JPanel {
 
         OptionalLong recipeCount = recipeFlip.getKnownRecipeCountMade(recipe);
         JLabel quantityLabel = new JLabel(recipeCount.isPresent()
-            ? QuantityFormatter.formatNumber(recipeCount.getAsLong()) + "x" : "Unknown count");
+            ? QuantityFormatter.formatNumber(recipeCount.getAsLong()) + "x" : RecipeDisplayText.UNKNOWN_COUNT);
         if (!recipeCount.isPresent()) {
-            quantityLabel.setToolTipText("The original recipe quantities are unavailable.");
+            quantityLabel.setToolTipText(RecipeDisplayText.MISSING_QUANTITIES);
         }
         quantityLabel.setFont(FontManager.getRunescapeSmallFont());
 
@@ -180,8 +180,8 @@ public class RecipeFlipPanel extends JPanel {
         pricePanel.setBackground(CustomColors.DARK_GRAY);
         JLabel priceLabel = new JLabel("Avg Price", SwingConstants.CENTER);
         priceLabel.setFont(FontManager.getRunescapeSmallFont());
-        JLabel priceValueLabel = new JLabel(itemName.equals("Coins")? "N/A": (avgPrice == null ? "Unknown" : QuantityFormatter.formatNumber(avgPrice) + " gp"));
-        if (avgPrice == null) priceValueLabel.setToolTipText("Original offer details are missing.");
+        JLabel priceValueLabel = new JLabel(itemName.equals("Coins")? "N/A": (avgPrice == null ? RecipeDisplayText.UNKNOWN : QuantityFormatter.formatNumber(avgPrice) + " gp"));
+        if (avgPrice == null) priceValueLabel.setToolTipText(RecipeDisplayText.MISSING_OFFERS);
         priceValueLabel.setFont(FontManager.getRunescapeSmallFont());
         pricePanel.add(priceLabel, BorderLayout.WEST);
         pricePanel.add(priceValueLabel, BorderLayout.EAST);
@@ -251,8 +251,8 @@ public class RecipeFlipPanel extends JPanel {
         deleteIcon.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
-                    JOptionPane.showMessageDialog(null, "You cannot delete recipe flips in the Accountwide view");
+                if (plugin.isAccountWideView()) {
+                    JOptionPane.showMessageDialog(null, RecipeDisplayText.ACCOUNT_WIDE_DELETE_UNAVAILABLE);
                     return;
                 }
                 final int result = JOptionPane.showOptionDialog(deleteIcon, "Are you sure you want to delete this recipe flip?",
@@ -296,18 +296,18 @@ public class RecipeFlipPanel extends JPanel {
         }
         boolean missingOffers = recipeFlip.hasMissingOffers();
         long profit = missingOffers ? 0 : recipeFlip.getProfit();
-        String profitString = missingOffers ? "Unknown" : UIUtilities.quantityToRSDecimalStack(profit, true) + " gp";
+        String profitString = missingOffers ? RecipeDisplayText.UNKNOWN : UIUtilities.quantityToRSDecimalStack(profit, true) + " gp";
         String profitEachString = "";
         if (!quantity.isPresent()) {
-            profitEachString = " (Unknown gp ea)";
+            profitEachString = RecipeDisplayText.UNKNOWN_PROFIT_EACH;
         } else if (!missingOffers && quantity.getAsLong() != 1) {
             profitEachString = " (" + UIUtilities.quantityToRSDecimalStack(profit / quantity.getAsLong(), false) + " gp ea)";
         }
         String profitDescription = profit < 0? "Loss": "Profit:";
 
         JLabel profitValLabel = new JLabel(profitString + profitEachString);
-        if (missingOffers) profitValLabel.setToolTipText("Original offer details are missing; profit is unavailable.");
-        else if (!quantity.isPresent()) profitValLabel.setToolTipText("The original recipe quantities are unavailable; profit per execution is unknown.");
+        if (missingOffers) profitValLabel.setToolTipText(RecipeDisplayText.MISSING_OFFERS_PROFIT);
+        else if (!quantity.isPresent()) profitValLabel.setToolTipText(RecipeDisplayText.MISSING_QUANTITIES_PROFIT_EACH);
         profitValLabel.setFont(FontManager.getRunescapeSmallFont());
 
         JLabel profitDescriptionLabel = new JLabel(profitDescription);

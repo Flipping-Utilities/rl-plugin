@@ -84,8 +84,13 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.ConcurrentModificationException;
 import java.util.List;
-import java.util.*;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.concurrent.ScheduledExecutorService;
@@ -102,13 +107,13 @@ public class FlippingPlugin extends Plugin {
     public static final String ACCOUNT_WIDE = "Accountwide";
 
     private static final Set<String> AUTO_SAVE_CONFIG_KEYS = Set.of(
-        "autoSaveEnabled",
-        "autoSaveInterval",
-        "showAutoSaveDisplay"
+        FlippingConfig.AUTO_SAVE_ENABLED,
+        FlippingConfig.AUTO_SAVE_INTERVAL,
+        FlippingConfig.SHOW_AUTO_SAVE_DISPLAY
     );
     private static final Set<String> AUTO_SAVE_TASK_KEYS = Set.of(
-        "autoSaveEnabled",
-        "autoSaveInterval"
+        FlippingConfig.AUTO_SAVE_ENABLED,
+        FlippingConfig.AUTO_SAVE_INTERVAL
     );
 
     @Inject
@@ -527,6 +532,22 @@ public class FlippingPlugin extends Plugin {
         newOfferEventPipelineHandler.onGrandExchangeOfferChanged(offerChangedEvent);
     }
 
+    public boolean isAccountWideView() {
+        return accountViewHandler.isAccountWideView();
+    }
+
+    public boolean isAccountInCurrentView(String accountName) {
+        return accountViewHandler.isAccountInCurrentView(accountName);
+    }
+
+    List<String> getAccountNamesForCurrentView() {
+        return accountViewHandler.getAccountNamesForCurrentView();
+    }
+
+    Collection<AccountData> getAccountsForCurrentView() {
+        return accountViewHandler.getAccountsForCurrentView();
+    }
+
     public List<FlippingItem> getItemsForCurrentView() {
         return accountViewHandler.getItemsForCurrentView();
     }
@@ -642,7 +663,7 @@ public class FlippingPlugin extends Plugin {
                 setUpdateSinceLastItemAccountWideBuild(true);
 
                 //rebuildItemsDisplay if you are currently looking at the account who's cache just got updated or the account wide view.
-                if (accountCurrentlyViewed.equals(ACCOUNT_WIDE) || accountCurrentlyViewed.equals(displayNameOfChangedAcc)) {
+                if (isAccountInCurrentView(displayNameOfChangedAcc)) {
                     List<FlippingItem> tradesForCurrentView = viewItemsForCurrentView();
                     flippingPanel.rebuild(tradesForCurrentView);
                     statPanel.rebuildItemsDisplay(tradesForCurrentView);
@@ -963,12 +984,12 @@ public class FlippingPlugin extends Plugin {
         handleSlotTimersConfigChange(event);
         handleAutoSaveConfigChange(event);
         // Live-switch the storage backend when the data source config changes.
-        if (event.getKey().equals("dataSource")) {
+        if (event.getKey().equals(FlippingConfig.DATA_SOURCE)) {
             storageController.switchStorageBackend();
             return;
         }
 
-        if (event.getKey().equals("sqliteMaintenance")) {
+        if (event.getKey().equals(FlippingConfig.SQLITE_MAINTENANCE)) {
             SqliteMaintenanceAction action = config.sqliteMaintenance();
             if (action != SqliteMaintenanceAction.NONE) {
                 storageController.handleSqliteMaintenance(action);
@@ -980,7 +1001,7 @@ public class FlippingPlugin extends Plugin {
     }
 
     private void handleSlotTimersConfigChange(ConfigChanged event) {
-        if (!event.getKey().equals("slotTimersEnabled")) {
+        if (!event.getKey().equals(FlippingConfig.SLOT_TIMERS_ENABLED)) {
             return;
         }
 

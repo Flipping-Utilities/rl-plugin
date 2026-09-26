@@ -105,8 +105,7 @@ public class NewOfferEventPipelineHandler {
      */
     private void rebuildDisplayAfterOfferEvent(OfferEvent offerEvent) {
 
-        if (!(plugin.getAccountCurrentlyViewed().equals(plugin.getCurrentlyLoggedInAccount()) ||
-                plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE))) {
+        if (!plugin.isAccountInCurrentView(plugin.getCurrentlyLoggedInAccount())) {
             return;
         }
 

@@ -11,8 +11,6 @@ import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -28,10 +26,8 @@ final class TradeHistoryHandler {
     }
 
     public void truncateTradeList() {
-        if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
-            plugin.getDataHandler().getAllAccountData().forEach(accountData -> plugin.getFlippingItemHandler().deleteRemovedItems(accountData.getTrades()));
-        } else {
-            plugin.getFlippingItemHandler().deleteRemovedItems(plugin.getItemsForCurrentView());
+        for (AccountData account : plugin.getAccountsForCurrentView()) {
+            plugin.getFlippingItemHandler().deleteRemovedItems(account.getTrades());
         }
     }
 
@@ -95,7 +91,7 @@ final class TradeHistoryHandler {
 
     public void setItemVisible(FlippingItem item, boolean visible) {
         // Account-wide items are merged copies; update each underlying account too.
-        for (String account : accountsInCurrentView()) {
+        for (String account : plugin.getAccountNamesForCurrentView()) {
             for (FlippingItem stored : plugin.getDataHandler().getAccountData(account).getTrades()) {
                 if (stored.getItemId() == item.getItemId()) {
                     setItemVisible(account, stored, visible);
@@ -104,12 +100,6 @@ final class TradeHistoryHandler {
         }
         item.setValidFlippingPanelItem(visible);
         plugin.setUpdateSinceLastItemAccountWideBuild(true);
-    }
-
-    private Collection<String> accountsInCurrentView() {
-        return FlippingPlugin.ACCOUNT_WIDE.equals(plugin.getAccountCurrentlyViewed())
-            ? new ArrayList<>(plugin.getDataHandler().getCurrentAccounts())
-            : Collections.singletonList(plugin.getAccountCurrentlyViewed());
     }
 
     private void setItemVisible(String account, FlippingItem item, boolean visible) {
@@ -130,16 +120,8 @@ final class TradeHistoryHandler {
      * Used by the stats panel to invalidate all offers for a certain interval when a user hits the reset button.
      */
     public void deleteOffers(Instant startOfInterval) {
-        if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
-            for (AccountData accountData : plugin.getDataHandler().getAllAccountData()) {
-                accountData.getTrades().forEach(item -> {
-                    deleteOffers(item.getIntervalHistory(startOfInterval), item);
-                });
-            }
-        } else {
-            plugin.getItemsForCurrentView().forEach(item -> {
-                deleteOffers(item.getIntervalHistory(startOfInterval), item);
-            });
+        for (AccountData account : plugin.getAccountsForCurrentView()) {
+            account.getTrades().forEach(item -> deleteOffers(item.getIntervalHistory(startOfInterval), item));
         }
 
         plugin.setUpdateSinceLastItemAccountWideBuild(true);
@@ -177,7 +159,7 @@ final class TradeHistoryHandler {
      * reset button
      */
     public void setAllFlippingItemsAsHidden() {
-        for (String account : accountsInCurrentView()) {
+        for (String account : plugin.getAccountNamesForCurrentView()) {
             plugin.getDataHandler().getAccountData(account).getTrades().forEach(item -> setItemVisible(account, item, false));
         }
         plugin.setUpdateSinceLastItemAccountWideBuild(true);
