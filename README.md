@@ -128,6 +128,17 @@ Quickly lookup your favorited items just by typing "1" in the ge search!
 
 # Development
 
+Run `./gradlew uiGallery` to choose data for a local RuneLite shell with the real plugin sidebar.
+Click **Open default** to copy your `~/.runelite` data, or enter, browse for, or drop a RuneLite folder,
+flipping folder, or SQLite file, then click **Open copy**. Edits stay in a temporary copy and are
+discarded when you close the window. Use `--args='--source /path/to/folder-or.db'` to skip the chooser.
+The left-hand Grand Exchange simulator can place buys and sells, fill them at a chosen rate or in
+manual chunks, cancel offers, and collect completed trades while the real sidebar updates.
+Public OSRS Wiki data supplies item names, GE limits, icons, and market prices. Open price history
+from the sidebar's Wiki prices or **Prices / chart** in the simulator.
+Use `--args='--fixtures'` for synthetic component states, or `./gradlew renderUiGallery` for headless
+PNGs. See the [sandbox and gallery guide](docs/component-gallery.md).
+
 ### General Structure of Codebase
 
 This section will talk about the purpose of various parts of the codebase, specifically the folders.

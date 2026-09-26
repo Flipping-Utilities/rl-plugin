@@ -22,6 +22,7 @@ dependencies {
     implementation 'org.xerial:sqlite-jdbc:3.45.1.0'
 
     testImplementation 'junit:junit:4.12'
+    testImplementation 'org.mockito:mockito-core:4.11.0'
     testImplementation 'org.slf4j:slf4j-simple:1.7.12'
     testImplementation group: 'net.runelite', name:'client', version: runeLiteVersion, {
         exclude group: 'ch.qos.logback', module: 'logback-classic'
@@ -60,4 +61,24 @@ tasks.register('runPlugin', JavaExec) {
     mainClass = 'com.flippingutilities.PluginRunner'
     jvmArgs "-ea"
     args "--developer-mode"
+}
+
+// Developer fixtures stay on the test classpath and are never packaged with the plugin.
+tasks.register('uiGallery', JavaExec) {
+    group = 'verification'
+    description = 'Open an offline RuneLite sandbox using a temporary copy of real data.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.flippingutilities.ui.uiutilities.UiGallery'
+    maxHeapSize = '2g'
+}
+
+tasks.register('renderUiGallery', JavaExec) {
+    group = 'verification'
+    description = 'Render every gallery fixture at 225 and 300 px without opening a window.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.flippingutilities.ui.uiutilities.UiGallery'
+    systemProperty 'java.awt.headless', 'true'
+    args '--render-all', layout.buildDirectory.dir('ui-gallery').get().asFile.absolutePath
 }
