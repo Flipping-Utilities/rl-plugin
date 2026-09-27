@@ -398,7 +398,7 @@ public class RealDataMigrationTest {
         final AccountWideData finalAccountWide = loadedAccountWide != null ? loadedAccountWide : new AccountWideData();
 
         // --- run the production migration against a temp DB ---
-        storage = new SqliteStorage(new File(tempDir.toFile(), "realdata.db"));
+        storage = new SqliteStorage(new File(tempDir.toFile(), "realdata.db"), new Gson());
         TradePersister stub = new TradePersister(gson) {
             @Override
             public Map<String, AccountData> loadAllAccountsForMigration() {

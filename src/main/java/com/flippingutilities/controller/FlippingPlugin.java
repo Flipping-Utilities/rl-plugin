@@ -335,7 +335,7 @@ public class FlippingPlugin extends Plugin {
     }
 
     protected SqliteStorage createSqliteStorage() {
-        return new SqliteStorage(new File(RuneLite.RUNELITE_DIR, "flipping/flipping.db"));
+        return new SqliteStorage(new File(RuneLite.RUNELITE_DIR, "flipping/flipping.db"), gson);
     }
 
     @Override

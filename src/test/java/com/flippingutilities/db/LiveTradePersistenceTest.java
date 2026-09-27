@@ -3,6 +3,7 @@ package com.flippingutilities.db;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
+import com.google.gson.Gson;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -32,7 +33,7 @@ public class LiveTradePersistenceTest {
     @Before
     public void setUp() throws Exception {
         database = temporaryFolder.newFile("trades.db");
-        storage = new SqliteStorage(database);
+        storage = new SqliteStorage(database, new Gson());
         storage.initializeSchema();
     }
 
@@ -46,7 +47,7 @@ public class LiveTradePersistenceTest {
         OfferEvent expected = complete(ACCOUNT, WHIP, "buy", BASE_TIME, 10, 50000, true);
         storage.recordTrade(ACCOUNT, expected);
         storage.close();
-        storage = new SqliteStorage(database);
+        storage = new SqliteStorage(database, new Gson());
 
         List<OfferEvent> offers = loadedOffers();
         assertEquals(1, offers.size());

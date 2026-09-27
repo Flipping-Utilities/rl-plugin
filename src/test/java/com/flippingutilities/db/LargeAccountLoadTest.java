@@ -2,6 +2,7 @@ package com.flippingutilities.db;
 
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.OfferEvent;
+import com.google.gson.Gson;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -41,7 +42,7 @@ public class LargeAccountLoadTest {
     public void setUp() throws Exception {
         testDbFile = Files.createTempFile("perf_test_", ".db").toFile();
         testDbFile.deleteOnExit();
-        storage = new SqliteStorage(testDbFile);
+        storage = new SqliteStorage(testDbFile, new Gson());
         storage.initializeSchema();
         populateFixture();
     }
@@ -106,7 +107,7 @@ public class LargeAccountLoadTest {
                 statement.setInt(5, price);
                 statement.setInt(6, isBuy ? 1 : 0);
                 statement.setString(7, offer.getUuid());
-                statement.setString(8, SqliteStorage.serializeOffer(offer));
+                statement.setString(8, storage.serializeOffer(offer));
                 statement.addBatch();
 
                 if ((i + 1) % 1_000 == 0) {
@@ -171,7 +172,7 @@ public class LargeAccountLoadTest {
         statement.setInt(2, itemId);
         statement.setString(3, offer.getUuid());
         statement.setInt(4, 1);
-        statement.setString(5, SqliteStorage.serializeOffer(offer));
+        statement.setString(5, storage.serializeOffer(offer));
         statement.addBatch();
     }
 

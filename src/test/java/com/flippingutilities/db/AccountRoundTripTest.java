@@ -95,7 +95,7 @@ public class AccountRoundTripTest {
 
     @Test
     public void liveWritesPreserveOfferClassificationAndVisibilityChanges() throws Exception {
-        SqliteStorage storage = new SqliteStorage(folder.newFile("live.db"));
+        SqliteStorage storage = new SqliteStorage(folder.newFile("live.db"), new Gson());
         try {
             storage.initializeSchema();
             OfferEvent cancelled = offer("cancelled", GrandExchangeOfferState.CANCELLED_BUY, 1, 10, 100, 1, 0);
@@ -119,7 +119,7 @@ public class AccountRoundTripTest {
 
     @Test
     public void livePartialFillSurvivesRestartWithoutAddingItTwice() throws Exception {
-        SqliteStorage storage = new SqliteStorage(folder.newFile("live-partial.db"));
+        SqliteStorage storage = new SqliteStorage(folder.newFile("live-partial.db"), new Gson());
         try {
             storage.initializeSchema();
             OfferEvent partial = offer("partial", GrandExchangeOfferState.BUYING, 5, 10, 100, 8, 0);
@@ -149,7 +149,7 @@ public class AccountRoundTripTest {
     public void completedSlotTimersSurviveRestartUntilCollectionWithoutDuplicatingHistory() throws Exception {
         for (GrandExchangeOfferState state : new GrandExchangeOfferState[]{GrandExchangeOfferState.BOUGHT,
             GrandExchangeOfferState.SOLD, GrandExchangeOfferState.CANCELLED_BUY, GrandExchangeOfferState.CANCELLED_SELL}) {
-            SqliteStorage storage = new SqliteStorage(folder.newFile("timer-" + state + ".db"));
+            SqliteStorage storage = new SqliteStorage(folder.newFile("timer-" + state + ".db"), new Gson());
             try {
                 storage.initializeSchema();
                 OfferEvent completed = offer("completed", state, 5, 5, 100, 100, 125);
@@ -216,7 +216,7 @@ public class AccountRoundTripTest {
 
     @Test
     public void deletingPartialHistoryPreservesSlotContinuityWithoutRestoringTheDeletedFill() throws Exception {
-        SqliteStorage storage = new SqliteStorage(folder.newFile("deleted-partial.db"));
+        SqliteStorage storage = new SqliteStorage(folder.newFile("deleted-partial.db"), new Gson());
         try {
             storage.initializeSchema();
             OfferEvent partial = offer("deleted-partial", GrandExchangeOfferState.BUYING, 5, 10, 100, 8, 0);
@@ -242,7 +242,7 @@ public class AccountRoundTripTest {
 
     @Test
     public void deletingLastHistoryOfferPreservesGeLimitsForEveryRestoredItem() throws Exception {
-        SqliteStorage storage = new SqliteStorage(folder.newFile("deleted-history-limits.db"));
+        SqliteStorage storage = new SqliteStorage(folder.newFile("deleted-history-limits.db"), new Gson());
         try {
             storage.initializeSchema();
             Instant nextRefresh = Instant.ofEpochMilli(System.currentTimeMillis() + 3_600_000L);
@@ -292,7 +292,7 @@ public class AccountRoundTripTest {
 
     private AccountData migrateAndReopen(AccountData original) throws Exception {
         File database = folder.newFile("round-trip.db");
-        SqliteStorage storage = new SqliteStorage(database);
+        SqliteStorage storage = new SqliteStorage(database, new Gson());
         try {
             TradePersister source = new TradePersister(new Gson()) {
                 @Override
@@ -309,7 +309,7 @@ public class AccountRoundTripTest {
         } finally {
             storage.close();
         }
-        SqliteStorage reopened = new SqliteStorage(database);
+        SqliteStorage reopened = new SqliteStorage(database, new Gson());
         try {
             reopened.initializeSchema();
             return reopened.loadAccount(ACCOUNT);

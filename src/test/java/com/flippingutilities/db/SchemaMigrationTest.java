@@ -36,7 +36,7 @@ public class SchemaMigrationTest {
     public void setUp() throws Exception {
         tempDir = Files.createTempDirectory("schema_test_");
         dbFile = new File(tempDir.toFile(), "schema.db");
-        storage = new SqliteStorage(dbFile);
+        storage = new SqliteStorage(dbFile, new Gson());
     }
 
     @After

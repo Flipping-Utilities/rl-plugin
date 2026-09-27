@@ -35,7 +35,7 @@ public class FavoriteMigrationTest {
         tradedItem.setFavorite(false);
         source.getTrades().addAll(Arrays.asList(searchedItem, tradedItem, item(11802, "1"), item(11804, null)));
 
-        SqliteStorage storage = new SqliteStorage(folder.newFile("favorites.db"));
+        SqliteStorage storage = new SqliteStorage(folder.newFile("favorites.db"), new Gson());
         try {
             assertEquals(1, new MigrationService(storage, new TradePersister(new Gson()))
                 .migrate(Collections.singletonMap(ACCOUNT, source)));
