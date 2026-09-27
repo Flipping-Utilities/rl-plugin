@@ -19,7 +19,10 @@ dependencies {
     annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
 
     implementation "org.apache.commons:commons-csv:1.4"
-    implementation 'org.xerial:sqlite-jdbc:3.46.0.0'
+    implementation('org.xerial:sqlite-jdbc:3.46.0.0') {
+        // RuneLite provides SLF4J; do not bundle another copy in the Plugin Hub JAR.
+        exclude group: 'org.slf4j', module: 'slf4j-api'
+    }
 
     testImplementation 'junit:junit:4.12'
     testImplementation 'org.slf4j:slf4j-simple:1.7.12'
