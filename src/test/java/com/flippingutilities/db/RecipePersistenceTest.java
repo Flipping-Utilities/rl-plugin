@@ -46,7 +46,7 @@ public class RecipePersistenceTest {
         AccountData json = persister.loadAccount(ACCOUNT);
         assertUnknownRecipeCount(json, syntheticKey, expectedProfit);
 
-        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("unknown-ratios.db"));
+        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("unknown-ratios.db"), new Gson());
         try {
             assertEquals(1, new MigrationService(storage, persister).migrate());
             storage.close();
@@ -73,7 +73,7 @@ public class RecipePersistenceTest {
         AccountData source = legacyAccount();
         Files.writeString(new File(accounts, ACCOUNT + ".json").toPath(), gson.toJson(source));
         TradePersister persister = new TradePersister(gson, accounts);
-        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("recipes.db"));
+        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("recipes.db"), new Gson());
         try {
             assertEquals(1, new MigrationService(storage, persister).migrate());
             storage.close();
@@ -117,7 +117,7 @@ public class RecipePersistenceTest {
         AccountData reloaded = persister.loadAccount(ACCOUNT);
         hydrateReferences(reloaded);
         assertRecipePreserved(reloaded);
-        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("rewritten.db"));
+        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("rewritten.db"), new Gson());
         try {
             assertEquals(1, new MigrationService(storage, persister).migrate());
             assertRecipePreserved(storage.loadAccount(ACCOUNT));
@@ -152,7 +152,7 @@ public class RecipePersistenceTest {
         File accounts = temporaryFolder.newFolder("unresolved");
         TradePersister persister = new TradePersister(gson, accounts);
         persister.writeToFile(ACCOUNT, source);
-        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("unresolved.db"));
+        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("unresolved.db"), new Gson());
         try {
             assertEquals("The account must migrate despite the dangling reference",
                 1, new MigrationService(storage, persister).migrate());
@@ -184,7 +184,7 @@ public class RecipePersistenceTest {
         AccountData source = legacyAccount();
         hydrateReferences(source);
         RecipeFlip flip = source.getRecipeFlipGroups().get(0).getRecipeFlips().get(0);
-        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("live.db"));
+        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("live.db"), new Gson());
         try {
             storage.initializeSchema();
             storage.recordTrade(ACCOUNT, source.getTrades().get(0).getHistory().getCompressedOfferEvents().get(0));
@@ -217,7 +217,7 @@ public class RecipePersistenceTest {
         hydrateReferences(source);
         RecipeFlip flip = source.getRecipeFlipGroups().get(0).getRecipeFlips().get(0);
         flip.getOutputs().get(11802).get("detached-output").getOffer().setTime(null);
-        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("live-missing-time.db"));
+        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("live-missing-time.db"), new Gson());
         try {
             storage.initializeSchema();
             try {
@@ -246,7 +246,7 @@ public class RecipePersistenceTest {
             component.setOfferUuid(offer.getUuid());
             component.setOffer(null);
         }
-        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("uuid-only.db"));
+        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("uuid-only.db"), new Gson());
         try {
             assertEquals(1, new MigrationService(storage, new TradePersister(gson))
                 .migrate(Collections.singletonMap(ACCOUNT, source)));
@@ -262,7 +262,7 @@ public class RecipePersistenceTest {
     public void migrationRejectsRecipeOffersWithoutTime() throws Exception {
         AccountData source = legacyAccount();
         source.getRecipeFlipGroups().get(0).getPartialOffers().get(0).getOffer().setTime(null);
-        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("missing-time.db"));
+        SqliteStorage storage = new SqliteStorage(temporaryFolder.newFile("missing-time.db"), new Gson());
         try {
             assertEquals("An offer without a timestamp cannot be used to calculate recipe prices", 0,
                 new MigrationService(storage, new TradePersister(gson)).migrate(Collections.singletonMap(ACCOUNT, source)));

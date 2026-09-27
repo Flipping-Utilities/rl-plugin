@@ -53,7 +53,7 @@ final class SqliteOfferStore {
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         int itemId = rs.getInt("item_id");
-                        OfferEvent offer = OfferJsonCodec.deserializeOffer(rs.getString("offer_json"));
+                        OfferEvent offer = storage.deserializeOffer(rs.getString("offer_json"));
                         offer.setMadeBy(displayName);
                         offersByItem.computeIfAbsent(itemId, k -> new ArrayList<>()).add(offer);
                     }
@@ -120,7 +120,7 @@ final class SqliteOfferStore {
             bind(statement, accountId, offer.getItemId(), offer.getUuid(),
                 offer.getTime() == null ? 0L : offer.getTime().toEpochMilli(),
                 offer.getCurrentQuantityInTrade(), offer.getPreTaxPrice(), offer.isBuy(),
-                OfferJsonCodec.serializeOffer(offer));
+                storage.serializeOffer(offer));
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to record trade for " + displayName, e);
@@ -144,7 +144,7 @@ final class SqliteOfferStore {
             "(account_id, slot_index, offer_uuid, offer_json, history_visible) " +
             "VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement ps = storage.getConnection().prepareStatement(sql)) {
-            bind(ps, accountId, slotIndex, offer.getUuid(), OfferJsonCodec.serializeOffer(offer), historyVisible);
+            bind(ps, accountId, slotIndex, offer.getUuid(), storage.serializeOffer(offer), historyVisible);
             ps.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Could not persist active slot for " + displayName, e);
@@ -168,7 +168,7 @@ final class SqliteOfferStore {
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         int idx = rs.getInt("slot_index");
-                        OfferEvent offer = OfferJsonCodec.deserializeOffer(rs.getString("offer_json"));
+                        OfferEvent offer = storage.deserializeOffer(rs.getString("offer_json"));
                         offer.setMadeBy(displayName);
 
                         if (!offer.isCausedByEmptySlot()) {

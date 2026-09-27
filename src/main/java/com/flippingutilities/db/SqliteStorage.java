@@ -4,6 +4,7 @@ import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.model.RecipeFlip;
+import com.google.gson.Gson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.sqlite.SQLiteConfig.TransactionMode;
@@ -47,15 +48,20 @@ public class SqliteStorage {
         }
     }
 
-    static String serializeOffer(OfferEvent offer) {
-        return OfferJsonCodec.serializeOffer(offer);
+    String serializeOffer(OfferEvent offer) {
+        return offerJsonCodec.serializeOffer(offer);
     }
 
-    static String serializeRecipeOffer(PartialOffer component) throws SQLException {
-        return OfferJsonCodec.serializeRecipeOffer(component);
+    String serializeRecipeOffer(PartialOffer component) throws SQLException {
+        return offerJsonCodec.serializeRecipeOffer(component);
+    }
+
+    OfferEvent deserializeOffer(String json) {
+        return offerJsonCodec.deserializeOffer(json);
     }
 
     private final File dbFile;
+    private final OfferJsonCodec offerJsonCodec;
     private Connection connection;
     private boolean schemaInitAttempted;
     // Collaborators share this instance's connection and are called under its monitor.
@@ -68,9 +74,11 @@ public class SqliteStorage {
      * Creates a storage bound to the given database file.
      *
      * @param dbFile Database file location
+     * @param gson RuneLite's injected Gson
      */
-    public SqliteStorage(File dbFile) {
+    public SqliteStorage(File dbFile, Gson gson) {
         this.dbFile = dbFile;
+        offerJsonCodec = new OfferJsonCodec(gson);
         itemState = new SqliteItemStateStore(this);
         recipes = new SqliteRecipeStore(this);
         offers = new SqliteOfferStore(this, itemState, recipes);
@@ -489,8 +497,8 @@ public class SqliteStorage {
     }
 
     /** Caller owns the transaction; returns false when this flip was already persisted. */
-    static boolean insertRecipeFlip(Connection conn, int accountId, String recipeKey, RecipeFlip flip) throws SQLException {
-        return SqliteRecipeStore.insertRecipeFlip(conn, accountId, recipeKey, flip);
+    boolean insertRecipeFlip(Connection conn, int accountId, String recipeKey, RecipeFlip flip) throws SQLException {
+        return recipes.insertRecipeFlip(conn, accountId, recipeKey, flip);
     }
 
     /**

@@ -47,7 +47,7 @@ public class OfferCorrectionPersistenceTest {
 
     @Before
     public void setUp() throws Exception {
-        storage = new SqliteStorage(folder.newFile("offers.db"));
+        storage = new SqliteStorage(folder.newFile("offers.db"), new Gson());
         storage.initializeSchema();
         ItemManager itemManager = itemManagerWithoutNetwork();
         plugin = new FlippingPlugin() {

@@ -39,7 +39,7 @@ public class MigrationBackupTest {
 
     @Before
     public void setUp() throws Exception {
-        storage = new SqliteStorage(folder.newFile("backup-test.db"));
+        storage = new SqliteStorage(folder.newFile("backup-test.db"), new Gson());
         storage.initializeSchema();
         storage.recordTrade(ACCOUNT, complete(ACCOUNT, 4151, "old-offer", TIME, 3, 100, true));
         storage.setSetting("migrated_" + ACCOUNT, "previous-import");
@@ -127,7 +127,7 @@ public class MigrationBackupTest {
     private void rejectBackupStatements() {
         File database = storage.getDbFile();
         storage.close();
-        storage = new SqliteStorage(database) {
+        storage = new SqliteStorage(database, new Gson()) {
             @Override
             public synchronized Connection getConnection() throws SQLException {
                 Connection connection = super.getConnection();
@@ -199,7 +199,7 @@ public class MigrationBackupTest {
             name.startsWith(storage.getDbFile().getName() + ".pre-migration-") && name.endsWith(".db"));
         assertNotNull(backups);
         assertEquals("A rebuild must not create a second backup of the emptied database", 1, backups.length);
-        SqliteStorage backup = new SqliteStorage(backups[0]);
+        SqliteStorage backup = new SqliteStorage(backups[0], new Gson());
         try {
             assertEquals("old-offer", onlyOffer(backup.loadAccount(ACCOUNT)).getUuid());
             assertEquals("previous-import", backup.getSetting("migrated_" + ACCOUNT));

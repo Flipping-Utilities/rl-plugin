@@ -65,7 +65,7 @@ public class StorageBackendSwitchTest {
         plugin = new FlippingPlugin() {
             @Override
             protected SqliteStorage createSqliteStorage() {
-                return new SqliteStorage(database);
+                return new SqliteStorage(database, new Gson());
             }
         };
         setField(plugin, "config", config);
@@ -193,7 +193,7 @@ public class StorageBackendSwitchTest {
 
     @Test
     public void switchingToSqliteRemovesAccountsDeletedWhileUsingJson() {
-        SqliteStorage oldStorage = new SqliteStorage(database);
+        SqliteStorage oldStorage = new SqliteStorage(database, new Gson());
         try {
             oldStorage.initializeSchema();
             oldStorage.upsertAccount("Deleted player", null);
@@ -212,7 +212,7 @@ public class StorageBackendSwitchTest {
 
     @Test
     public void failedMigrationRetainsLiveStateAndFallsBackToJson() {
-        SqliteStorage existing = new SqliteStorage(database);
+        SqliteStorage existing = new SqliteStorage(database, new Gson());
         try {
             existing.initializeSchema();
             existing.recordTrade(ACCOUNT, offer("previously-persisted", 4));
@@ -229,7 +229,7 @@ public class StorageBackendSwitchTest {
         assertNull(plugin.getSqliteStorage());
         assertEquals("unsaved-edit", item.getFavoriteCode());
         assertLiveStateUnchanged();
-        SqliteStorage reopened = new SqliteStorage(database);
+        SqliteStorage reopened = new SqliteStorage(database, new Gson());
         try {
             assertTrue(hasOffer(reopened.loadAccount(ACCOUNT), "previously-persisted"));
             assertTrue(reopened.requiresFullResync());
@@ -295,7 +295,7 @@ public class StorageBackendSwitchTest {
         assertSame("Client fallback has not run yet", failedStorage, plugin.getSqliteStorage());
         assertFalse("A failed backend is immediately inactive", plugin.getDataHandler().isUsingSqlite());
         assertFalse("A failed backend must reject subsequent queued writes", laterTaskRan.get());
-        SqliteStorage reopened = new SqliteStorage(database);
+        SqliteStorage reopened = new SqliteStorage(database, new Gson());
         try {
             assertEquals("true", reopened.getSetting("migration_completed"));
             assertTrue("A separate storage instance must detect the failed write", reopened.requiresFullResync());
@@ -545,7 +545,7 @@ public class StorageBackendSwitchTest {
 
     @Test
     public void failedJsonSnapshotAbortsSwitchAndRemainsDirtyForRetry() {
-        SqliteStorage oldStorage = new SqliteStorage(database);
+        SqliteStorage oldStorage = new SqliteStorage(database, new Gson());
         try {
             oldStorage.initializeSchema();
             oldStorage.setSetting("migration_completed", "true");
@@ -562,7 +562,7 @@ public class StorageBackendSwitchTest {
         assertFalse(executor.hasTasks());
         assertEquals(0, persister.loads);
         assertLiveStateUnchanged();
-        SqliteStorage reopened = new SqliteStorage(database);
+        SqliteStorage reopened = new SqliteStorage(database, new Gson());
         try {
             assertTrue("Restart must prefer the JSON snapshot after its eventual retry",
                 reopened.requiresFullResync());
@@ -599,7 +599,7 @@ public class StorageBackendSwitchTest {
         assertTrue("The registered future covers queued writes and close", closed.isDone());
         assertNull(plugin.getSqliteStorage());
 
-        SqliteStorage reopened = new SqliteStorage(database);
+        SqliteStorage reopened = new SqliteStorage(database, new Gson());
         try {
             FlippingItem storedItem = reopened.loadAccount(ACCOUNT).getTrades().get(0);
             assertTrue(storedItem.isFavorite());
