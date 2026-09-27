@@ -315,7 +315,7 @@ public class MigrationService {
                 int qty = offer.getCurrentQuantityInTrade();
                 long price = offer.getPreTaxPrice();
                 boolean isBuy = offer.isBuy();
-                tradesToInsert.add(new TradeRecord(accountId, item.getItemId(), offer.getUuid(), timestamp, qty, price, isBuy, SqliteStorage.serializeOffer(offer)));
+                tradesToInsert.add(new TradeRecord(accountId, item.getItemId(), offer.getUuid(), timestamp, qty, price, isBuy, storage.serializeOffer(offer)));
 
                 tradesCount++;
             }
@@ -402,7 +402,7 @@ public class MigrationService {
         for (RecipeFlipGroup group : groups) {
             if (group == null || group.getRecipeFlips() == null) continue;
             for (RecipeFlip flip : group.getRecipeFlips()) {
-                if (SqliteStorage.insertRecipeFlip(conn, accountId, group.getRecipeKey(), flip)) {
+                if (storage.insertRecipeFlip(conn, accountId, group.getRecipeKey(), flip)) {
                     count++;
                 }
             }

@@ -58,7 +58,7 @@ public class MigrationLiveTradeInteractionTest {
     public void setUp() throws Exception {
         tempDir = Files.createTempDirectory("live_migration_test_");
         File dbFile = new File(tempDir.toFile(), "test.db");
-        storage = new SqliteStorage(dbFile);
+        storage = new SqliteStorage(dbFile, new Gson());
         storage.initializeSchema();
         storage.upsertAccount(ACCOUNT, null);
     }
@@ -478,7 +478,7 @@ public class MigrationLiveTradeInteractionTest {
         assertEquals(Instant.ofEpochSecond(1600000000, 123000000),
             data.getLastOffers().get(1).getTime());
 
-        SqliteStorage storage = new SqliteStorage(new File(accountsDir.toFile(), "legacy.db"));
+        SqliteStorage storage = new SqliteStorage(new File(accountsDir.toFile(), "legacy.db"), new Gson());
         try {
             assertEquals(1, new MigrationService(storage, persister).migrate(accounts));
             AccountData loaded = storage.loadAccount(ACCOUNT);

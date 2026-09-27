@@ -3,7 +3,6 @@ package com.flippingutilities.db;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.PartialOffer;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.TypeAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
@@ -15,8 +14,8 @@ import java.time.Instant;
 
 /** Offer snapshots shared by live SQLite persistence and JSON migration. */
 final class OfferJsonCodec {
-    private static final Gson GSON = new GsonBuilder()
-        .registerTypeAdapter(Instant.class, new TypeAdapter<Instant>() {
+    private static final TypeAdapter<Instant> INSTANT =
+        new TypeAdapter<Instant>() {
             @Override
             public void write(JsonWriter out, Instant value) throws IOException {
                 if (value == null) {
@@ -65,14 +64,19 @@ final class OfferJsonCodec {
                 in.skipValue();
                 return null;
             }
-        })
-        .create();
+        };
 
-    static String serializeOffer(OfferEvent offer) {
-        return GSON.toJson(offer);
+    private final Gson gson;
+
+    OfferJsonCodec(Gson gson) {
+        this.gson = gson.newBuilder().registerTypeAdapter(Instant.class, INSTANT).create();
     }
 
-    static String serializeRecipeOffer(PartialOffer component) throws SQLException {
+    String serializeOffer(OfferEvent offer) {
+        return gson.toJson(offer);
+    }
+
+    String serializeRecipeOffer(PartialOffer component) throws SQLException {
         if (component.getOffer() != null && component.getOffer().getTime() == null) {
             throw new SQLException("Cannot persist recipe: missing offer timestamp " + component.getOfferUuid());
         }
@@ -80,10 +84,7 @@ final class OfferJsonCodec {
         return serializeOffer(component.getOffer());
     }
 
-    static OfferEvent deserializeOffer(String json) {
-        return GSON.fromJson(json, OfferEvent.class);
-    }
-
-    private OfferJsonCodec() {
+    OfferEvent deserializeOffer(String json) {
+        return gson.fromJson(json, OfferEvent.class);
     }
 }

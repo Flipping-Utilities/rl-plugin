@@ -1,6 +1,7 @@
 package com.flippingutilities.db;
 
 import com.flippingutilities.model.AccountData;
+import com.google.gson.Gson;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -25,7 +26,7 @@ public class StorageParityTest {
     public void setUp() throws Exception {
         testDbFile = Files.createTempFile("test_parity_", ".db").toFile();
         testDbFile.deleteOnExit();
-        storage = new SqliteStorage(testDbFile);
+        storage = new SqliteStorage(testDbFile, new Gson());
         storage.initializeSchema();
     }
     

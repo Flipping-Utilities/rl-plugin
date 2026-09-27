@@ -1,5 +1,6 @@
 package com.flippingutilities.db;
 
+import com.google.gson.Gson;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -18,7 +19,7 @@ public class AccountUpsertTest {
 
     @Test
     public void updatesExistingAccountInPlaceAndPreservesKnownMetadataAndChildren() throws Exception {
-        SqliteStorage storage = new SqliteStorage(folder.newFile("accounts.db"));
+        SqliteStorage storage = new SqliteStorage(folder.newFile("accounts.db"), new Gson());
         try {
             storage.initializeSchema();
             storage.upsertAccount("Account", "original-player");
@@ -58,7 +59,7 @@ public class AccountUpsertTest {
 
     @Test
     public void fillsMissingAccountMetadataWithoutChangingIdentity() throws Exception {
-        SqliteStorage storage = new SqliteStorage(folder.newFile("missing-metadata.db"));
+        SqliteStorage storage = new SqliteStorage(folder.newFile("missing-metadata.db"), new Gson());
         try {
             storage.initializeSchema();
             storage.upsertAccount("Account", null);

@@ -103,7 +103,7 @@ public class JsonLoadSafetyTest {
         DataHandler handler = handler(persister);
         handler.loadAccountData("Player");
         handler.markDataAsHavingChanged("Player");
-        SqliteStorage storage = new SqliteStorage(new File(folder.getRoot(), "protected.db"));
+        SqliteStorage storage = new SqliteStorage(new File(folder.getRoot(), "protected.db"), new Gson());
         try {
             try {
                 new MigrationService(storage, persister).migrate();
