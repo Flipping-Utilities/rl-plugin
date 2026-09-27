@@ -24,7 +24,7 @@ import static com.flippingutilities.db.SqliteBindings.bind;
 /**
  * Recipe flip snapshots and their component persistence.
  * Instance methods run within the owning SqliteStorage monitor and transaction.
- * The static migration writer uses its caller's connection and transaction.
+ * The migration writer uses its caller's connection and transaction.
  */
 final class SqliteRecipeStore {
     private static final Logger logger = LoggerFactory.getLogger(SqliteRecipeStore.class);
@@ -97,7 +97,7 @@ final class SqliteRecipeStore {
                 while (rs.next()) {
                     int itemId = rs.getInt("item_id");
                     String uuid = rs.getString("offer_uuid");
-                    OfferEvent offer = OfferJsonCodec.deserializeOffer(rs.getString("offer_json"));
+                    OfferEvent offer = storage.deserializeOffer(rs.getString("offer_json"));
                     if (offer != null) {
                         offer.setMadeBy(displayName);
                         offer.setItemName("Item " + itemId);
@@ -219,7 +219,7 @@ final class SqliteRecipeStore {
     }
 
     /** Caller owns the transaction; returns false when this flip was already persisted. */
-    static boolean insertRecipeFlip(Connection conn, int accountId, String recipeKey, RecipeFlip flip) throws SQLException {
+    boolean insertRecipeFlip(Connection conn, int accountId, String recipeKey, RecipeFlip flip) throws SQLException {
         if (flip == null || flip.getTimeOfCreation() == null) {
             return false;
         }
@@ -247,7 +247,7 @@ final class SqliteRecipeStore {
         return true;
     }
 
-    private static void insertRecipeFlipComponents(Connection conn, long recipeId,
+    private void insertRecipeFlipComponents(Connection conn, long recipeId,
                                                    Map<Integer, Map<String, PartialOffer>> components,
                                                    RecipeComponentTable table) throws SQLException {
         if (components == null) {
@@ -260,7 +260,7 @@ final class SqliteRecipeStore {
                 for (PartialOffer component : entry.getValue().values()) {
                     if (component == null || component.getAmountConsumed() <= 0) continue;
                     bind(ps, recipeId, entry.getKey(), component.getOfferUuid(), component.getAmountConsumed(),
-                        OfferJsonCodec.serializeRecipeOffer(component));
+                        storage.serializeRecipeOffer(component));
                     ps.addBatch();
                 }
             }

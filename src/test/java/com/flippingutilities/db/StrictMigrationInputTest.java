@@ -31,7 +31,7 @@ public class StrictMigrationInputTest {
     @Before
     public void setUp() throws Exception {
         accountDirectory = folder.newFolder("accounts");
-        storage = new SqliteStorage(folder.newFile("trades.db"));
+        storage = new SqliteStorage(folder.newFile("trades.db"), new Gson());
         storage.initializeSchema();
         gson = new Gson();
     }

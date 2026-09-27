@@ -3,6 +3,7 @@ package com.flippingutilities.db;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.RecipeFlip;
+import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 import org.junit.After;
 import org.junit.Before;
@@ -47,7 +48,7 @@ public class AccountIsolationTest {
     public void openClients() throws Exception {
         File database = folder.newFile("accounts.db");
         first = new LookupHookStorage(database);
-        second = new SqliteStorage(database);
+        second = new SqliteStorage(database, new Gson());
         first.initializeSchema();
         second.initializeSchema();
     }
@@ -223,7 +224,7 @@ public class AccountIsolationTest {
         private Runnable afterLookup;
 
         private LookupHookStorage(File file) {
-            super(file);
+            super(file, new Gson());
         }
 
         private void afterNextAccountLookup(Runnable action) {

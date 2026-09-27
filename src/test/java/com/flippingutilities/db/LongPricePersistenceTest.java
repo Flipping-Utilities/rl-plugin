@@ -58,7 +58,7 @@ public class LongPricePersistenceTest {
     public void liveSqliteWritesRoundTripLongPricesAndTaxedProfits() throws Exception {
         AccountData source = account();
         File database = folder.newFile("live.db");
-        SqliteStorage storage = new SqliteStorage(database);
+        SqliteStorage storage = new SqliteStorage(database, new Gson());
         try {
             storage.initializeSchema();
             for (OfferEvent offer : offers(source)) {
@@ -85,7 +85,7 @@ public class LongPricePersistenceTest {
         AccountData fromJson = persister.loadAccount(ACCOUNT);
         assertMoney(fromJson);
 
-        SqliteStorage storage = new SqliteStorage(folder.newFile("migrated.db"));
+        SqliteStorage storage = new SqliteStorage(folder.newFile("migrated.db"), new Gson());
         try {
             assertEquals(1, new MigrationService(storage, persister).migrate());
             assertMoney(storage.loadAccount(ACCOUNT));

@@ -30,7 +30,7 @@ public class TestMigrationParityTest {
     @Before
     public void setUp() throws Exception {
         jsonAccountData = createTestAccountData();
-        storage = new SqliteStorage(temporaryFolder.newFile("migration.db"));
+        storage = new SqliteStorage(temporaryFolder.newFile("migration.db"), new Gson());
         storage.initializeSchema();
         MigrationService migration = new MigrationService(storage, new TradePersister(new Gson()));
         Connection connection = storage.getConnection();

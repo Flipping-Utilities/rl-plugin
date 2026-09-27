@@ -1,6 +1,7 @@
 package com.flippingutilities.db;
 
 import com.flippingutilities.model.AccountData;
+import com.google.gson.Gson;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -40,7 +41,7 @@ public class ConcurrencyTest {
     public void setUp() throws Exception {
         tempDir = Files.createTempDirectory("concurrency_test_");
         dbFile = new File(tempDir.toFile(), "concurrent.db");
-        storage = new SqliteStorage(dbFile);
+        storage = new SqliteStorage(dbFile, new Gson());
         storage.initializeSchema();
         storage.upsertAccount("ConcurrentAcct", null);
     }
@@ -152,7 +153,7 @@ public class ConcurrencyTest {
 
     @Test
     public void independentClientsCanWriteDifferentAccountsWithoutSnapshotUpgradeFailures() throws Exception {
-        SqliteStorage otherClient = new SqliteStorage(dbFile);
+        SqliteStorage otherClient = new SqliteStorage(dbFile, new Gson());
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
             otherClient.initializeSchema();
@@ -189,7 +190,7 @@ public class ConcurrencyTest {
 
     @Test
     public void failedWriteReservationDiscardsTheDriversPartialTransactionState() throws Exception {
-        SqliteStorage otherClient = new SqliteStorage(dbFile);
+        SqliteStorage otherClient = new SqliteStorage(dbFile, new Gson());
         Connection firstConnection = storage.getConnection();
         try (Statement settings = firstConnection.createStatement()) {
             settings.execute("PRAGMA busy_timeout=25");
