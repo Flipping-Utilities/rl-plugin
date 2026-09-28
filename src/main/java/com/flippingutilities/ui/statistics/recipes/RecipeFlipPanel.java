@@ -2,7 +2,6 @@ package com.flippingutilities.ui.statistics.recipes;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.RecipeFlip;
-import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.model.RecipeFlipGroup;
 import com.flippingutilities.ui.uiutilities.CustomColors;
@@ -25,7 +24,6 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.OptionalLong;
 
 /**
  * The visual representation of a RecipeFlip. RecipeFlipPanels
@@ -62,12 +60,9 @@ public class RecipeFlipPanel extends JPanel {
         titlePanel.setLayout(new DynamicGridLayout(2,1));
         titlePanel.setBackground(CustomColors.DARK_GRAY);
 
-        OptionalLong recipeCount = recipeFlip.getKnownRecipeCountMade(recipe);
-        JLabel quantityLabel = new JLabel(recipeCount.isPresent()
-            ? QuantityFormatter.formatNumber(recipeCount.getAsLong()) + "x" : RecipeDisplayText.UNKNOWN_COUNT);
-        if (!recipeCount.isPresent()) {
-            quantityLabel.setToolTipText(RecipeDisplayText.MISSING_QUANTITIES);
-        }
+        String recipeQuantity = QuantityFormatter.formatNumber(recipeFlip.getRecipeCountMade(recipe));
+
+        JLabel quantityLabel = new JLabel(recipeQuantity + "x");
         quantityLabel.setFont(FontManager.getRunescapeSmallFont());
 
         JPanel quantityAndTimePanel = new JPanel();
@@ -75,11 +70,7 @@ public class RecipeFlipPanel extends JPanel {
         quantityAndTimePanel.add(quantityLabel);
         quantityAndTimePanel.add(timeDisplay);
 
-        String recipeDisplayName = recipe != null
-                ? UIUtilities.truncateText(recipe.getName(), 40)
-                : (recipeFlipGroup.getRecipeKey() != null
-                        ? UIUtilities.truncateText("Recipe:" + recipeFlipGroup.getRecipeKey(), 40)
-                        : "Unknown Recipe");
+        String recipeDisplayName = UIUtilities.truncateText(recipe.getName(), 40);
         JLabel itemNameAndActionLabel = new JLabel(recipeDisplayName, SwingConstants.CENTER);
         itemNameAndActionLabel.setFont(FontManager.getRunescapeSmallFont());
         itemNameAndActionLabel.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
@@ -111,40 +102,24 @@ public class RecipeFlipPanel extends JPanel {
 
         //if the recipe does not contain coins but the user added coins to the input by using the coin selector
         if (userAddedCoinsThatWereNotInRecipe) {
-            componentGroupPanel.add(createComponentPanel("Coins", recipeFlip.getCoinCost(), 1L));
+            componentGroupPanel.add(createComponentPanel("Coins", recipeFlip.getCoinCost(), 1));
         }
 
         partialOffers.forEach((itemId, partialOfferMap) -> {
             String itemName;
             long quantity;
-            Long avgPrice;
+            long avgPrice;
 
             if (itemId == ItemID.COINS) {
                 itemName = "Coins";
                 quantity = recipeFlip.getCoinCost();
-                avgPrice = 1L;
+                avgPrice = 1;
             }
             else {
                 List<PartialOffer> partialOfferList = new ArrayList<>(partialOfferMap.values());
-                quantity = partialOfferList.stream().mapToLong(po -> po.amountConsumed).sum();
-
-                // The backing offer may be missing if the original trade was deleted; fall back to the item id.
-                OfferEvent offer = partialOfferList.stream()
-                    .map(PartialOffer::getOffer)
-                    .filter(o -> o != null)
-                    .findFirst()
-                    .orElse(null);
-
-                itemName = (offer != null && offer.getItemName() != null && !offer.getItemName().isEmpty())
-                    ? offer.getItemName()
-                    : "Item " + itemId;
-
-                long totalValue = partialOfferList.stream()
-                    .filter(po -> po.getOffer() != null)
-                    .mapToLong(po -> (long) po.getOffer().getPrice() * po.amountConsumed)
-                    .sum();
-                avgPrice = partialOfferList.stream().anyMatch(po -> po.amountConsumed > 0 && po.getOffer() == null)
-                    ? null : (quantity > 0 ? totalValue / quantity : 0);
+                itemName = partialOfferList.get(0).getOffer().getItemName();
+                quantity = partialOfferList.stream().mapToInt(po -> po.amountConsumed).sum();
+                avgPrice =  partialOfferList.stream().mapToLong(po -> po.getOffer().getPrice() * po.amountConsumed).sum()/quantity;
             }
 
             componentGroupPanel.add(createComponentPanel(itemName, quantity, avgPrice));
@@ -153,7 +128,7 @@ public class RecipeFlipPanel extends JPanel {
         return componentGroupPanel;
     }
 
-    private JPanel createComponentPanel(String itemName, long quantity, Long avgPrice){
+    private JPanel createComponentPanel(String itemName, long quantity, long avgPrice){
         if (quantity == 0) {
             JPanel panel = new JPanel(new BorderLayout());
             panel.setBackground(CustomColors.DARK_GRAY);
@@ -180,8 +155,7 @@ public class RecipeFlipPanel extends JPanel {
         pricePanel.setBackground(CustomColors.DARK_GRAY);
         JLabel priceLabel = new JLabel("Avg Price", SwingConstants.CENTER);
         priceLabel.setFont(FontManager.getRunescapeSmallFont());
-        JLabel priceValueLabel = new JLabel(itemName.equals("Coins")? "N/A": (avgPrice == null ? RecipeDisplayText.UNKNOWN : QuantityFormatter.formatNumber(avgPrice) + " gp"));
-        if (avgPrice == null) priceValueLabel.setToolTipText(RecipeDisplayText.MISSING_OFFERS);
+        JLabel priceValueLabel = new JLabel(itemName.equals("Coins")? "N/A": QuantityFormatter.formatNumber(avgPrice) + " gp");
         priceValueLabel.setFont(FontManager.getRunescapeSmallFont());
         pricePanel.add(priceLabel, BorderLayout.WEST);
         pricePanel.add(priceValueLabel, BorderLayout.EAST);
@@ -251,8 +225,8 @@ public class RecipeFlipPanel extends JPanel {
         deleteIcon.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (plugin.isAccountWideView()) {
-                    JOptionPane.showMessageDialog(null, RecipeDisplayText.ACCOUNT_WIDE_DELETE_UNAVAILABLE);
+                if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+                    JOptionPane.showMessageDialog(null, "You cannot delete recipe flips in the Accountwide view");
                     return;
                 }
                 final int result = JOptionPane.showOptionDialog(deleteIcon, "Are you sure you want to delete this recipe flip?",
@@ -261,7 +235,6 @@ public class RecipeFlipPanel extends JPanel {
 
                 if (result == JOptionPane.YES_OPTION) {
                     recipeFlipGroup.deleteFlip(recipeFlip);
-                    plugin.deleteRecipeFlipFromStorage(recipeFlipGroup.getRecipeKey(), recipeFlip);
                     plugin.setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
                     plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
                     plugin.getStatPanel().rebuildItemsDisplay(plugin.viewItemsForCurrentView());
@@ -284,8 +257,8 @@ public class RecipeFlipPanel extends JPanel {
     }
 
     private JPanel createProfitPanel() {
-        OptionalLong quantity = recipeFlip.getKnownRecipeCountMade(recipe);
-        if (quantity.isPresent() && quantity.getAsLong() == 0) {
+        long quantity = recipeFlip.getRecipeCountMade(recipe);
+        if (quantity == 0) {
             JPanel panel = new JPanel(new BorderLayout());
             panel.setBackground(CustomColors.DARK_GRAY);
             JLabel label = new JLabel("Mismatched recipe flip (delete it)", SwingConstants.CENTER);
@@ -294,26 +267,19 @@ public class RecipeFlipPanel extends JPanel {
             panel.add(label, BorderLayout.CENTER);
             return panel;
         }
-        boolean missingOffers = recipeFlip.hasMissingOffers();
-        long profit = missingOffers ? 0 : recipeFlip.getProfit();
-        String profitString = missingOffers ? RecipeDisplayText.UNKNOWN : UIUtilities.quantityToRSDecimalStack(profit, true) + " gp";
-        String profitEachString = "";
-        if (!quantity.isPresent()) {
-            profitEachString = RecipeDisplayText.UNKNOWN_PROFIT_EACH;
-        } else if (!missingOffers && quantity.getAsLong() != 1) {
-            profitEachString = " (" + UIUtilities.quantityToRSDecimalStack(profit / quantity.getAsLong(), false) + " gp ea)";
-        }
+        long profit = recipeFlip.getProfit();
+        long profitEach = profit/quantity;
+        String profitString = UIUtilities.quantityToRSDecimalStack(profit, true) + " gp";
+        String profitEachString = quantity == 1? "": " (" + UIUtilities.quantityToRSDecimalStack(profitEach, false) + " gp ea)";
         String profitDescription = profit < 0? "Loss": "Profit:";
 
         JLabel profitValLabel = new JLabel(profitString + profitEachString);
-        if (missingOffers) profitValLabel.setToolTipText(RecipeDisplayText.MISSING_OFFERS_PROFIT);
-        else if (!quantity.isPresent()) profitValLabel.setToolTipText(RecipeDisplayText.MISSING_QUANTITIES_PROFIT_EACH);
         profitValLabel.setFont(FontManager.getRunescapeSmallFont());
 
         JLabel profitDescriptionLabel = new JLabel(profitDescription);
         profitDescriptionLabel.setFont(FontManager.getRunescapeSmallFont());
 
-        profitDescriptionLabel.setForeground(missingOffers ? ColorScheme.LIGHT_GRAY_COLOR : profit >= 0? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
+        profitDescriptionLabel.setForeground(profit >= 0? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
 
         JPanel profitPanel = new JPanel(new BorderLayout());
         profitPanel.setBackground(CustomColors.DARK_GRAY);

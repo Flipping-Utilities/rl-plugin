@@ -1,4 +1,4 @@
-package com.flippingutilities.ui.widgets.graph;
+package com.flippingutilities.ui.widgets;
 
 /**
  * calculates visually pleasing tick intervals for chart axes.
@@ -6,6 +6,8 @@ package com.flippingutilities.ui.widgets.graph;
  */
 public final class TickIntervalCalculator {
 
+    /** standard nice numbers for tick intervals */
+    private static final long[] NICE_NUMBERS = {1, 2, 5, 10};
     /** target number of ticks to display on chart axis */
     private static final int TARGET_TICK_COUNT = 6;
 

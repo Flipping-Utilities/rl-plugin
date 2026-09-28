@@ -37,11 +37,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 /**
  * This class is the representation of an item that a user is flipping. It contains information about the
@@ -58,7 +54,6 @@ import java.util.Optional;
 @Slf4j
 public class FlippingItem implements Searchable
 {
-	public static final String DEFAULT_FAVORITE_CODE = "1";
 
 	@SerializedName("id")
 	@Getter
@@ -95,7 +90,7 @@ public class FlippingItem implements Searchable
 
 	@Getter
 	@Setter
-	private String favoriteCode = DEFAULT_FAVORITE_CODE;
+	private String favoriteCode = "1";
 
 	//non persisted fields start here.
 	@Setter
@@ -161,16 +156,10 @@ public class FlippingItem implements Searchable
 	 *
 	 * @param newOffer the new offer that just came in
 	 */
-	public List<String> updateHistory(OfferEvent newOffer)
+	public void updateHistory(OfferEvent newOffer)
 	{
 		newOffer.setItemName(itemName);
-		return history.updateHistory(newOffer);
-	}
-
-	public List<String> updateHistory(OfferEvent newOffer, OfferEvent previousOffer)
-	{
-		newOffer.setItemName(itemName);
-		return history.updateHistory(newOffer, previousOffer);
+		history.updateHistory(newOffer);
 	}
 
 	/**

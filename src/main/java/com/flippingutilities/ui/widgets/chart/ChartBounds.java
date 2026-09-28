@@ -1,4 +1,4 @@
-package com.flippingutilities.ui.widgets.graph.chart;
+package com.flippingutilities.ui.widgets.chart;
 
 public final class ChartBounds {
     public final int x;

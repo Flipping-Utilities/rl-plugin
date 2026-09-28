@@ -24,8 +24,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.flippingutilities.ui.widgets.graph.TimeSeriesChart;
-import com.flippingutilities.ui.widgets.graph.ChartConfig;
 
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;

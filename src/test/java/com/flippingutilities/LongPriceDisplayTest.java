@@ -5,17 +5,18 @@ import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesPoint;
 import com.flippingutilities.model.TimeseriesResponse;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
-import com.flippingutilities.ui.widgets.graph.ChartConfig;
-import com.flippingutilities.ui.widgets.graph.TickIntervalCalculator;
-import com.flippingutilities.ui.widgets.graph.TimeSeriesChart;
-import com.flippingutilities.ui.widgets.graph.chart.ChartBounds;
-import com.flippingutilities.ui.widgets.graph.chart.PriceRange;
+import com.flippingutilities.ui.widgets.ChartConfig;
+import com.flippingutilities.ui.widgets.TickIntervalCalculator;
+import com.flippingutilities.ui.widgets.TimeSeriesChart;
+import com.flippingutilities.ui.widgets.chart.ChartBounds;
+import com.flippingutilities.ui.widgets.chart.PriceRange;
 import com.flippingutilities.utilities.GeHistoryTabExtractor;
 import com.flippingutilities.utilities.WikiItemMargins;
 import com.google.gson.Gson;
 import net.runelite.api.widgets.Widget;
 import org.junit.Test;
 
+import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Proxy;
@@ -45,7 +46,7 @@ public class LongPriceDisplayTest {
 
     @Test
     public void chartUsesLongPricesWhileKeepingPixelCoordinates() {
-        TimeSeriesChart chart = new TimeSeriesChart(ChartConfig.builder().build());
+        TimeSeriesChart chart = new TimeSeriesChart(ChartConfig.builder().labelFont(new Font(Font.DIALOG, Font.PLAIN, 12)).build());
         ChartBounds bounds = new ChartBounds(0, 0, 200, 100);
         PriceRange range = new PriceRange(3_000_000_001L, 5_000_000_001L);
         assertEquals(5_000_000_001L, chart.calculatePriceFromY(0, bounds, range));

@@ -1,7 +1,6 @@
 package com.flippingutilities.jobs;
 
 import com.flippingutilities.FlippingConfig;
-import com.flippingutilities.controller.ApiRequestHandlerTest.ManualClient;
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.CachedTimeseries;
 import com.flippingutilities.model.Timestep;
