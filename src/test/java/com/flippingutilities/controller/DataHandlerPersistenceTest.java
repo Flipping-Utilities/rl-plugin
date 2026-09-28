@@ -1,11 +1,17 @@
 package com.flippingutilities.controller;
 
 import com.flippingutilities.db.JsonStorage;
+import com.flippingutilities.db.JsonStorageCodec;
 import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
 import com.flippingutilities.model.FlippingItem;
+import com.flippingutilities.model.OfferEvent;
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.client.callback.ClientThread;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -243,6 +249,79 @@ public class DataHandlerPersistenceTest {
         assertFalse(reloaded.getAccounts().containsKey(ALICE));
         assertTrue(reloaded.getAccounts().containsKey(BOB));
         assertFalse(handler.isSavePending());
+    }
+
+    @Test
+    public void deletingLoggedInAccountRemotelyKeepsLiveModelAndPreservesNewOffersInRecovery() throws Exception {
+        plugin.setCurrentlyLoggedInAccount(ALICE);
+        AccountData active = handler.viewAccountData(ALICE);
+        JsonStorage remote = new JsonStorage(gson, directory);
+        AccountData bob = remote.load().getAccounts().get(BOB);
+        bob.setLastModifiedAt(FIRST);
+        remote.commit(remote.capture(Collections.singletonMap(BOB, bob), null, Collections.singleton(ALICE)));
+
+        handler.refreshExternalData(() -> {});
+        io.runAll();
+        clientThread.runAll();
+        assertSame("GE events must retain their live AccountData", active, handler.viewAccountData(ALICE));
+        assertEquals(FIRST, handler.viewAccountData(BOB).getLastModifiedAt());
+        assertTrue(handler.getStorageError().contains("deleted the logged-in account"));
+
+        handler.getAccountData(BOB).setLastModifiedAt(SECOND);
+        handler.storeData();
+        io.runAll();
+        assertEquals(SECOND, disk(BOB).getLastModifiedAt());
+        assertNotNull("An unrelated successful save must not clear the deletion conflict", handler.getStorageError());
+        assertNull(disk(ALICE));
+
+        addLiveOfferAndAssertRecovery();
+    }
+
+    @Test
+    public void directReloadAlsoKeepsTheDeletedActiveAccountAndItsOldBaseline() throws Exception {
+        plugin.setCurrentlyLoggedInAccount(ALICE);
+        AccountData active = handler.viewAccountData(ALICE);
+        JsonStorage remote = new JsonStorage(gson, directory);
+        remote.load();
+        remote.commit(remote.capture(Collections.emptyMap(), null, Collections.singleton(ALICE)));
+
+        handler.loadAccountData(ALICE);
+        assertSame(active, handler.viewAccountData(ALICE));
+        addLiveOfferAndAssertRecovery();
+    }
+
+    private void addLiveOfferAndAssertRecovery() throws Exception {
+        OfferEvent incoming = new OfferEvent();
+        incoming.setUuid("new-live-offer");
+        incoming.setItemId(4151);
+        incoming.setBuy(true);
+        incoming.setPrice(100L);
+        incoming.setTime(SECOND);
+        incoming.setSlot(1);
+        incoming.setState(GrandExchangeOfferState.BUYING);
+        incoming.setCurrentQuantityInTrade(3);
+        incoming.setTotalQuantityInTrade(10);
+        incoming.setTradeStartedAt(FIRST);
+        handler.getAccountData(ALICE).getLastOffers().put(1, incoming);
+        handler.storeData();
+        io.runAll();
+        assertNull("A stale client must not recreate an account deleted remotely", disk(ALICE));
+        assertTrue("New live changes must remain dirty after CAS rejects them", handler.isSavePending());
+        assertTrue(handler.getStorageError().contains("preserved"));
+        Path recovery;
+        try (java.util.stream.Stream<Path> files = Files.list(directory.toPath().resolve("json-v2"))) {
+            recovery = files.filter(file -> file.getFileName().toString().startsWith("conflict-"))
+                .findFirst().orElseThrow(() -> new AssertionError("Expected a conflict recovery file"));
+        }
+        JsonObject checkpoint;
+        try (java.io.Reader reader = Files.newBufferedReader(recovery)) {
+            checkpoint = new JsonParser().parse(reader).getAsJsonObject();
+        }
+        java.util.Map<String, JsonElement> records = new java.util.LinkedHashMap<>();
+        checkpoint.getAsJsonObject("records").entrySet().forEach(entry -> records.put(entry.getKey(), entry.getValue()));
+        AccountData preserved = new JsonStorageCodec(gson).decodeAccount(ALICE, records);
+        assertEquals("new-live-offer", preserved.getLastOffers().get(1).getUuid());
+        assertEquals(3, preserved.getLastOffers().get(1).getCurrentQuantityInTrade());
     }
 
     @Test

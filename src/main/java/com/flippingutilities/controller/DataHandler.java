@@ -47,6 +47,8 @@ public class DataHandler {
     private final Map<String, Long> deletedAccounts = new HashMap<>();
     private final Map<String, Long> lastChange = new HashMap<>();
     private final Set<String> protectedAccounts = new HashSet<>();
+    // These accounts stay writable in memory so later offers can reach CAS conflict recovery.
+    private final Set<String> activeDeletionConflicts = new HashSet<>();
     private long changeNumber;
     private long successfulSaveGeneration;
     private long accountWideRevision;
@@ -219,7 +221,7 @@ public class DataHandler {
                         successfulSaveGeneration++;
                     }
                     synchronized (DataHandler.this) {
-                        if (protectedAccounts.isEmpty()) storageError = null;
+                        if (protectedAccounts.isEmpty() && activeDeletionConflicts.isEmpty()) storageError = null;
                     }
                 } catch (IOException | RuntimeException failure) {
                     storageFailed(failure);
@@ -328,6 +330,7 @@ public class DataHandler {
                                 }
                                 AccountData account = updates.getAccounts().get(name);
                                 if (account == null) {
+                                    if (retainDeletedActiveAccount(name)) continue;
                                     accountSpecificData.remove(name);
                                 } else {
                                     try {
@@ -340,6 +343,7 @@ public class DataHandler {
                                     accountSpecificData.put(name, account);
                                 }
                                 protectedAccounts.remove(name);
+                                activeDeletionConflicts.remove(name);
                                 accepted.add(name);
                             }
                             boolean acceptWide = updates.getAccountWideData() != null && !accountWideDirty
@@ -388,10 +392,34 @@ public class DataHandler {
         });
     }
 
+    /** Do not invalidate the model still used by incoming GE events, or adopt its remote deletion. */
+    private boolean retainDeletedActiveAccount(String name) {
+        if (!name.equals(plugin.getCurrentlyLoggedInAccount()) || !accountSpecificData.containsKey(name)) return false;
+        activeDeletionConflicts.add(name);
+        storageFailed(new IllegalStateException("Another client deleted the logged-in account " + name
+            + ". Its live trades are retained; new changes will be preserved in a conflict recovery file."));
+        return true;
+    }
+
     public synchronized void loadAccountData(String name) {
         if (!initialized || closed || !pendingSave.isDone() || dirtyAccounts.containsKey(name)
                 || dirtyMetadata.containsKey(name) || deletedAccounts.containsKey(name)) return;
         try {
+            if (name.equals(plugin.getCurrentlyLoggedInAccount()) && accountSpecificData.containsKey(name)) {
+                // Unlike loadAccount(), this read leaves the baseline untouched until acceptance.
+                JsonStorage.Updates updates = storage().readUpdates();
+                if (updates.getDeletedAccounts().contains(name)) {
+                    retainDeletedActiveAccount(name);
+                } else if (updates.getAccounts().containsKey(name)) {
+                    AccountData account = updates.getAccounts().get(name);
+                    account.prepareForUse(plugin);
+                    accountSpecificData.put(name, account);
+                    storage().adopt(updates, Collections.singleton(name), false);
+                    protectedAccounts.remove(name);
+                    activeDeletionConflicts.remove(name);
+                }
+                return;
+            }
             AccountData account = storage().loadAccount(name);
             if (account != null) {
                 account.prepareForUse(plugin);
@@ -401,6 +429,7 @@ public class DataHandler {
                 accountSpecificData.remove(name);
                 protectedAccounts.remove(name);
             }
+            activeDeletionConflicts.remove(name);
         } catch (IOException | RuntimeException failure) {
             protectedAccounts.add(name);
             storageFailed(failure);
