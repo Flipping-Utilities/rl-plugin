@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class AccountSelectorRefreshTest {
     @Test
@@ -41,6 +42,23 @@ public class AccountSelectorRefreshTest {
         SwingUtilities.invokeAndWait(() -> {
             JComboBox<String> selector = selector();
             MasterPanel.syncAccountSelector(selector, new HashSet<>(Arrays.asList("Bob")));
+            assertEquals(FlippingPlugin.ACCOUNT_WIDE, selector.getSelectedItem());
+        });
+    }
+
+    @Test
+    public void multipleDeletionsNeverSelectAnotherMissingAccount() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JComboBox<String> selector = selector();
+            selector.setSelectedItem("Bob");
+            HashSet<String> remaining = new HashSet<>(Arrays.asList("Carol"));
+            selector.addItemListener(event -> {
+                if (event.getStateChange() == ItemEvent.SELECTED) {
+                    assertTrue("View callbacks must only receive accounts still present in storage",
+                        FlippingPlugin.ACCOUNT_WIDE.equals(event.getItem()) || remaining.contains(event.getItem()));
+                }
+            });
+            MasterPanel.syncAccountSelector(selector, remaining);
             assertEquals(FlippingPlugin.ACCOUNT_WIDE, selector.getSelectedItem());
         });
     }
