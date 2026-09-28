@@ -36,8 +36,7 @@ import com.google.gson.stream.JsonWriter;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.RuneLite;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVPrinter;
+import org.apache.commons.text.StringEscapeUtils;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -308,26 +307,52 @@ public class TradePersister
 
 
 	public static void exportToCsv(File file, List<FlippingItem> trades, String startOfIntervalName) throws IOException {
-		FileWriter out = new FileWriter(file);
-		CSVPrinter csvWriter = new CSVPrinter(out,
-				CSVFormat.DEFAULT.
-						withHeader("name", "date", "quantity", "price", "state").
-						withCommentMarker('#').
-						withHeaderComments("Displaying trades for selected time interval: " + startOfIntervalName));
+		try (BufferedWriter out = new BufferedWriter(new FileWriter(file))) {
+			String comment = "Displaying trades for selected time interval: " + startOfIntervalName;
+			out.write("# " + comment.replace("\r\n", "\n").replace('\r', '\n').replace("\n", "\r\n# ") + "\r\n");
+			writeCsvRecord(out, "name", "date", "quantity", "price", "state");
 
-		for (FlippingItem item : trades) {
-			for (OfferEvent offer : item.getHistory().getCompressedOfferEvents()) {
-				csvWriter.printRecord(
-						item.getItemName(),
-						TimeFormatters.formatInstantToDate(offer.getTime()),
-						offer.getCurrentQuantityInTrade(),
-						offer.getPrice(),
-						offer.getState()
-				);
+			for (FlippingItem item : trades) {
+				for (OfferEvent offer : item.getHistory().getCompressedOfferEvents()) {
+					writeCsvRecord(out,
+							item.getItemName(),
+							TimeFormatters.formatInstantToDate(offer.getTime()),
+							offer.getCurrentQuantityInTrade(),
+							offer.getPrice(),
+							offer.getState()
+					);
+				}
+				out.write(String.format("# Total profit: %d\r\n\r\n",
+					FlippingItem.getProfit(item.getHistory().getCompressedOfferEvents())));
 			}
-			csvWriter.printComment(String.format("Total profit: %d", FlippingItem.getProfit(item.getHistory().getCompressedOfferEvents())));
-			csvWriter.println();
 		}
-		csvWriter.close();
+	}
+
+	private static void writeCsvRecord(BufferedWriter out, Object... fields) throws IOException {
+		for (int i = 0; i < fields.length; i++) {
+			if (i > 0) {
+				out.write(',');
+			}
+			if (fields[i] == null) {
+				continue;
+			}
+			String value = fields[i].toString();
+			String escaped = StringEscapeUtils.escapeCsv(value);
+			// Retain Commons CSV's additional quoting for empty first fields, whitespace,
+			// and first fields starting with a non-ASCII-alphanumeric character.
+			boolean quote = value.isEmpty() && i == 0;
+			if (!value.isEmpty()) {
+				char first = value.charAt(0);
+				boolean startsWithLetterOrDigit = (first >= '0' && first <= '9')
+					|| (first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z');
+				quote = first <= '#' || value.charAt(value.length() - 1) <= ' '
+					|| (i == 0 && !startsWithLetterOrDigit);
+			}
+			if (quote && escaped.equals(value)) {
+				escaped = '"' + escaped + '"';
+			}
+			out.write(escaped);
+		}
+		out.write("\r\n");
 	}
 }
