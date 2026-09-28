@@ -43,29 +43,29 @@ final class SessionTimeHandler {
     }
 
     private void handleNotFlipping() {
-        if (plugin.getCurrentlyLoggedInAccount() == null) {
+        String displayName = plugin.getCurrentlyLoggedInAccount();
+        if (displayName == null) {
             return;
         }
-        plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).setLastSessionTimeUpdate(null);
+        AccountData account = plugin.getDataHandler().viewAccountData(displayName);
+        if (account.getLastSessionTimeUpdate() != null) {
+            account.setLastSessionTimeUpdate(null);
+            plugin.getDataHandler().markSessionTimeChanged(displayName);
+        }
     }
 
     private void updateActiveFlippingSessionTime() {
-        AccountData account = plugin.getDataHandler().viewAccountData(plugin.getCurrentlyLoggedInAccount());
+        String displayName = plugin.getCurrentlyLoggedInAccount();
+        AccountData account = plugin.getDataHandler().viewAccountData(displayName);
+        Instant now = Instant.now();
         Instant lastUpdate = account.getLastSessionTimeUpdate();
-
-        if (lastUpdate == null) {
-            lastUpdate = Instant.now();
-        }
-
-        long additionalTime = Duration.between(lastUpdate, Instant.now()).toMillis();
+        long additionalTime = lastUpdate == null ? 0 : Duration.between(lastUpdate, now).toMillis();
         long newTotalTime = account.getAccumulatedSessionTimeMillis() + additionalTime;
-
-        plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).setAccumulatedSessionTimeMillis(newTotalTime);
-        plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).setLastSessionTimeUpdate(Instant.now());
-
-        // Persist session time to SQLite if active
-        String accountName = plugin.getCurrentlyLoggedInAccount();
-        plugin.submitStorageTask(storage -> storage.updateAccountSessionTime(accountName, newTotalTime));
+        if (newTotalTime != account.getAccumulatedSessionTimeMillis() || !now.equals(lastUpdate)) {
+            account.setAccumulatedSessionTimeMillis(newTotalTime);
+            account.setLastSessionTimeUpdate(now);
+            plugin.getDataHandler().markSessionTimeChanged(displayName);
+        }
 
         if (shouldUpdateSessionTimeDisplay()) {
             plugin.getStatPanel().updateSessionTimeDisplay(plugin.viewAccumulatedTimeForCurrentView());

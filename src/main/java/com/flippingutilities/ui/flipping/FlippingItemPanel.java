@@ -439,7 +439,7 @@ public class FlippingItemPanel extends JPanel
 			}
 
 			flippingItem.setFavoriteCode(searchCodeTextField.getText());
-			// Persist the single-account code change so a SQLite-mode restart doesn't revert it.
+			// Persist the single-account code change so it survives a restart.
 			// Runs after the set above so the persisted value is the new one.
 			if (!plugin.isAccountWideView()) {
 				plugin.persistFavoriteCodeOnAccount(plugin.getAccountCurrentlyViewed(), flippingItem);
@@ -788,7 +788,7 @@ public class FlippingItemPanel extends JPanel
 				boolean wasDummyAndAccountwide = wasDummy && plugin.isAccountWideView();
 				if (!wasDummyAndAccountwide) {
 					flippingItem.setFavorite(!flippingItem.isFavorite());
-					// Persist the single-account toggle so a SQLite-mode restart doesn't revert it.
+					// Persist the single-account toggle so it survives a restart.
 					// Runs after the toggle above so the persisted value is the new one.
 					if (!plugin.isAccountWideView()) {
 						plugin.persistFavoriteOnAccount(plugin.getAccountCurrentlyViewed(), flippingItem);

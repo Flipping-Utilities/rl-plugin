@@ -51,19 +51,12 @@ final class FavoriteHandler {
         }
     }
 
-    /**
-     * Single-account favorite toggle: unlike the account-wide variant, the panel updates the
-     * FlippingItem itself, so this only persists the change to the active backend. Without the
-     * upsert, SQLite mode restarts revert the toggle (JSON stays authoritative in memory only).
-     */
+    /** The panel updates the item directly; mark its account for persistence. */
     public void persistFavoriteOnAccount(String accountName, FlippingItem item) {
         if (accountName == null || item == null) {
             return;
         }
-        int itemId = item.getItemId();
-        boolean favorite = item.isFavorite();
-        String code = item.getFavoriteCode();
-        plugin.submitStorageTask(storage -> storage.upsertFavorite(accountName, itemId, favorite, code));
+        plugin.getDataHandler().markDataAsHavingChanged(accountName);
     }
 
     /** Single-account quick-search code change; see {@link #persistFavoriteOnAccount}. */
@@ -91,9 +84,9 @@ final class FavoriteHandler {
         else {
             flippingItem.setFlippedBy(accountName);
             items.add(0, flippingItem);
-            plugin.markAccountTradesAsHavingChanged(accountName);
             plugin.setUpdateSinceLastItemAccountWideBuild(true);
         }
+        plugin.markAccountTradesAsHavingChanged(accountName);
     }
 
     public void onGrandExchangeSearched(GrandExchangeSearched event) {

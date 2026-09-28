@@ -106,20 +106,51 @@ public class FlippingItemHandler {
      * from each account's trade list into one flipping item.
      */
     List<FlippingItem> createAccountWideFlippingItemList(Collection<AccountData> allAccountData) {
-        //take all flipping items from the account cache, regardless of account, and segregate them based on item name.
+        // Group source items without cloning their history until the aggregate is built.
         Map<Integer, List<FlippingItem>> groupedItems = allAccountData.stream().
             flatMap(accountData -> accountData.getTrades().stream()).
-            map(FlippingItem::clone).
             collect(Collectors.groupingBy(FlippingItem::getItemId));
 
-        //take every list containing flipping items of the same type and reduce it to one merged flipping item and put that
-        //item in a final merged list
         List<FlippingItem> mergedItems = groupedItems.values().stream().
-            map(list -> list.stream().reduce(FlippingItem::merge)).filter(Optional::isPresent).map(Optional::get).
+            map(this::mergeAccountItems).
             collect(Collectors.toList());
 
         mergedItems.sort(Collections.reverseOrder(Comparator.comparing(FlippingItem::getLatestActivityTime)));
 
         return mergedItems;
+    }
+
+    private FlippingItem mergeAccountItems(List<FlippingItem> items) {
+        FlippingItem latest = items.get(0);
+        Deque<FlippingItem> historyOrder = new ArrayDeque<>();
+        boolean favorite = false;
+        for (FlippingItem item : items) {
+            // The previous pairwise merge prepended a new latest item's history.
+            // Retain that stable ordering when offers have identical timestamps.
+            if (item.getLatestActivityTime().isAfter(latest.getLatestActivityTime())) {
+                latest = item;
+                historyOrder.addFirst(item);
+            } else {
+                historyOrder.addLast(item);
+            }
+            favorite |= item.isFavorite();
+        }
+        FlippingItem merged = latest.clone();
+        merged.setFavorite(favorite);
+        if (items.size() == 1) return merged;
+
+        List<OfferEvent> history = new ArrayList<>();
+        for (FlippingItem item : historyOrder) {
+            if (item == latest) {
+                history.addAll(merged.getHistory().getCompressedOfferEvents());
+            } else {
+                item.getHistory().getCompressedOfferEvents().forEach(offer -> history.add(offer.clone()));
+            }
+        }
+        // Sorting once avoids repeatedly sorting the growing combined history for
+        // each account. Every offer is still cloned so edits cannot reach source data.
+        history.sort(Comparator.comparing(OfferEvent::getTime));
+        merged.getHistory().setCompressedOfferEvents(history);
+        return merged;
     }
 }

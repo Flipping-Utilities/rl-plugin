@@ -12,10 +12,8 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /** Edits trade history, item visibility and exports for the selected accounts. */
 final class TradeHistoryHandler {
@@ -26,8 +24,11 @@ final class TradeHistoryHandler {
     }
 
     public void truncateTradeList() {
-        for (AccountData account : plugin.getAccountsForCurrentView()) {
+        for (String name : plugin.getAccountNamesForCurrentView()) {
+            AccountData account = plugin.getDataHandler().getAccountData(name);
+            int previousSize = account.getTrades().size();
             plugin.getFlippingItemHandler().deleteRemovedItems(account.getTrades());
+            if (account.getTrades().size() != previousSize) plugin.getDataHandler().markDataAsHavingChanged(name);
         }
     }
 
@@ -45,10 +46,11 @@ final class TradeHistoryHandler {
     }
 
     private void addSelectedGeTabOffer(OfferEvent selectedOffer) {
-        if (plugin.getCurrentlyLoggedInAccount() == null) {
+        String account = plugin.getCurrentlyLoggedInAccount();
+        if (account == null) {
             return;
         }
-        Optional<FlippingItem> flippingItem = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getTrades().stream().filter(item -> item.getItemId() == selectedOffer.getItemId()).findFirst();
+        Optional<FlippingItem> flippingItem = plugin.getDataHandler().getAccountData(account).getTrades().stream().filter(item -> item.getItemId() == selectedOffer.getItemId()).findFirst();
         if (flippingItem.isPresent()) {
             flippingItem.get().updateHistory(selectedOffer);
             flippingItem.get().updateLatestProperties(selectedOffer);
@@ -56,11 +58,11 @@ final class TradeHistoryHandler {
             flippingItem.get().setValidFlippingPanelItem(true);
         } else {
             int tradeItemId = selectedOffer.getItemId();
-            FlippingItem item = new FlippingItem(tradeItemId, "", -1, plugin.getCurrentlyLoggedInAccount());
+            FlippingItem item = new FlippingItem(tradeItemId, "", -1, account);
             item.setValidFlippingPanelItem(true);
             item.updateLatestProperties(selectedOffer);
             item.updateHistory(selectedOffer);
-            plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getTrades().add(0, item);
+            plugin.getDataHandler().getAccountData(account).getTrades().add(0, item);
 
             //itemmanager can only be used on the client thread.
             //i can't put everything in the runnable given to the client thread cause then it executes async and if there
@@ -72,21 +74,17 @@ final class TradeHistoryHandler {
                 int geLimit = itemStats != null ? itemStats.getGeLimit() : 0;
                 item.setItemName(itemName);
                 item.setTotalGELimit(geLimit);
+                plugin.getDataHandler().markDataAsHavingChanged(account);
             });
         }
-        recordTrade(plugin.getCurrentlyLoggedInAccount(), selectedOffer);
+        recordTrade(account, selectedOffer);
     }
 
-    /** Snapshot the offer before handing it to the ordered storage queue. */
+    /** Mark the account after its in-memory history has changed. */
     public void recordTrade(String account, OfferEvent offer) {
-        OfferEvent snapshot = offer.clone();
-        plugin.submitStorageTask(storage -> {
-            // Partial quantities are cumulative and restored from the active slot instead.
-            if (snapshot.isComplete() && snapshot.getCurrentQuantityInTrade() > 0) {
-                storage.recordTrade(account, snapshot);
-            }
-            storage.upsertItemVisibility(account, snapshot.getItemId(), true);
-        });
+        if (account != null && offer != null) {
+            plugin.getDataHandler().markDataAsHavingChanged(account);
+        }
     }
 
     public void setItemVisible(FlippingItem item, boolean visible) {
@@ -104,12 +102,11 @@ final class TradeHistoryHandler {
 
     private void setItemVisible(String account, FlippingItem item, boolean visible) {
         item.setValidFlippingPanelItem(visible);
-        int itemId = item.getItemId();
-        plugin.submitStorageTask(storage -> storage.upsertItemVisibility(account, itemId, visible));
+        plugin.getDataHandler().markDataAsHavingChanged(account);
     }
 
     public List<OfferEvent> findOfferMatches(OfferEvent offerEvent, int limit) {
-        Optional<FlippingItem> flippingItem = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getTrades().stream().filter(item -> item.getItemId() == offerEvent.getItemId()).findFirst();
+        Optional<FlippingItem> flippingItem = plugin.getDataHandler().viewAccountData(plugin.getCurrentlyLoggedInAccount()).getTrades().stream().filter(item -> item.getItemId() == offerEvent.getItemId()).findFirst();
         if (!flippingItem.isPresent()) {
             return new ArrayList<>();
         }
@@ -120,9 +117,10 @@ final class TradeHistoryHandler {
      * Used by the stats panel to invalidate all offers for a certain interval when a user hits the reset button.
      */
     public void deleteOffers(Instant startOfInterval) {
-        for (AccountData account : plugin.getAccountsForCurrentView()) {
+        for (String name : plugin.getAccountNamesForCurrentView()) {
+            AccountData account = plugin.getDataHandler().getAccountData(name);
             account.getTrades().forEach(item ->
-                deleteOffers(item.getIntervalHistory(startOfInterval), account.getRecipeFlipGroups(), item));
+                deleteOffers(name, item.getIntervalHistory(startOfInterval), account.getRecipeFlipGroups(), item));
         }
 
         plugin.setUpdateSinceLastItemAccountWideBuild(true);
@@ -131,28 +129,15 @@ final class TradeHistoryHandler {
     }
 
     public void deleteOffers(List<OfferEvent> offers, FlippingItem item) {
-        deleteOffers(offers, plugin.viewRecipeFlipGroupsForCurrentView(), item);
+        deleteOffers(plugin.getAccountCurrentlyViewed(), offers, plugin.viewRecipeFlipGroupsForCurrentView(), item);
     }
 
-    private void deleteOffers(List<OfferEvent> offers, List<RecipeFlipGroup> recipeFlipGroups, FlippingItem item) {
+    private void deleteOffers(String account, List<OfferEvent> offers, List<RecipeFlipGroup> recipeFlipGroups, FlippingItem item) {
         item.deleteOffers(offers);
         plugin.getRecipeHandler().deleteInvalidRecipeFlips(offers, recipeFlipGroups);
-        plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
+        plugin.markAccountTradesAsHavingChanged(account);
         plugin.setUpdateSinceLastItemAccountWideBuild(true);
         plugin.setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
-
-        // Mirror the deletion into SQLite off-thread. The offer uuids identify
-        // the exact trade rows; recipes referencing those offers are deleted with them.
-        if (plugin.getSqliteStorage() != null) {
-            List<String> uuids = offers.stream()
-                .map(OfferEvent::getUuid)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-            if (!uuids.isEmpty()) {
-                String accountName = item.getFlippedBy() != null ? item.getFlippedBy() : plugin.getAccountCurrentlyViewed();
-                plugin.submitStorageTask(storage -> storage.deleteTradesByUuid(accountName, uuids));
-            }
-        }
     }
 
     /**

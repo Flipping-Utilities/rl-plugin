@@ -85,7 +85,7 @@ public class ApiAuthHandler {
      * This should be called on client start up
      */
     public CompletableFuture<String> checkExistingJwt() {
-        String jwtString = plugin.getDataHandler().getAccountWideData().getJwt();
+        String jwtString = plugin.getDataHandler().viewAccountWideData().getJwt();
         if (jwtString == null) {
             log.debug("no jwt stored locally, not attempting to check existing jwt");
             return CompletableFuture.completedFuture("no jwt");
@@ -123,6 +123,7 @@ public class ApiAuthHandler {
                 hasValidJWT = false; //validJwt is false by default, just setting it here for clarity
             } else {
                 plugin.getDataHandler().getAccountWideData().setJwt(newJwt);
+                plugin.getDataHandler().markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
                 hasValidJWT = true;
                 log.debug("successfully refreshed jwt");
                 validJwtSubscriberActions.forEach(Runnable::run);
@@ -169,6 +170,7 @@ public class ApiAuthHandler {
                 log.warn("failed to login with token!", exception);
             } else {
                 plugin.getDataHandler().getAccountWideData().setJwt(jwt);
+                plugin.getDataHandler().markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
                 hasValidJWT = true;
                 validJwtSubscriberActions.forEach(Runnable::run);
                 log.debug("successfully logged in with token!");

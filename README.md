@@ -164,7 +164,7 @@ This section will talk about the purpose of various parts of the codebase, speci
 
 **controller/**
 - `FlippingPlugin` wires the plugin lifecycle, RuneLite events, jobs and UI to domain handlers.
-  `StorageController` owns backend switching, ordered SQLite work, recovery and maintenance.
+  `DataHandler` owns the live account models and an ordered background queue for JSON storage.
   `TradeHistoryHandler`, `FavoriteHandler`, `RecipeFlipHandler`, `AccountViewHandler` and
   `SessionTimeHandler` handle their respective account operations. `NewOfferEventPipelineHandler`
   consumes live GE events. Public methods on `FlippingPlugin` delegate to these handlers so
@@ -178,10 +178,10 @@ This section will talk about the purpose of various parts of the codebase, speci
 
 
 **db/**
-- `TradePersister` reads and writes JSON. `SqliteStorage` owns the SQLite connection, schema,
-  settings and recovery marker, and delegates to account, offer, recipe and item-state stores.
-  Its synchronized entry points keep those stores on the same connection and transaction boundary.
-  `OfferJsonCodec` handles persisted offer snapshots; `MigrationService` imports JSON accounts.
+- `TradePersister` reads legacy account JSON and exports CSV. `JsonStorageCodec` converts accounts
+  into versioned records. `JsonStorage` migrates legacy files and tracks each client's adopted data.
+  `JsonJournalStore` commits changed records and maintains recoverable checkpoints.
+  See [JSON storage and recovery](docs/json-storage.md) for the format, migration and concurrency behavior.
 
 **ui/**
 - This folder contains all the UI code for the plugin which is the code that draws the "plugin" you see, such as the slots

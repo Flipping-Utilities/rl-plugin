@@ -1,13 +1,13 @@
 package com.flippingutilities.controller;
 
-import com.flippingutilities.DataSource;
 import com.flippingutilities.FlippingConfig;
-import com.flippingutilities.db.SqliteStorage;
-import com.flippingutilities.db.MigrationService;
 import com.flippingutilities.db.TradePersister;
+import com.flippingutilities.db.JsonStorageCodec;
+import com.flippingutilities.db.JsonJournalStore;
 import com.flippingutilities.model.*;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.flippingutilities.ui.slots.SlotsPanel;
 import net.runelite.api.Client;
@@ -15,7 +15,6 @@ import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.ItemComposition;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.game.ItemManager;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -27,12 +26,16 @@ import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.stream.Collectors;
+import java.lang.reflect.Field;
+import java.nio.file.Path;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.function.Consumer;
 
 import static org.junit.Assert.*;
 
@@ -40,15 +43,19 @@ public class OfferCorrectionPersistenceTest {
     private static final String ACCOUNT = "Player";
     private static final int ITEM = 4151;
     @Rule public TemporaryFolder folder = new TemporaryFolder();
-    private SqliteStorage storage;
+    private Path storageDirectory;
+    private JsonJournalStore storage;
+    private final JsonStorageCodec codec = new JsonStorageCodec(new Gson());
+    private Map<String, JsonElement> persisted = new HashMap<>();
     private FlippingPlugin plugin;
     private AccountData account;
     private NewOfferEventPipelineHandler pipeline;
 
     @Before
     public void setUp() throws Exception {
-        storage = new SqliteStorage(folder.newFile("offers.db"), new Gson());
-        storage.initializeSchema();
+        storageDirectory = folder.newFolder("journal").toPath();
+        storage = new JsonJournalStore(storageDirectory, new Gson());
+        storage.initialize(persisted);
         ItemManager itemManager = itemManagerWithoutNetwork();
         plugin = new FlippingPlugin() {
             private final DataHandler handler = new DataHandler(this);
@@ -59,15 +66,11 @@ public class OfferCorrectionPersistenceTest {
             };
             @Override public DataHandler getDataHandler() { return handler; }
             @Override public SlotsPanel getSlotsPanel() { return slots; }
-            @Override public SqliteStorage getSqliteStorage() { return storage; }
             @Override public ItemManager getItemManager() { return itemManager; }
             @Override public FlippingConfig getConfig() {
-                return new FlippingConfig() {
-                    @Override public DataSource dataSource() { return DataSource.SQLITE; }
-                };
+                return new FlippingConfig() {};
             }
             @Override public String getAccountCurrentlyViewed() { return "Other account"; }
-            @Override public synchronized void submitStorageTask(Consumer<SqliteStorage> task) { task.accept(storage); }
         };
         plugin.setCurrentlyLoggedInAccount(ACCOUNT);
         plugin.getDataHandler().addAccount(ACCOUNT);
@@ -76,8 +79,6 @@ public class OfferCorrectionPersistenceTest {
         account.getTrades().get(0).setValidFlippingPanelItem(true);
         pipeline = new NewOfferEventPipelineHandler(plugin);
     }
-
-    @After public void tearDown() { if (storage != null) storage.close(); }
 
     @Test
     public void legacyJsonPreparationSharesActiveIdentityThroughMigrationAndCompletion() throws Exception {
@@ -94,7 +95,7 @@ public class OfferCorrectionPersistenceTest {
         assertEquals(activeUuid, history(account).get(1).getUuid());
         account.prepareForUse(plugin);
         assertEquals("Preparation must keep the established identity", activeUuid, account.getLastOffers().get(3).getUuid());
-        migrateAccount();
+        persistAccount();
         assertEquals(9, quantity(reopen()));
 
         String archivedUuid = history(account).get(0).getUuid();
@@ -107,8 +108,9 @@ public class OfferCorrectionPersistenceTest {
     @Test
     public void rawLegacyJsonMigrationSharesActiveIdentityBeforeReopenAndCompletion() throws Exception {
         TradePersister persister = legacyJson(legacyOffer(5, 90), legacyOffer(4, 80), legacyOffer(5, 90));
-        assertEquals(1, new MigrationService(storage, persister).migrate());
-        reloadFromSqlite();
+        account = persister.loadAccount(ACCOUNT);
+        persistAccount();
+        reloadFromJson();
 
         assertEquals(9, quantity(account));
         String activeUuid = account.getLastOffers().get(3).getUuid();
@@ -128,8 +130,8 @@ public class OfferCorrectionPersistenceTest {
         loadLegacyJson(legacyJson(legacyOffer(5, 90), legacyOffer(5, 80)));
         String archivedUuid = history(account).get(0).getUuid();
         assertNotEquals(archivedUuid, account.getLastOffers().get(3).getUuid());
-        migrateAccount();
-        reloadFromSqlite();
+        persistAccount();
+        reloadFromJson();
         assertEquals("The deleted active partial must stay hidden after migration", 5, quantity(account));
 
         pipeline.onNewOfferEvent(offer("completed", GrandExchangeOfferState.BOUGHT, 10, 100));
@@ -147,8 +149,8 @@ public class OfferCorrectionPersistenceTest {
             assertNotEquals(offer.getUuid(), account.getLastOffers().get(3).getUuid());
         });
         assertNotEquals(archivedUuids.get(0), archivedUuids.get(1));
-        migrateAccount();
-        reloadFromSqlite();
+        persistAccount();
+        reloadFromJson();
         assertEquals(10, quantity(account));
 
         pipeline.onNewOfferEvent(offer("completed", GrandExchangeOfferState.BOUGHT, 10, 100));
@@ -178,8 +180,8 @@ public class OfferCorrectionPersistenceTest {
             assertNotEquals(offer.getUuid(), account.getLastOffers().get(3).getUuid());
         });
         long archivedQuantity = quantity(account);
-        migrateAccount();
-        reloadFromSqlite();
+        persistAccount();
+        reloadFromJson();
         assertEquals(archivedQuantity, quantity(account));
 
         pipeline.onNewOfferEvent(offer("completed", GrandExchangeOfferState.BOUGHT, 10, 100));
@@ -195,8 +197,8 @@ public class OfferCorrectionPersistenceTest {
         loadLegacyJson(legacyJson(active, archived));
         assertEquals("active", account.getLastOffers().get(3).getUuid());
         assertEquals("archived", history(account).get(0).getUuid());
-        migrateAccount();
-        reloadFromSqlite();
+        persistAccount();
+        reloadFromJson();
         assertEquals(5, quantity(account));
 
         pipeline.onNewOfferEvent(offer("completed", GrandExchangeOfferState.BOUGHT, 10, 100));
@@ -211,8 +213,8 @@ public class OfferCorrectionPersistenceTest {
         loadLegacyJson(legacyJson(legacyOffer(5, 90), historical));
         assertEquals("historical", account.getLastOffers().get(3).getUuid());
         assertEquals("historical", history(account).get(0).getUuid());
-        migrateAccount();
-        reloadFromSqlite();
+        persistAccount();
+        reloadFromJson();
 
         pipeline.onNewOfferEvent(offer("completed", GrandExchangeOfferState.BOUGHT, 10, 100));
 
@@ -225,7 +227,7 @@ public class OfferCorrectionPersistenceTest {
         String cancelled = legacyOffer(5, 100).replace("BUYING", "CANCELLED_BUY");
         loadLegacyJson(legacyJson(cancelled, cancelled));
         assertEquals(history(account).get(0).getUuid(), account.getLastOffers().get(3).getUuid());
-        migrateAccount();
+        persistAccount();
         assertEquals(5, quantity(reopen()));
 
         pipeline.onNewOfferEvent(offer("corrected", GrandExchangeOfferState.BUYING, 7, 101));
@@ -235,7 +237,7 @@ public class OfferCorrectionPersistenceTest {
     }
 
     @Test
-    public void completionReplacesOnlyTheMigratedActivePartial() {
+    public void completionReplacesOnlyTheMigratedActivePartial() throws Exception {
         migrateArchivedAndActivePartial(true);
         assertEquals(9, quantity(reopen()));
 
@@ -246,7 +248,7 @@ public class OfferCorrectionPersistenceTest {
     }
 
     @Test
-    public void hiddenActivePredecessorDoesNotMakeCompletionReplaceArchivedHistory() {
+    public void hiddenActivePredecessorDoesNotMakeCompletionReplaceArchivedHistory() throws Exception {
         // The active offer still provides slot continuity after its history was deleted.
         migrateArchivedAndActivePartial(false);
         assertEquals(4, quantity(reopen()));
@@ -258,10 +260,10 @@ public class OfferCorrectionPersistenceTest {
     }
 
     @Test
-    public void freshOfferInReusedSlotPreservesAnArchivedPartial() {
+    public void freshOfferInReusedSlotPreservesAnArchivedPartial() throws Exception {
         account.getTrades().get(0).getHistory().getCompressedOfferEvents()
             .add(offer("archived", GrandExchangeOfferState.BUYING, 4, 80));
-        migrateAccount();
+        persistAccount();
 
         pipeline.onNewOfferEvent(offer("new-start", GrandExchangeOfferState.BUYING, 0, 100));
         pipeline.onNewOfferEvent(offer("new-fill", GrandExchangeOfferState.BUYING, 3, 101));
@@ -270,7 +272,7 @@ public class OfferCorrectionPersistenceTest {
         assertArchivedFillSurvives(reopen(), 7);
     }
 
-    private void migrateArchivedAndActivePartial(boolean activeIsInHistory) {
+    private void migrateArchivedAndActivePartial(boolean activeIsInHistory) throws Exception {
         account.getTrades().get(0).getHistory().getCompressedOfferEvents()
             .add(offer("archived", GrandExchangeOfferState.BUYING, 4, 80));
         OfferEvent active = offer("active", GrandExchangeOfferState.BUYING, 5, 90);
@@ -278,12 +280,11 @@ public class OfferCorrectionPersistenceTest {
             account.getTrades().get(0).getHistory().getCompressedOfferEvents().add(active);
         }
         account.getLastOffers().put(3, active);
-        migrateAccount();
+        persistAccount();
     }
 
-    private void migrateAccount() {
-        assertEquals(1, new MigrationService(storage, new TradePersister(new Gson()))
-            .migrate(Collections.singletonMap(ACCOUNT, account)));
+    private void persistAccount() throws Exception {
+        persisted = storage.commit(persisted, codec.encodeAccount(ACCOUNT, account));
     }
 
     private void assertArchivedFillSurvives(AccountData data, long expectedQuantity) {
@@ -293,13 +294,15 @@ public class OfferCorrectionPersistenceTest {
     }
 
     @Test
-    public void cancellationCorrectionReplacesExactHistoryAndPreservesRecipeSnapshot() {
+    public void cancellationCorrectionReplacesExactHistoryAndPreservesRecipeSnapshot() throws Exception {
         pipeline.onNewOfferEvent(offer("start", GrandExchangeOfferState.BUYING, 0, 90));
         OfferEvent cancelled = offer("cancelled", GrandExchangeOfferState.CANCELLED_BUY, 5, 100);
         pipeline.onNewOfferEvent(cancelled);
-        storage.insertRecipeFlip(ACCOUNT, "recipe", new RecipeFlip(Instant.parse("2020-01-02T00:00:00Z"),
+        RecipeFlipGroup recipe = new RecipeFlipGroup("recipe");
+        recipe.addRecipeFlip(new RecipeFlip(Instant.parse("2020-01-02T00:00:00Z"),
             Collections.emptyMap(), Collections.singletonMap(ITEM,
                 Collections.singletonMap(cancelled.getUuid(), new PartialOffer(cancelled, 2))), 0L));
+        account.getRecipeFlipGroups().add(recipe);
         OfferEvent correction = offer("corrected", GrandExchangeOfferState.BUYING, 7, 101);
         assertTrue(correction.isUpdateForCancelled(cancelled));
 
@@ -317,7 +320,7 @@ public class OfferCorrectionPersistenceTest {
     }
 
     @Test
-    public void correctedFillSurvivesCollectionAndNextOfferInSameSlot() {
+    public void correctedFillSurvivesCollectionAndNextOfferInSameSlot() throws Exception {
         pipeline.onNewOfferEvent(offer("start", GrandExchangeOfferState.BUYING, 0, 90));
         pipeline.onNewOfferEvent(offer("cancelled", GrandExchangeOfferState.CANCELLED_BUY, 5, 100));
         pipeline.onNewOfferEvent(offer("corrected", GrandExchangeOfferState.BUYING, 7, 101));
@@ -331,41 +334,14 @@ public class OfferCorrectionPersistenceTest {
         assertEquals(10, quantity(reopen()));
     }
 
-    @Test
-    public void rejectedCorrectionRollsBackHistoryAndSlotWhileKeepingRecipes() throws Exception {
-        pipeline.onNewOfferEvent(offer("start", GrandExchangeOfferState.BUYING, 0, 90));
-        OfferEvent cancelled = offer("cancelled", GrandExchangeOfferState.CANCELLED_BUY, 5, 100);
-        pipeline.onNewOfferEvent(cancelled);
-        storage.insertRecipeFlip(ACCOUNT, "recipe", new RecipeFlip(Instant.parse("2020-01-02T00:00:00Z"),
-            Collections.emptyMap(), Collections.singletonMap(ITEM,
-                Collections.singletonMap(cancelled.getUuid(), new PartialOffer(cancelled, 2))), 0L));
-        try (Statement statement = storage.getConnection().createStatement()) {
-            statement.execute("CREATE TRIGGER reject_correction BEFORE INSERT ON trades " +
-                "WHEN NEW.uuid = 'corrected' BEGIN SELECT RAISE(ABORT, 'injected correction failure'); END");
-        }
-
-        try {
-            pipeline.onNewOfferEvent(offer("corrected", GrandExchangeOfferState.BUYING, 7, 101));
-            fail("The storage failure must propagate to the storage coordinator");
-        } catch (IllegalStateException expected) {
-            assertTrue(expected.getCause().getMessage().contains("injected correction failure"));
-        }
-
-        AccountData restored = reopen();
-        assertEquals("The old history must survive a failed replacement", 5, quantity(restored));
-        assertEquals("cancelled", restored.getTrades().get(0).getHistory().getCompressedOfferEvents().get(0).getUuid());
-        assertEquals("A rejected correction must preserve the cancelled offer awaiting collection",
-            "cancelled", restored.getLastOffers().get(cancelled.getSlot()).getUuid());
-        assertEquals(1, restored.getRecipeFlipGroups().get(0).getRecipeFlips().size());
-    }
-
-    private AccountData reopen() {
-        storage.close();
-        return storage.loadAccount(ACCOUNT);
+    private AccountData reopen() throws Exception {
+        persistAccount();
+        return codec.decodeAccount(ACCOUNT, new JsonJournalStore(storageDirectory, new Gson()).load());
     }
 
     private List<OfferEvent> history(AccountData data) {
-        return data.getTrades().get(0).getHistory().getCompressedOfferEvents();
+        return data.getTrades().stream().flatMap(item -> item.getHistory().getCompressedOfferEvents().stream())
+            .collect(Collectors.toList());
     }
 
     private void assertHistoryPreserved(AccountData data, long expectedQuantity, List<String> retainedUuids) {
@@ -376,24 +352,38 @@ public class OfferCorrectionPersistenceTest {
         }
     }
 
-    private void loadLegacyJson(TradePersister persister) {
-        plugin.tradePersister = persister;
-        plugin.getDataHandler().loadAccountData(ACCOUNT);
-        account = plugin.getDataHandler().getAccountData(ACCOUNT);
+    private void loadLegacyJson(TradePersister persister) throws Exception {
+        installAccount(persister.loadAccount(ACCOUNT));
+        account.markMigrated();
         assertEquals(Integer.valueOf(AccountData.CURRENT_VERSION), account.getVersion());
     }
 
-    private void reloadFromSqlite() {
-        storage.close();
-        plugin.getDataHandler().setSqliteStorage(storage);
-        plugin.getDataHandler().loadAccountData(ACCOUNT);
-        account = plugin.getDataHandler().getAccountData(ACCOUNT);
+    private void reloadFromJson() throws Exception {
+        installAccount(codec.decodeAccount(ACCOUNT, new JsonJournalStore(storageDirectory, new Gson()).load()));
+    }
+
+    private void installAccount(AccountData loaded) throws Exception {
+        loaded.prepareForUse(plugin);
+        account = loaded;
+        Field accounts = DataHandler.class.getDeclaredField("accountSpecificData");
+        accounts.setAccessible(true);
+        accounts.set(plugin.getDataHandler(), new HashMap<>(Collections.singletonMap(ACCOUNT, loaded)));
     }
 
     private TradePersister legacyJson(String slotSnapshot, String... historySnapshots) throws Exception {
         File directory = folder.newFolder();
-        String json = "{\"lastOffers\":{\"3\":" + slotSnapshot + "},\"trades\":[{\"id\":4151,"
-            + "\"name\":\"Whip\",\"fB\":\"Player\",\"h\":{\"sO\":[" + String.join(",", historySnapshots) + "]}}]}";
+        Map<Integer, List<String>> byItem = new LinkedHashMap<>();
+        byItem.put(ITEM, new ArrayList<>());
+        for (String snapshot : historySnapshots) {
+            int itemId = new JsonParser().parse(snapshot).getAsJsonObject().get("id").getAsInt();
+            byItem.computeIfAbsent(itemId, ignored -> new ArrayList<>()).add(snapshot);
+        }
+        List<String> items = new ArrayList<>();
+        byItem.forEach((id, snapshots) -> items.add("{\"id\":" + id
+            + ",\"name\":\"Whip\",\"fB\":\"Player\",\"h\":{\"sO\":["
+            + String.join(",", snapshots) + "]}}"));
+        String json = "{\"lastOffers\":{\"3\":" + slotSnapshot + "},\"trades\":["
+            + String.join(",", items) + "]}";
         Files.write(new File(directory, ACCOUNT + ".json").toPath(), json.getBytes(StandardCharsets.UTF_8));
         Constructor<TradePersister> constructor = TradePersister.class.getDeclaredConstructor(Gson.class, File.class);
         constructor.setAccessible(true);

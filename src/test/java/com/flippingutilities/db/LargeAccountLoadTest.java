@@ -1,185 +1,96 @@
 package com.flippingutilities.db;
 
 import com.flippingutilities.model.AccountData;
+import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
+import com.flippingutilities.model.PartialOffer;
+import com.flippingutilities.model.RecipeFlip;
+import com.flippingutilities.model.RecipeFlipGroup;
 import com.google.gson.Gson;
-import org.junit.After;
-import org.junit.Before;
+import com.google.gson.JsonElement;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
-import java.io.File;
 import java.nio.file.Files;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.time.Duration;
+import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.Map;
 
 import static com.flippingutilities.db.StorageTestOffers.complete;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
+/** Synthetic history exercises full in-memory loading without depending on private account files. */
 public class LargeAccountLoadTest {
-    private static final String DISPLAY_NAME = "PerfPlayer";
-    private static final String PLAYER_ID = "perf-player-id";
-    private static final int TOTAL_TRADES = 50_000;
-    private static final int ITEM_COUNT = 100;
-    private static final int FIRST_ITEM_ID = 10_000;
-    private static final int RECIPE_FLIP_COUNT = 200;
-    private static final int RECIPE_GROUP_COUNT = 10;
-    private static final int RECIPE_INPUTS_PER_FLIP = 2;
-    private static final long FIXTURE_WINDOW_MILLIS = Duration.ofDays(30).toMillis();
+    private static final String ACCOUNT = "Large account";
+    private static final int TRADES = 50_000;
+    private static final int ITEMS = 100;
+    private static final int RECIPES = 200;
+    private static final int GROUPS = 10;
+    private static final Instant TIME = Instant.parse("2026-01-01T00:00:00Z");
 
-    private File testDbFile;
-    private SqliteStorage storage;
-    private int accountId;
-    private long baseTimestamp;
-
-    @Before
-    public void setUp() throws Exception {
-        testDbFile = Files.createTempFile("perf_test_", ".db").toFile();
-        testDbFile.deleteOnExit();
-        storage = new SqliteStorage(testDbFile, new Gson());
-        storage.initializeSchema();
-        populateFixture();
-    }
-
-    @After
-    public void tearDown() {
-        if (storage != null) {
-            storage.close();
-        }
-        if (testDbFile != null && testDbFile.exists()) {
-            testDbFile.delete();
-        }
-    }
+    @Rule public TemporaryFolder folder = new TemporaryFolder();
 
     @Test
-    public void largeAccountRestoresAllTradesAndRecipes() {
-        AccountData account = storage.loadAccount(DISPLAY_NAME);
-        assertNotNull(account);
-        assertEquals(ITEM_COUNT, account.getTrades().size());
-        assertEquals(TOTAL_TRADES, account.getTrades().stream()
-            .mapToInt(item -> item.getHistory().getCompressedOfferEvents().size()).sum());
-        assertEquals(RECIPE_GROUP_COUNT, account.getRecipeFlipGroups().size());
-        assertEquals(RECIPE_FLIP_COUNT, account.getRecipeFlipGroups().stream()
-            .mapToInt(group -> group.getRecipeFlips().size()).sum());
-    }
+    public void largeAccountRestoresAllTradesAndRecipesThenAppendsOnlyItsNewTrade() throws Exception {
+        AccountData source = fixture();
+        Gson gson = new Gson();
+        JsonStorageCodec codec = new JsonStorageCodec(gson);
+        Path directory = folder.newFolder().toPath();
+        JsonJournalStore store = new JsonJournalStore(directory, gson);
+        Map<String, JsonElement> initial = codec.encodeAccount(ACCOUNT, source);
+        store.initialize(initial);
+        AccountData restored = codec.decodeAccount(ACCOUNT, new JsonJournalStore(directory, gson).load());
 
-    private void populateFixture() throws Exception {
-        storage.upsertAccount(DISPLAY_NAME, PLAYER_ID);
-
-        Integer resolvedAccountId = storage.getAccountId(DISPLAY_NAME);
-        assertNotNull("Account should be created before populating fixture", resolvedAccountId);
-        accountId = resolvedAccountId;
-        baseTimestamp = Instant.now().minus(Duration.ofDays(30)).toEpochMilli();
-
-        insertTradesFixture();
-        insertRecipeFixture();
-    }
-
-    private void insertTradesFixture() throws SQLException {
-        Connection connection = storage.getConnection();
-        boolean originalAutoCommit = connection.getAutoCommit();
-        connection.setAutoCommit(false);
-
-        String sql = "INSERT INTO trades (account_id, item_id, timestamp, qty, price, is_buy, uuid, offer_json) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            for (int i = 0; i < TOTAL_TRADES; i++) {
-                int itemId = FIRST_ITEM_ID + (i % ITEM_COUNT);
-                long timestamp = baseTimestamp + ((long) i * FIXTURE_WINDOW_MILLIS / TOTAL_TRADES);
-                int qty = 1 + (i % 20);
-                int cycle = i / ITEM_COUNT;
-                boolean isBuy = ((cycle + (itemId - FIRST_ITEM_ID)) % 2) == 0;
-                int basePrice = 10_000 + ((itemId - FIRST_ITEM_ID) * 35) + (cycle % 60);
-                int price = isBuy ? basePrice : basePrice + 175 + (cycle % 15);
-
-                OfferEvent offer = complete(DISPLAY_NAME, itemId, "perf-" + i, timestamp, qty, price, isBuy);
-
-                statement.setInt(1, accountId);
-                statement.setInt(2, itemId);
-                statement.setLong(3, timestamp);
-                statement.setInt(4, qty);
-                statement.setInt(5, price);
-                statement.setInt(6, isBuy ? 1 : 0);
-                statement.setString(7, offer.getUuid());
-                statement.setString(8, storage.serializeOffer(offer));
-                statement.addBatch();
-
-                if ((i + 1) % 1_000 == 0) {
-                    statement.executeBatch();
-                }
-            }
-            statement.executeBatch();
-            connection.commit();
-        } catch (SQLException e) {
-            connection.rollback();
-            throw e;
-        } finally {
-            connection.setAutoCommit(originalAutoCommit);
+        assertEquals(ITEMS, restored.getTrades().size());
+        assertEquals(TRADES, tradeCount(restored));
+        assertEquals(GROUPS, restored.getRecipeFlipGroups().size());
+        assertEquals(RECIPES, restored.getRecipeFlipGroups().stream().mapToInt(group -> group.getRecipeFlips().size()).sum());
+        assertEquals(recipeProfit(source), recipeProfit(restored));
+        for (int i = 0; i < ITEMS; i++) {
+            assertEquals(source.getTrades().get(i).getHistory().getCompressedOfferEvents(),
+                restored.getTrades().get(i).getHistory().getCompressedOfferEvents());
         }
+
+        OfferEvent newTrade = complete(ACCOUNT, 10_000, "new-trade", TIME.plusSeconds(TRADES + 1).toEpochMilli(), 3, 1234, true);
+        restored.getTrades().get(0).getHistory().getCompressedOfferEvents().add(newTrade);
+        store.commit(initial, codec.encodeAccount(ACCOUNT, restored));
+        assertTrue("A new trade must not rewrite a 50,000-trade history", Files.size(directory.resolve("journal.jsonl")) < 2048);
+        AccountData reopened = codec.decodeAccount(ACCOUNT, new JsonJournalStore(directory, gson).load());
+        assertEquals(TRADES + 1, tradeCount(reopened));
+        assertEquals(newTrade, reopened.getTrades().get(0).getHistory().getCompressedOfferEvents().get(TRADES / ITEMS));
+        assertEquals(recipeProfit(source), recipeProfit(reopened));
     }
 
-    private void insertRecipeFixture() throws SQLException {
-        Connection connection = storage.getConnection();
-        boolean originalAutoCommit = connection.getAutoCommit();
-        connection.setAutoCommit(false);
-
-        String recipeFlipSql = "INSERT INTO recipe_flips (account_id, timestamp, recipe_key, coin_cost, natural_key) VALUES (?, ?, ?, ?, ?)";
-        String inputSql = "INSERT INTO recipe_flip_inputs (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)";
-        String outputSql = "INSERT INTO recipe_flip_outputs (recipe_flip_id, item_id, offer_uuid, amount_consumed, offer_json) VALUES (?, ?, ?, ?, ?)";
-        try (
-            PreparedStatement recipeFlipStatement = connection.prepareStatement(recipeFlipSql, Statement.RETURN_GENERATED_KEYS);
-            PreparedStatement inputStatement = connection.prepareStatement(inputSql);
-            PreparedStatement outputStatement = connection.prepareStatement(outputSql)
-        ) {
-            for (int i = 0; i < RECIPE_FLIP_COUNT; i++) {
-                long timestamp = baseTimestamp + ((long) (i + 1) * FIXTURE_WINDOW_MILLIS / (RECIPE_FLIP_COUNT + 1));
-                recipeFlipStatement.setInt(1, accountId);
-                recipeFlipStatement.setLong(2, timestamp);
-                recipeFlipStatement.setString(3, "recipe-group-" + (i % RECIPE_GROUP_COUNT));
-                recipeFlipStatement.setInt(4, 24_500 + (i % 12) * 400);
-                recipeFlipStatement.setString(5, "perf-recipe-" + i);
-                recipeFlipStatement.executeUpdate();
-
-                long recipeFlipId = readGeneratedId(recipeFlipStatement, "recipe flip");
-                for (int input = 0; input < RECIPE_INPUTS_PER_FLIP; input++) {
-                    int itemId = FIRST_ITEM_ID + ((i * RECIPE_INPUTS_PER_FLIP + input) % ITEM_COUNT);
-                    bindRecipeComponent(inputStatement, recipeFlipId, itemId, true);
-                }
-                bindRecipeComponent(outputStatement, recipeFlipId, FIRST_ITEM_ID + 80 + (i % 10), false);
-            }
-
-            inputStatement.executeBatch();
-            outputStatement.executeBatch();
-            connection.commit();
-        } catch (SQLException e) {
-            connection.rollback();
-            throw e;
-        } finally {
-            connection.setAutoCommit(originalAutoCommit);
+    private AccountData fixture() {
+        AccountData account = new AccountData();
+        for (int i = 0; i < ITEMS; i++) {
+            account.getTrades().add(new FlippingItem(10_000 + i, "Item " + i, 70, ACCOUNT));
         }
-    }
-
-    private void bindRecipeComponent(PreparedStatement statement, long recipeFlipId, int itemId, boolean isBuy) throws SQLException {
-        OfferEvent offer = complete(DISPLAY_NAME, itemId,
-            "recipe-" + recipeFlipId + "-" + itemId + "-" + isBuy, baseTimestamp, 1, 500, isBuy);
-        statement.setLong(1, recipeFlipId);
-        statement.setInt(2, itemId);
-        statement.setString(3, offer.getUuid());
-        statement.setInt(4, 1);
-        statement.setString(5, storage.serializeOffer(offer));
-        statement.addBatch();
-    }
-
-    private long readGeneratedId(PreparedStatement statement, String label) throws SQLException {
-        try (ResultSet resultSet = statement.getGeneratedKeys()) {
-            assertTrue("Expected generated id for " + label, resultSet.next());
-            return resultSet.getLong(1);
+        for (int i = 0; i < TRADES; i++) {
+            FlippingItem item = account.getTrades().get(i % ITEMS);
+            item.getHistory().getCompressedOfferEvents().add(complete(ACCOUNT, item.getItemId(), "trade-" + i,
+                TIME.plusSeconds(i).toEpochMilli(), 1 + i % 20, 10_000 + i % 1000, i % 2 == 0));
         }
+        for (int i = 0; i < GROUPS; i++) account.getRecipeFlipGroups().add(new RecipeFlipGroup("group-" + i));
+        for (int i = 0; i < RECIPES; i++) {
+            OfferEvent input = account.getTrades().get(0).getHistory().getCompressedOfferEvents().get(i);
+            OfferEvent output = account.getTrades().get(1).getHistory().getCompressedOfferEvents().get(i);
+            RecipeFlip flip = new RecipeFlip(TIME.plusSeconds(i),
+                Collections.singletonMap(output.getItemId(), Collections.singletonMap(output.getUuid(), new PartialOffer(output, 1))),
+                Collections.singletonMap(input.getItemId(), Collections.singletonMap(input.getUuid(), new PartialOffer(input, 1))), 100);
+            account.getRecipeFlipGroups().get(i % GROUPS).addRecipeFlip(flip);
+        }
+        return account;
+    }
+
+    private int tradeCount(AccountData account) {
+        return account.getTrades().stream().mapToInt(item -> item.getHistory().getCompressedOfferEvents().size()).sum();
+    }
+
+    private long recipeProfit(AccountData account) {
+        return account.getRecipeFlipGroups().stream().flatMap(group -> group.getRecipeFlips().stream())
+            .mapToLong(RecipeFlip::getProfit).sum();
     }
 }

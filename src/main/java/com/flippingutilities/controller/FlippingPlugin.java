@@ -26,10 +26,7 @@
 
 package com.flippingutilities.controller;
 
-import com.flippingutilities.SqliteMaintenanceAction;
 import com.flippingutilities.FlippingConfig;
-import com.flippingutilities.db.SqliteStorage;
-import net.runelite.client.RuneLite;
 import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.jobs.SlotSenderJob;
 import com.flippingutilities.jobs.TimeseriesFetcher;
@@ -92,7 +89,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
-import java.util.function.Consumer;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -106,15 +102,7 @@ public class FlippingPlugin extends Plugin {
     public static final String CONFIG_GROUP = "flipping";
     public static final String ACCOUNT_WIDE = "Accountwide";
 
-    private static final Set<String> AUTO_SAVE_CONFIG_KEYS = Set.of(
-        FlippingConfig.AUTO_SAVE_ENABLED,
-        FlippingConfig.AUTO_SAVE_INTERVAL,
-        FlippingConfig.SHOW_AUTO_SAVE_DISPLAY
-    );
-    private static final Set<String> AUTO_SAVE_TASK_KEYS = Set.of(
-        FlippingConfig.AUTO_SAVE_ENABLED,
-        FlippingConfig.AUTO_SAVE_INTERVAL
-    );
+
 
     @Inject
     @Getter
@@ -201,8 +189,6 @@ public class FlippingPlugin extends Plugin {
 
     private ScheduledFuture slotTimersTask;
     private ScheduledFuture autoSaveTask;
-    @Getter
-    private Instant nextScheduledAutoSave;
 
     @Getter
     private int loginTickCount;
@@ -238,7 +224,8 @@ public class FlippingPlugin extends Plugin {
     @Inject
     private OfferGraphChartOverlay offerGraphChartOverlay;
 
-    private final StorageController storageController = new StorageController(this, this::createSqliteStorage);
+    private volatile boolean storageReady;
+    private volatile long lifecycleGeneration;
 
     public void setUpdateSinceLastItemAccountWideBuild(boolean changed) {
         accountViewHandler.setItemsChanged(changed);
@@ -252,25 +239,14 @@ public class FlippingPlugin extends Plugin {
         return flippingItemHandler;
     }
 
-    public SqliteStorage getSqliteStorage() {
-        return storageController.getSqliteStorage();
-    }
-
-    public void submitStorageTask(Consumer<SqliteStorage> task) {
-        storageController.submitStorageTask(task);
-    }
-
-    boolean isStorageFailed(SqliteStorage storage) {
-        return storageController.isStorageFailed(storage);
-    }
-
-    void recoverFromStorageFailure(SqliteStorage storage, Exception failure) {
-        storageController.recoverFromStorageFailure(storage, failure);
-    }
-
     @Override
     protected void startUp() {
+        final long startupGeneration = ++lifecycleGeneration;
+        eventsReceivedBeforeFullLogin.clear();
         accountCurrentlyViewed = ACCOUNT_WIDE;
+        currentlyLoggedInAccount = null;
+        previouslyLoggedIn = false;
+        storageReady = false;
 
         tradePersister = new TradePersister(gson);
         recipeHandler = new RecipeHandler(gson, httpClient, null);
@@ -278,7 +254,6 @@ public class FlippingPlugin extends Plugin {
 
         optionHandler = new OptionHandler(this);
         dataHandler = new DataHandler(this);
-        storageController.initializeStorage();
         gameUiChangesHandler = new GameUiChangesHandler(this, eventBus);
         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
         apiAuthHandler = new ApiAuthHandler(this);
@@ -302,23 +277,32 @@ public class FlippingPlugin extends Plugin {
 
         clientToolbar.addNavigation(navButton);
         keyManager.registerKeyListener(offerEditorKeyListener());
+        java.util.concurrent.CompletableFuture<com.flippingutilities.db.JsonStorage.LoadedData> initialData = dataHandler.readDataAsync();
         clientThread.invokeLater(() ->
         {
+            if (startupGeneration != lifecycleGeneration) return true;
             switch (client.getGameState()) {
                 case STARTING:
                 case UNKNOWN:
                     return false;
             }
 
-            dataHandler.loadData();
-            // Load the authoritative view before starting an import. Imports never replace
-            // that view, so offers arriving while they run remain visible.
-            storageController.migrateLoadedData();
+            if (!initialData.isDone()) return false;
+            try {
+                dataHandler.installLoadedData(initialData.join());
+            } catch (RuntimeException failure) {
+                log.error("Cannot load JSON storage; original files were preserved", failure);
+                SwingUtilities.invokeLater(() -> javax.swing.JOptionPane.showMessageDialog(masterPanel,
+                    "Trading data could not be loaded. Original files were preserved.\n" + dataHandler.getStorageError(),
+                    "Flipping Utilities storage", javax.swing.JOptionPane.ERROR_MESSAGE));
+                return true;
+            }
+            storageReady = true;
+            setUpdateSinceLastItemAccountWideBuild(true);
+            setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
-            if (config.autoSaveEnabled()) {
-                autoSaveTask = startAutoSave();
-            }
+            autoSaveTask = startAutoSave();
             startJobs();
             apiAuthHandler.subscribeToPremiumChecking((isPremium) -> { if (isPremium) WikiDataFetcherJob.requestInterval = 30; });
             apiAuthHandler.checkExistingJwt().thenRun(() -> apiAuthHandler.setPremiumStatus());
@@ -334,12 +318,9 @@ public class FlippingPlugin extends Plugin {
         });
     }
 
-    protected SqliteStorage createSqliteStorage() {
-        return new SqliteStorage(new File(RuneLite.RUNELITE_DIR, "flipping/flipping.db"), gson);
-    }
-
     @Override
     protected void shutDown() {
+        lifecycleGeneration++;
         log.debug("shutdown running!");
         if (generalRepeatingTasks != null) {
             generalRepeatingTasks.cancel(true);
@@ -354,9 +335,16 @@ public class FlippingPlugin extends Plugin {
             autoSaveTask = null;
         }
         masterPanel.dispose();
+        if (cacheUpdaterJob != null) cacheUpdaterJob.stop();
+        if (wikiDataFetcherJob != null) wikiDataFetcherJob.stop();
+        if (slotStateSenderJob != null) slotStateSenderJob.stop();
 
-        dataHandler.storeData();
-        storageController.shutDownStorage();
+        storageReady = false;
+        try {
+            dataHandler.close().get();
+        } catch (Exception failure) {
+            log.error("Could not finish saving JSON storage on plugin shutdown", failure);
+        }
 
         clientToolbar.removeNavigation(navButton);
     }
@@ -364,6 +352,9 @@ public class FlippingPlugin extends Plugin {
     //called when the X button on the client is pressed
     @Subscribe(priority = 101)
     public void onClientShutdown(ClientShutdown clientShutdownEvent) {
+        lifecycleGeneration++;
+        storageReady = false;
+        if (autoSaveTask != null) autoSaveTask.cancel(false);
         if (generalRepeatingTasks != null) {
             generalRepeatingTasks.cancel(true);
         }
@@ -371,8 +362,7 @@ public class FlippingPlugin extends Plugin {
             slotTimersTask.cancel(true);
             slotTimersTask = null;
         }
-        dataHandler.storeData();
-        Future<?> closed = storageController.shutDownStorage();
+        Future<?> closed = dataHandler.close();
         if (closed != null) {
             clientShutdownEvent.waitFor(closed);
         }
@@ -383,6 +373,7 @@ public class FlippingPlugin extends Plugin {
 
     @Subscribe
     public void onGameStateChanged(GameStateChanged event) {
+        if (!storageReady) return;
         if (event.getGameState() == GameState.LOGGED_IN) {
             onLoggedInGameState();
         } else if (event.getGameState() == GameState.LOGIN_SCREEN && previouslyLoggedIn) {
@@ -397,6 +388,7 @@ public class FlippingPlugin extends Plugin {
         //keep scheduling this task until it returns true (when we have access to a display name)
         clientThread.invokeLater(() ->
         {
+            if (!storageReady) return true;
             //we return true in this case as something went wrong and somehow the state isn't logged in, so we don't
             //want to keep scheduling this task.
             if (client.getGameState() != GameState.LOGGED_IN) {
@@ -477,7 +469,8 @@ public class FlippingPlugin extends Plugin {
     public void handleLogout() {
         log.debug("{} is logging out", currentlyLoggedInAccount);
 
-        dataHandler.getAccountData(currentlyLoggedInAccount).setLastSessionTimeUpdate(null);
+        dataHandler.viewAccountData(currentlyLoggedInAccount).setLastSessionTimeUpdate(null);
+        dataHandler.markSessionTimeChanged(currentlyLoggedInAccount);
         dataHandler.storeData();
 
         if (slotTimersTask != null && !slotTimersTask.isCancelled()) {
@@ -501,8 +494,10 @@ public class FlippingPlugin extends Plugin {
             try {
                 flippingPanel.updateTimerDisplays();
                 statPanel.updateTimeDisplay();
-                sessionTimeHandler.updateSessionTime();
-                if (config.autoSaveEnabled()) {
+                clientThread.invokeLater(() -> {
+                    if (storageReady) sessionTimeHandler.updateSessionTime();
+                });
+                if (storageReady) {
                     statPanel.updateAutoSaveDisplay();
                 }
             } catch (ConcurrentModificationException e) {
@@ -627,50 +622,16 @@ public class FlippingPlugin extends Plugin {
      * @param fileName name of the file which was modified.
      */
     public void onDirectoryUpdate(String fileName) {
-        if (!fileName.endsWith(".json") || fileName.endsWith(".backup.json")
-            || fileName.endsWith(".special.json") || fileName.equalsIgnoreCase("trades.json")) {
-            return;
-        }
-        String displayNameOfChangedAcc = fileName.substring(0, fileName.length() - ".json".length());
-
-        if (displayNameOfChangedAcc.equals(dataHandler.thisClientLastStored)) {
-            log.debug("not reloading data for {} into the cache as this client was the last one to store it", displayNameOfChangedAcc);
-            dataHandler.thisClientLastStored = null;
-            return;
-        }
-
-        if (displayNameOfChangedAcc.equalsIgnoreCase(ACCOUNT_WIDE)) {
-            executor.schedule(() -> {
-                dataHandler.loadAccountWideData();
-            }, 1000, TimeUnit.MILLISECONDS);
-            return;
-        }
-
-        executor.schedule(() ->
-        {
-            //have to run on client thread cause loadAccount calls accountData.prepareForUse which uses the itemmanager
-            clientThread.invokeLater(() -> {
-                log.debug("second has passed, updating cache for {}", displayNameOfChangedAcc);
-                dataHandler.loadAccountData(displayNameOfChangedAcc);
-                if (!masterPanel.getViewSelectorItems().contains(displayNameOfChangedAcc)) {
-                    masterPanel.getAccountSelector().addItem(displayNameOfChangedAcc);
-                }
-
-                if (dataHandler.getCurrentAccounts().size() > 1) {
-                    masterPanel.getAccountSelector().setVisible(true);
-                }
-
-                setUpdateSinceLastItemAccountWideBuild(true);
-
-                //rebuildItemsDisplay if you are currently looking at the account who's cache just got updated or the account wide view.
-                if (isAccountInCurrentView(displayNameOfChangedAcc)) {
-                    List<FlippingItem> tradesForCurrentView = viewItemsForCurrentView();
-                    flippingPanel.rebuild(tradesForCurrentView);
-                    statPanel.rebuildItemsDisplay(tradesForCurrentView);
-                    statPanel.rebuildRecipesDisplay(viewRecipeFlipGroupsForCurrentView());
-                }
-            });
-        }, 1000, TimeUnit.MILLISECONDS);
+        if (!fileName.equals("journal.jsonl") && !fileName.equals("checkpoint.json")) return;
+        dataHandler.refreshExternalData(() -> {
+            masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
+            setUpdateSinceLastItemAccountWideBuild(true);
+            setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
+            List<FlippingItem> items = viewItemsForCurrentView();
+            flippingPanel.rebuild(items);
+            statPanel.rebuildItemsDisplay(items);
+            statPanel.rebuildRecipesDisplay(viewRecipeFlipGroupsForCurrentView());
+        });
     }
 
     public List<FlippingItem> sortItems(List<FlippingItem> items, SORT sort, Instant startOfInterval) {
@@ -737,11 +698,7 @@ public class FlippingPlugin extends Plugin {
         favoriteHandler.setFavoriteCodeOnAllAccounts(item, favoriteCode);
     }
 
-    /**
-     * Single-account favorite toggle: unlike the account-wide variant, the panel updates the
-     * FlippingItem itself, so this only persists the change to the active backend. Without the
-     * upsert, SQLite mode restarts revert the toggle (JSON stays authoritative in memory only).
-     */
+    /** Marks an item changed after a single-account favorite toggle in the panel. */
     public void persistFavoriteOnAccount(String accountName, FlippingItem item) {
         favoriteHandler.persistFavoriteOnAccount(accountName, item);
     }
@@ -751,18 +708,12 @@ public class FlippingPlugin extends Plugin {
         favoriteHandler.persistFavoriteCodeOnAccount(accountName, item);
     }
 
-    /**
-     * Persist the deletion of a single recipe flip (per-flip delete button) to SQLite so it
-     * does not reappear after a restart. No-op in JSON mode. Best-effort.
-     */
+    /** Marks the affected account after deleting one recipe flip. */
     public void deleteRecipeFlipFromStorage(String recipeKey, RecipeFlip flip) {
         recipeFlipHandler.deleteRecipeFlipFromStorage(recipeKey, flip);
     }
 
-    /**
-     * Persist the interval-reset deletion of one recipe group's flips (recipe group panel
-     * reset) to SQLite, scoped to that group's recipe key. No-op in JSON mode. Best-effort.
-     */
+    /** Marks the affected account after resetting a recipe interval. */
     public void deleteRecipeFlipsSinceFromStorage(String recipeKey, Instant since) {
         recipeFlipHandler.deleteRecipeFlipsSinceFromStorage(recipeKey, since);
     }
@@ -881,11 +832,6 @@ public class FlippingPlugin extends Plugin {
 
     public void deleteAccount(String displayName) {
         dataHandler.deleteAccount(displayName);
-        if (getSqliteStorage() != null) {
-            // SQLite mode must delete its copy too, otherwise the account resurrects on the
-            // next reloadFromSqlite()/restart. Best-effort on the executor.
-            submitStorageTask(storage -> storage.deleteAccountData(displayName));
-        }
         if (accountCurrentlyViewed.equals(displayName)) {
             masterPanel.getAccountSelector().setSelectedItem(dataHandler.getCurrentAccounts().toArray()[0]);
         }
@@ -909,19 +855,12 @@ public class FlippingPlugin extends Plugin {
     }
 
     private ScheduledFuture startAutoSave() {
-        int intervalMinutes = config.autoSaveInterval();
-        log.debug("Starting auto-save task with interval of {} minutes", intervalMinutes);
-        nextScheduledAutoSave = Instant.now().plus(intervalMinutes, ChronoUnit.MINUTES);
-        return executor.scheduleAtFixedRate(() -> {
-            try {
-                log.debug("Auto-save executing");
-                dataHandler.storeData();
-                nextScheduledAutoSave = Instant.now().plus(config.autoSaveInterval(), ChronoUnit.MINUTES);
-                SwingUtilities.invokeLater(() -> statPanel.updateAutoSaveDisplay());
-            } catch (Exception e) {
-                log.error("Exception during auto-save", e);
-            }
-        }, intervalMinutes, intervalMinutes, TimeUnit.MINUTES);
+        // Saving is always enabled. Capture after game events; disk writes run on the ordered I/O queue.
+        return executor.scheduleAtFixedRate(() -> clientThread.invokeLater(() -> {
+            if (!storageReady) return;
+            dataHandler.storeData();
+            SwingUtilities.invokeLater(() -> statPanel.updateAutoSaveDisplay());
+        }), 1, 1, TimeUnit.SECONDS);
     }
 
     //see RecipeHandler.getItemsInRecipe
@@ -957,7 +896,7 @@ public class FlippingPlugin extends Plugin {
     }
 
     public void toggleEnhancedSlots(boolean shouldEnhance) {
-        dataHandler.getAccountWideData().setEnhancedSlots(shouldEnhance);
+        dataHandler.viewAccountWideData().setEnhancedSlots(shouldEnhance);
         dataHandler.markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
         if (shouldEnhance) {
             slotStateDrawer.refreshSlotVisuals();
@@ -968,7 +907,7 @@ public class FlippingPlugin extends Plugin {
     }
 
     public boolean shouldEnhanceSlots() {
-        return dataHandler.getAccountWideData().isEnhancedSlots();
+        return dataHandler.viewAccountWideData().isEnhancedSlots();
     }
 
     @Subscribe
@@ -982,20 +921,6 @@ public class FlippingPlugin extends Plugin {
         }
 
         handleSlotTimersConfigChange(event);
-        handleAutoSaveConfigChange(event);
-        // Live-switch the storage backend when the data source config changes.
-        if (event.getKey().equals(FlippingConfig.DATA_SOURCE)) {
-            storageController.switchStorageBackend();
-            return;
-        }
-
-        if (event.getKey().equals(FlippingConfig.SQLITE_MAINTENANCE)) {
-            SqliteMaintenanceAction action = config.sqliteMaintenance();
-            if (action != SqliteMaintenanceAction.NONE) {
-                storageController.handleSqliteMaintenance(action);
-            }
-        }
-
         statPanel.rebuildItemsDisplay(viewItemsForCurrentView());
         flippingPanel.rebuild(viewItemsForCurrentView());
     }
@@ -1016,29 +941,4 @@ public class FlippingPlugin extends Plugin {
         dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().forEach(SlotActivityTimer::resetToDefault);
     }
 
-    private void handleAutoSaveConfigChange(ConfigChanged event) {
-        String eventKey = event.getKey();
-        if (!AUTO_SAVE_CONFIG_KEYS.contains(eventKey)) {
-            return;
-        }
-
-        if (AUTO_SAVE_TASK_KEYS.contains(eventKey)) {
-            cancelAutoSaveTask();
-
-            if (config.autoSaveEnabled()) {
-                autoSaveTask = startAutoSave();
-            }
-        }
-
-        SwingUtilities.invokeLater(() -> statPanel.updateAutoSaveDisplay());
-    }
-
-    private void cancelAutoSaveTask() {
-        if (autoSaveTask == null) {
-            return;
-        }
-        autoSaveTask.cancel(true);
-        autoSaveTask = null;
-        nextScheduledAutoSave = null;
-    }
 }
