@@ -301,13 +301,14 @@ public class MasterPanel extends PluginPanel
 			accountSelector.addItem(FlippingPlugin.ACCOUNT_WIDE);
 			existing.add(FlippingPlugin.ACCOUNT_WIDE);
 		}
+		// Removing a selected item can synchronously select its also-deleted predecessor.
+		if (selectedAccount == null || !expected.contains(selectedAccount)) {
+			accountSelector.setSelectedItem(FlippingPlugin.ACCOUNT_WIDE);
+		}
 		for (int index = accountSelector.getItemCount() - 1; index >= 0; index--) {
 			if (!expected.contains(accountSelector.getItemAt(index))) accountSelector.removeItemAt(index);
 		}
 		expected.stream().filter(name -> !existing.contains(name)).forEach(accountSelector::addItem);
-		if (selectedAccount == null || !expected.contains(selectedAccount)) {
-			accountSelector.setSelectedItem(FlippingPlugin.ACCOUNT_WIDE);
-		}
 	}
 
 	/**
