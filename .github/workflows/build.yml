@@ -1,0 +1,100 @@
+name: Build and Plugin Hub checks
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PLUGIN_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+  PLUGIN_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  build:
+    name: Java 11 build and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.PLUGIN_REPOSITORY }}
+          ref: ${{ env.PLUGIN_COMMIT }}
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Set up Gradle and validate wrapper
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-provider: basic
+
+      - name: Compile, test and package
+        shell: bash
+        run: |
+          token="$(openssl rand -hex 32)"
+          echo "::add-mask::$token"
+          echo "::stop-commands::$token"
+          trap 'echo "::$token::"' EXIT
+          ./gradlew clean build --no-daemon --console=plain
+
+      - name: Upload test reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-reports
+          path: |
+            build/reports/tests/test/
+            build/test-results/test/*.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+  plugin-hub:
+    name: RuneLite Plugin Hub packaging
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.PLUGIN_REPOSITORY }}
+          ref: ${{ env.PLUGIN_COMMIT }}
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Build with the official Plugin Hub packager
+        shell: bash
+        run: bash .github/scripts/check-plugin-hub.sh
+
+      - name: Upload Plugin Hub feedback and package
+        id: artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: plugin-hub-check
+          path: build/plugin-hub/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Link Plugin Hub artifacts
+        if: ${{ always() && steps.artifacts.outputs.artifact-url != '' }}
+        env:
+          ARTIFACT_URL: ${{ steps.artifacts.outputs.artifact-url }}
+        run: printf '\n[Download Plugin Hub logs and artifacts](%s)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
