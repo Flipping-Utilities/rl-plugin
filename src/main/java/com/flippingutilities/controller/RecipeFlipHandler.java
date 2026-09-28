@@ -7,7 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 
-/** Applies recipe flip changes to the viewed account and queues their persistence. */
+/** Applies recipe flip changes to the viewed account and marks them for persistence. */
 @Slf4j
 final class RecipeFlipHandler {
     private final FlippingPlugin plugin;
@@ -17,29 +17,19 @@ final class RecipeFlipHandler {
     }
 
     public void deleteRecipeFlipFromStorage(String recipeKey, RecipeFlip flip) {
-        if (plugin.getSqliteStorage() == null) {
-            return;
-        }
         final String account = pluginAccountForRecipeWrites();
         if (account == null || flip == null || flip.getTimeOfCreation() == null) {
             return;
         }
-        final String key = recipeKey;
-        final Instant created = flip.getTimeOfCreation();
-        plugin.submitStorageTask(storage -> storage.deleteRecipeFlip(account, key, created));
+        plugin.getDataHandler().markDataAsHavingChanged(account);
     }
 
     public void deleteRecipeFlipsSinceFromStorage(String recipeKey, Instant since) {
-        if (plugin.getSqliteStorage() == null) {
-            return;
-        }
         final String account = pluginAccountForRecipeWrites();
         if (account == null || recipeKey == null) {
             return;
         }
-        final String key = recipeKey;
-        final Instant start = since;
-        plugin.submitStorageTask(storage -> storage.deleteRecipeFlipsSince(account, key, start));
+        plugin.getDataHandler().markDataAsHavingChanged(account);
     }
 
     /** Recipe deletions target a real account; the account-wide view blocks them. */
@@ -53,8 +43,7 @@ final class RecipeFlipHandler {
 
     public void addRecipeFlip(RecipeFlip recipeFlip, Recipe recipe) {
         if (plugin.isAccountWideView()) {
-            // The account-wide pseudo view has no AccountData to attach the flip to (and
-            // persisting it would create a bogus "Accountwide" account in the DB).
+            // The account-wide pseudo view has no AccountData to attach the flip to.
             log.warn("Cannot create a recipe flip from the account-wide view; switch to a specific account first");
             return;
         }
@@ -62,13 +51,6 @@ final class RecipeFlipHandler {
         plugin.getRecipeHandler().addRecipeFlip(account.getRecipeFlipGroups(), recipeFlip, recipe);
         plugin.setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
 
-        // Persist live-created recipe flips to SQLite, otherwise they are lost on the next
-        // reload in SQLite mode (they only lived in memory/JSON). Best-effort on the executor.
-        if (plugin.getSqliteStorage() != null) {
-            final String accountName = plugin.getAccountCurrentlyViewed();
-            final String recipeKey = RecipeHandler.createRecipeKey(recipe);
-            final RecipeFlip snapshot = recipeFlip.clone();
-            plugin.submitStorageTask(storage -> storage.insertRecipeFlip(accountName, recipeKey, snapshot));
-        }
+        plugin.getDataHandler().markDataAsHavingChanged(plugin.getAccountCurrentlyViewed());
     }
 }

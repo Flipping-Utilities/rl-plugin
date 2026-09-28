@@ -95,8 +95,8 @@ public class SlotSenderJob {
      * as the offer from client.getGrandExchangeOffers() is missing that information.
      */
     private List<SlotState> getCurrentSlots() {
-        Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
-        List<SlotActivityTimer> slotActivityTimers = plugin.getDataHandler().getAccountData(plugin.getCurrentlyLoggedInAccount()).getSlotTimers();
+        Map<Integer, OfferEvent> lastOfferEventForEachSlot = plugin.getDataHandler().viewAccountData(plugin.getCurrentlyLoggedInAccount()).getLastOffers();
+        List<SlotActivityTimer> slotActivityTimers = plugin.getDataHandler().viewAccountData(plugin.getCurrentlyLoggedInAccount()).getSlotTimers();
         List<SlotState> slotStates = new ArrayList<>();
         for (int i = 0; i < 8; i++) {
             GrandExchangeOffer grandExchangeOffer = plugin.getClient().getGrandExchangeOffers()[i];
@@ -104,7 +104,8 @@ public class SlotSenderJob {
             OfferEvent trueOfferInSlot = this.getOfferEventConstructedFromClient(i);
 
             if (lastOfferEventForEachSlot.containsKey(i)) {
-                OfferEvent lastOfferEventForSlotTrackedByPlugin = lastOfferEventForEachSlot.get(i);
+                // Decorate only the outgoing payload, never the persisted account model.
+                OfferEvent lastOfferEventForSlotTrackedByPlugin = lastOfferEventForEachSlot.get(i).clone();
                 lastOfferEventForSlotTrackedByPlugin.setListedPrice(grandExchangeOffer.getPrice());
                 lastOfferEventForSlotTrackedByPlugin.setSpent(grandExchangeOffer.getSpent());
                 if (i < slotActivityTimers.size()) {

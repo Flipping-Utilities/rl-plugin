@@ -27,163 +27,70 @@
 package com.flippingutilities.jobs;
 
 import com.flippingutilities.db.TradePersister;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
-import java.nio.file.*;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-/**
- * Updates the cache in real time as files are changed in the directory being monitored. It monitors the directory
- * where the accounts' data is stored and fires any registered callbacks when it detects a change for an account.
- * The reason it accepts callbacks is so that this class is not tied to any specific component's way of handling a file
- * change. This decoupling allows the cache updater to be used easily by any component that wishes to fire an action
- * when a file for an account is changed.
- */
+/** Checks the two storage files without walking account histories or retaining a WatchService. */
 @Slf4j
-public class CacheUpdaterJob
-{
-	ScheduledExecutorService executor;
+public class CacheUpdaterJob {
+    private final Path directory;
+    private final List<Consumer<String>> subscribers = new CopyOnWriteArrayList<>();
+    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(
+        new ThreadFactoryBuilder().setNameFormat("flipping-json-watch-%d").setDaemon(true).build());
+    private ScheduledFuture<?> task;
+    private Object previous;
 
-	List<Consumer<String>> subscribers = new ArrayList<>();
+    public CacheUpdaterJob() {
+        this(TradePersister.PARENT_DIRECTORY.toPath().resolve("json-v2"));
+    }
 
-	boolean isBeingShutdownByClient = false;
+    CacheUpdaterJob(Path directory) {
+        this.directory = directory;
+    }
 
-	Future realTimeUpdateTask;
+    public void subscribe(Consumer<String> callback) { subscribers.add(callback); }
 
-	Map<String, Long> lastEvents = new HashMap<>();
+    public synchronized void start() {
+        if (task == null && !executor.isShutdown()) {
+            task = executor.scheduleWithFixedDelay(this::updateCacheRealTime, 1, 1, TimeUnit.SECONDS);
+        }
+    }
 
-	int requiredMinMsSinceLastUpdate = 5;
-	int failureCount;
-	int failureThreshold = 2;
+    public synchronized void stop() {
+        if (task != null) task.cancel(false);
+        executor.shutdown();
+    }
 
+    public void updateCacheRealTime() {
+        try {
+            Object current = Arrays.asList(stamp(directory.resolve("checkpoint.json")),
+                stamp(directory.resolve("journal.jsonl")));
+            if (!Objects.equals(previous, current)) {
+                previous = current;
+                subscribers.forEach(callback -> callback.accept("journal.jsonl"));
+            }
+        } catch (IOException | RuntimeException failure) {
+            log.warn("Could not check JSON storage for updates; will retry", failure);
+        }
+    }
 
-	public CacheUpdaterJob()
-	{
-		this.executor = Executors.newSingleThreadScheduledExecutor();
-	}
-
-	public void subscribe(Consumer<String> callback)
-	{
-		subscribers.add(callback);
-	}
-
-	public void start()
-	{
-		realTimeUpdateTask = executor.schedule(this::updateCacheRealTime, 1000, TimeUnit.MILLISECONDS);
-	}
-
-	public void stop()
-	{
-		isBeingShutdownByClient = true;
-		realTimeUpdateTask.cancel(true);
-	}
-
-	public void updateCacheRealTime()
-	{
-		try
-		{
-			log.debug("starting cache updater job!");
-			WatchService watchService = FileSystems.getDefault().newWatchService();
-
-			Path path = TradePersister.PARENT_DIRECTORY.toPath();
-
-			path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_MODIFY);
-
-			WatchKey key;
-			while ((key = watchService.take()) != null)
-			{
-				for (WatchEvent<?> event : key.pollEvents())
-				{
-					log.debug("change in directory for {} with event: {}", event.context(), event.kind());
-					if (!isDuplicateEvent(event.context().toString()))
-					{
-						log.debug("not duplicate event, firing callbacks");
-						subscribers.forEach(subscriber -> subscriber.accept(event.context().toString()));
-					}
-					else
-					{
-						log.debug("duplicate event, not firing callbacks");
-					}
-
-				}
-				//put the key back in the queue so we can take out more events when they occur
-				key.reset();
-				failureCount = 0;
-			}
-		}
-
-		catch (IOException | InterruptedException e)
-		{
-			if (!isBeingShutdownByClient)
-			{
-				log.warn("exception in updateCacheRealTime, Error = {}", e);
-				onUnexpectedError();
-			}
-
-			else
-			{
-				onClientShutdown();
-			}
-		}
-
-		catch (Exception e)
-		{
-			log.warn("unknown exception in updateCacheRealTime, task is going to stop. Error = {}", e);
-		}
-	}
-
-	private void onUnexpectedError()
-	{
-		log.debug("Failure number: {} Error not caused by client shutdown", failureCount);
-		failureCount++;
-		if (failureCount > failureThreshold)
-		{
-			log.warn("number of failures exceeds failure threshold, not scheduling task again");
-			return;
-		}
-
-		else
-		{
-			log.debug("failure count below threshold, scheduling task again");
-			realTimeUpdateTask = executor.schedule(this::updateCacheRealTime, 1000, TimeUnit.MILLISECONDS);
-		}
-	}
-
-	private void onClientShutdown()
-	{
-		log.debug("shutting down cache updater due to the client shutdown");
-	}
-
-	private boolean isDuplicateEvent(String fileName)
-	{
-		long lastModified = TradePersister.lastModified(fileName);
-		if (lastEvents.containsKey(fileName))
-		{
-			long prevModificationTime = lastEvents.get(fileName);
-			long diffSinceLastModification = Math.abs(lastModified - prevModificationTime);
-			if (diffSinceLastModification < requiredMinMsSinceLastUpdate)
-			{
-				return true;
-			}
-			else
-			{
-				lastEvents.put(fileName, lastModified);
-				return false;
-			}
-		}
-		else
-		{
-			lastEvents.put(fileName, lastModified);
-			return false;
-		}
-	}
+    private Object stamp(Path path) throws IOException {
+        if (!Files.exists(path)) return null;
+        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
+        return Arrays.asList(attrs.fileKey(), attrs.size(), attrs.lastModifiedTime());
+    }
 }

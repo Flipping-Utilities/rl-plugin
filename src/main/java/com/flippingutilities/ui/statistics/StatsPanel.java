@@ -27,6 +27,7 @@
 package com.flippingutilities.ui.statistics;
 
 import com.flippingutilities.controller.FlippingPlugin;
+import com.flippingutilities.controller.DataHandler;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.statistics.items.FlippingItemPanel;
 import com.flippingutilities.ui.statistics.items.FlippingItemContainerPanel;
@@ -87,8 +88,8 @@ public class StatsPanel extends JPanel
 	private final JLabel totalFlipsText = new JLabel("Total Flips Made: ");
 	private final JLabel taxPaidText = new JLabel("Tax paid: ");
 	private final JLabel sessionTimeText = new JLabel("Session Time: ");
-	private final JLabel autoSaveText = new JLabel("Next auto-save: ");
-	private final JLabel[] textLabelArray = {hourlyProfitText, roiText, totalFlipsText, taxPaidText, sessionTimeText};
+	private final JLabel storageText = new JLabel("Storage: ");
+	private final JLabel[] textLabelArray = {hourlyProfitText, roiText, totalFlipsText, taxPaidText, sessionTimeText, storageText};
 
 	/* Subinfo value labels */
 	private final JLabel hourlyProfitVal = new JLabel("", SwingConstants.RIGHT);
@@ -96,16 +97,16 @@ public class StatsPanel extends JPanel
 	private final JLabel totalFlipsVal = new JLabel("", SwingConstants.RIGHT);
 	private final JLabel taxPaidVal = new JLabel("", SwingConstants.RIGHT);
 	private final JLabel sessionTimeVal = new JLabel("", SwingConstants.RIGHT);
-	private final JLabel autoSaveVal = new JLabel("", SwingConstants.RIGHT);
-	private final JLabel[] valLabelArray = {hourlyProfitVal, roiVal, totalFlipsVal, taxPaidVal, sessionTimeVal};
+	private final JLabel storageVal = new JLabel("Saved", SwingConstants.RIGHT);
+	private final JLabel[] valLabelArray = {hourlyProfitVal, roiVal, totalFlipsVal, taxPaidVal, sessionTimeVal, storageVal};
 
 	private final JPanel hourlyProfitPanel = new JPanel(new BorderLayout());
 	private final JPanel roiPanel = new JPanel(new BorderLayout());
 	private final JPanel totalFlipsPanel = new JPanel(new BorderLayout());
 	private final JPanel taxPaidPanel = new JPanel(new BorderLayout());
 	private final JPanel sessionTimePanel = new JPanel(new BorderLayout());
-	private final JPanel autoSavePanel = new JPanel(new BorderLayout());
-	private final JPanel[] subInfoPanelArray = {hourlyProfitPanel, roiPanel, totalFlipsPanel, taxPaidPanel, sessionTimePanel};
+	private final JPanel storagePanel = new JPanel(new BorderLayout());
+	private final JPanel[] subInfoPanelArray = {hourlyProfitPanel, roiPanel, totalFlipsPanel, taxPaidPanel, sessionTimePanel, storagePanel};
 
 	//Contains the unix time of the start of the interval.
 	@Getter
@@ -152,6 +153,7 @@ public class StatsPanel extends JPanel
 		add(createTopPanel(searchBar), BorderLayout.NORTH);
 		add(createTabGroupContainer(tabGroup, mainDisplay), BorderLayout.CENTER);
 		setBorder(new EmptyBorder(5,7,0,7));
+		updateAutoSaveDisplay();
 	}
 
 	private JPanel createTabGroupContainer(FastTabGroup tabGroup, JPanel mainDisplay) {
@@ -364,8 +366,6 @@ public class StatsPanel extends JPanel
 
 	public void updateCumulativeDisplays(List<FlippingItem> tradesList, List<RecipeFlipGroup> recipeFlipGroups)
 	{
-		subInfoPanel.remove(autoSavePanel);
-
 		if (!Objects.equals(timeIntervalDropdown.getSelectedItem(), "Session"))
 		{
 			subInfoPanel.remove(sessionTimePanel);
@@ -765,9 +765,6 @@ public class StatsPanel extends JPanel
 		sessionTimeVal.setPreferredSize(new Dimension(200, 0));
 		sessionTimeVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
 
-		autoSaveText.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
-		autoSaveVal.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
-
 		//Profit total over the selected time interval
 		totalProfitVal.setFont(StyleContext.getDefaultStyleContext()
 			.getFont(FontManager.getRunescapeBoldFont().getName(), Font.PLAIN, 28));
@@ -864,7 +861,7 @@ public class StatsPanel extends JPanel
 			panel.setBorder(new EmptyBorder(4, 2, 4, 2));
 			panel.setBackground(CustomColors.DARK_GRAY);
 			//these are added in update displays if the time interval is set to "Session"
-			if (panel != hourlyProfitPanel && panel != sessionTimePanel) {
+			if (panel != hourlyProfitPanel && panel != sessionTimePanel && panel != storagePanel) {
 				subInfoPanel.add(panel);
 			}
 		}
@@ -875,11 +872,6 @@ public class StatsPanel extends JPanel
 			subInfoPanelArray[i].add(textLabelArray[i], BorderLayout.WEST);
 			subInfoPanelArray[i].add(valLabelArray[i], BorderLayout.EAST);
 		}
-
-		autoSavePanel.setBorder(new EmptyBorder(4, 2, 4, 2));
-		autoSavePanel.setBackground(CustomColors.DARK_GRAY);
-		autoSavePanel.add(autoSaveText, BorderLayout.WEST);
-		autoSavePanel.add(autoSaveVal, BorderLayout.EAST);
 
 		subInfoPanel.setBackground(CustomColors.DARK_GRAY);
 		subInfoPanel.setBorder(new EmptyBorder(9, 5, 5, 5));
@@ -893,48 +885,25 @@ public class StatsPanel extends JPanel
 		subInfoPanel = this.createSubInfoPanel();
 		JPanel profitAndSubInfoContainer = new JPanel(new BorderLayout());
 		profitAndSubInfoContainer.add(this.createTotalProfitPanel(subInfoPanel), BorderLayout.NORTH);
-		profitAndSubInfoContainer.add(subInfoPanel, BorderLayout.SOUTH);
+		profitAndSubInfoContainer.add(subInfoPanel, BorderLayout.CENTER);
+		storagePanel.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createMatteBorder(0, 2, 2, 2, ColorScheme.DARKER_GRAY_COLOR.darker()),
+			new EmptyBorder(4, 7, 4, 7)));
+		profitAndSubInfoContainer.add(storagePanel, BorderLayout.SOUTH);
 		profitAndSubInfoContainer.setBorder(new EmptyBorder(5, 0, 5, 0));
 		return profitAndSubInfoContainer;
 	}
 
 	public void updateAutoSaveDisplay() {
-		if (!plugin.getConfig().autoSaveEnabled() || !plugin.getConfig().showAutoSaveDisplay()) {
-			subInfoPanel.remove(autoSavePanel);
-			revalidate();
-			repaint();
-			return;
-		}
-
-		String displayText = calculateAutoSaveDisplayText();
-		autoSaveVal.setText(displayText);
-
-		subInfoPanel.add(autoSavePanel);
+		DataHandler storage = plugin.getDataHandler();
+		String error = storage == null ? null : storage.getStorageError();
+		boolean pending = storage == null || storage.isSavePending();
+		storageVal.setText(error != null ? "Needs attention" : pending ? "Saving…" : "Saved");
+		storageVal.setForeground(error != null ? ColorScheme.PROGRESS_ERROR_COLOR : ColorScheme.GRAND_EXCHANGE_ALCH);
+		String tooltip = error != null ? error : pending ? "Saving recent changes." : "All changes are saved.";
+		storageVal.setToolTipText(tooltip);
+		storagePanel.setToolTipText(tooltip);
 		revalidate();
 		repaint();
-	}
-
-	private String calculateAutoSaveDisplayText() {
-		Instant nextSave = plugin.getNextScheduledAutoSave();
-		if (nextSave == null) {
-			return "Pending";
-		}
-
-		long secondsUntilNextSave = calculateSecondsUntilNextSave(nextSave);
-		return formatCountdownTime(secondsUntilNextSave);
-	}
-
-	private long calculateSecondsUntilNextSave(Instant nextScheduledSave) {
-		long seconds = Duration.between(Instant.now(), nextScheduledSave).getSeconds();
-		return Math.max(0, seconds);
-	}
-
-	private String formatCountdownTime(long secondsUntilNextSave) {
-		if (secondsUntilNextSave <= 0) {
-			return "00:00";
-		}
-		long minutes = secondsUntilNextSave / 60;
-		long seconds = secondsUntilNextSave % 60;
-		return String.format("%02d:%02d", minutes, seconds);
 	}
 }

@@ -86,7 +86,9 @@ public abstract class AbstractOfferEditorPanel extends JPanel {
     }
 
     public void deleteOption(Option option) {
-        plugin.getDataHandler().getAccountWideData().getOptions().remove(option);
+        if (plugin.getDataHandler().getAccountWideData().getOptions().remove(option)) {
+            plugin.getDataHandler().markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
+        }
         rebuild(getOptions());
     }
 

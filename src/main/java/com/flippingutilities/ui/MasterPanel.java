@@ -104,8 +104,6 @@ public class MasterPanel extends PluginPanel
 
 		add(header, BorderLayout.NORTH);
 		add(mainDisplay, BorderLayout.CENTER);
-
-		updateSqliteIndicator();
 	}
 
 	/**
@@ -247,24 +245,6 @@ public class MasterPanel extends PluginPanel
 		tabGroup.select(flippingTab);
 		return tabGroup;
 	}
-
-	/**
-	 * Shows or hides the SQLite indicator icon on the stats tab based on the current data source.
-	 */
-	public void updateSqliteIndicator()
-	{
-		if (statisticsTab == null)
-		{
-			return;
-		}
-		boolean sqlite = plugin != null && plugin.getDataHandler() != null
-			&& plugin.getDataHandler().isUsingSqlite();
-		statisticsTab.setIcon(sqlite ? Icons.DATABASE_ICON : null);
-		statisticsTab.setToolTipText(sqlite ? "stats (SQLite storage active)" : null);
-		tabGroup.revalidate();
-		tabGroup.repaint();
-	}
-
 	public Set<String> getViewSelectorItems()
 	{
 		Set<String> items = new HashSet<>();

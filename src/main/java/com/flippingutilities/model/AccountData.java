@@ -229,10 +229,9 @@ public class AccountData {
             });
         }
 
-        // Restore timer state from the persisted last offers. The JSON backend serializes the
-        // timers themselves, but the SQLite backend only persists the offers — without this
-        // wiring the GE slot timers are blank after every restart in SQLite mode. Timers that
-        // already carry an offer (JSON path) are left untouched. Completed offers keep
+        // Restore timer state from persisted slot offers; widget state is not part of the new format.
+        // Timers loaded from a legacy snapshot that already carry an offer are left untouched.
+        // Completed offers keep
         // their fixed start-to-completion duration until the slot is collected.
         if (lastOffers != null) {
             for (Map.Entry<Integer, OfferEvent> entry : lastOffers.entrySet()) {
@@ -329,12 +328,12 @@ public class AccountData {
      * the item manager retrieves the item's name as "Members object". The item manager returns the correct
      * name when the user is on a member's world or logged out. As such, this method is called when the plugin starts
      * and whenever the user logs into a members world to clean up any "Members object" item names.
-     * Also fixes placeholder names like "Item 12345" from SQLite migration.
+     * Also fixes placeholder names like "Item 12345" from older normalized records.
      */
     public void fixIncorrectItemNames(ItemManager itemManager) {
         trades.forEach(item -> {
             String currentName = item.getItemName();
-            // Match "Members object" (f2p world artifact) or SQLite placeholder "Item <id>"
+            // Match "Members object" (f2p world artifact) or stored placeholder "Item <id>"
             if (currentName.equals("Members object") || currentName.matches("Item \\d+")) {
                 try {
                     String actualName = itemManager.getItemComposition(item.getItemId()).getName();
