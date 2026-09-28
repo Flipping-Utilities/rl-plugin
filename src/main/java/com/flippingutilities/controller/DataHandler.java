@@ -26,411 +26,426 @@
 
 package com.flippingutilities.controller;
 
-import com.flippingutilities.db.SqliteStorage;
-import com.flippingutilities.db.SqliteSettings;
-import com.flippingutilities.db.TradePersister;
+import com.flippingutilities.db.JsonStorage;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
-import com.flippingutilities.model.BackupCheckpoints;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 
-import java.time.Instant;
+import java.io.IOException;
 import java.util.*;
-/**
- * Responsible for loading data from disk, handling any operations to access/change data during the plugin's life, and storing
- * data to disk.
- */
+import java.util.concurrent.*;
+
+/** Owns the live model, immutable save captures, and one ordered background I/O queue. */
 @Slf4j
 public class DataHandler {
-    // SQLite storage backend (optional)
-    private SqliteStorage sqliteStorage;
-    private final Set<String> accountsAwaitingRecoverySnapshot = new HashSet<>();
-    FlippingPlugin plugin;
-    private AccountWideData accountWideData;
-    private BackupCheckpoints backupCheckpoints;
+    private final FlippingPlugin plugin;
+    private AccountWideData accountWideData = new AccountWideData();
     private Map<String, AccountData> accountSpecificData = new HashMap<>();
-    private boolean accountWideDataChanged = false;
-    private Set<String> accountsWithUnsavedChanges = new HashSet<>();
-    public String thisClientLastStored;
+    private final Map<String, Long> dirtyAccounts = new HashMap<>();
+    private final Map<String, Long> dirtyMetadata = new HashMap<>();
+    private final Map<String, Long> deletedAccounts = new HashMap<>();
+    private final Map<String, Long> lastChange = new HashMap<>();
+    private final Set<String> protectedAccounts = new HashSet<>();
+    // These accounts stay writable in memory so later offers can reach CAS conflict recovery.
+    private final Set<String> activeDeletionConflicts = new HashSet<>();
+    private long changeNumber;
+    private long successfulSaveGeneration;
+    private long accountWideRevision;
+    private boolean accountWideDirty;
+    private boolean initialized;
+    private boolean closed;
+    private boolean refreshing;
+    private boolean refreshAgain;
+    private boolean refreshAfterSave;
+    private boolean refreshRetryScheduled;
+    private Runnable refreshCallback;
+    private JsonStorage storage;
+    private CompletableFuture<Void> pendingSave = CompletableFuture.completedFuture(null);
+    private volatile String storageError;
+    private final ExecutorService io;
 
     public DataHandler(FlippingPlugin plugin) {
+        this(plugin, Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
+            .setNameFormat("flipping-json-%d").setDaemon(true).build()));
+    }
+
+    DataHandler(FlippingPlugin plugin, ExecutorService io) {
         this.plugin = plugin;
+        this.io = Objects.requireNonNull(io);
+        accountWideData.setDefaults();
     }
 
-    public void setSqliteStorage(SqliteStorage storage) {
+    private synchronized JsonStorage storage() {
         if (storage == null) {
-            // Detaching cannot make an unsaved JSON snapshot safe to reload. This also
-            // covers an import that failed before this handler attached its database.
-            accountsAwaitingRecoverySnapshot.addAll(accountsWithUnsavedChanges);
+            storage = new JsonStorage(plugin.tradePersister.getGson(), plugin.tradePersister.getAccountDirectory());
         }
-        this.sqliteStorage = storage;
+        return storage;
     }
 
-    public boolean isUsingSqlite() {
-        return sqliteStorage != null && plugin.getConfig().dataSource().isSqlite()
-            && !plugin.isStorageFailed(sqliteStorage);
+    public CompletableFuture<JsonStorage.LoadedData> readDataAsync() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return storage().load();
+            } catch (IOException | RuntimeException failure) {
+                storageFailed(failure);
+                throw new CompletionException(failure);
+            }
+        }, io);
     }
 
-    public AccountWideData viewAccountWideData() {
-        return accountWideData;
-    }
-
-    public AccountWideData getAccountWideData() {
-        accountWideDataChanged = true;
-        return accountWideData;
-    }
-
-    public void addAccount(String displayName) {
-        log.info("adding {} to data handler", displayName);
-        AccountData accountData = new AccountData();
-        accountData.prepareForUse(plugin);
-        accountSpecificData.put(displayName, accountData);
-    }
-
-    public void deleteAccount(String displayName) {
-        log.info("deleting account: {}", displayName);
-        accountSpecificData.remove(displayName);
-        accountsAwaitingRecoverySnapshot.remove(displayName);
-        accountsWithUnsavedChanges.remove(displayName);
-        TradePersister.deleteFile(displayName + ".json");
-    }
-
-    /** Keep cached accounts authoritative until each recovery snapshot is safely written. */
-    void preserveAccountsForRecovery() {
-        accountsAwaitingRecoverySnapshot.addAll(accountSpecificData.keySet());
-        accountsWithUnsavedChanges.addAll(accountSpecificData.keySet());
-    }
-
-    public Collection<AccountData> getAllAccountData() {
-        accountsWithUnsavedChanges.addAll(accountSpecificData.keySet());
-        return accountSpecificData.values();
-    }
-
-    public Collection<AccountData> viewAllAccountData() {
-        return accountSpecificData.values();
-    }
-
-    //TODO this is a weird solution to the problem of having to know whether data changed...
-    //TODO change it to something that perhaps takes a snapshot of data at plugin start and compares it to
-    //TODO data at logout/plugin shutdown.
-    //calls it if data is going to be updated,
-    public AccountData getAccountData(String displayName) {
-        accountsWithUnsavedChanges.add(displayName);
-        return accountSpecificData.get(displayName);
-    }
-
-    //is called if account data just needs to be viewed, not updated
-    public AccountData viewAccountData(String displayName) {
-        return accountSpecificData.get(displayName);
-    }
-
-    public Set<String> getCurrentAccounts() {
-        return accountSpecificData.keySet();
-    }
-
-    public void markDataAsHavingChanged(String displayName) {
-        if (displayName.equals(FlippingPlugin.ACCOUNT_WIDE)) {
-            accountWideDataChanged = true;
-        }
-        else {
-            accountsWithUnsavedChanges.add(displayName);
-        }
-    }
-
-    /** Keep failed snapshots dirty so autosave or shutdown can retry them. */
-    public boolean storeData() {
-        accountsWithUnsavedChanges.removeIf(this::storeAccountData);
-        if (accountWideDataChanged && storeData("accountwide", accountWideData)) {
-            accountWideDataChanged = false;
-        }
-        return accountsWithUnsavedChanges.isEmpty() && !accountWideDataChanged;
-    }
-
+    /** Synchronous seam for callers that already own an I/O thread. Startup uses readDataAsync. */
     public void loadData() {
-        log.debug("Loading data on startup");
         try {
-            TradePersister.setupFlippingFolder();
+            installLoadedData(storage().load());
+        } catch (IOException | RuntimeException failure) {
+            storageFailed(failure);
         }
-        catch (Exception e) {
-            log.warn("Couldn't set up flipping folder, setting defaults", e);
-            accountWideData = new AccountWideData();
-            accountWideData.setDefaults();
-            accountSpecificData = new HashMap<>();
-            accountWideDataChanged = true;
-            plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
+    }
+
+    /** ItemManager and slot hydration stay on RuneLite's client thread; file parsing does not. */
+    public synchronized void installLoadedData(JsonStorage.LoadedData loaded) {
+        accountWideData = loaded.getAccountWideData();
+        boolean defaultsChanged = accountWideData.setDefaults();
+        plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
+        Map<String, AccountData> prepared = new HashMap<>();
+        loaded.getAccounts().forEach((name, account) -> {
+            try {
+                account.startNewSession();
+                account.prepareForUse(plugin);
+                prepared.put(name, account);
+                protectedAccounts.remove(name);
+            } catch (RuntimeException | OutOfMemoryError failure) {
+                protectedAccounts.add(name);
+                storageFailed(failure);
+                log.error("Cannot prepare account {}; its persisted records will not be replaced", name, failure);
+            }
+        });
+        accountSpecificData = prepared;
+        initialized = true;
+        if (defaultsChanged) markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
+    }
+
+    public synchronized AccountWideData viewAccountWideData() { return accountWideData; }
+    public synchronized AccountWideData getAccountWideData() {
+        markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
+        return accountWideData;
+    }
+
+    public synchronized void addAccount(String name) {
+        if (protectedAccounts.contains(name)) {
+            throw new IllegalStateException("This account needs storage recovery before it can be changed");
+        }
+        AccountData account = new AccountData();
+        account.prepareForUse(plugin);
+        accountSpecificData.put(name, account);
+        deletedAccounts.remove(name);
+        markDataAsHavingChanged(name);
+    }
+
+    public synchronized void deleteAccount(String name) {
+        if (protectedAccounts.contains(name)) {
+            storageFailed(new IllegalStateException("Cannot delete protected account " + name));
             return;
         }
-
-        backupCheckpoints = plugin.tradePersister.fetchBackupCheckpoints();
-        accountWideData = fetchAccountWideData();
-        plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
-        accountSpecificData = fetchAndPrepareAllAccountData();
-        backupAllAccountData();
-    }
-    
-    private void backupAllAccountData() {
-        log.debug("backing up account data");
-        boolean backupCheckpointsChanged = false;
-        for (String displayName : accountSpecificData.keySet()) {
-            AccountData accountData = accountSpecificData.get(displayName);
-            //the data could be empty because there was an exception when loading it (such as in fetchAccountData)
-            //or perhaps there are legitimately no trades because it is a new file or the user reset their history. In
-            //any of these cases, we shouldn't back it up as its useless to backup an empty AccountData and, even worse, 
-            //we may overwrite a previous backup with nothing.
-
-            if (!accountData.getTrades().isEmpty() && backupCheckpoints.shouldBackup(displayName, accountData.getLastStoredAt())) {
-                try { 
-                    plugin.tradePersister.writeToFile(displayName + ".backup", accountData);
-                    backupCheckpoints.getAccountToBackupTime().put(displayName, accountData.getLastStoredAt());
-                    backupCheckpointsChanged = true;
-                }
-                catch (Exception e) {
-                    log.warn("Couldn't backup account data for {} due to {}", displayName, e);
-                }
-            }
-            else {
-                log.debug("Not backing up data for {} as it's empty or it hasn't changed since last backup", displayName);
-            }
-        }
-        if (backupCheckpointsChanged) {
-            storeData("backupCheckpoints.special", backupCheckpoints);
-        }
+        accountSpecificData.remove(name);
+        dirtyAccounts.remove(name);
+        dirtyMetadata.remove(name);
+        long revision = ++changeNumber;
+        deletedAccounts.put(name, revision);
+        lastChange.put(name, revision);
     }
 
-    private AccountWideData fetchAccountWideData() {
+    public synchronized Collection<AccountData> getAllAccountData() {
+        accountSpecificData.keySet().forEach(this::markDataAsHavingChanged);
+        return new ArrayList<>(accountSpecificData.values());
+    }
+
+    public synchronized Collection<AccountData> viewAllAccountData() {
+        return new ArrayList<>(accountSpecificData.values());
+    }
+
+    public synchronized AccountData getAccountData(String name) {
+        markDataAsHavingChanged(name);
+        return accountSpecificData.get(name);
+    }
+
+    public synchronized AccountData viewAccountData(String name) { return accountSpecificData.get(name); }
+    public synchronized Set<String> getCurrentAccounts() { return new HashSet<>(accountSpecificData.keySet()); }
+
+    public synchronized void markDataAsHavingChanged(String name) {
+        if (FlippingPlugin.ACCOUNT_WIDE.equals(name)) {
+            accountWideDirty = true;
+            accountWideRevision = ++changeNumber;
+        } else if (name != null) {
+            long revision = ++changeNumber;
+            dirtyAccounts.put(name, revision);
+            lastChange.put(name, revision);
+        }
+    }
+
+    public synchronized void markSessionTimeChanged(String name) {
+        if (name != null) {
+            long revision = ++changeNumber;
+            dirtyMetadata.put(name, revision);
+            lastChange.put(name, revision);
+        }
+    }
+
+    /** Capture on the model's owning thread. Only immutable JSON records cross onto the I/O queue. */
+    public synchronized boolean storeData() {
+        if (closed || !initialized || !pendingSave.isDone()) return false;
+        if (dirtyAccounts.isEmpty() && dirtyMetadata.isEmpty() && deletedAccounts.isEmpty() && !accountWideDirty) return true;
+        Map<String, Long> fullVersions = new HashMap<>(dirtyAccounts);
+        Map<String, Long> metadataVersions = new HashMap<>(dirtyMetadata);
+        Map<String, Long> deletions = new HashMap<>(deletedAccounts);
+        long wideVersion = accountWideRevision;
+        boolean includeWide = accountWideDirty;
         try {
-            log.debug("Fetching accountwide data");
-            AccountWideData accountWideData = plugin.tradePersister.loadAccountWideData();
-            boolean didActuallySetDefaults = accountWideData.setDefaults();
-            this.accountWideData = accountWideData;
-            plugin.tradePersister.accountPrepared("accountwide");
-            accountWideDataChanged = didActuallySetDefaults;
-            return accountWideData;
+            Map<String, AccountData> full = changedData(fullVersions.keySet());
+            Map<String, AccountData> metadata = changedData(metadataVersions.keySet());
+            metadata.keySet().removeAll(full.keySet());
+            for (String name : deletions.keySet()) {
+                if (protectedAccounts.contains(name)) throw new IllegalStateException("Cannot delete protected account " + name);
+            }
+            JsonStorage.CapturedSave captured = storage().capture(full, metadata,
+                includeWide ? accountWideData : null, deletions.keySet());
+            pendingSave = CompletableFuture.runAsync(() -> {
+                try {
+                    storage().commit(captured);
+                    synchronized (DataHandler.this) {
+                        fullVersions.forEach((name, version) -> dirtyAccounts.remove(name, version));
+                        metadataVersions.forEach((name, version) -> dirtyMetadata.remove(name, version));
+                        deletions.forEach((name, version) -> deletedAccounts.remove(name, version));
+                        if (includeWide && accountWideRevision == wideVersion) accountWideDirty = false;
+                        successfulSaveGeneration++;
+                    }
+                    synchronized (DataHandler.this) {
+                        if (protectedAccounts.isEmpty() && activeDeletionConflicts.isEmpty()) storageError = null;
+                    }
+                } catch (IOException | RuntimeException failure) {
+                    storageFailed(failure);
+                    throw new CompletionException(failure);
+                }
+            }, io);
+            pendingSave.whenComplete((ignored, failure) -> {
+                synchronized (DataHandler.this) {
+                    if (failure == null && refreshAfterSave) {
+                        refreshAgain = true;
+                        refreshAfterSave = false;
+                    }
+                    queueRefreshRetry();
+                }
+            });
+        } catch (RuntimeException failure) {
+            storageFailed(failure);
         }
-        catch (Exception e) {
-            plugin.tradePersister.protectAccount("accountwide");
-            log.warn("Could not prepare account-wide data; JSON saves disabled until valid data is loaded", e);
-            AccountWideData accountWideData = new AccountWideData();
-            accountWideData.setDefaults();
-            accountWideDataChanged = true;
-            return accountWideData;
+        return false;
+    }
+
+    private Map<String, AccountData> changedData(Set<String> names) {
+        Map<String, AccountData> result = new HashMap<>();
+        for (String name : names) {
+            if (protectedAccounts.contains(name)) throw new IllegalStateException("Cannot save protected account " + name);
+            AccountData account = accountSpecificData.get(name);
+            if (account == null) throw new IllegalStateException("Cannot capture missing account " + name);
+            result.put(name, account);
+        }
+        return result;
+    }
+
+    /** Wait for the preceding capture, then capture any newer edits before closing the queue. */
+    public Future<?> close() {
+        CompletableFuture<Void> preceding;
+        synchronized (this) {
+            if (closed) return pendingSave;
+            preceding = pendingSave;
+        }
+        try { preceding.join(); } catch (CompletionException failure) { /* retry the still-dirty capture */ }
+        synchronized (this) {
+            if (closed) return pendingSave;
+            storeData();
+            if ((!initialized || hasUnsavedChanges()) && pendingSave.isDone()) {
+                pendingSave = new CompletableFuture<>();
+                pendingSave.completeExceptionally(new IOException(storageError == null
+                    ? "JSON storage could not capture all pending changes" : storageError));
+            }
+            closed = true;
+            io.shutdown();
+            return pendingSave;
         }
     }
 
-    private Map<String, AccountData> fetchAndPrepareAllAccountData()
-    {
-        Map<String, AccountData> accounts = fetchAllAccountData();
-        prepareAllAccountData(accounts);
-        return accounts;
+    public String getStorageError() { return storageError; }
+
+    public synchronized boolean isSavePending() {
+        return !pendingSave.isDone() || hasUnsavedChanges();
     }
 
-    private void prepareAllAccountData(Map<String, AccountData> allAccountData) {
-        for (String displayName : allAccountData.keySet()) {
-            AccountData accountData = allAccountData.get(displayName);
+    private boolean hasUnsavedChanges() {
+        return !dirtyAccounts.isEmpty() || !dirtyMetadata.isEmpty() || !deletedAccounts.isEmpty() || accountWideDirty;
+    }
+
+    private void storageFailed(Throwable failure) {
+        String message = failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage();
+        if (!message.equals(storageError)) log.error("JSON storage needs attention: {}", message, failure);
+        storageError = message;
+    }
+
+    /** Watch notifications only request reads; adopting a result rechecks local dirtiness on the client thread. */
+    public synchronized void refreshExternalData(Runnable changed) {
+        if (!initialized || closed) return;
+        refreshCallback = changed;
+        if (refreshing || !pendingSave.isDone()) {
+            refreshAgain = true;
+            return;
+        }
+        refreshAgain = false;
+        refreshAfterSave = false;
+        Map<String, Long> observedChanges = new HashMap<>(lastChange);
+        long observedSaveGeneration = successfulSaveGeneration;
+        long observedWideRevision = accountWideRevision;
+        refreshing = true;
+        io.execute(() -> {
             try {
-                accountData.startNewSession();
-                accountData.prepareForUse(plugin);
-                accountSpecificData.put(displayName, accountData);
-                plugin.tradePersister.accountPrepared(displayName);
+                JsonStorage.Updates updates = storage().readUpdates();
+                plugin.getClientThread().invokeLater(() -> {
+                    boolean adopted = false;
+                    synchronized (DataHandler.this) {
+                        try {
+                            if (closed) return;
+                            if (!pendingSave.isDone() || successfulSaveGeneration != observedSaveGeneration) {
+                                refreshAgain = true;
+                                return;
+                            }
+                            Set<String> accepted = new HashSet<>();
+                            Set<String> names = new HashSet<>(updates.getAccounts().keySet());
+                            names.addAll(updates.getDeletedAccounts());
+                            for (String name : names) {
+                                if (dirtyAccounts.containsKey(name) || dirtyMetadata.containsKey(name)
+                                        || deletedAccounts.containsKey(name)
+                                        || !Objects.equals(lastChange.get(name), observedChanges.get(name))) {
+                                    refreshAfterSave = true;
+                                    continue;
+                                }
+                                AccountData account = updates.getAccounts().get(name);
+                                if (account == null) {
+                                    if (retainDeletedActiveAccount(name)) continue;
+                                    accountSpecificData.remove(name);
+                                } else {
+                                    try {
+                                        account.prepareForUse(plugin);
+                                    } catch (RuntimeException | OutOfMemoryError failure) {
+                                        protectedAccounts.add(name);
+                                        storageFailed(failure);
+                                        continue;
+                                    }
+                                    accountSpecificData.put(name, account);
+                                }
+                                protectedAccounts.remove(name);
+                                activeDeletionConflicts.remove(name);
+                                accepted.add(name);
+                            }
+                            boolean acceptWide = updates.getAccountWideData() != null && !accountWideDirty
+                                && accountWideRevision == observedWideRevision;
+                            if (updates.getAccountWideData() != null && !acceptWide) refreshAfterSave = true;
+                            boolean wideDefaultsChanged = false;
+                            if (acceptWide) {
+                                AccountWideData wide = updates.getAccountWideData();
+                                wideDefaultsChanged = wide.setDefaults();
+                                plugin.getRecipeHandler().setLocalRecipes(wide.getLocalRecipes());
+                                accountWideData = wide;
+                            }
+                            storage().adopt(updates, accepted, acceptWide);
+                            if (wideDefaultsChanged) markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
+                            adopted = !accepted.isEmpty() || acceptWide;
+                        } catch (RuntimeException failure) {
+                            storageFailed(failure);
+                        } finally {
+                            refreshing = false;
+                            queueRefreshRetry();
+                        }
+                    }
+                    if (adopted) changed.run();
+                });
+            } catch (IOException | RuntimeException failure) {
+                storageFailed(failure);
+                synchronized (DataHandler.this) {
+                    refreshing = false;
+                    queueRefreshRetry();
+                }
             }
-            catch (Exception | OutOfMemoryError e) {
-                plugin.tradePersister.protectAccount(displayName);
-                log.error("Could not prepare {}; JSON saves and backups are disabled until valid data is loaded", displayName, e);
-                AccountData newAccountData = new AccountData();
-                newAccountData.startNewSession();
-                newAccountData.prepareForUse(plugin);
-                allAccountData.put(displayName, newAccountData);
-                continue;
-            }
-            persistVersionMigration(displayName, accountData);
-        }
+        });
     }
 
-    /**
-     * Persists a format-version migration for an account that loaded and prepared
-     * successfully. A failure here (backup creation or the write itself) must NOT discard
-     * the account or disable its saves - the data itself is valid - so it is logged and the
-     * account is marked dirty for a retry on a later save.
-     */
-    private void persistVersionMigration(String displayName, AccountData accountData) {
+    /** Coalesce overlapping file notifications, but retry dirty accounts only after a successful save. */
+    private void queueRefreshRetry() {
+        if (closed || !initialized || refreshing || !pendingSave.isDone()
+                || !refreshAgain || refreshRetryScheduled || refreshCallback == null) return;
+        refreshRetryScheduled = true;
+        plugin.getClientThread().invokeLater(() -> {
+            synchronized (DataHandler.this) {
+                refreshRetryScheduled = false;
+                if (closed || !refreshAgain) return;
+                refreshExternalData(refreshCallback);
+            }
+        });
+    }
+
+    /** Do not invalidate the model still used by incoming GE events, or adopt its remote deletion. */
+    private boolean retainDeletedActiveAccount(String name) {
+        if (!name.equals(plugin.getCurrentlyLoggedInAccount()) || !accountSpecificData.containsKey(name)) return false;
+        activeDeletionConflicts.add(name);
+        storageFailed(new IllegalStateException("Another client deleted the logged-in account " + name
+            + ". Its live trades are retained; new changes will be preserved in a conflict recovery file."));
+        return true;
+    }
+
+    public synchronized void loadAccountData(String name) {
+        if (!initialized || closed || !pendingSave.isDone() || dirtyAccounts.containsKey(name)
+                || dirtyMetadata.containsKey(name) || deletedAccounts.containsKey(name)) return;
         try {
-            if (!accountData.needsMigration()) {
+            if (name.equals(plugin.getCurrentlyLoggedInAccount()) && accountSpecificData.containsKey(name)) {
+                // Unlike loadAccount(), this read leaves the baseline untouched until acceptance.
+                JsonStorage.Updates updates = storage().readUpdates();
+                if (updates.getDeletedAccounts().contains(name)) {
+                    retainDeletedActiveAccount(name);
+                } else if (updates.getAccounts().containsKey(name)) {
+                    AccountData account = updates.getAccounts().get(name);
+                    account.prepareForUse(plugin);
+                    accountSpecificData.put(name, account);
+                    storage().adopt(updates, Collections.singleton(name), false);
+                    protectedAccounts.remove(name);
+                    activeDeletionConflicts.remove(name);
+                }
                 return;
             }
-            log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})",
-                displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
-            plugin.tradePersister.createPreMigrationBackup(displayName);
-            accountData.markMigrated();
-            plugin.tradePersister.writeToFile(displayName, accountData);
-            log.info("Migration complete for {}", displayName);
-        } catch (Exception e) {
-            log.warn("Could not persist version migration for {}; keeping the loaded account and retrying on a later save",
-                displayName, e);
-            markDataAsHavingChanged(displayName);
+            AccountData account = storage().loadAccount(name);
+            if (account != null) {
+                account.prepareForUse(plugin);
+                accountSpecificData.put(name, account);
+                protectedAccounts.remove(name);
+            } else {
+                accountSpecificData.remove(name);
+                protectedAccounts.remove(name);
+            }
+            activeDeletionConflicts.remove(name);
+        } catch (IOException | RuntimeException failure) {
+            protectedAccounts.add(name);
+            storageFailed(failure);
         }
     }
 
-    private Map<String, AccountData> fetchAllAccountData() {
-        // SQLite path: try loading from SQLite first
-        if (sqliteStorage != null && plugin.getConfig().dataSource().isSqlite()) {
-            try {
-                Map<String, AccountData> accounts = new HashMap<>();
-                for (String displayName : sqliteStorage.listAccounts()) {
-                    // guard against junk rows named after the pseudo account-wide view
-                    if (displayName.equalsIgnoreCase(FlippingPlugin.ACCOUNT_WIDE)) {
-                        continue;
-                    }
-                    AccountData data = sqliteStorage.loadAccount(displayName);
-                    if (data != null) {
-                        accounts.put(displayName, data);
-                    }
-                }
-                if (!accounts.isEmpty()) {
-                    return accounts;
-                }
-                // Empty DB: fall through to JSON so a fresh SQLite install can still bootstrap.
-            } catch (Exception e) {
-                handleSqliteReadFailure(e);
-            }
-        }
+    public synchronized void loadAccountWideData() {
+        if (!initialized || closed || !pendingSave.isDone() || accountWideDirty) return;
         try {
-            return plugin.tradePersister.loadAllAccounts();
+            AccountWideData wide = storage().loadAccountWideData();
+            boolean defaultsChanged = wide.setDefaults();
+            plugin.getRecipeHandler().setLocalRecipes(wide.getLocalRecipes());
+            accountWideData = wide;
+            if (defaultsChanged) markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
+        } catch (IOException | RuntimeException failure) {
+            storageFailed(failure);
         }
-        catch (Exception e) {
-            log.warn("error propagated from tradePersister.loadAllAccounts() when fetching all account data, returning empty hashmap", e);
-            return new HashMap<>();
-        }
-    }
-
-    private void handleSqliteReadFailure(Exception failure) {
-        SqliteStorage failed = sqliteStorage;
-        sqliteStorage = null;
-        preserveAccountsForRecovery();
-        plugin.recoverFromStorageFailure(failed, failure);
-    }
-
-    // Used by other components to set accountWideData on DataHandler
-    public void loadAccountWideData() {
-        accountWideData = fetchAccountWideData();
-        plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
-    }
-    
-    // Used by other components to set account data on DataHandler
-    public void loadAccountData(String displayName) {
-        log.info("loading data for {}", displayName);
-        accountSpecificData.put(displayName, fetchAccountData(displayName));
-    }
-
-    private AccountData fetchAccountData(String displayName)
-    {
-        // A write can fail before its queued client-thread recovery callback runs.
-        if (plugin.isStorageFailed(sqliteStorage) || plugin.isStorageFailed(plugin.getSqliteStorage())) {
-            preserveAccountsForRecovery();
-            setSqliteStorage(null);
-        }
-        if (accountsAwaitingRecoverySnapshot.contains(displayName)
-                && accountSpecificData.containsKey(displayName)) {
-            return accountSpecificData.get(displayName);
-        }
-        // SQLite path: attempt to load from SQLite when configured
-        if (sqliteStorage != null && plugin.getConfig().dataSource().isSqlite()) {
-            try {
-                AccountData accountData = sqliteStorage.loadAccount(displayName);
-                if (accountData != null) {
-                    accountData.prepareForUse(plugin);
-                    if (accountData.needsMigration()) {
-                        accountData.markMigrated();
-                    }
-                    // A reload refreshes history, but the running client's session may
-                    // have restarted since the session snapshot was imported.
-                    AccountData current = accountSpecificData.get(displayName);
-                    if (current != null) {
-                        accountData.setSessionStartTime(current.getSessionStartTime());
-                        accountData.setAccumulatedSessionTimeMillis(current.getAccumulatedSessionTimeMillis());
-                        accountData.setLastSessionTimeUpdate(current.getLastSessionTimeUpdate());
-                    }
-                    return accountData;
-                }
-                // SQLite returned null (account not found); fall through to JSON.
-            } catch (Exception e) {
-                handleSqliteReadFailure(e);
-                if (accountSpecificData.containsKey(displayName)) {
-                    return accountSpecificData.get(displayName);
-                }
-            }
-        }
-        try {
-            AccountData accountData = plugin.tradePersister.loadAccount(displayName);
-            accountData.prepareForUse(plugin);
-            accountSpecificData.put(displayName, accountData);
-            plugin.tradePersister.accountPrepared(displayName);
-            persistVersionMigration(displayName, accountData);
-            return accountData;
-        }
-        catch (Exception | OutOfMemoryError e)
-        {
-            plugin.tradePersister.protectAccount(displayName);
-            log.error("Could not load {}; keeping cached data and disabling JSON saves until valid data is loaded", displayName, e);
-            return accountSpecificData.getOrDefault(displayName, new AccountData());
-        }
-    }
-
-    private boolean storeAccountData(String displayName) {
-        // The account-wide view and deleted accounts must never become JSON accounts.
-        AccountData data = accountSpecificData.get(displayName);
-        if (displayName == null || displayName.equalsIgnoreCase(FlippingPlugin.ACCOUNT_WIDE) || data == null) {
-            return true;
-        }
-        thisClientLastStored = displayName;
-        data.setLastStoredAt(Instant.now());
-        boolean stored = storeData(displayName, data);
-        if (stored) {
-            accountsAwaitingRecoverySnapshot.remove(displayName);
-        }
-        return stored;
-    }
-
-    private boolean storeData(String fileName, Object data) {
-        try {
-            plugin.tradePersister.writeToFile(fileName, data);
-            return true;
-        } catch (Exception e) {
-            log.warn("Couldn't store data to {}; retaining it for retry", fileName, e);
-            return false;
-        }
-    }
-
-    public void reloadFromSqlite() {
-        if (sqliteStorage == null || !plugin.getConfig().dataSource().isSqlite()) {
-            log.debug("Skipping SQLite reload because storage is not enabled");
-            return;
-        }
-
-        List<String> sqliteAccounts = sqliteStorage.listAccounts();
-        Map<String, AccountData> reloadedAccounts = new HashMap<>();
-        log.info("Reloading {} accounts from SQLite", sqliteAccounts.size());
-
-        for (String displayName : sqliteAccounts) {
-            if (displayName.equalsIgnoreCase(FlippingPlugin.ACCOUNT_WIDE)) {
-                continue;
-            }
-            reloadedAccounts.put(displayName, fetchAccountData(displayName));
-        }
-
-        // Carry over in-memory accounts ONLY while their migration has not actually
-        // completed. Once migration_completed is set, SQLite reflects the authoritative
-        // import; carrying over in-memory accounts then (e.g. one read from the pre-wipe
-        // database during a backend switch) would resurrect accounts the user deleted.
-        boolean migrationCompleted = sqliteStorage.getBooleanSetting(SqliteSettings.MIGRATION_COMPLETED);
-        if (!migrationCompleted) {
-            for (Map.Entry<String, AccountData> entry : accountSpecificData.entrySet()) {
-                if (sqliteStorage.getSetting(SqliteSettings.accountMigrationKey(entry.getKey())) == null) {
-                    reloadedAccounts.putIfAbsent(entry.getKey(), entry.getValue());
-                }
-            }
-        }
-
-        accountSpecificData = reloadedAccounts;
-        accountsWithUnsavedChanges.clear();
     }
 }

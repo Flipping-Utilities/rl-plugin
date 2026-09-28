@@ -62,8 +62,8 @@ public class OptionPanel extends JPanel {
         //keyInputField.setPreferredSize(new Dimension(30, 25));
         keyInputField.setText(option.getKey());
         keyInputField.addActionListener(e -> {
-            plugin.markAccountTradesAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
             option.setKey(keyInputField.getText());
+            plugin.markAccountTradesAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
             setResultingValue();
         });
         keyInputField.setToolTipText("Press enter after inputting a key to save your changes");
@@ -73,8 +73,8 @@ public class OptionPanel extends JPanel {
         propertiesSelector.setSelectedItem(option.getProperty());
         propertiesSelector.addActionListener(e -> {
             if (propertiesSelector.getSelectedItem() != null) {
-                plugin.markAccountTradesAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
                 option.setProperty((String) propertiesSelector.getSelectedItem());
+                plugin.markAccountTradesAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
                 setResultingValue();
             }
         });
@@ -83,8 +83,8 @@ public class OptionPanel extends JPanel {
         //optionalEditor.setPreferredSize(new Dimension(30, 25));
         optionalEditor.setText(option.getModifier());
         optionalEditor.addActionListener(e -> {
-            plugin.markAccountTradesAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
             option.setModifier(optionalEditor.getText());
+            plugin.markAccountTradesAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
             setResultingValue();
         });
         optionalEditor.setToolTipText("press enter after inputting something to save your changes");

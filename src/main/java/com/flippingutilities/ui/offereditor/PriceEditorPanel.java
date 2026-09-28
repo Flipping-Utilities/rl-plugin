@@ -19,6 +19,7 @@ public class PriceEditorPanel extends AbstractOfferEditorPanel{
     @Override
     public void addOptionPanel() {
         plugin.getDataHandler().getAccountWideData().getOptions().add(0,Option.defaultPriceOption());
+        plugin.getDataHandler().markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
         rebuild(getOptions());
     }
 
@@ -31,5 +32,6 @@ public class PriceEditorPanel extends AbstractOfferEditorPanel{
         options.add(new Option("o", Option.LAST_BUY, "+0", false));
         options.add(new Option("l", Option.INSTA_SELL, "+0", false));
         options.add(new Option("p", Option.INSTA_BUY, "+0", false));
+        plugin.getDataHandler().markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
     }
 }

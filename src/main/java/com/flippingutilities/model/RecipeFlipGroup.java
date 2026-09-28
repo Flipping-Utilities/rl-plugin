@@ -86,7 +86,7 @@ public class RecipeFlipGroup implements Searchable {
         }
 
         // Item identity is recoverable, but per-execution ratios are not. Zero preserves
-        // that distinction in the recipe key through JSON and SQLite hydration.
+        // that distinction in the recipe key through storage hydration.
         List<RecipeItem> inputs = inputIds.stream().map(id -> new RecipeItem(id, 0)).collect(Collectors.toList());
         List<RecipeItem> outputs = outputIds.stream().map(id -> new RecipeItem(id, 0)).collect(Collectors.toList());
 

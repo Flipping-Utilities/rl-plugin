@@ -104,8 +104,6 @@ public class MasterPanel extends PluginPanel
 
 		add(header, BorderLayout.NORTH);
 		add(mainDisplay, BorderLayout.CENTER);
-
-		updateSqliteIndicator();
 	}
 
 	/**
@@ -247,24 +245,6 @@ public class MasterPanel extends PluginPanel
 		tabGroup.select(flippingTab);
 		return tabGroup;
 	}
-
-	/**
-	 * Shows or hides the SQLite indicator icon on the stats tab based on the current data source.
-	 */
-	public void updateSqliteIndicator()
-	{
-		if (statisticsTab == null)
-		{
-			return;
-		}
-		boolean sqlite = plugin != null && plugin.getDataHandler() != null
-			&& plugin.getDataHandler().isUsingSqlite();
-		statisticsTab.setIcon(sqlite ? Icons.DATABASE_ICON : null);
-		statisticsTab.setToolTipText(sqlite ? "stats (SQLite storage active)" : null);
-		tabGroup.revalidate();
-		tabGroup.repaint();
-	}
-
 	public Set<String> getViewSelectorItems()
 	{
 		Set<String> items = new HashSet<>();
@@ -301,24 +281,34 @@ public class MasterPanel extends PluginPanel
 	 * are looking at.
 	 */
 	public void setupAccSelectorDropdown(Set<String> currentAccounts) {
-		//adding an item causes the event listener (changeView) to fire which causes stat panel
-		//and flipping panel to rebuildItemsDisplay. I think this only happens on the first item you add.
-		accountSelector.removeAllItems();
-		accountSelector.addItem(FlippingPlugin.ACCOUNT_WIDE);
+		syncAccountSelector(accountSelector, currentAccounts);
+		accountSelector.setVisible(currentAccounts.size() > 1);
+	}
 
-		// guard against a pseudo account-wide entry sneaking into the account set (it would
-		// show up as a second, identical "accountwide" view in the dropdown)
+	static void syncAccountSelector(JComboBox<String> accountSelector, Set<String> currentAccounts) {
+		Object selectedAccount = accountSelector.getSelectedItem();
+		Set<String> expected = new HashSet<>();
+		expected.add(FlippingPlugin.ACCOUNT_WIDE);
 		currentAccounts.stream()
 			.filter(name -> !name.equalsIgnoreCase(FlippingPlugin.ACCOUNT_WIDE))
-			.forEach(displayName -> accountSelector.addItem(displayName));
-
-		//sets the account selector dropdown to visible or not depending on whether the config option has been
-		//selected and there are > 1 accounts.
-		if (currentAccounts.size() > 1) {
-			accountSelector.setVisible(true);
-		} else {
-			accountSelector.setVisible(false);
+			.forEach(expected::add);
+		// Updating the existing model preserves selection and avoids changeView resetting pagination.
+		Set<String> existing = new HashSet<>();
+		for (int index = 0; index < accountSelector.getItemCount(); index++) {
+			existing.add(accountSelector.getItemAt(index));
 		}
+		if (!existing.contains(FlippingPlugin.ACCOUNT_WIDE)) {
+			accountSelector.addItem(FlippingPlugin.ACCOUNT_WIDE);
+			existing.add(FlippingPlugin.ACCOUNT_WIDE);
+		}
+		// Removing a selected item can synchronously select its also-deleted predecessor.
+		if (selectedAccount == null || !expected.contains(selectedAccount)) {
+			accountSelector.setSelectedItem(FlippingPlugin.ACCOUNT_WIDE);
+		}
+		for (int index = accountSelector.getItemCount() - 1; index >= 0; index--) {
+			if (!expected.contains(accountSelector.getItemAt(index))) accountSelector.removeItemAt(index);
+		}
+		expected.stream().filter(name -> !existing.contains(name)).forEach(accountSelector::addItem);
 	}
 
 	/**

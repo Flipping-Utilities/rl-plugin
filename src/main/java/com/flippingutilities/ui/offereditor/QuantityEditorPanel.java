@@ -19,6 +19,7 @@ public class QuantityEditorPanel extends AbstractOfferEditorPanel{
     @Override
     public void addOptionPanel() {
         plugin.getDataHandler().getAccountWideData().getOptions().add(0,Option.defaultQuantityOption());
+        plugin.getDataHandler().markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
         rebuild(getOptions());
     }
 
@@ -28,5 +29,6 @@ public class QuantityEditorPanel extends AbstractOfferEditorPanel{
         options.add(new Option("p", Option.GE_LIMIT, "+0", true));
         options.add(new Option("l", Option.REMAINING_LIMIT, "+0", true));
         options.add(new Option("o", Option.CASHSTACK, "+0", true));
+        plugin.getDataHandler().markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
     }
 }

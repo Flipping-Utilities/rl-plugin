@@ -42,12 +42,7 @@ import java.awt.*;
 @ConfigGroup(FlippingPlugin.CONFIG_GROUP)
 public interface FlippingConfig extends Config
 {
-	String DATA_SOURCE = "dataSource";
-	String SQLITE_MAINTENANCE = "sqliteMaintenance";
 	String SLOT_TIMERS_ENABLED = "slotTimersEnabled";
-	String AUTO_SAVE_ENABLED = "autoSaveEnabled";
-	String AUTO_SAVE_INTERVAL = "autoSaveInterval";
-	String SHOW_AUTO_SAVE_DISPLAY = "showAutoSaveDisplay";
 
 	@ConfigItem(
 		keyName = "roiGradientMax",
@@ -145,35 +140,6 @@ public interface FlippingConfig extends Config
         )
         String chartsSection = "chartsSection";
 
-        @ConfigSection(
-            name = "Storage",
-            description = "Configure storage backend",
-            position = 120
-        )
-        String storageSection = "storageSection";
-
-        @ConfigItem(
-            keyName = DATA_SOURCE,
-            name = "Data source",
-            description = "Select the storage backend to use (JSON or SQLITE)",
-            section = storageSection,
-            position = 1
-        )
-        default DataSource dataSource() {
-            return DataSource.JSON;
-        }
-
-        @ConfigItem(
-            keyName = SQLITE_MAINTENANCE,
-            name = "SQLite maintenance",
-            description = "Delete the SQLite database files, or regenerate them from JSON",
-            section = storageSection,
-            position = 2
-        )
-        default SqliteMaintenanceAction sqliteMaintenance() {
-            return SqliteMaintenanceAction.NONE;
-        }
-
         @ConfigItem(
                         keyName = "quickLookupEnabled",
                         name = "Quick lookup",
@@ -218,48 +184,6 @@ public interface FlippingConfig extends Config
 		return true;
 	}
 
-
-	@ConfigSection(
-			name = "Auto-Save",
-			description = "Configure automatic saving of trade data",
-			position = 100
-	)
-	String autoSaveSection = "autoSaveSection";
-
-	@ConfigItem(
-			keyName = AUTO_SAVE_ENABLED,
-			name = "Enable auto-save",
-			description = "Automatically save trade data at regular intervals to prevent data loss on crashes",
-			section = autoSaveSection,
-			position = 1
-	)
-	default boolean autoSaveEnabled() {
-		return false;
-	}
-
-	@ConfigItem(
-			keyName = AUTO_SAVE_INTERVAL,
-			name = "Auto-save interval",
-			description = "How often to automatically save trade data (in minutes)",
-			section = autoSaveSection,
-			position = 2
-	)
-	@Units(Units.MINUTES)
-	@Range(min = 1)
-	default int autoSaveInterval() {
-		return 10;
-	}
-
-	@ConfigItem(
-			keyName = SHOW_AUTO_SAVE_DISPLAY,
-			name = "Show countdown timer",
-			description = "Display the countdown timer in the stats panel",
-			section = autoSaveSection,
-			position = 3
-	)
-	default boolean showAutoSaveDisplay() {
-		return true;
-	}
 
 	@ConfigSection(
 			name = "Custom Recipes",

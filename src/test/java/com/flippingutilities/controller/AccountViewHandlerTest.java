@@ -1,7 +1,7 @@
 package com.flippingutilities.controller;
 
-import com.flippingutilities.db.SqliteStorage;
 import com.flippingutilities.db.TradePersister;
+import com.flippingutilities.db.JsonStorage;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
@@ -19,9 +19,16 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
+import org.junit.rules.TemporaryFolder;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
+import java.io.File;
+import java.nio.file.Files;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -31,14 +38,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import static java.util.Collections.singleton;
 import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
@@ -51,8 +57,9 @@ public class AccountViewHandlerTest {
     private static final Instant INTERVAL_START = Instant.parse("2026-01-01T00:00:00Z");
 
     private final Map<String, AccountData> accounts = new HashMap<>();
-    private final Set<String> savedAccounts = new HashSet<>();
-    private final Map<String, String> savedJson = new HashMap<>();
+    @Rule public TemporaryFolder folder = new TemporaryFolder();
+    private File dataDirectory;
+    private ExecutorService storageExecutor;
     private final Gson gson = new Gson();
     private FlippingPlugin plugin;
     private DataHandler dataHandler;
@@ -60,46 +67,51 @@ public class AccountViewHandlerTest {
 
     @Before
     public void setUp() throws Exception {
-        plugin = new FlippingPlugin() {
-            @Override
-            public void submitStorageTask(Consumer<SqliteStorage> task) {
-                // These tests exercise JSON dirty tracking and in-memory view selection.
-            }
+        plugin = new FlippingPlugin();
+        dataDirectory = folder.newFolder();
+        plugin.tradePersister = new TradePersister(gson) {
+            @Override public File getAccountDirectory() { return dataDirectory; }
         };
-        plugin.tradePersister = new TradePersister(new Gson()) {
-            @Override
-            public void writeToFile(String displayName, Object data) {
-                if (data instanceof AccountData) {
-                    savedAccounts.add(displayName);
-                    savedJson.put(displayName, gson.toJson(data));
-                }
-            }
-        };
-        dataHandler = new DataHandler(plugin);
+        recipeClient = new OkHttpClient.Builder().addInterceptor(chain -> new Response.Builder()
+            .request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+            .body(ResponseBody.create(MediaType.get("application/json"), "[]")).build()).build();
+        setField(plugin, FlippingPlugin.class, "recipeHandler",
+            new RecipeHandler(gson, recipeClient, Collections.emptyList()));
+        storageExecutor = Executors.newSingleThreadExecutor();
+        dataHandler = new DataHandler(plugin, storageExecutor);
         setField(plugin, FlippingPlugin.class, "dataHandler", dataHandler);
         setField(plugin, FlippingPlugin.class, "flippingItemHandler", new FlippingItemHandler(plugin));
-        setField(dataHandler, DataHandler.class, "accountSpecificData", accounts);
+        dataHandler.loadData();
+        assertNull(dataHandler.getStorageError());
         for (String name : Arrays.asList(FIRST_ACCOUNT, SECOND_ACCOUNT)) {
-            AccountData account = new AccountData();
+            dataHandler.addAccount(name);
+            AccountData account = dataHandler.getAccountData(name);
             FlippingItem item = new FlippingItem(ITEM_ID, "Abyssal whip", 70, name);
             item.setValidFlippingPanelItem(true);
             account.getTrades().add(item);
             account.setAccumulatedSessionTimeMillis(1000L);
             accounts.put(name, account);
         }
+        saveAndLoad();
         select(FIRST_ACCOUNT);
     }
 
     @After
-    public void closeRecipeClient() {
-        if (recipeClient != null) {
-            recipeClient.dispatcher().executorService().shutdownNow();
-            recipeClient.connectionPool().evictAll();
+    public void closeResources() throws Exception {
+        try {
+            if (dataHandler != null) dataHandler.close().get(10, TimeUnit.SECONDS);
+        } finally {
+            if (storageExecutor != null) storageExecutor.shutdownNow();
+            if (recipeClient != null) {
+                recipeClient.dispatcher().executorService().shutdownNow();
+                recipeClient.connectionPool().evictAll();
+            }
         }
     }
 
     @Test
     public void readOnlyViewsAndSelectionDoNotScheduleAccountSaves() throws Exception {
+        byte[] originalJournal = journalBytes();
         assertSame(accounts.get(FIRST_ACCOUNT).getTrades(), plugin.viewItemsForCurrentView());
         assertTrue(plugin.viewRecipeFlipGroupsForCurrentView().isEmpty());
         assertEquals(Duration.ofSeconds(1), plugin.viewAccumulatedTimeForCurrentView());
@@ -118,20 +130,23 @@ public class AccountViewHandlerTest {
         select(FIRST_ACCOUNT);
         assertEquals(accounts.keySet(), new HashSet<>(selectedNames));
 
-        assertTrue(dataHandler.storeData());
-        assertTrue(savedAccounts.isEmpty());
+        assertFalse(dataHandler.isSavePending());
+        Map<String, AccountData> persisted = closeAndLoad();
+        assertEquals(accounts.keySet(), persisted.keySet());
+        assertArrayEquals(originalJournal, journalBytes());
     }
 
     @Test
-    public void hidingTheSelectedAccountLeavesOtherAccountsUntouched() {
+    public void hidingTheSelectedAccountLeavesOtherAccountsUntouched() throws Exception {
         FlippingItem first = item(FIRST_ACCOUNT);
         plugin.setAllFlippingItemsAsHidden();
 
         assertFalse(first.getValidFlippingPanelItem());
         assertTrue(accounts.get(FIRST_ACCOUNT).getTrades().isEmpty());
         assertTrue(item(SECOND_ACCOUNT).getValidFlippingPanelItem());
-        assertTrue(dataHandler.storeData());
-        assertEquals(singleton(FIRST_ACCOUNT), savedAccounts);
+        Map<String, AccountData> persisted = closeAndLoad();
+        assertTrue(persisted.get(FIRST_ACCOUNT).getTrades().isEmpty());
+        assertTrue(persisted.get(SECOND_ACCOUNT).getTrades().get(0).getValidFlippingPanelItem());
     }
 
     @Test
@@ -146,8 +161,9 @@ public class AccountViewHandlerTest {
         plugin.truncateTradeList();
         assertTrue(accounts.get(FIRST_ACCOUNT).getTrades().isEmpty());
         assertTrue(accounts.get(SECOND_ACCOUNT).getTrades().isEmpty());
-        assertTrue(dataHandler.storeData());
-        assertEquals(accounts.keySet(), savedAccounts);
+        Map<String, AccountData> persisted = closeAndLoad();
+        assertTrue(persisted.get(FIRST_ACCOUNT).getTrades().isEmpty());
+        assertTrue(persisted.get(SECOND_ACCOUNT).getTrades().isEmpty());
     }
 
     @Test
@@ -156,29 +172,37 @@ public class AccountViewHandlerTest {
         plugin.addFavoritedItem(favorite);
         assertTrue(item(FIRST_ACCOUNT).isFavorite());
         assertFalse(item(SECOND_ACCOUNT).isFavorite());
-        assertTrue(dataHandler.storeData());
-        assertEquals(singleton(FIRST_ACCOUNT), savedAccounts);
+        Map<String, AccountData> persisted = saveAndLoad();
+        assertTrue(persisted.get(FIRST_ACCOUNT).getTrades().get(0).isFavorite());
+        assertFalse(persisted.get(SECOND_ACCOUNT).getTrades().get(0).isFavorite());
 
-        savedAccounts.clear();
         select(FlippingPlugin.ACCOUNT_WIDE);
         plugin.addFavoritedItem(favorite);
         assertTrue(item(FIRST_ACCOUNT).isFavorite());
         assertTrue(item(SECOND_ACCOUNT).isFavorite());
-        assertTrue(dataHandler.storeData());
-        assertEquals(accounts.keySet(), savedAccounts);
+        persisted = closeAndLoad();
+        assertTrue(persisted.get(FIRST_ACCOUNT).getTrades().get(0).isFavorite());
+        assertTrue(persisted.get(SECOND_ACCOUNT).getTrades().get(0).isFavorite());
     }
 
     @Test
-    public void mutableItemAccessMarksOnlyTheUnderlyingSingleAccount() throws Exception {
-        assertSame(accounts.get(FIRST_ACCOUNT).getTrades(), plugin.getItemsForCurrentView());
-        assertTrue(dataHandler.storeData());
-        assertEquals(singleton(FIRST_ACCOUNT), savedAccounts);
+    public void mutableItemAccessPersistsTheSingleAccountButMergedItemsRemainCopies() throws Exception {
+        List<FlippingItem> selectedItems = plugin.getItemsForCurrentView();
+        assertSame(accounts.get(FIRST_ACCOUNT).getTrades(), selectedItems);
+        selectedItems.get(0).setFavorite(true);
+        assertTrue(dataHandler.isSavePending());
+        Map<String, AccountData> persisted = saveAndLoad();
+        assertTrue(persisted.get(FIRST_ACCOUNT).getTrades().get(0).isFavorite());
+        assertFalse(persisted.get(SECOND_ACCOUNT).getTrades().get(0).isFavorite());
 
-        savedAccounts.clear();
+        byte[] originalJournal = journalBytes();
         select(FlippingPlugin.ACCOUNT_WIDE);
-        plugin.getItemsForCurrentView();
-        assertTrue(dataHandler.storeData());
-        assertTrue("A merged view contains copies and must not mark underlying accounts dirty", savedAccounts.isEmpty());
+        plugin.getItemsForCurrentView().get(0).setFavorite(false);
+        assertFalse("A merged view contains copies and must not leave accounts dirty", dataHandler.isSavePending());
+        persisted = closeAndLoad();
+        assertTrue(persisted.get(FIRST_ACCOUNT).getTrades().get(0).isFavorite());
+        assertFalse(persisted.get(SECOND_ACCOUNT).getTrades().get(0).isFavorite());
+        assertArrayEquals(originalJournal, journalBytes());
     }
 
     @Test
@@ -195,10 +219,9 @@ public class AccountViewHandlerTest {
             assertHistory(accounts.get(account), account, "before");
         }
         assertEquals(2, plugin.viewRecipeFlipGroupsForCurrentView().get(0).getRecipeFlips().size());
-        assertTrue(dataHandler.storeData());
-        assertEquals(accounts.keySet(), savedAccounts);
+        Map<String, AccountData> persisted = closeAndLoad();
         for (String account : accounts.keySet()) {
-            assertHistory(gson.fromJson(savedJson.get(account), AccountData.class), account, "before");
+            assertHistory(persisted.get(account), account, "before");
         }
     }
 
@@ -210,17 +233,12 @@ public class AccountViewHandlerTest {
 
         assertHistory(accounts.get(FIRST_ACCOUNT), FIRST_ACCOUNT, "before");
         assertHistory(accounts.get(SECOND_ACCOUNT), SECOND_ACCOUNT, "before", "after");
-        assertTrue(dataHandler.storeData());
-        assertEquals(singleton(FIRST_ACCOUNT), savedAccounts);
-        assertHistory(gson.fromJson(savedJson.get(FIRST_ACCOUNT), AccountData.class), FIRST_ACCOUNT, "before");
+        Map<String, AccountData> persisted = closeAndLoad();
+        assertHistory(persisted.get(FIRST_ACCOUNT), FIRST_ACCOUNT, "before");
+        assertHistory(persisted.get(SECOND_ACCOUNT), SECOND_ACCOUNT, "before", "after");
     }
 
     private void addRecipeHistory() throws Exception {
-        recipeClient = new OkHttpClient.Builder().addInterceptor(chain -> new Response.Builder()
-            .request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
-            .body(ResponseBody.create(MediaType.get("application/json"), "[]")).build()).build();
-        setField(plugin, FlippingPlugin.class, "recipeHandler",
-            new RecipeHandler(gson, recipeClient, Collections.emptyList()));
         Recipe recipe = new Recipe(singletonList(new RecipeItem(ITEM_ID, 1)),
             singletonList(new RecipeItem(ITEM_ID + 1, 1)), "Test recipe");
         for (String account : accounts.keySet()) {
@@ -241,7 +259,28 @@ public class AccountViewHandlerTest {
                     singletonMap(ITEM_ID, singletonMap(offer.getUuid(), new PartialOffer(offer, 1))), 0));
             }
             accounts.get(account).getRecipeFlipGroups().add(new RecipeFlipGroup(recipe, flips));
+            dataHandler.markDataAsHavingChanged(account);
         }
+        saveAndLoad();
+    }
+
+    private Map<String, AccountData> saveAndLoad() throws Exception {
+        dataHandler.storeData();
+        storageExecutor.submit(() -> {}).get(10, TimeUnit.SECONDS);
+        assertNull(dataHandler.getStorageError());
+        assertFalse(dataHandler.isSavePending());
+        return new JsonStorage(gson, dataDirectory).load().getAccounts();
+    }
+
+    private Map<String, AccountData> closeAndLoad() throws Exception {
+        dataHandler.close().get(10, TimeUnit.SECONDS);
+        assertNull(dataHandler.getStorageError());
+        assertFalse(dataHandler.isSavePending());
+        return new JsonStorage(gson, dataDirectory).load().getAccounts();
+    }
+
+    private byte[] journalBytes() throws Exception {
+        return Files.readAllBytes(dataDirectory.toPath().resolve("json-v2/journal.jsonl"));
     }
 
     private void assertHistory(AccountData data, String account, String... positions) {

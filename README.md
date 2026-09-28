@@ -128,13 +128,43 @@ Quickly lookup your favorited items just by typing "1" in the ge search!
 
 # Development
 
+### Building and checking Plugin Hub compatibility
+
+Use Java 11 and `./gradlew clean build` to compile the plugin and run its tests.
+`./gradlew runPlugin` starts the development client.
+
+`runelite-plugin.properties` selects `build=standard` for Plugin Hub distribution.
+The Hub replaces this repository's `build.gradle` and `settings.gradle` with its
+[standard build template](https://github.com/runelite/plugin-hub-tooling/blob/master/package/src/main/resources/net/runelite/pluginhub/packager/standard-build.gradle).
+Local test dependencies and development tasks still work, but custom dependencies
+and tasks in those files do not configure the Hub build. Set the displayed plugin
+version in `runelite-plugin.properties`; the Hub does not read the local Gradle
+version in standard mode.
+
+GitHub Actions runs two independent checks on pull requests and pushes to `master`:
+
+- **Build and test:** runs the local Gradle build and uploads HTML/XML test reports.
+- **Plugin Hub:** uses RuneLite's official packager, the Hub's current RuneLite
+  version and dependency verification metadata, and strict PR checks. This catches
+  standard-build compilation failures, unsupported APIs, invalid plugin metadata,
+  icon/license problems, and oversized JARs. The job summary records the checked commit
+  and upstream versions; artifacts contain the build logs and, on success, the
+  packaged JAR and source archive.
+
+The Hub check always runs in PR mode, including on `master`, and does not publish
+the plugin. Build failures remain failures even if the local Gradle build passes.
+These checks reproduce Hub packaging feedback, not its separate review bot or
+maintainer approval. After merging a release, update the commit in
+[`plugin-hub/plugins/flipping-utilities`](https://github.com/runelite/plugin-hub/blob/master/plugins/flipping-utilities)
+to submit it to the Hub.
+
 ### General Structure of Codebase
 
 This section will talk about the purpose of various parts of the codebase, specifically the folders.
 
 **controller/**
 - `FlippingPlugin` wires the plugin lifecycle, RuneLite events, jobs and UI to domain handlers.
-  `StorageController` owns backend switching, ordered SQLite work, recovery and maintenance.
+  `DataHandler` owns the live account models and an ordered background queue for JSON storage.
   `TradeHistoryHandler`, `FavoriteHandler`, `RecipeFlipHandler`, `AccountViewHandler` and
   `SessionTimeHandler` handle their respective account operations. `NewOfferEventPipelineHandler`
   consumes live GE events. Public methods on `FlippingPlugin` delegate to these handlers so
@@ -148,10 +178,10 @@ This section will talk about the purpose of various parts of the codebase, speci
 
 
 **db/**
-- `TradePersister` reads and writes JSON. `SqliteStorage` owns the SQLite connection, schema,
-  settings and recovery marker, and delegates to account, offer, recipe and item-state stores.
-  Its synchronized entry points keep those stores on the same connection and transaction boundary.
-  `OfferJsonCodec` handles persisted offer snapshots; `MigrationService` imports JSON accounts.
+- `TradePersister` reads legacy account JSON and exports CSV. `JsonStorageCodec` converts accounts
+  into versioned records. `JsonStorage` migrates legacy files and tracks each client's adopted data.
+  `JsonJournalStore` commits changed records and maintains recoverable checkpoints.
+  See [JSON storage and recovery](docs/json-storage.md) for the format, migration and concurrency behavior.
 
 **ui/**
 - This folder contains all the UI code for the plugin which is the code that draws the "plugin" you see, such as the slots

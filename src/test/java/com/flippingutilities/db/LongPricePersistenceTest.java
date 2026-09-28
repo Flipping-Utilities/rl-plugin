@@ -19,8 +19,6 @@ import org.junit.rules.TemporaryFolder;
 import java.io.File;
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
-import java.sql.ResultSet;
-import java.sql.Statement;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
@@ -55,48 +53,20 @@ public class LongPricePersistenceTest {
     }
 
     @Test
-    public void liveSqliteWritesRoundTripLongPricesAndTaxedProfits() throws Exception {
-        AccountData source = account();
-        File database = folder.newFile("live.db");
-        SqliteStorage storage = new SqliteStorage(database, new Gson());
-        try {
-            storage.initializeSchema();
-            for (OfferEvent offer : offers(source)) {
-                storage.recordTrade(ACCOUNT, offer);
-            }
-            try (Statement statement = storage.getConnection().createStatement();
-                 ResultSet rows = statement.executeQuery("SELECT price FROM trades ORDER BY timestamp")) {
-                assertTrue(rows.next());
-                assertEquals(BUY_PRICE, rows.getLong(1));
-                assertTrue(rows.next());
-                assertEquals(SELL_PRICE, rows.getLong(1));
-            }
-            storage.close();
-            assertMoney(storage.loadAccount(ACCOUNT));
-        } finally {
-            storage.close();
-        }
+    public void journalRecordsRoundTripLongPricesAndTaxedProfits() {
+        JsonStorageCodec codec = new JsonStorageCodec(new Gson());
+        assertMoney(codec.decodeAccount(ACCOUNT, codec.encodeAccount(ACCOUNT, account())));
     }
 
     @Test
     public void jsonMigrationAndCsvKeepLongPrices() throws Exception {
         TradePersister persister = new TradePersister(new Gson(), folder.newFolder("accounts"));
-        persister.writeToFile(ACCOUNT, account());
+        LegacyJsonFixtures.write(persister, ACCOUNT, account());
         AccountData fromJson = persister.loadAccount(ACCOUNT);
         assertMoney(fromJson);
 
-        SqliteStorage storage = new SqliteStorage(folder.newFile("migrated.db"), new Gson());
-        try {
-            assertEquals(1, new MigrationService(storage, persister).migrate());
-            assertMoney(storage.loadAccount(ACCOUNT));
-            try (Statement statement = storage.getConnection().createStatement();
-                 ResultSet rows = statement.executeQuery("SELECT MAX(price) FROM trades")) {
-                assertTrue(rows.next());
-                assertEquals(SELL_PRICE, rows.getLong(1));
-            }
-        } finally {
-            storage.close();
-        }
+        JsonStorageCodec codec = new JsonStorageCodec(new Gson());
+        assertMoney(codec.decodeAccount(ACCOUNT, codec.encodeAccount(ACCOUNT, fromJson)));
 
         File csv = folder.newFile("export.csv");
         TradePersister.exportToCsv(csv, fromJson.getTrades(), "All time");
