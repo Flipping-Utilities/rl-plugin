@@ -12,8 +12,8 @@ import java.util.Map;
  * show how much of an offer event was consumed bc when creating recipe flips you can
  * specify that you only want some of the offer to be used.
  * 
- * Retains the offer snapshot because recipe components can outlive their history entries.
- * UUID-only files from older versions are still resolved on load via hydrateOffer().
+ * Stores only the offerUuid instead of the full OfferEvent to reduce JSON file size.
+ * The full OfferEvent is resolved on load via hydrateOffer().
  */
 @Data
 @NoArgsConstructor
@@ -22,7 +22,7 @@ public class PartialOffer {
     private String offerUuid;
     
     @SerializedName("offer")
-    @Expose
+    @Expose(serialize = false, deserialize = true)
     private OfferEvent offer;
     
     @Expose
@@ -40,9 +40,10 @@ public class PartialOffer {
     }
 
     public PartialOffer clone() {
-        PartialOffer copy = new PartialOffer(offerUuid, amountConsumed);
-        copy.offer = offer != null ? offer.clone() : null;
-        return copy;
+        return new PartialOffer(
+                offer != null ? offer.clone() : null,
+                amountConsumed
+        );
     }
 
     public void hydrateOffer(Map<String, OfferEvent> offersByUuid) {
@@ -64,13 +65,11 @@ public class PartialOffer {
         if (offer == null) {
             return null;
         }
-        // Clamp at 0: legacy recipe data can reference more consumption than the offer holds
-        // (e.g. offers deleted after the recipe flip was made). A negative remaining quantity
-        // used to propagate into flip displays as e.g. "-666 flipped (ongoing)".
-        int remainingAmount = Math.max(0, offer.getCurrentQuantityInTrade() - amountConsumed);
+        int remainingAmount = offer.getCurrentQuantityInTrade() - amountConsumed;
         OfferEvent adjustedOfferEvent = offer.clone();
         adjustedOfferEvent.setCurrentQuantityInTrade(remainingAmount);
         return adjustedOfferEvent;
     }
 }
+
 

@@ -31,16 +31,8 @@ import com.flippingutilities.jobs.WikiDataFetcherJob;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.Section;
-import com.flippingutilities.ui.uiutilities.CustomColors;
-import com.flippingutilities.ui.uiutilities.CustomFonts;
-import com.flippingutilities.ui.uiutilities.Icons;
-import com.flippingutilities.ui.uiutilities.TimeFormatters;
-import com.flippingutilities.ui.uiutilities.UIUtilities;
-import com.flippingutilities.utilities.Constants;
-import com.flippingutilities.utilities.GeTax;
-import com.flippingutilities.utilities.WikiDataSource;
-import com.flippingutilities.utilities.WikiItemMargins;
-import com.flippingutilities.utilities.WikiRequestWrapper;
+import com.flippingutilities.ui.uiutilities.*;
+import com.flippingutilities.utilities.*;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
@@ -50,35 +42,18 @@ import net.runelite.client.util.AsyncBufferedImage;
 import net.runelite.client.util.LinkBrowser;
 import net.runelite.client.util.QuantityFormatter;
 
-import javax.swing.Box;
-import javax.swing.BoxLayout;
-import javax.swing.Icon;
-import javax.swing.ImageIcon;
-import javax.swing.JComponent;
-import javax.swing.JDialog;
-import javax.swing.JLabel;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
-import javax.swing.SwingConstants;
+import javax.swing.*;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.TextField;
+import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.*;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Represents an instance of one of the many panels on the FlippingPanel. It is used to display information such as
@@ -431,7 +406,7 @@ public class FlippingItemPanel extends JPanel
 		searchCodeTextField.setText(flippingItem.getFavoriteCode());
 		searchCodeTextField.addActionListener(e -> {
 			isHighlighted[0] = false;
-			if (plugin.isAccountWideView()) {
+			if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
 				plugin.setFavoriteCodeOnAllAccounts(flippingItem, searchCodeTextField.getText());
 			}
 			else {
@@ -439,11 +414,6 @@ public class FlippingItemPanel extends JPanel
 			}
 
 			flippingItem.setFavoriteCode(searchCodeTextField.getText());
-			// Persist the single-account code change so a SQLite-mode restart doesn't revert it.
-			// Runs after the set above so the persisted value is the new one.
-			if (!plugin.isAccountWideView()) {
-				plugin.persistFavoriteCodeOnAccount(plugin.getAccountCurrentlyViewed(), flippingItem);
-			}
 
 			searchCodeLabel.setText("<html> quick search code: " + UIUtilities.colorText(flippingItem.getFavoriteCode(), ColorScheme.GRAND_EXCHANGE_ALCH) + "</html>");
 
@@ -687,7 +657,10 @@ public class FlippingItemPanel extends JPanel
 		itemIconLabel.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
-				plugin.setItemVisible(flippingItem, false);
+				flippingItem.setValidFlippingPanelItem(false);
+				if (!plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE)) {
+					plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
+				}
 				plugin.getFlippingPanel().rebuild(plugin.viewItemsForCurrentView());
 			}
 
@@ -776,7 +749,7 @@ public class FlippingItemPanel extends JPanel
 					plugin.addFavoritedItem(flippingItem);
 				}
 
-				if (plugin.isAccountWideView())
+				if (plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE))
 				{
 					plugin.setFavoriteOnAllAccounts(flippingItem, !flippingItem.isFavorite());
 				}
@@ -785,14 +758,9 @@ public class FlippingItemPanel extends JPanel
 				}
 
 				//if it was a dummy item and in the accountwide view, it has already had its favorite set by setFavoriteOnAllAccounts
-				boolean wasDummyAndAccountwide = wasDummy && plugin.isAccountWideView();
+				boolean wasDummyAndAccountwide = wasDummy && plugin.getAccountCurrentlyViewed().equals(FlippingPlugin.ACCOUNT_WIDE);
 				if (!wasDummyAndAccountwide) {
 					flippingItem.setFavorite(!flippingItem.isFavorite());
-					// Persist the single-account toggle so a SQLite-mode restart doesn't revert it.
-					// Runs after the toggle above so the persisted value is the new one.
-					if (!plugin.isAccountWideView()) {
-						plugin.persistFavoriteOnAccount(plugin.getAccountCurrentlyViewed(), flippingItem);
-					}
 				}
 
 				favoriteIcon.setIcon(flippingItem.isFavorite()? Icons.STAR_ON_ICON:Icons.STAR_OFF_ICON);

@@ -1,7 +1,6 @@
 package com.flippingutilities.jobs;
 
 import com.flippingutilities.controller.FlippingPlugin;
-import com.flippingutilities.controller.ApiRequestHandlerTest.ManualClient;
 import com.flippingutilities.utilities.WikiDataSource;
 import com.flippingutilities.utilities.WikiRequestWrapper;
 import com.google.gson.Gson;
