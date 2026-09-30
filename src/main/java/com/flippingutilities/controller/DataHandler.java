@@ -31,6 +31,7 @@ import com.flippingutilities.model.AccountWideData;
 import com.flippingutilities.model.BackupCheckpoints;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
 
@@ -64,14 +65,166 @@ public class DataHandler {
     public void addAccount(String displayName) {
         log.info("adding {} to data handler", displayName);
         AccountData accountData = new AccountData();
+        accountData.setDisplayName(displayName);
         accountData.prepareForUse(plugin);
         accountSpecificData.put(displayName, accountData);
+        plugin.tradePersister.setAccountIndex(accountSpecificData);
     }
 
     public void deleteAccount(String displayName) {
         log.info("deleting account: {}", displayName);
-        accountSpecificData.remove(displayName);
         plugin.tradePersister.deleteAccount(displayName);
+        accountSpecificData.remove(displayName);
+        accountsWithUnsavedChanges.remove(displayName);
+        plugin.tradePersister.setAccountIndex(accountSpecificData);
+    }
+
+    /** Binds a verified logged-in character to its existing history before accepting offers. */
+    public String bindLoggedInAccount(String accountId, String displayName) throws IOException {
+        AccountData account = accountSpecificData.values().stream()
+            .filter(data -> accountId.equals(data.getAccountId())).findFirst().orElse(null);
+        if (account == null) {
+            account = accountSpecificData.values().stream()
+                .filter(data -> data.getAccountId() == null && displayName.equals(data.getDisplayName()))
+                .findFirst().orElse(null);
+        }
+        String oldKey = getAccountKey(account);
+        String oldName = account == null ? null : account.getDisplayName();
+        if (oldKey == null || !accountsWithUnsavedChanges.contains(oldKey)) {
+            // A different client may have created or updated history before its polling event arrived.
+            AccountData disk = plugin.tradePersister.loadAccountById(accountId);
+            if (disk == null && account != null && account.getStorageFileName() != null) {
+                disk = plugin.tradePersister.loadAccountFile(account.getStorageFileName());
+                if (disk == null) {
+                    throw new IOException("Account history moved before login; wait for its reload");
+                }
+            }
+            if (disk != null) {
+                if (disk.isPersistenceReadFailed()) {
+                    throw new IOException("Cannot bind unreadable account history");
+                }
+                disk.prepareForUse(plugin);
+                account = disk;
+                if (oldName == null) {
+                    oldName = disk.getDisplayName();
+                }
+            }
+        }
+        if (account == null) {
+            account = new AccountData();
+            account.prepareForUse(plugin);
+        }
+        plugin.tradePersister.bindAccount(accountId, displayName, account);
+        if (oldKey != null) {
+            accountSpecificData.remove(oldKey);
+        }
+        // Keep a distinct temporary key until all UI names are reconciled below.
+        String insertionKey = "account:" + accountId;
+        accountSpecificData.put(insertionKey, account);
+        if (oldKey != null && accountsWithUnsavedChanges.remove(oldKey)) {
+            accountsWithUnsavedChanges.add(insertionKey);
+        }
+        rebuildAccountKeys();
+        String key = getAccountKey(account);
+        accountsWithUnsavedChanges.add(key);
+        if (backupCheckpoints != null && oldName != null) {
+            Instant checkpoint = backupCheckpoints.getAccountToBackupTime().remove(oldName);
+            if (checkpoint != null) {
+                backupCheckpoints.getAccountToBackupTime().putIfAbsent("id:" + accountId, checkpoint);
+                storeData("backupcheckpoints.special", backupCheckpoints);
+            }
+        }
+        return key;
+    }
+
+    /** Resolves a view after a name change without confusing characters that reused an RSN. */
+    public String getAccountKey(AccountData account) {
+        if (account == null) {
+            return null;
+        }
+        for (Map.Entry<String, AccountData> entry : accountSpecificData.entrySet()) {
+            if (entry.getValue() == account || sameAccount(entry.getValue(), account)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    private static boolean sameAccount(AccountData first, AccountData second) {
+        if (first.getAccountId() != null || second.getAccountId() != null) {
+            return first.getAccountId() != null && first.getAccountId().equals(second.getAccountId());
+        }
+        return Objects.equals(first.getDisplayName(), second.getDisplayName());
+    }
+
+    private void rebuildAccountKeys() {
+        Map<String, Integer> nameCounts = new HashMap<>();
+        accountSpecificData.forEach((key, data) -> {
+            if (data.getDisplayName() == null) {
+                data.setDisplayName(key);
+            }
+            nameCounts.merge(data.getDisplayName(), 1, Integer::sum);
+        });
+        Map<String, AccountData> renamed = new HashMap<>();
+        Set<String> renamedDirty = new HashSet<>();
+        accountSpecificData.forEach((oldKey, data) -> {
+            String key = data.getDisplayName();
+            if (nameCounts.get(key) > 1 || FlippingPlugin.ACCOUNT_WIDE.equals(key)) {
+                key += " [" + (data.getAccountId() == null ? "legacy" : data.getAccountId()) + "]";
+            }
+            renamed.put(key, data);
+            if (accountsWithUnsavedChanges.contains(oldKey)) {
+                renamedDirty.add(key);
+            }
+            data.renameAccount(key);
+        });
+        accountSpecificData = renamed;
+        accountsWithUnsavedChanges = renamedDirty;
+        plugin.tradePersister.setAccountIndex(accountSpecificData);
+    }
+
+    /** Reloads a committed filename; a delayed event for a vanished file must never create empty data. */
+    public String loadAccountFile(String fileName) {
+        try {
+            AccountData loaded = plugin.tradePersister.loadAccountFile(fileName);
+            if (loaded == null || loaded.isPersistenceReadFailed()) {
+                return null;
+            }
+            String oldKey = getAccountKey(loaded);
+            if (oldKey == null && loaded.getAccountId() != null) {
+                for (Map.Entry<String, AccountData> entry : accountSpecificData.entrySet()) {
+                    AccountData legacy = entry.getValue();
+                    if (legacy.getAccountId() == null && loaded.getDisplayName().equals(legacy.getDisplayName())
+                        && !plugin.tradePersister.accountFileExists(legacy)) {
+                        oldKey = entry.getKey();
+                        break;
+                    }
+                }
+            }
+            AccountData existing = oldKey == null ? null : accountSpecificData.get(oldKey);
+            if (existing != null && existing.getAccountId() == null && loaded.getAccountId() != null) {
+                // Preserve references held by the currently selected view across a legacy migration.
+                existing.setAccountId(loaded.getAccountId());
+            }
+            if (existing != null && accountsWithUnsavedChanges.contains(oldKey)) {
+                // A different client may have renamed the character while this client still has edits.
+                existing.setDisplayName(loaded.getDisplayName());
+                existing.setStorageFileName(loaded.getStorageFileName());
+                loaded = existing;
+            } else {
+                loaded.prepareForUse(plugin);
+            }
+            if (oldKey != null) {
+                accountSpecificData.put(oldKey, loaded);
+            } else {
+                accountSpecificData.put("file:" + fileName, loaded);
+            }
+            rebuildAccountKeys();
+            return getAccountKey(loaded);
+        } catch (Exception e) {
+            log.warn("Could not reload account file {}; keeping cached data", fileName, e);
+            return null;
+        }
     }
 
     public Collection<AccountData> getAllAccountData() {
@@ -114,8 +267,11 @@ public class DataHandler {
         log.debug("storing data");
         if (accountsWithUnsavedChanges.size() > 0) {
             log.debug("accounts with unsaved changes are {}. Saving them.", accountsWithUnsavedChanges);
-            accountsWithUnsavedChanges.forEach(accountName -> storeAccountData(accountName));
-            accountsWithUnsavedChanges.clear();
+            for (String accountName : new HashSet<>(accountsWithUnsavedChanges)) {
+                if (storeAccountData(accountName)) {
+                    accountsWithUnsavedChanges.remove(accountName);
+                }
+            }
         }
 
         if (accountWideDataChanged) {
@@ -131,6 +287,7 @@ public class DataHandler {
         accountWideData = fetchAccountWideData();
         plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
         accountSpecificData = fetchAndPrepareAllAccountData();
+        rebuildAccountKeys();
         backupAllAccountData();
     }
     
@@ -144,10 +301,11 @@ public class DataHandler {
             //any of these cases, we shouldn't back it up as its useless to backup an empty AccountData and, even worse, 
             //we may overwrite a previous backup with nothing.
 
-            if (!accountData.getTrades().isEmpty() && backupCheckpoints.shouldBackup(displayName, accountData.getLastStoredAt())) {
+            String checkpointKey = accountData.getAccountId() == null ? accountData.getDisplayName() : "id:" + accountData.getAccountId();
+            if (!accountData.getTrades().isEmpty() && backupCheckpoints.shouldBackup(checkpointKey, accountData.getLastStoredAt())) {
                 try { 
                     plugin.tradePersister.writeBackup(displayName, accountData);
-                    backupCheckpoints.getAccountToBackupTime().put(displayName, accountData.getLastStoredAt());
+                    backupCheckpoints.getAccountToBackupTime().put(checkpointKey, accountData.getLastStoredAt());
                     backupCheckpointsChanged = true;
                 }
                 catch (Exception e) {
@@ -159,7 +317,7 @@ public class DataHandler {
             }
         }
         if (backupCheckpointsChanged) {
-            storeData("backupCheckpoints.special", backupCheckpoints);
+            storeData("backupcheckpoints.special", backupCheckpoints);
         }
     }
 
@@ -206,11 +364,8 @@ public class DataHandler {
                 }
             }
             catch (Exception e) {
-                log.warn("Couldn't prepare account data for {} due to {}, setting default", displayName, e);
-                AccountData newAccountData = new AccountData();
-                newAccountData.startNewSession();
-                newAccountData.prepareForUse(plugin);
-                allAccountData.put(displayName, newAccountData);
+                log.warn("Couldn't prepare account data for {}; preserving its existing history", displayName, e);
+                accountData.setPersistenceReadFailed(true);
             }
         }
     }
@@ -235,6 +390,7 @@ public class DataHandler {
     public void loadAccountData(String displayName) {
         log.info("loading data for {}", displayName);
         accountSpecificData.put(displayName, fetchAccountData(displayName));
+        rebuildAccountKeys();
     }
 
     private AccountData fetchAccountData(String displayName)
@@ -259,28 +415,32 @@ public class DataHandler {
         catch (Exception e)
         {
             log.warn("couldn't load trades for {}, e = " + e, displayName);
-            return new AccountData();
+            AccountData failed = new AccountData();
+            failed.setDisplayName(displayName);
+            failed.setPersistenceReadFailed(true);
+            return failed;
         }
     }
 
-    private void storeAccountData(String displayName)
+    private boolean storeAccountData(String displayName)
     {
         try
         {
             AccountData data = accountSpecificData.get(displayName);
             if (data == null)
             {
-                log.debug("for an unknown reason the data associated with {} has been set to null. Storing" +
-                        "an empty AccountData object instead.", displayName);
-                data = new AccountData();
+                log.warn("No cached data for {}; refusing to write an empty account", displayName);
+                return false;
             }
             thisClientLastStored = displayName;
             data.setLastStoredAt(Instant.now());
             plugin.tradePersister.writeToFile(displayName, data);
+            return true;
         }
         catch (Exception e)
         {
             log.warn("couldn't store trades, error = " + e);
+            return false;
         }
     }
 

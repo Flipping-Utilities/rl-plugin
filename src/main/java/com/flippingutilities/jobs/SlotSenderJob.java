@@ -50,12 +50,12 @@ public class SlotSenderJob {
     }
 
     private void sendSlots() {
-        if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount())) {
+        if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInDisplayName())) {
             return;
         }
 
         List<SlotState> currentSlotStates = this.getCurrentSlots();
-        AccountSlotsUpdate accountSlotsUpdate = new AccountSlotsUpdate(plugin.getCurrentlyLoggedInAccount(), currentSlotStates);
+        AccountSlotsUpdate accountSlotsUpdate = new AccountSlotsUpdate(plugin.getCurrentlyLoggedInDisplayName(), currentSlotStates);
         if (accountSlotsUpdate.equals(this.previouslySentSlotUpdate) && !justLoggedIn) {
             log.debug("no updates to slots since the last time I sent them, not sending any requests.");
             subscribers.forEach(subscriber -> subscriber.accept(0));
