@@ -44,6 +44,9 @@ import org.apache.commons.text.StringEscapeUtils;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.nio.channels.FileChannel;
@@ -53,7 +56,6 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -239,8 +241,25 @@ public class TradePersister
     private String[] primaryIdentity(Filepath primary) throws IOException {
         Filepath marker = existingFile(accountNameFromFileName(primary.getFileName()) + ".identity.special.json");
         // This tiny record retains the ID/current name even when recovery uses an older, byte-preserved backup.
-        if (marker != null) return identity(marker);
-        return identity(primary);
+        if (marker != null) {
+            try {
+                String[] saved = identity(marker);
+                validateAccountId(saved[0]);
+                if (saved[1] != null && !saved[1].isEmpty()) return saved;
+            } catch (IOException | IllegalArgumentException e) {
+                log.warn("Invalid identity marker {}; using account history", marker.getFileName());
+            }
+        }
+        try {
+            return identity(primary);
+        } catch (IOException primaryFailure) {
+            // Recovery must also work during ownership checks, not only while reading trade history.
+            try { return identity(sibling(primary, ".backup.json")); }
+            catch (IOException backupFailure) {
+                primaryFailure.addSuppressed(backupFailure);
+                throw primaryFailure;
+            }
+        }
     }
 
     private Filepath findById(String id) throws IOException {
@@ -269,6 +288,8 @@ public class TradePersister
     }
 
     public synchronized Map<String, AccountData> loadAllAccounts() throws IOException {
+        try { recoverRenames(); }
+        catch (StorageBusyException e) { log.debug("Another client is completing a rename; polling will refresh it"); }
         List<AccountData> loaded = new ArrayList<>();
         for (Filepath file : files()) {
             if (isAccountFile(file.getFileName())) loaded.add(readAccount(file));
@@ -331,6 +352,7 @@ public class TradePersister
 
     public synchronized AccountData loadAccountById(String id) throws IOException {
         validateAccountId(id);
+        recoverRenames();
         Filepath file = findById(id);
         return file == null ? null : loadAccountFile(file.getFileName());
     }
@@ -394,6 +416,7 @@ public class TradePersister
      */
     public synchronized void bindAccount(String id, String name, AccountData data) throws IOException {
         try (StorageLock ignored = lockStorage()) {
+            recoverRenamesLocked();
             validateAccountId(id);
             if (data.isPersistenceReadFailed()) throw new IOException("Cannot migrate unreadable history for " + name);
             if (data.getAccountId() != null && !id.equals(data.getAccountId())) throw new IOException("Account ID does not match history");
@@ -408,24 +431,17 @@ public class TradePersister
                 if (diskId != null && !diskId.equals(id)) throw new IOException("History belongs to another account ID");
             }
             Filepath target = directory.joinSegment(identityStem(directory, id, name) + ".json");
-            Map<Filepath, Filepath> moves = new LinkedHashMap<>();
-            if (source != null && !source.getFileName().equals(target.getFileName())) {
-                String oldStem = accountNameFromFileName(source.getFileName());
-                String newStem = accountNameFromFileName(target.getFileName());
+            boolean renaming = source != null && !source.getFileName().equals(target.getFileName());
+            Filepath journal = directory.joinSegment(accountNameFromFileName(target.getFileName()) + ".rename.special.json");
+            if (journal.exists()) throw new IOException("Conflicting account rename journal: " + journal.getFileName());
+            if (renaming || source == null) {
+                String targetStem = accountNameFromFileName(target.getFileName());
                 for (String suffix : ACCOUNT_FILE_SUFFIXES) {
-                    Filepath oldFile = existingFile(oldStem + suffix);
-                    Filepath newFile = directory.joinSegment(newStem + suffix);
-                    Filepath exactTarget = existingFile(newFile.getFileName());
-                    if (exactTarget != null || (newFile.exists() && (oldFile == null
+                    Filepath oldFile = source == null ? null : existingFile(accountNameFromFileName(source.getFileName()) + suffix);
+                    Filepath newFile = directory.joinSegment(targetStem + suffix);
+                    if (existingFile(newFile.getFileName()) != null || (newFile.exists() && (oldFile == null
                         || !oldFile.getFileName().equalsIgnoreCase(newFile.getFileName())))) {
                         throw new IOException("Cannot rename account: destination already exists: " + newFile.getFileName());
-                    }
-                    if (oldFile != null) moves.put(oldFile, newFile);
-                }
-            } else if (source == null) {
-                for (String suffix : ACCOUNT_FILE_SUFFIXES) {
-                    if (sibling(target, suffix).exists()) {
-                        throw new IOException("Cannot create account: destination already exists: " + sibling(target, suffix).getFileName());
                     }
                 }
             }
@@ -433,34 +449,151 @@ public class TradePersister
             data.setDisplayName(name);
             data.renameAccount(name);
             Filepath primary = source == null ? target : source;
-            Map<String, String> marker = new LinkedHashMap<>();
-            marker.put("accountId", id);
-            marker.put("displayName", name);
-            Filepath identityFile = sibling(primary, ".identity.special.json");
-            writeAtomically(identityFile, marker, ".tmp");
-            if (!primary.getFileName().equals(target.getFileName()) && !moves.containsKey(identityFile)) {
-                moves.put(identityFile, sibling(target, ".identity.special.json"));
-            }
-            // Preserve an interrupted save as part of the family; use a separate temporary for identity writes.
+            // Commit the identity and pending history before recording a rename. No file moves yet.
             writeAtomically(primary, data, ".identity-write.tmp");
             data.setStorageFileName(primary.getFileName());
-            List<Map.Entry<Filepath, Filepath>> completed = new ArrayList<>();
-            try {
-                for (Map.Entry<Filepath, Filepath> move : moves.entrySet()) {
-                    moveWithoutReplacing(move.getKey(), move.getValue());
-                    completed.add(move);
+            IdentityRecord record = new IdentityRecord();
+            record.accountId = id;
+            record.displayName = name;
+            if (renaming) {
+                record.renameFrom = primary.getFileName();
+                record.renameTo = target.getFileName();
+                record.fileHashes = new LinkedHashMap<>();
+                String stem = accountNameFromFileName(primary.getFileName());
+                for (String suffix : ACCOUNT_FILE_SUFFIXES) {
+                    Filepath file = existingFile(stem + suffix);
+                    if (file != null) record.fileHashes.put(suffix, fileHash(file));
                 }
-            } catch (IOException e) {
-                Collections.reverse(completed);
-                for (Map.Entry<Filepath, Filepath> move : completed) {
-                    try { moveWithoutReplacing(move.getValue(), move.getKey()); }
-                    catch (IOException rollback) { e.addSuppressed(rollback); }
-                }
-                throw e;
+            }
+            if (renaming) {
+                writeAtomically(journal, record, ".tmp");
+                completeRename(record);
+            } else {
+                writeAtomically(sibling(primary, ".identity.special.json"), record, ".tmp");
             }
             data.setStorageFileName(target.getFileName());
             accountIndex.put(name, data);
         }
+    }
+
+    /** A durable journal proves which bytes belong to an interrupted rename. */
+    private static class IdentityRecord {
+        String accountId;
+        String displayName;
+        String renameFrom;
+        String renameTo;
+        Map<String, String> fileHashes;
+        boolean completed;
+    }
+
+    private IdentityRecord readIdentityRecord(Filepath file) throws IOException {
+        try (BufferedReader reader = file.openBufferedReader()) {
+            return gson.fromJson(reader, IdentityRecord.class);
+        } catch (RuntimeException e) {
+            throw new IOException("Invalid identity record: " + file.getFileName(), e);
+        }
+    }
+
+    private List<IdentityRecord> pendingRenames() throws IOException {
+        List<IdentityRecord> pending = new ArrayList<>();
+        for (Filepath file : files()) {
+            String filename = file.getFileName();
+            if (!filename.endsWith(".rename.special.json")) continue;
+            IdentityRecord record = readIdentityRecord(file);
+            if (record != null && record.renameFrom != null) pending.add(record);
+        }
+        return pending;
+    }
+
+    private void recoverRenames() throws IOException {
+        if (!pendingRenames().isEmpty()) {
+            try (StorageLock ignored = lockStorage()) { recoverRenamesLocked(); }
+        }
+    }
+
+    private void recoverRenamesLocked() throws IOException {
+        for (IdentityRecord record : pendingRenames()) completeRename(record);
+    }
+
+    private String fileHash(Filepath file) throws IOException {
+        final MessageDigest digest;
+        try { digest = MessageDigest.getInstance("SHA-256"); }
+        catch (NoSuchAlgorithmException e) { throw new IllegalStateException("SHA-256 unavailable", e); }
+        try (InputStream input = file.openInputStream()) {
+            byte[] buffer = new byte[8192];
+            int size;
+            while ((size = input.read(buffer)) != -1) digest.update(buffer, 0, size);
+        }
+        return ACCOUNT_NAME_ENCODING.encode(digest.digest());
+    }
+
+    private void verifyMigrationFile(Filepath file, String expectedHash) throws IOException {
+        if (!fileHash(file).equals(expectedHash)) {
+            throw new IOException("Interrupted rename conflicts with changed file: " + file.getFileName());
+        }
+    }
+
+    private void completeRename(IdentityRecord record) throws IOException {
+        validateAccountId(record.accountId);
+        String expectedTarget = identityStem(directory, record.accountId, record.displayName) + ".json";
+        if (!expectedTarget.equals(record.renameTo) || !isAccountFile(record.renameFrom)
+            || record.renameFrom.equals(record.renameTo) || record.fileHashes == null
+            || !record.fileHashes.containsKey(".json")) {
+            throw new IOException("Invalid account rename journal");
+        }
+        String fromStem = accountNameFromFileName(record.renameFrom);
+        String toStem = accountNameFromFileName(record.renameTo);
+        if (record.completed) {
+            finishRename(record, toStem);
+            return;
+        }
+        Map<Filepath, Filepath> moves = new LinkedHashMap<>();
+        // The separate journal stays put, including across a case-only intermediate move.
+        // The primary always moves last, after its supporting files.
+        for (String suffix : ACCOUNT_FILE_SUFFIXES) {
+            Filepath source = existingFile(fromStem + suffix);
+            Filepath target = directory.joinSegment(toStem + suffix);
+            Filepath existingTarget = existingFile(target.getFileName());
+            Filepath intermediate = existingFile(target.getFileName() + ".rename.tmp");
+            String expectedHash = record.fileHashes.get(suffix);
+            if (expectedHash == null) {
+                if (source != null || existingTarget != null || intermediate != null) {
+                    throw new IOException("Unplanned file in interrupted rename: " + target.getFileName());
+                }
+                continue;
+            }
+            if (source != null) {
+                if (existingTarget != null || intermediate != null || (target.exists()
+                    && !source.getFileName().equalsIgnoreCase(target.getFileName()))) {
+                    throw new IOException("Conflicting destination in interrupted rename: " + target.getFileName());
+                }
+                verifyMigrationFile(source, expectedHash);
+                moves.put(source, target);
+            } else if (intermediate != null) {
+                if (existingTarget != null) throw new IOException("Conflicting intermediate account file");
+                verifyMigrationFile(intermediate, expectedHash);
+                moves.put(intermediate, target);
+            } else if (existingTarget != null) {
+                verifyMigrationFile(existingTarget, expectedHash);
+            } else {
+                throw new IOException("Missing file in interrupted rename: " + target.getFileName());
+            }
+        }
+        // All remaining and already-completed moves were verified before changing another filename.
+        for (Map.Entry<Filepath, Filepath> move : moves.entrySet()) moveWithoutReplacing(move.getKey(), move.getValue());
+        // Commit completion before updating the marker, so cleanup is itself safe to repeat after a crash.
+        record.completed = true;
+        writeAtomically(directory.joinSegment(toStem + ".rename.special.json"), record, ".tmp");
+        finishRename(record, toStem);
+    }
+
+    private void finishRename(IdentityRecord record, String toStem) throws IOException {
+        if (existingFile(toStem + ".json") == null) throw new IOException("Completed rename has no primary file");
+        IdentityRecord identity = new IdentityRecord();
+        identity.accountId = record.accountId;
+        identity.displayName = record.displayName;
+        writeAtomically(directory.joinSegment(toStem + ".identity.special.json"), identity, ".tmp");
+        directory.joinSegment(toStem + ".rename.special.json").deleteIfExists();
     }
 
     private void moveWithoutReplacing(Filepath source, Filepath target) throws IOException {
@@ -524,12 +657,14 @@ public class TradePersister
 
     public synchronized void writeToFile(String key, Object data) throws IOException {
         try (StorageLock ignored = lockStorage()) {
+            recoverRenamesLocked();
             writeToFile(key, data, ".json");
         }
     }
 
     public synchronized void writeBackup(String key, Object data) throws IOException {
         try (StorageLock ignored = lockStorage()) {
+            recoverRenamesLocked();
             writeToFile(key, data, ".backup.json");
         }
     }
@@ -576,6 +711,7 @@ public class TradePersister
 
     public synchronized void deleteAccount(String key) {
         try (StorageLock ignored = lockStorage()) {
+            recoverRenamesLocked();
             Filepath primary = indexedPrimary(key);
             // Remove every variant so backups cannot later resurrect a deleted ID or block a rename.
             for (String suffix : ACCOUNT_FILE_SUFFIXES) sibling(primary, suffix).deleteIfExists();
@@ -585,6 +721,7 @@ public class TradePersister
 
     public synchronized void createPreMigrationBackup(String key) throws IOException {
         try (StorageLock ignored = lockStorage()) {
+            recoverRenamesLocked();
             Filepath primary = indexedPrimary(key);
             Filepath backup = sibling(primary, ".json.pre-migration");
             if (!backup.exists() && primary.exists()) primary.copyTo(backup);
@@ -592,8 +729,10 @@ public class TradePersister
     }
 
     public synchronized void deletePreMigrationBackup(String key) {
-        try (StorageLock ignored = lockStorage()) { sibling(indexedPrimary(key), ".json.pre-migration").deleteIfExists(); }
-        catch (IOException e) { log.warn("Failed to delete pre-migration backup for {}", key, e); }
+        try (StorageLock ignored = lockStorage()) {
+            recoverRenamesLocked();
+            sibling(indexedPrimary(key), ".json.pre-migration").deleteIfExists();
+        } catch (IOException e) { log.warn("Failed to delete pre-migration backup for {}", key, e); }
     }
 
     public static Filepath exportToCsv(Filepath directory, String accountId, String displayName,

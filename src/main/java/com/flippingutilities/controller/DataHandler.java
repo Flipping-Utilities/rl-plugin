@@ -104,6 +104,14 @@ public class DataHandler {
                     throw new IOException("Cannot bind unreadable account history");
                 }
                 disk.prepareForUse(plugin);
+                if (account == null) {
+                    disk.startNewSession();
+                } else {
+                    // Refresh persisted history without undoing this client's session reset or elapsed time.
+                    disk.setSessionStartTime(account.getSessionStartTime());
+                    disk.setAccumulatedSessionTimeMillis(account.getAccumulatedSessionTimeMillis());
+                    disk.setLastSessionTimeUpdate(account.getLastSessionTimeUpdate());
+                }
                 account = disk;
                 if (oldName == null) {
                     oldName = disk.getDisplayName();
