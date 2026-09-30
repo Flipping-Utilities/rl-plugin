@@ -34,20 +34,22 @@ import com.google.gson.FieldAttributes;
 import com.google.gson.annotations.Expose;
 import com.google.gson.stream.JsonWriter;
 import com.google.gson.reflect.TypeToken;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.client.RuneLite;
+import net.runelite.client.util.Filepath;
 import org.apache.commons.text.StringEscapeUtils;
 
-import java.io.File;
-import java.io.FileWriter;
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.lang.reflect.Type;
-import java.nio.file.Files;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 /**
  * This class is responsible for handling all the IO related tasks for persisting trades. This class should contain
@@ -63,8 +65,12 @@ public class TradePersister
 	/** Gson for serialization (excludes fields with @Expose(serialize=false)) */
 	private final Gson writeGson;
 
-	public TradePersister(Gson gson) {
+	@Getter
+	private final Filepath directory;
+
+	public TradePersister(Gson gson, Filepath directory) {
 		this.gson = gson;
+		this.directory = directory;
 		// Create a Gson for writing that excludes fields marked with @Expose(serialize=false)
 		this.writeGson = gson.newBuilder()
 			.setExclusionStrategies(new ExclusionStrategy() {
@@ -82,59 +88,55 @@ public class TradePersister
 			.create();
 	}
 
-	//this is in {user's home directory}/.runelite/flipping
-	public static final File PARENT_DIRECTORY = new File(RuneLite.RUNELITE_DIR, "flipping");
-	public static final File OLD_FILE = new File(PARENT_DIRECTORY, "trades.json");
-
 	/**
-	 * Creates flipping directory if it doesn't exist and partitions trades.json into individual files
-	 * for each account, if it exists.
+	 * Creates the plugin data directory and removes the obsolete combined trades file.
 	 *
 	 * @throws IOException handled in FlippingPlugin
 	 */
-	public static void setupFlippingFolder() throws IOException
+	public void setupFlippingFolder() throws IOException
 	{
-		if (!PARENT_DIRECTORY.exists())
-		{
-			log.debug("flipping directory doesn't exist yet so it's being created");
-			if (!PARENT_DIRECTORY.mkdir())
-			{
-				throw new IOException("unable to create parent directory!");
+		directory.createDirectories();
+		try (Stream<Filepath> files = directory.walk(1)) {
+			Iterator<Filepath> iterator = files.iterator();
+			while (iterator.hasNext()) {
+				Filepath file = iterator.next();
+				if (file.isFile() && file.getFileName().endsWith(".json")) {
+					try {
+						directory.joinSegment(file.getFileName());
+					} catch (IllegalArgumentException e) {
+						throw new IOException("Account filename is not supported by RuneLite Filepath: "
+							+ file.getFileName() + ". Existing data has not been changed.", e);
+					}
+				}
 			}
 		}
-		else
-		{
-			log.debug("flipping directory already exists so it's not being created");
-			if (OLD_FILE.exists())
-			{
-				OLD_FILE.delete();
-
-			}
-		}
+		directory.joinSegment("trades.json").deleteIfExists();
 	}
 
 	/**
-	 * loads each account's data from the parent directory located at {user's home directory}/.runelite/flipping/
+	 * Loads each account's data from the plugin data directory.
 	 * Each account's data is stored in separate file in that directory and is named {displayName}.json
 	 *
-	 * Why not use loadAccount(displayName) in this method? Here we have access to the files first so we can call
-	 * loadFromFile directly. rather than getting the display name from the file and then calling
-	 * loadAccount
+	 * Each account is loaded through loadAccount so backup recovery remains available.
 	 *
 	 * @return a map of display name to that account's data
 	 * @throws IOException handled in FlippingPlugin
 	 */
-	public Map<String, AccountData> loadAllAccounts()
+	public Map<String, AccountData> loadAllAccounts() throws IOException
 	{
 		Map<String, AccountData> accountsData = new HashMap<>();
-		for (File f : PARENT_DIRECTORY.listFiles())
-		{
-			if (f.getName().equals("accountwide.json") || !f.getName().contains(".json") || f.getName().contains(".backup.json") || f.getName().contains(".special.json")) {
-				continue;
+		try (Stream<Filepath> files = directory.walk(1)) {
+			Iterator<Filepath> iterator = files.iterator();
+			while (iterator.hasNext()) {
+				Filepath file = iterator.next();
+				String name = file.getFileName();
+				if (!file.isFile() || name.equals("accountwide.json") || !name.endsWith(".json")
+					|| name.endsWith(".backup.json") || name.endsWith(".special.json")) {
+					continue;
+				}
+				String displayName = name.substring(0, name.length() - ".json".length());
+				accountsData.put(displayName, loadAccount(displayName));
 			}
-			String displayName = f.getName().split("\\.")[0];
-			AccountData accountData  = loadAccount(displayName);
-			accountsData.put(displayName, accountData);
 		}
 
 		return accountsData;
@@ -146,7 +148,7 @@ public class TradePersister
 	{
 		log.debug("loading data for {}", displayName);
 		try {
-			File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
+			Filepath accountFile = directory.joinSegment(displayName + ".json");
 			AccountData accountData = loadFromFile(accountFile);
 			if (accountData == null)
 			{
@@ -168,7 +170,7 @@ public class TradePersister
 	private AccountData loadAccountFromBackup(String displayName) {
 		log.debug("loading data for {} from backup", displayName);
 		try {
-			File accountFile = new File(PARENT_DIRECTORY, displayName + ".backup.json");
+			Filepath accountFile = directory.joinSegment(displayName + ".backup.json");
 			if (!accountFile.exists()) {
 				log.debug("backup for {} does not exist, returning empty AccountData", displayName);
 				return new AccountData();
@@ -186,9 +188,9 @@ public class TradePersister
 		}
 	}
 
-	private AccountData loadFromFile(File f) throws IOException
+	private AccountData loadFromFile(Filepath file) throws IOException
 	{
-		try (java.io.BufferedReader bufferedReader = Files.newBufferedReader(f.toPath(), java.nio.charset.StandardCharsets.UTF_8);
+		try (BufferedReader bufferedReader = file.openBufferedReader();
 			com.google.gson.stream.JsonReader jsonReader = new com.google.gson.stream.JsonReader(bufferedReader))
 		{
 			return gson.fromJson(jsonReader, AccountData.class);
@@ -197,11 +199,12 @@ public class TradePersister
 
 
 	public AccountWideData loadAccountWideData() throws IOException {
-		File accountFile = new File(PARENT_DIRECTORY, "accountwide.json");
+		Filepath accountFile = directory.joinSegment("accountwide.json");
 		if (accountFile.exists()){
-			String accountWideDataJson = new String(Files.readAllBytes(accountFile.toPath()));
 			Type type = new TypeToken<AccountWideData>(){}.getType();
-			return gson.fromJson(accountWideDataJson, type);
+			try (BufferedReader reader = accountFile.openBufferedReader()) {
+				return gson.fromJson(reader, type);
+			}
 		}
 		else {
 			return new AccountWideData();
@@ -211,11 +214,12 @@ public class TradePersister
 	public BackupCheckpoints fetchBackupCheckpoints() {
 		try {
 			log.debug("Fetching backup checkpoints");
-			File backupCheckpointsFile = new File(PARENT_DIRECTORY, "backupcheckpoints.special.json");
+			Filepath backupCheckpointsFile = directory.joinSegment("backupcheckpoints.special.json");
 			if (backupCheckpointsFile.exists()){
-				String backupCheckpointsJson = new String(Files.readAllBytes(backupCheckpointsFile.toPath()));
 				Type type = new TypeToken<BackupCheckpoints>(){}.getType();
-				return gson.fromJson(backupCheckpointsJson, type);
+				try (BufferedReader reader = backupCheckpointsFile.openBufferedReader()) {
+					return gson.fromJson(reader, type);
+				}
 			}
 			else {
 				return new BackupCheckpoints();
@@ -227,7 +231,7 @@ public class TradePersister
 	}
 
 	/**
-	 * stores trades for an account in {user's home directory}/.runelite/flipping/{account's display name}.json
+	 * Stores trades in the plugin data directory as {account's display name}.json.
 	 *
 	 * @param displayName display name of the account the data is associated with
 	 * @param data        the trades and last offers of that account
@@ -235,44 +239,36 @@ public class TradePersister
 	 */
 	public void writeToFile(String displayName, Object data) throws IOException {
 		log.debug("Writing to file for {}", displayName);
-		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
-		File tempFile = new File(PARENT_DIRECTORY, displayName + ".json.tmp");
+		Filepath accountFile = directory.joinSegment(displayName + ".json");
+		Filepath tempFile = directory.joinSegment(displayName + ".json.tmp");
 		
-		try (BufferedWriter bufferedWriter = Files.newBufferedWriter(tempFile.toPath(), StandardCharsets.UTF_8);
+		try (BufferedWriter bufferedWriter = tempFile.openBufferedWriter();
 			JsonWriter jsonWriter = new JsonWriter(bufferedWriter)) {
 			writeGson.toJson(data, data.getClass(), jsonWriter);
 		} catch (IOException e) {
-			try { Files.deleteIfExists(tempFile.toPath()); } catch (IOException ignored) {}
+			try { tempFile.deleteIfExists(); } catch (IOException ignored) {}
 			throw e;
 		}
 		
 		try {
-				Files.move(tempFile.toPath(), accountFile.toPath(),
-						java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-		} catch (java.nio.file.AtomicMoveNotSupportedException ame) {
-				Files.move(tempFile.toPath(), accountFile.toPath(),
-						java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+			try {
+				tempFile.moveTo(accountFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+			} catch (AtomicMoveNotSupportedException ame) {
+				tempFile.moveTo(accountFile, StandardCopyOption.REPLACE_EXISTING);
+			}
 		} catch (IOException e) {
-				try { Files.deleteIfExists(tempFile.toPath()); } catch (IOException ignored) {}
+				try { tempFile.deleteIfExists(); } catch (IOException ignored) {}
 				throw e;
 		}
 	}
 
-	public static long lastModified(String fileName)
+	public void deleteFile(String fileName)
 	{
-		return new File(PARENT_DIRECTORY, fileName).lastModified();
-	}
-
-	public static void deleteFile(String fileName)
-	{
-		File accountFile = new File(PARENT_DIRECTORY, fileName);
-		if (accountFile.exists())
-		{
-			if (accountFile.delete()) {
-				log.debug("{} deleted", fileName);
-			} else {
-				log.debug("unable to delete {}", fileName);
-			}
+		try {
+			directory.joinSegment(fileName).deleteIfExists();
+			log.debug("{} deleted", fileName);
+		} catch (IOException e) {
+			log.debug("unable to delete {}", fileName, e);
 		}
 	}
 
@@ -280,12 +276,12 @@ public class TradePersister
 	 * Creates a pre-migration backup file for an account before migration.
 	 * This should only be called when migration is actually needed.
 	 */
-	public static void createPreMigrationBackup(String displayName) throws IOException {
-		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
-		File backupFile = new File(PARENT_DIRECTORY, displayName + ".json.pre-migration");
+	public void createPreMigrationBackup(String displayName) throws IOException {
+		Filepath accountFile = directory.joinSegment(displayName + ".json");
+		Filepath backupFile = directory.joinSegment(displayName + ".json.pre-migration");
 		if (!backupFile.exists() && accountFile.exists()) {
-			Files.copy(accountFile.toPath(), backupFile.toPath());
-			log.info("Created pre-migration backup: {}", backupFile.getName());
+			accountFile.copyTo(backupFile);
+			log.info("Created pre-migration backup: {}", backupFile.getFileName());
 		}
 	}
 
@@ -293,21 +289,19 @@ public class TradePersister
 	 * Deletes the pre-migration backup file for an account after successful migration.
 	 * This should be called after the account data has been successfully saved in the new format.
 	 */
-	public static void deletePreMigrationBackup(String displayName) {
+	public void deletePreMigrationBackup(String displayName) {
 		String backupFileName = displayName + ".json.pre-migration";
-		File backupFile = new File(PARENT_DIRECTORY, backupFileName);
-		if (backupFile.exists()) {
-			if (backupFile.delete()) {
-				log.info("Deleted pre-migration backup: {}", backupFileName);
-			} else {
-				log.warn("Failed to delete pre-migration backup: {}", backupFileName);
-			}
+		try {
+			directory.joinSegment(backupFileName).deleteIfExists();
+			log.info("Deleted pre-migration backup: {}", backupFileName);
+		} catch (IOException e) {
+			log.warn("Failed to delete pre-migration backup: {}", backupFileName, e);
 		}
 	}
 
 
-	public static void exportToCsv(File file, List<FlippingItem> trades, String startOfIntervalName) throws IOException {
-		try (BufferedWriter out = new BufferedWriter(new FileWriter(file))) {
+	public static void exportToCsv(Filepath file, List<FlippingItem> trades, String startOfIntervalName) throws IOException {
+		try (BufferedWriter out = file.openBufferedWriter()) {
 			String comment = "Displaying trades for selected time interval: " + startOfIntervalName;
 			out.write("# " + comment.replace("\r\n", "\n").replace('\r', '\n').replace("\n", "\r\n# ") + "\r\n");
 			writeCsvRecord(out, "name", "date", "quantity", "price", "state");
