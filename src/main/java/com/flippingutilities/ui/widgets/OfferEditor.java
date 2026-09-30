@@ -27,6 +27,7 @@
 package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.ui.uiutilities.Icons;
+import com.flippingutilities.utilities.Constants;
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
 import net.runelite.api.VarClientStr;
@@ -47,6 +48,10 @@ public class OfferEditor {
     private Widget bottomText;
     private Widget nonWikiText;
     private Widget wikiText;
+
+    public static boolean isNumericInputMode(int inputMode) {
+        return inputMode == Constants.MESLAYER_MODE_INT_INPUT || inputMode == Constants.MESLAYER_MODE_LONG_INPUT;
+    }
 
     public OfferEditor(Widget parent, Client client) {
         this.client = client;
