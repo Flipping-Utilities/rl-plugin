@@ -134,7 +134,7 @@ public class AccountData {
     }
 
     private void hydrateSlotTimers(FlippingPlugin plugin) {
-        if (slotTimers == null) {
+        if (slotTimers == null || slotTimers.size() != 8) {
             slotTimers = setupSlotTimers(plugin);
         } else {
             slotTimers.forEach(timer -> {
