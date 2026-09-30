@@ -27,27 +27,40 @@
 package com.flippingutilities.db;
 
 import com.flippingutilities.model.*;
+import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
+import com.google.common.io.BaseEncoding;
 import com.google.gson.Gson;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.annotations.Expose;
 import com.google.gson.stream.JsonWriter;
 import com.google.gson.reflect.TypeToken;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.client.RuneLite;
+import net.runelite.client.util.Filepath;
 import org.apache.commons.text.StringEscapeUtils;
 
-import java.io.File;
-import java.io.FileWriter;
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.nio.charset.StandardCharsets;
 import java.io.IOException;
+import java.io.InputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.lang.reflect.Type;
-import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 /**
  * This class is responsible for handling all the IO related tasks for persisting trades. This class should contain
@@ -57,14 +70,24 @@ import java.util.Map;
 @Slf4j
 public class TradePersister
 {
+	private static final BaseEncoding ACCOUNT_NAME_ENCODING = BaseEncoding.base16().lowerCase();
+    private static final String[] ACCOUNT_FILE_SUFFIXES = {
+        ".identity.special.json", ".backup.json.tmp", ".json.pre-migration", ".backup.json", ".json.tmp", ".json"
+    };
+    private Map<String, AccountData> accountIndex = new HashMap<>();
+
 	/** Gson for deserialization (reads all fields) */
 	Gson gson;
 	
 	/** Gson for serialization (excludes fields with @Expose(serialize=false)) */
 	private final Gson writeGson;
 
-	public TradePersister(Gson gson) {
+	@Getter
+	private final Filepath directory;
+
+	public TradePersister(Gson gson, Filepath directory) {
 		this.gson = gson;
+		this.directory = directory;
 		// Create a Gson for writing that excludes fields marked with @Expose(serialize=false)
 		this.writeGson = gson.newBuilder()
 			.setExclusionStrategies(new ExclusionStrategy() {
@@ -82,113 +105,514 @@ public class TradePersister
 			.create();
 	}
 
-	//this is in {user's home directory}/.runelite/flipping
-	public static final File PARENT_DIRECTORY = new File(RuneLite.RUNELITE_DIR, "flipping");
-	public static final File OLD_FILE = new File(PARENT_DIRECTORY, "trades.json");
-
-	/**
-	 * Creates flipping directory if it doesn't exist and partitions trades.json into individual files
-	 * for each account, if it exists.
-	 *
-	 * @throws IOException handled in FlippingPlugin
-	 */
-	public static void setupFlippingFolder() throws IOException
-	{
-		if (!PARENT_DIRECTORY.exists())
-		{
-			log.debug("flipping directory doesn't exist yet so it's being created");
-			if (!PARENT_DIRECTORY.mkdir())
-			{
-				throw new IOException("unable to create parent directory!");
-			}
-		}
-		else
-		{
-			log.debug("flipping directory already exists so it's not being created");
-			if (OLD_FILE.exists())
-			{
-				OLD_FILE.delete();
-
-			}
-		}
-	}
-
-	/**
-	 * loads each account's data from the parent directory located at {user's home directory}/.runelite/flipping/
-	 * Each account's data is stored in separate file in that directory and is named {displayName}.json
-	 *
-	 * Why not use loadAccount(displayName) in this method? Here we have access to the files first so we can call
-	 * loadFromFile directly. rather than getting the display name from the file and then calling
-	 * loadAccount
-	 *
-	 * @return a map of display name to that account's data
-	 * @throws IOException handled in FlippingPlugin
-	 */
-	public Map<String, AccountData> loadAllAccounts()
-	{
-		Map<String, AccountData> accountsData = new HashMap<>();
-		for (File f : PARENT_DIRECTORY.listFiles())
-		{
-			if (f.getName().equals("accountwide.json") || !f.getName().contains(".json") || f.getName().contains(".backup.json") || f.getName().contains(".special.json")) {
-				continue;
-			}
-			String displayName = f.getName().split("\\.")[0];
-			AccountData accountData  = loadAccount(displayName);
-			accountsData.put(displayName, accountData);
-		}
-
-		return accountsData;
-	}
-
-	//anything that wants to load an account's data MUST go through this method as it handles various cases such as
-	//loading from backups
-	public AccountData loadAccount(String displayName)
-	{
-		log.debug("loading data for {}", displayName);
-		try {
-			File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
-			AccountData accountData = loadFromFile(accountFile);
-			if (accountData == null)
-			{
-				log.warn("data for {} is null for some reason. Will try loading from backup", displayName);
-				accountData = loadAccountFromBackup(displayName);
-			}
-			return accountData;
-		}
-    catch (OutOfMemoryError e) {
-        log.error("OutOfMemoryError while loading data for {}. File may be too large. Returning empty AccountData.", displayName);
-        return new AccountData();
+    /** File locks are released by the OS if a client exits during a migration. */
+    private StorageLock lockStorage() throws IOException {
+        FileChannel channel = directory.joinSegment("accounts.lock")
+            .openFileChannel(StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+        try {
+            FileLock lock = channel.tryLock();
+            if (lock == null) throw new StorageBusyException();
+            return new StorageLock(channel, lock);
+        } catch (OverlappingFileLockException e) {
+            channel.close();
+            throw new StorageBusyException();
+        } catch (IOException e) {
+            channel.close();
+            throw e;
+        }
     }
-    catch (Exception e) {
-        log.warn("Got exception {} while loading data for {}. Will try loading from backup", e, displayName);
-        return loadAccountFromBackup(displayName);
+
+    public static class StorageBusyException extends IOException {
+        public StorageBusyException() { super("Another RuneLite client is updating account files; retry later"); }
     }
-	}
 
-	private AccountData loadAccountFromBackup(String displayName) {
-		log.debug("loading data for {} from backup", displayName);
-		try {
-			File accountFile = new File(PARENT_DIRECTORY, displayName + ".backup.json");
-			if (!accountFile.exists()) {
-				log.debug("backup for {} does not exist, returning empty AccountData", displayName);
-				return new AccountData();
-			}
-			AccountData accountData = loadFromFile(accountFile);
-			if (accountData == null) {
-				log.debug("data loaded from backup for {} is null for some reason, returning an empty AccountData object", displayName);
-				accountData = new AccountData();
-			}
-			return accountData;
-		}
-		catch (Exception e) {
-			log.debug("Couldn't load data for {} from backup due to {}", displayName, e);
-			return new AccountData();
-		}
-	}
+    private static class StorageLock implements AutoCloseable {
+        private final FileChannel channel;
+        private final FileLock lock;
+        private StorageLock(FileChannel channel, FileLock lock) { this.channel = channel; this.lock = lock; }
+        @Override public void close() throws IOException {
+            try { lock.release(); } finally { channel.close(); }
+        }
+    }
 
-	private AccountData loadFromFile(File f) throws IOException
+    /** Legacy names stay literal until an authenticated login supplies their account ID. */
+    public void setupFlippingFolder() throws IOException {
+        directory.createDirectories();
+        directory.joinSegment("trades.json").deleteIfExists();
+    }
+
+    public synchronized void setAccountIndex(Map<String, AccountData> accounts) {
+        accountIndex = new HashMap<>(accounts);
+    }
+
+    public synchronized boolean accountFileExists(AccountData data) throws IOException {
+        return data.getStorageFileName() != null && existingFile(data.getStorageFileName()) != null;
+    }
+
+    private static boolean isAccountFile(String name) {
+        return name.endsWith(".json") && !name.equals("accountwide.json")
+            && !name.endsWith(".backup.json") && !name.endsWith(".special.json");
+    }
+
+    /** Legacy filenames must never be decoded: @ followed by hex can be a literal old name. */
+    public static String accountNameFromFileName(String fileName) {
+        if (!fileName.endsWith(".json")) {
+            throw new IllegalArgumentException("Not an account JSON filename: " + fileName);
+        }
+        return fileName.substring(0, fileName.length() - 5);
+    }
+
+    private List<Filepath> files() throws IOException {
+        try (Stream<Filepath> stream = directory.walk(1)) {
+            List<Filepath> result = new ArrayList<>();
+            stream.filter(Filepath::isFile).forEach(result::add);
+            return result;
+        }
+    }
+
+    // Walking also gives us Filepath handles for legacy filenames rejected by joinSegment (e.g. Con).
+    private Filepath existingFile(String name) throws IOException {
+        for (Filepath file : files()) {
+            if (file.getFileName().equals(name)) return file;
+        }
+        return null;
+    }
+
+    private static void validateAccountId(String id) {
+        if (id == null) throw new IllegalArgumentException("Missing account ID");
+        long hash = Long.parseUnsignedLong(id);
+        if (hash == -1L || !Long.toUnsignedString(hash).equals(id)) {
+            throw new IllegalArgumentException("Invalid account ID: " + id);
+        }
+    }
+
+    private static Filepath accountFile(Filepath directory, String name, String suffix) {
+        if (name.contains("/") || name.contains("\\")) {
+            throw new IllegalArgumentException("Account names cannot contain path separators");
+        }
+        try {
+            return directory.joinSegment(name + suffix);
+        } catch (IllegalArgumentException ignored) {
+            return directory.joinSegment("legacy-@" + ACCOUNT_NAME_ENCODING.encode(name.getBytes(StandardCharsets.UTF_8)) + suffix);
+        }
+    }
+
+    private static String identityStem(Filepath directory, String id, String name) {
+        validateAccountId(id);
+        if (name == null || name.isEmpty()) throw new IllegalArgumentException("Missing display name");
+        String stem = id + "_" + name;
+        try {
+            directory.joinSegment(stem + ".json");
+            return stem;
+        } catch (IllegalArgumentException ignored) {
+            // Preserve unusual historical labels without placing separators or controls in a path.
+            return id + "_@" + ACCOUNT_NAME_ENCODING.encode(name.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    private Filepath sibling(Filepath primary, String suffix) throws IOException {
+        String stem = accountNameFromFileName(primary.getFileName());
+        Filepath existing = existingFile(stem + suffix);
+        return existing != null ? existing : accountFile(directory, stem, suffix);
+    }
+
+    /** Read just identity fields, skipping trade arrays without allocating another account history. */
+    private String[] identity(Filepath file) throws IOException {
+        try (BufferedReader reader = file.openBufferedReader();
+             com.google.gson.stream.JsonReader json = new com.google.gson.stream.JsonReader(reader)) {
+            String id = null;
+            String name = null;
+            json.beginObject();
+            while (json.hasNext()) {
+                String field = json.nextName();
+                if ((field.equals("accountId") || field.equals("displayName"))
+                    && json.peek() != com.google.gson.stream.JsonToken.NULL) {
+                    if (field.equals("accountId")) id = json.nextString();
+                    else name = json.nextString();
+                    if (id != null && name != null) break;
+                } else json.skipValue();
+            }
+            return new String[]{id, name};
+        } catch (RuntimeException e) {
+            throw new IOException("Cannot read account identity from " + file.getFileName(), e);
+        }
+    }
+
+    private String[] primaryIdentity(Filepath primary) throws IOException {
+        Filepath marker = existingFile(accountNameFromFileName(primary.getFileName()) + ".identity.special.json");
+        // This tiny record retains the ID/current name even when recovery uses an older, byte-preserved backup.
+        if (marker != null) {
+            try {
+                String[] saved = identity(marker);
+                validateAccountId(saved[0]);
+                if (saved[1] != null && !saved[1].isEmpty()) return saved;
+            } catch (IOException | IllegalArgumentException e) {
+                log.warn("Invalid identity marker {}; using account history", marker.getFileName());
+            }
+        }
+        try {
+            return identity(primary);
+        } catch (IOException primaryFailure) {
+            // Recovery must also work during ownership checks, not only while reading trade history.
+            try { return identity(sibling(primary, ".backup.json")); }
+            catch (IOException backupFailure) {
+                primaryFailure.addSuppressed(backupFailure);
+                throw primaryFailure;
+            }
+        }
+    }
+
+    private Filepath findById(String id) throws IOException {
+        Filepath found = null;
+        for (Filepath file : files()) {
+            String filename = file.getFileName();
+            boolean candidate = filename.startsWith(id + "_");
+            if (!candidate) {
+                candidate = accountIndex.values().stream().anyMatch(a -> id.equals(a.getAccountId())
+                    && filename.equals(a.getStorageFileName()));
+            }
+            if (!candidate || !isAccountFile(filename)) continue;
+            String[] identity;
+            try { identity = primaryIdentity(file); }
+            catch (IOException e) {
+                // An indexed corrupt primary still needs to be recoverable from its backup.
+                if (accountIndex.values().stream().anyMatch(a -> id.equals(a.getAccountId())
+                    && filename.equals(a.getStorageFileName()))) identity = new String[]{id, null};
+                else throw e;
+            }
+            if (!id.equals(identity[0])) continue;
+            if (found != null) throw new IOException("Multiple primary files for account ID " + id);
+            found = file;
+        }
+        return found;
+    }
+
+    public synchronized Map<String, AccountData> loadAllAccounts() throws IOException {
+        try { recoverRenames(); }
+        catch (StorageBusyException e) { log.debug("Another client is completing a rename; polling will refresh it"); }
+        List<AccountData> loaded = new ArrayList<>();
+        for (Filepath file : files()) {
+            if (isAccountFile(file.getFileName())) loaded.add(readAccount(file));
+        }
+        Map<String, AccountData> result = new LinkedHashMap<>();
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        for (AccountData data : loaded) {
+            if (data.getAccountId() != null && !ids.add(data.getAccountId())) {
+                throw new IOException("Multiple primary files for account ID " + data.getAccountId());
+            }
+            String name = data.getDisplayName();
+            long count = loaded.stream().filter(a -> name.equals(a.getDisplayName())).count();
+            String key = count > 1 || name.equals(FlippingPlugin.ACCOUNT_WIDE)
+                ? name + " [" + (data.getAccountId() == null ? "legacy" : data.getAccountId()) + "]" : name;
+            if (result.putIfAbsent(key, data) != null) {
+                throw new IOException("Ambiguous account files for " + key + "; no files were overwritten");
+            }
+            data.renameAccount(key);
+        }
+        setAccountIndex(result);
+        return result;
+    }
+
+    private AccountData readAccount(Filepath primary) {
+        AccountData data = null;
+        try { data = loadFromFile(primary); }
+        catch (Exception | OutOfMemoryError e) { log.warn("Unable to read {}; trying backup", primary.getFileName(), e); }
+        if (data == null) {
+            try { data = loadFromFile(sibling(primary, ".backup.json")); }
+            catch (Exception | OutOfMemoryError e) { log.warn("Unable to recover {}", primary.getFileName(), e); }
+        }
+        if (data == null) {
+            data = new AccountData();
+            data.setPersistenceReadFailed(true);
+        }
+        try {
+            String[] savedIdentity = primaryIdentity(primary);
+            if (savedIdentity[0] != null) {
+                data.setAccountId(savedIdentity[0]);
+                data.setDisplayName(savedIdentity[1]);
+            }
+        } catch (IOException e) {
+            log.debug("No separate identity available for {}", primary.getFileName());
+        }
+        if (data.getDisplayName() == null) data.setDisplayName(accountNameFromFileName(primary.getFileName()));
+        if (data.getAccountId() != null) validateAccountId(data.getAccountId());
+        data.setStorageFileName(primary.getFileName());
+        return data;
+    }
+
+    /** A removed polling event must not fabricate an empty account or resurrect an old RSN. */
+    public synchronized AccountData loadAccountFile(String filename) throws IOException {
+        if (!isAccountFile(filename)) return null;
+        Filepath file = existingFile(filename);
+        if (file == null) return null;
+        AccountData data = readAccount(file);
+        if (data.isPersistenceReadFailed()) throw new IOException("Cannot reload unreadable account " + filename);
+        return data;
+    }
+
+    public synchronized AccountData loadAccountById(String id) throws IOException {
+        validateAccountId(id);
+        recoverRenames();
+        Filepath file = findById(id);
+        return file == null ? null : loadAccountFile(file.getFileName());
+    }
+
+    public synchronized AccountData loadAccount(String key) {
+        try {
+            AccountData indexed = accountIndex.get(key);
+            Filepath file = indexed == null ? existingFile(key + ".json") : primaryFor(indexed, key, false);
+            if (file == null) file = accountFile(directory, key, ".json");
+            AccountData data = readAccount(file);
+            accountIndex.put(key, data);
+            return data;
+        } catch (IOException e) {
+            log.warn("Cannot load account {}", key, e);
+            AccountData failed = new AccountData();
+            failed.setDisplayName(key);
+            failed.setPersistenceReadFailed(true);
+            return failed;
+        }
+    }
+
+    private Filepath primaryFor(AccountData data, String key, boolean writing) throws IOException {
+        if (data.isPersistenceReadFailed() && writing) throw new IOException("Refusing to replace an unreadable account: " + key);
+        if (data.getAccountId() != null) {
+            validateAccountId(data.getAccountId());
+            Filepath current = findById(data.getAccountId());
+            if (current != null) {
+                // Another client may have renamed this ID since we loaded it. Its name is canonical.
+                try {
+                    String currentName = primaryIdentity(current)[1];
+                    if (currentName != null) data.setDisplayName(currentName);
+                } catch (IOException e) {
+                    if (!writing) return current;
+                    throw e;
+                }
+                data.setStorageFileName(current.getFileName());
+                return current;
+            }
+            if (data.getStorageFileName() != null && writing) {
+                throw new IOException("Account file disappeared; reload before saving " + key);
+            }
+            return directory.joinSegment(identityStem(directory, data.getAccountId(), data.getDisplayName()) + ".json");
+        }
+        if (data.getStorageFileName() != null) {
+            Filepath current = existingFile(data.getStorageFileName());
+            if (current != null) {
+                String diskId = primaryIdentity(current)[0];
+                if (diskId != null) throw new IOException("Legacy account was migrated by another client; reload before saving");
+                return current;
+            }
+            if (writing) throw new IOException("Legacy account was moved; reload before saving " + key);
+        }
+        String name = data.getDisplayName() == null ? key : data.getDisplayName();
+        Filepath existing = existingFile(name + ".json");
+        return existing != null ? existing : accountFile(directory, name, ".json");
+    }
+
+    /**
+     * Bind only a character observed at login. Persist the identity before renaming so an interrupted
+     * migration remains identifiable. Preflight every destination; moves never replace other files.
+     */
+    public synchronized void bindAccount(String id, String name, AccountData data) throws IOException {
+        try (StorageLock ignored = lockStorage()) {
+            recoverRenamesLocked();
+            validateAccountId(id);
+            if (data.isPersistenceReadFailed()) throw new IOException("Cannot migrate unreadable history for " + name);
+            if (data.getAccountId() != null && !id.equals(data.getAccountId())) throw new IOException("Account ID does not match history");
+            Filepath source = findById(id);
+            if (source == null && data.getStorageFileName() != null) source = existingFile(data.getStorageFileName());
+            if (source == null && data.getAccountId() == null) source = existingFile(name + ".json");
+            if (source != null && data.getStorageFileName() == null) {
+                throw new IOException("History appeared on disk; reload before binding " + name);
+            }
+            if (source != null) {
+                String diskId = primaryIdentity(source)[0];
+                if (diskId != null && !diskId.equals(id)) throw new IOException("History belongs to another account ID");
+            }
+            Filepath target = directory.joinSegment(identityStem(directory, id, name) + ".json");
+            boolean renaming = source != null && !source.getFileName().equals(target.getFileName());
+            Filepath journal = directory.joinSegment(accountNameFromFileName(target.getFileName()) + ".rename.special.json");
+            if (journal.exists()) throw new IOException("Conflicting account rename journal: " + journal.getFileName());
+            if (renaming || source == null) {
+                String targetStem = accountNameFromFileName(target.getFileName());
+                for (String suffix : ACCOUNT_FILE_SUFFIXES) {
+                    Filepath oldFile = source == null ? null : existingFile(accountNameFromFileName(source.getFileName()) + suffix);
+                    Filepath newFile = directory.joinSegment(targetStem + suffix);
+                    if (existingFile(newFile.getFileName()) != null || (newFile.exists() && (oldFile == null
+                        || !oldFile.getFileName().equalsIgnoreCase(newFile.getFileName())))) {
+                        throw new IOException("Cannot rename account: destination already exists: " + newFile.getFileName());
+                    }
+                }
+            }
+            data.setAccountId(id);
+            data.setDisplayName(name);
+            data.renameAccount(name);
+            Filepath primary = source == null ? target : source;
+            // Commit the identity and pending history before recording a rename. No file moves yet.
+            writeAtomically(primary, data, ".identity-write.tmp");
+            data.setStorageFileName(primary.getFileName());
+            IdentityRecord record = new IdentityRecord();
+            record.accountId = id;
+            record.displayName = name;
+            if (renaming) {
+                record.renameFrom = primary.getFileName();
+                record.renameTo = target.getFileName();
+                record.fileHashes = new LinkedHashMap<>();
+                String stem = accountNameFromFileName(primary.getFileName());
+                for (String suffix : ACCOUNT_FILE_SUFFIXES) {
+                    Filepath file = existingFile(stem + suffix);
+                    if (file != null) record.fileHashes.put(suffix, fileHash(file));
+                }
+            }
+            if (renaming) {
+                writeAtomically(journal, record, ".tmp");
+                completeRename(record);
+            } else {
+                writeAtomically(sibling(primary, ".identity.special.json"), record, ".tmp");
+            }
+            data.setStorageFileName(target.getFileName());
+            accountIndex.put(name, data);
+        }
+    }
+
+    /** A durable journal proves which bytes belong to an interrupted rename. */
+    private static class IdentityRecord {
+        String accountId;
+        String displayName;
+        String renameFrom;
+        String renameTo;
+        Map<String, String> fileHashes;
+        boolean completed;
+    }
+
+    private IdentityRecord readIdentityRecord(Filepath file) throws IOException {
+        try (BufferedReader reader = file.openBufferedReader()) {
+            return gson.fromJson(reader, IdentityRecord.class);
+        } catch (RuntimeException e) {
+            throw new IOException("Invalid identity record: " + file.getFileName(), e);
+        }
+    }
+
+    private List<IdentityRecord> pendingRenames() throws IOException {
+        List<IdentityRecord> pending = new ArrayList<>();
+        for (Filepath file : files()) {
+            String filename = file.getFileName();
+            if (!filename.endsWith(".rename.special.json")) continue;
+            IdentityRecord record = readIdentityRecord(file);
+            if (record != null && record.renameFrom != null) pending.add(record);
+        }
+        return pending;
+    }
+
+    private void recoverRenames() throws IOException {
+        if (!pendingRenames().isEmpty()) {
+            try (StorageLock ignored = lockStorage()) { recoverRenamesLocked(); }
+        }
+    }
+
+    private void recoverRenamesLocked() throws IOException {
+        for (IdentityRecord record : pendingRenames()) completeRename(record);
+    }
+
+    private String fileHash(Filepath file) throws IOException {
+        final MessageDigest digest;
+        try { digest = MessageDigest.getInstance("SHA-256"); }
+        catch (NoSuchAlgorithmException e) { throw new IllegalStateException("SHA-256 unavailable", e); }
+        try (InputStream input = file.openInputStream()) {
+            byte[] buffer = new byte[8192];
+            int size;
+            while ((size = input.read(buffer)) != -1) digest.update(buffer, 0, size);
+        }
+        return ACCOUNT_NAME_ENCODING.encode(digest.digest());
+    }
+
+    private void verifyMigrationFile(Filepath file, String expectedHash) throws IOException {
+        if (!fileHash(file).equals(expectedHash)) {
+            throw new IOException("Interrupted rename conflicts with changed file: " + file.getFileName());
+        }
+    }
+
+    private void completeRename(IdentityRecord record) throws IOException {
+        validateAccountId(record.accountId);
+        String expectedTarget = identityStem(directory, record.accountId, record.displayName) + ".json";
+        if (!expectedTarget.equals(record.renameTo) || !isAccountFile(record.renameFrom)
+            || record.renameFrom.equals(record.renameTo) || record.fileHashes == null
+            || !record.fileHashes.containsKey(".json")) {
+            throw new IOException("Invalid account rename journal");
+        }
+        String fromStem = accountNameFromFileName(record.renameFrom);
+        String toStem = accountNameFromFileName(record.renameTo);
+        if (record.completed) {
+            finishRename(record, toStem);
+            return;
+        }
+        Map<Filepath, Filepath> moves = new LinkedHashMap<>();
+        // The separate journal stays put, including across a case-only intermediate move.
+        // The primary always moves last, after its supporting files.
+        for (String suffix : ACCOUNT_FILE_SUFFIXES) {
+            Filepath source = existingFile(fromStem + suffix);
+            Filepath target = directory.joinSegment(toStem + suffix);
+            Filepath existingTarget = existingFile(target.getFileName());
+            Filepath intermediate = existingFile(target.getFileName() + ".rename.tmp");
+            String expectedHash = record.fileHashes.get(suffix);
+            if (expectedHash == null) {
+                if (source != null || existingTarget != null || intermediate != null) {
+                    throw new IOException("Unplanned file in interrupted rename: " + target.getFileName());
+                }
+                continue;
+            }
+            if (source != null) {
+                if (existingTarget != null || intermediate != null || (target.exists()
+                    && !source.getFileName().equalsIgnoreCase(target.getFileName()))) {
+                    throw new IOException("Conflicting destination in interrupted rename: " + target.getFileName());
+                }
+                verifyMigrationFile(source, expectedHash);
+                moves.put(source, target);
+            } else if (intermediate != null) {
+                if (existingTarget != null) throw new IOException("Conflicting intermediate account file");
+                verifyMigrationFile(intermediate, expectedHash);
+                moves.put(intermediate, target);
+            } else if (existingTarget != null) {
+                verifyMigrationFile(existingTarget, expectedHash);
+            } else {
+                throw new IOException("Missing file in interrupted rename: " + target.getFileName());
+            }
+        }
+        // All remaining and already-completed moves were verified before changing another filename.
+        for (Map.Entry<Filepath, Filepath> move : moves.entrySet()) moveWithoutReplacing(move.getKey(), move.getValue());
+        // Commit completion before updating the marker, so cleanup is itself safe to repeat after a crash.
+        record.completed = true;
+        writeAtomically(directory.joinSegment(toStem + ".rename.special.json"), record, ".tmp");
+        finishRename(record, toStem);
+    }
+
+    private void finishRename(IdentityRecord record, String toStem) throws IOException {
+        if (existingFile(toStem + ".json") == null) throw new IOException("Completed rename has no primary file");
+        IdentityRecord identity = new IdentityRecord();
+        identity.accountId = record.accountId;
+        identity.displayName = record.displayName;
+        writeAtomically(directory.joinSegment(toStem + ".identity.special.json"), identity, ".tmp");
+        directory.joinSegment(toStem + ".rename.special.json").deleteIfExists();
+    }
+
+    private void moveWithoutReplacing(Filepath source, Filepath target) throws IOException {
+        if (!source.getFileName().equals(target.getFileName())
+            && source.getFileName().equalsIgnoreCase(target.getFileName()) && target.exists()) {
+            // Case-insensitive filesystems need an intermediate name to actually update filename casing.
+            Filepath intermediate = directory.joinSegment(target.getFileName() + ".rename.tmp");
+            source.moveTo(intermediate);
+            try { intermediate.moveTo(target); }
+            catch (IOException e) {
+                try { intermediate.moveTo(source); } catch (IOException rollback) { e.addSuppressed(rollback); }
+                throw e;
+            }
+        } else source.moveTo(target);
+    }
+
+	private AccountData loadFromFile(Filepath file) throws IOException
 	{
-		try (java.io.BufferedReader bufferedReader = Files.newBufferedReader(f.toPath(), java.nio.charset.StandardCharsets.UTF_8);
+		try (BufferedReader bufferedReader = file.openBufferedReader();
 			com.google.gson.stream.JsonReader jsonReader = new com.google.gson.stream.JsonReader(bufferedReader))
 		{
 			return gson.fromJson(jsonReader, AccountData.class);
@@ -197,11 +621,12 @@ public class TradePersister
 
 
 	public AccountWideData loadAccountWideData() throws IOException {
-		File accountFile = new File(PARENT_DIRECTORY, "accountwide.json");
+		Filepath accountFile = directory.joinSegment("accountwide.json");
 		if (accountFile.exists()){
-			String accountWideDataJson = new String(Files.readAllBytes(accountFile.toPath()));
 			Type type = new TypeToken<AccountWideData>(){}.getType();
-			return gson.fromJson(accountWideDataJson, type);
+			try (BufferedReader reader = accountFile.openBufferedReader()) {
+				return gson.fromJson(reader, type);
+			}
 		}
 		else {
 			return new AccountWideData();
@@ -211,11 +636,15 @@ public class TradePersister
 	public BackupCheckpoints fetchBackupCheckpoints() {
 		try {
 			log.debug("Fetching backup checkpoints");
-			File backupCheckpointsFile = new File(PARENT_DIRECTORY, "backupcheckpoints.special.json");
+			Filepath backupCheckpointsFile = directory.joinSegment("backupcheckpoints.special.json");
+			if (!backupCheckpointsFile.exists()) {
+				backupCheckpointsFile = directory.joinSegment("backupCheckpoints.special.json");
+			}
 			if (backupCheckpointsFile.exists()){
-				String backupCheckpointsJson = new String(Files.readAllBytes(backupCheckpointsFile.toPath()));
 				Type type = new TypeToken<BackupCheckpoints>(){}.getType();
-				return gson.fromJson(backupCheckpointsJson, type);
+				try (BufferedReader reader = backupCheckpointsFile.openBufferedReader()) {
+					return gson.fromJson(reader, type);
+				}
 			}
 			else {
 				return new BackupCheckpoints();
@@ -226,88 +655,102 @@ public class TradePersister
 		}
 	}
 
-	/**
-	 * stores trades for an account in {user's home directory}/.runelite/flipping/{account's display name}.json
-	 *
-	 * @param displayName display name of the account the data is associated with
-	 * @param data        the trades and last offers of that account
-	 * @throws IOException
-	 */
-	public void writeToFile(String displayName, Object data) throws IOException {
-		log.debug("Writing to file for {}", displayName);
-		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
-		File tempFile = new File(PARENT_DIRECTORY, displayName + ".json.tmp");
-		
-		try (BufferedWriter bufferedWriter = Files.newBufferedWriter(tempFile.toPath(), StandardCharsets.UTF_8);
-			JsonWriter jsonWriter = new JsonWriter(bufferedWriter)) {
-			writeGson.toJson(data, data.getClass(), jsonWriter);
-		} catch (IOException e) {
-			try { Files.deleteIfExists(tempFile.toPath()); } catch (IOException ignored) {}
-			throw e;
-		}
-		
-		try {
-				Files.move(tempFile.toPath(), accountFile.toPath(),
-						java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-		} catch (java.nio.file.AtomicMoveNotSupportedException ame) {
-				Files.move(tempFile.toPath(), accountFile.toPath(),
-						java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-		} catch (IOException e) {
-				try { Files.deleteIfExists(tempFile.toPath()); } catch (IOException ignored) {}
-				throw e;
-		}
+    public synchronized void writeToFile(String key, Object data) throws IOException {
+        try (StorageLock ignored = lockStorage()) {
+            recoverRenamesLocked();
+            writeToFile(key, data, ".json");
+        }
+    }
+
+    public synchronized void writeBackup(String key, Object data) throws IOException {
+        try (StorageLock ignored = lockStorage()) {
+            recoverRenamesLocked();
+            writeToFile(key, data, ".backup.json");
+        }
+    }
+
+    private void writeToFile(String key, Object data, String suffix) throws IOException {
+        Filepath file;
+        if (data instanceof AccountData) {
+            AccountData account = (AccountData) data;
+            if (account.getDisplayName() == null) account.setDisplayName(key);
+            Filepath primary = primaryFor(account, key, true);
+            file = suffix.equals(".json") ? primary : sibling(primary, suffix);
+            writeAtomically(file, account, ".tmp");
+            account.setStorageFileName(primary.getFileName());
+            accountIndex.put(key, account);
+        } else {
+            file = directory.joinSegment(key + suffix);
+            writeAtomically(file, data, ".tmp");
+        }
+    }
+
+    private void writeAtomically(Filepath file, Object data, String tempSuffix) throws IOException {
+        Filepath temp = accountFile(directory, file.getFileName(), tempSuffix);
+        try (BufferedWriter writer = temp.openBufferedWriter(); JsonWriter json = new JsonWriter(writer)) {
+            writeGson.toJson(data, data.getClass(), json);
+        } catch (IOException e) {
+            try { temp.deleteIfExists(); } catch (IOException ignored) { }
+            throw e;
+        }
+        try {
+            try { temp.moveTo(file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
+            catch (AtomicMoveNotSupportedException e) { temp.moveTo(file, StandardCopyOption.REPLACE_EXISTING); }
+        } catch (IOException e) {
+            try { temp.deleteIfExists(); } catch (IOException ignored) { }
+            throw e;
+        }
+    }
+
+    private Filepath indexedPrimary(String key) throws IOException {
+        AccountData data = accountIndex.get(key);
+        if (data != null) return primaryFor(data, key, false);
+        Filepath existing = existingFile(key + ".json");
+        return existing != null ? existing : accountFile(directory, key, ".json");
+    }
+
+    public synchronized void deleteAccount(String key) {
+        try (StorageLock ignored = lockStorage()) {
+            recoverRenamesLocked();
+            Filepath primary = indexedPrimary(key);
+            // Remove every variant so backups cannot later resurrect a deleted ID or block a rename.
+            for (String suffix : ACCOUNT_FILE_SUFFIXES) sibling(primary, suffix).deleteIfExists();
+            accountIndex.remove(key);
+        } catch (IOException e) { log.warn("Unable to delete {}", key, e); }
+    }
+
+    public synchronized void createPreMigrationBackup(String key) throws IOException {
+        try (StorageLock ignored = lockStorage()) {
+            recoverRenamesLocked();
+            Filepath primary = indexedPrimary(key);
+            Filepath backup = sibling(primary, ".json.pre-migration");
+            if (!backup.exists() && primary.exists()) primary.copyTo(backup);
+        }
+    }
+
+    public synchronized void deletePreMigrationBackup(String key) {
+        try (StorageLock ignored = lockStorage()) {
+            recoverRenamesLocked();
+            sibling(indexedPrimary(key), ".json.pre-migration").deleteIfExists();
+        } catch (IOException e) { log.warn("Failed to delete pre-migration backup for {}", key, e); }
+    }
+
+    public static Filepath exportToCsv(Filepath directory, String accountId, String displayName,
+                                     List<FlippingItem> trades, String interval) throws IOException {
+        if (accountId == null) return exportToCsv(directory, displayName, trades, interval);
+        Filepath file = directory.joinSegment(identityStem(directory, accountId, displayName) + ".csv");
+        exportToCsv(file, trades, interval);
+        return file;
+    }
+
+	public static Filepath exportToCsv(Filepath directory, String accountName, List<FlippingItem> trades, String startOfIntervalName) throws IOException {
+		Filepath file = accountFile(directory, accountName, ".csv");
+		exportToCsv(file, trades, startOfIntervalName);
+		return file;
 	}
 
-	public static long lastModified(String fileName)
-	{
-		return new File(PARENT_DIRECTORY, fileName).lastModified();
-	}
-
-	public static void deleteFile(String fileName)
-	{
-		File accountFile = new File(PARENT_DIRECTORY, fileName);
-		if (accountFile.exists())
-		{
-			if (accountFile.delete()) {
-				log.debug("{} deleted", fileName);
-			} else {
-				log.debug("unable to delete {}", fileName);
-			}
-		}
-	}
-
-	/**
-	 * Creates a pre-migration backup file for an account before migration.
-	 * This should only be called when migration is actually needed.
-	 */
-	public static void createPreMigrationBackup(String displayName) throws IOException {
-		File accountFile = new File(PARENT_DIRECTORY, displayName + ".json");
-		File backupFile = new File(PARENT_DIRECTORY, displayName + ".json.pre-migration");
-		if (!backupFile.exists() && accountFile.exists()) {
-			Files.copy(accountFile.toPath(), backupFile.toPath());
-			log.info("Created pre-migration backup: {}", backupFile.getName());
-		}
-	}
-
-	/**
-	 * Deletes the pre-migration backup file for an account after successful migration.
-	 * This should be called after the account data has been successfully saved in the new format.
-	 */
-	public static void deletePreMigrationBackup(String displayName) {
-		String backupFileName = displayName + ".json.pre-migration";
-		File backupFile = new File(PARENT_DIRECTORY, backupFileName);
-		if (backupFile.exists()) {
-			if (backupFile.delete()) {
-				log.info("Deleted pre-migration backup: {}", backupFileName);
-			} else {
-				log.warn("Failed to delete pre-migration backup: {}", backupFileName);
-			}
-		}
-	}
-
-
-	public static void exportToCsv(File file, List<FlippingItem> trades, String startOfIntervalName) throws IOException {
-		try (BufferedWriter out = new BufferedWriter(new FileWriter(file))) {
+	public static void exportToCsv(Filepath file, List<FlippingItem> trades, String startOfIntervalName) throws IOException {
+		try (BufferedWriter out = file.openBufferedWriter()) {
 			String comment = "Displaying trades for selected time interval: " + startOfIntervalName;
 			out.write("# " + comment.replace("\r\n", "\n").replace('\r', '\n').replace("\n", "\r\n# ") + "\r\n");
 			writeCsvRecord(out, "name", "date", "quantity", "price", "state");

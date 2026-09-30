@@ -128,6 +128,43 @@ Quickly lookup your favorited items just by typing "1" in the ge search!
 
 # Development
 
+### Data storage
+
+Account JSON files and backups live in `.runelite/plugin-data/flipping-utilities/`.
+On first use, RuneLite moves the existing `.runelite/flipping/` directory there if
+the new directory does not already exist. Close other RuneLite clients before
+upgrading so an older plugin cannot continue writing to the old location. If both
+directories already exist, RuneLite uses the new directory and leaves the old one
+untouched.
+
+Per-character files use `<player_id>_<rsn>.json`. The player ID is RuneLite's
+unsigned account hash, which identifies the character independently of its name.
+On login, matching legacy `<rsn>.json` history is assigned that ID. On a later name
+change, the primary file, backups, interrupted saves, and identity record are
+renamed together. CSV exports for identified characters use the same ID/name stem.
+Shared settings and checkpoint files remain account-wide.
+
+Legacy files cannot be assigned an ID until the matching character is observed.
+Unmatched files remain available; if a name changed before the first migration,
+its old history is left untouched rather than guessed. Reserved names such as
+`Con` work as `123_Con.json`; unusual invalid path characters are encoded in the
+name suffix while the actual RSN stays in the JSON. Literal legacy names beginning
+with `@` remain literal. Characters that reused an RSN remain separate accounts,
+with IDs added to their selector labels when needed.
+
+Migration checks every destination before renaming and refuses to overwrite
+conflicting files. A small `<player_id>_<rsn>.identity.special.json` record keeps
+the current ID/name available even when recovering an older backup. File locks
+coordinate writes and renames between upgraded clients. Failed saves retain their
+pending edits for a retry. A temporary `<player_id>_<rsn>.rename.special.json`
+journal records file hashes so interrupted renames resume without replacing
+unrelated files; the journal is removed after completion.
+
+File access uses RuneLite’s `Filepath` API. Cross-client changes are checked once
+per second, and CSV exports use a directory selected through `Filepath.Chooser`.
+The OSRS Cloud API uses `https://api.osrs.cloud/v1/`; the
+`OSRS_CLOUD_API_BASE_URL` environment override has been removed.
+
 ### Building and checking Plugin Hub compatibility
 
 Use Java 11 and `./gradlew clean build` to compile the plugin and run its tests.
@@ -239,9 +276,9 @@ user data to disk and cancelling any background jobs that were running.
 This section describes how the plugin models users' trade history. The main model classes used to do this are:
 AccountData, FlippingItem, HistoryManager, and OfferEvent.
 
-When you go to `.runelite/flipping/<username>.json` and open it, you will see the JSON version of an `AccountData`
+When you go to `.runelite/plugin-data/flipping-utilities/<player_id>_<rsn>.json` and open it, you will see the JSON version of an `AccountData`
 object. Each of the user's osrs accounts get their own AccountData object, each of which is stored in a file
-of the format `.runelite/flipping/<account_username>.json`.
+of the format `.runelite/plugin-data/flipping-utilities/<player_id>_<rsn>.json`.
 
 AccountData objects are created from the JSON in those files on client startup (or created on account login if they have
 no previously saved data for that account). As the user makes trades, deletes trades via the UI, and so on, the

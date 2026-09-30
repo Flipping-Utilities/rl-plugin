@@ -44,6 +44,7 @@ import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.components.IconTextField;
 import net.runelite.client.ui.components.materialtabs.MaterialTab;
+import net.runelite.client.util.Filepath;
 import net.runelite.client.util.QuantityFormatter;
 
 import javax.swing.*;
@@ -54,7 +55,6 @@ import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.File;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -686,19 +686,20 @@ public class StatsPanel extends JPanel
 		downloadIcon.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
-				JFileChooser f = new JFileChooser();
-				f.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-				f.showSaveDialog(parent);
-				File selectedDirectory = f.getSelectedFile();
-				if (selectedDirectory == null) {
+				List<Filepath> selection = new Filepath.Chooser()
+					.setIsSave()
+					.setAcceptsDirectories()
+					.showDialog(parent);
+				if (selection == null || selection.isEmpty()) {
 					return;
 				}
-				log.info("exporting to csv in folder {}", f.getSelectedFile());
+				Filepath selectedDirectory = selection.get(0);
+				log.info("exporting to csv in folder {}", selectedDirectory);
 				try {
-					plugin.exportToCsv(f.getSelectedFile(), startOfInterval, startOfIntervalName);
+					Filepath exportedFile = plugin.exportToCsv(selectedDirectory, startOfInterval, startOfIntervalName);
 					JOptionPane.showMessageDialog(
 							parent,
-							String.format("Successfully saved csv file to %s/%s.csv", f.getSelectedFile().toString(), plugin.getAccountCurrentlyViewed()),
+							String.format("Successfully saved csv file to %s", exportedFile),
 							"Successfully saved CSV!",
 							JOptionPane.INFORMATION_MESSAGE
 					);

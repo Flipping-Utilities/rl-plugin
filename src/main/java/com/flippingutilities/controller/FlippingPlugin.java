@@ -71,6 +71,7 @@ import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.tooltip.TooltipManager;
 import net.runelite.client.util.ImageUtil;
+import net.runelite.client.util.Filepath;
 import net.runelite.client.game.ItemStats;
 import okhttp3.*;
 
@@ -78,7 +79,6 @@ import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import java.awt.*;
 import java.awt.event.KeyEvent;
-import java.io.File;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -94,6 +94,8 @@ import java.util.stream.Collectors;
 @Slf4j
 @PluginDescriptor(
         name = "Flipping Utilities",
+        internalName = "flipping-utilities",
+        legacyDataDirectory = "flipping",
         description = "Provides utilities for GE flipping"
 )
 public class FlippingPlugin extends Plugin {
@@ -233,10 +235,12 @@ public class FlippingPlugin extends Plugin {
     private OfferGraphChartOverlay offerGraphChartOverlay;
 
     @Override
-    protected void startUp() {
+    protected void startUp() throws IOException {
         accountCurrentlyViewed = ACCOUNT_WIDE;
 
-        tradePersister = new TradePersister(gson);
+        Filepath directory = getPluginDirectory();
+        tradePersister = new TradePersister(gson, directory);
+        tradePersister.setupFlippingFolder();
         recipeHandler = new RecipeHandler(gson, httpClient, null);
         flippingItemHandler = new FlippingItemHandler(this);
 
@@ -297,6 +301,10 @@ public class FlippingPlugin extends Plugin {
     @Override
     protected void shutDown() {
         log.debug("shutdown running!");
+        if (cacheUpdaterJob != null) {
+            cacheUpdaterJob.stop();
+            cacheUpdaterJob = null;
+        }
         if (generalRepeatingTasks != null) {
             generalRepeatingTasks.cancel(true);
             generalRepeatingTasks = null;
@@ -309,9 +317,13 @@ public class FlippingPlugin extends Plugin {
             autoSaveTask.cancel(true);
             autoSaveTask = null;
         }
-        masterPanel.dispose();
+        if (masterPanel != null) {
+            masterPanel.dispose();
+        }
 
-        clientToolbar.removeNavigation(navButton);
+        if (navButton != null) {
+            clientToolbar.removeNavigation(navButton);
+        }
     }
 
     //called when the X button on the client is pressed
@@ -324,7 +336,9 @@ public class FlippingPlugin extends Plugin {
             slotTimersTask.cancel(true);
             slotTimersTask = null;
         }
-        dataHandler.storeData();
+        if (dataHandler != null) {
+            dataHandler.storeData();
+        }
         if (cacheUpdaterJob != null) cacheUpdaterJob.stop();
         if (wikiDataFetcherJob != null) wikiDataFetcherJob.stop();
         if (slotStateSenderJob != null) slotStateSenderJob.stop();
@@ -369,38 +383,70 @@ public class FlippingPlugin extends Plugin {
             if (name.equals("")) {
                 return false;
             }
+            if (client.getAccountHash() == -1L) {
+                return false;
+            }
             previouslyLoggedIn = true;
 
-            if (currentlyLoggedInAccount == null) {
-                handleLogin(name);
+            AccountData current = currentlyLoggedInAccount == null ? null : dataHandler.viewAccountData(currentlyLoggedInAccount);
+            if (current == null || !Long.toUnsignedString(client.getAccountHash()).equals(current.getAccountId())
+                || !name.equals(current.getDisplayName())) {
+                return handleLogin(name);
             }
             //stops scheduling this task
             return true;
         });
     }
 
-    public void handleLogin(String displayName) {
+    @Subscribe
+    public void onPlayerChanged(PlayerChanged event) {
+        if (dataHandler != null && event.getPlayer() == client.getLocalPlayer()
+            && client.getGameState() == GameState.LOGGED_IN) {
+            onLoggedInGameState();
+        }
+    }
+
+    /** The actual RuneScape name, without any local selector disambiguation. */
+    public String getCurrentlyLoggedInDisplayName() {
+        AccountData account = dataHandler == null || currentlyLoggedInAccount == null
+            ? null : dataHandler.viewAccountData(currentlyLoggedInAccount);
+        return account == null ? currentlyLoggedInAccount : account.getDisplayName();
+    }
+
+    /** Returns false when login should be retried on the next client tick. */
+    public boolean handleLogin(String displayName) {
         if (wikiDataFetcherJob != null) {
             wikiDataFetcherJob.onWorldSwitch(client.getWorldType());
         }
         if (client.getVarbitValue(VarbitID.IRONMAN) != 0) {
                 log.debug("account is an ironman, not adding it to the cache");
-                return;
+                return true;
             }
 
-        log.debug("{} has just logged in!", displayName);
-        if (!dataHandler.getCurrentAccounts().contains(displayName)) {
-            log.debug("data handler does not contain data for {}", displayName);
-            dataHandler.addAccount(displayName);
-            masterPanel.getAccountSelector().addItem(displayName);
+        if (client.getAccountHash() == -1L) {
+            return false;
         }
+        log.debug("{} has just logged in!", displayName);
+        final String accountKey;
+        try {
+            accountKey = dataHandler.bindLoggedInAccount(Long.toUnsignedString(client.getAccountHash()), displayName);
+        } catch (TradePersister.StorageBusyException e) {
+            log.debug("Account storage is busy; retrying character login on the next tick");
+            return false;
+        } catch (IOException | RuntimeException e) {
+            log.warn("Could not bind the logged-in character to its history; keeping existing files", e);
+            return true;
+        }
+        AccountData account = dataHandler.viewAccountData(accountKey);
         //see documentation for AccountData.fixIncorrectItemNames
         if (client.getWorldType().contains(WorldType.MEMBERS)) {
-            dataHandler.viewAccountData(displayName).fixIncorrectItemNames(itemManager);
+            account.fixIncorrectItemNames(itemManager);
         }
 
         loginTickCount = client.getTickCount();
-        currentlyLoggedInAccount = displayName;
+        currentlyLoggedInAccount = accountKey;
+        accountCurrentlyViewed = accountKey;
+        refreshAccountSelector(account, account);
 
         //now that we have a display name we can process any events that we received before the display name
         //was set.
@@ -410,10 +456,10 @@ public class FlippingPlugin extends Plugin {
         if (dataHandler.getCurrentAccounts().size() > 1) {
             masterPanel.getAccountSelector().setVisible(true);
         }
-        accountCurrentlyViewed = displayName;
+        accountCurrentlyViewed = accountKey;
         //this will cause changeView to be invoked which will cause a rebuildItemsDisplay of
         //flipping and stats panel
-        masterPanel.getAccountSelector().setSelectedItem(displayName);
+        masterPanel.getAccountSelector().setSelectedItem(accountKey);
 
         if (slotTimersTask == null && config.slotTimersEnabled()) {
             log.debug("starting slot timers on login");
@@ -421,6 +467,7 @@ public class FlippingPlugin extends Plugin {
         }
         apiAuthHandler.checkRsn(displayName);
         slotStateSenderJob.justLoggedIn = true;
+        return true;
     }
 
     public void handleLogout() {
@@ -544,7 +591,7 @@ public class FlippingPlugin extends Plugin {
     }
 
     private void startJobs() {
-        cacheUpdaterJob = new CacheUpdaterJob();
+        cacheUpdaterJob = new CacheUpdaterJob(tradePersister.getDirectory(), executor);
         cacheUpdaterJob.subscribe(this::onDirectoryUpdate);
         cacheUpdaterJob.start();
 
@@ -574,49 +621,43 @@ public class FlippingPlugin extends Plugin {
      * @param fileName name of the file which was modified.
      */
     public void onDirectoryUpdate(String fileName) {
-        if (!fileName.contains(".json") || fileName.contains(".backup.json") || fileName.contains(".special.json")) {
+        if (!fileName.endsWith(".json") || fileName.endsWith(".backup.json") || fileName.endsWith(".special.json")) {
             return;
         }
-        String displayNameOfChangedAcc = fileName.split("\\.")[0];
-
-        if (displayNameOfChangedAcc.equals(dataHandler.thisClientLastStored)) {
-            log.debug("not reloading data for {} into the cache as this client was the last one to store it", displayNameOfChangedAcc);
-            dataHandler.thisClientLastStored = null;
-            return;
-        }
-
         if (fileName.equals("accountwide.json")) {
-            executor.schedule(() -> {
-                dataHandler.loadAccountWideData();
-            }, 1000, TimeUnit.MILLISECONDS);
+            executor.schedule(dataHandler::loadAccountWideData, 1000, TimeUnit.MILLISECONDS);
             return;
         }
+        executor.schedule(() -> clientThread.invokeLater(() -> {
+            AccountData viewed = dataHandler.viewAccountData(accountCurrentlyViewed);
+            AccountData loggedIn = dataHandler.viewAccountData(currentlyLoggedInAccount);
+            if (dataHandler.loadAccountFile(fileName) != null) {
+                refreshAccountSelector(viewed, loggedIn);
+            }
+        }), 1000, TimeUnit.MILLISECONDS);
+    }
 
-        executor.schedule(() ->
-        {
-            //have to run on client thread cause loadAccount calls accountData.prepareForUse which uses the itemmanager
-            clientThread.invokeLater(() -> {
-                log.debug("second has passed, updating cache for {}", displayNameOfChangedAcc);
-                dataHandler.loadAccountData(displayNameOfChangedAcc);
-                if (!masterPanel.getViewSelectorItems().contains(displayNameOfChangedAcc)) {
-                    masterPanel.getAccountSelector().addItem(displayNameOfChangedAcc);
-                }
-
-                if (dataHandler.getCurrentAccounts().size() > 1) {
-                    masterPanel.getAccountSelector().setVisible(true);
-                }
-
-                updateSinceLastItemAccountWideBuild = true;
-
-                //rebuildItemsDisplay if you are currently looking at the account who's cache just got updated or the account wide view.
-                if (accountCurrentlyViewed.equals(ACCOUNT_WIDE) || accountCurrentlyViewed.equals(displayNameOfChangedAcc)) {
-                    List<FlippingItem> tradesForCurrentView = viewItemsForCurrentView();
-                    flippingPanel.rebuild(tradesForCurrentView);
-                    statPanel.rebuildItemsDisplay(tradesForCurrentView);
-                    statPanel.rebuildRecipesDisplay(viewRecipeFlipGroupsForCurrentView());
-                }
-            });
-        }, 1000, TimeUnit.MILLISECONDS);
+    /** Reconcile selector labels by character identity after a login or another client's rename. */
+    private void refreshAccountSelector(AccountData viewed, AccountData loggedIn) {
+        String viewedKey = dataHandler.getAccountKey(viewed);
+        String loggedInKey = dataHandler.getAccountKey(loggedIn);
+        if (viewedKey != null) {
+            accountCurrentlyViewed = viewedKey;
+        }
+        if (loggedInKey != null) {
+            currentlyLoggedInAccount = loggedInKey;
+        }
+        updateSinceLastItemAccountWideBuild = true;
+        updateSinceLastRecipeFlipGroupAccountWideBuild = true;
+        java.util.List<String> names = new ArrayList<>(dataHandler.getCurrentAccounts());
+        Collections.sort(names);
+        names.add(0, ACCOUNT_WIDE);
+        String selected = names.contains(accountCurrentlyViewed) ? accountCurrentlyViewed : ACCOUNT_WIDE;
+        accountCurrentlyViewed = selected;
+        masterPanel.getAccountSelector().setModel(new javax.swing.DefaultComboBoxModel<>(names.toArray(new String[0])));
+        masterPanel.getAccountSelector().setSelectedItem(selected);
+        masterPanel.getAccountSelector().setVisible(dataHandler.getCurrentAccounts().size() > 1);
+        changeView(selected);
     }
 
     //TODO this caching logic can be generalized and put into another component. There are also a bunch of
@@ -915,8 +956,8 @@ public class FlippingPlugin extends Plugin {
         truncateTradeList();
     }
 
-    public void exportToCsv(File parentDirectory, Instant startOfInterval, String startOfIntervalName) throws IOException {
-        if (parentDirectory.equals(TradePersister.PARENT_DIRECTORY)) {
+    public Filepath exportToCsv(Filepath parentDirectory, Instant startOfInterval, String startOfIntervalName) throws IOException {
+        if (parentDirectory.equals(tradePersister.getDirectory())) {
             throw new RuntimeException("Cannot save csv file in the flipping directory, pick another directory");
         }
         //create new flipping item list with only history from that interval
@@ -931,7 +972,10 @@ public class FlippingPlugin extends Plugin {
             items.add(itemWithOnlySelectedIntervalHistory);
         }
 
-        TradePersister.exportToCsv(new File(parentDirectory, accountCurrentlyViewed + ".csv"), items, startOfIntervalName);
+        AccountData account = dataHandler.viewAccountData(accountCurrentlyViewed);
+        return account == null
+            ? TradePersister.exportToCsv(parentDirectory, accountCurrentlyViewed, items, startOfIntervalName)
+            : TradePersister.exportToCsv(parentDirectory, account.getAccountId(), account.getDisplayName(), items, startOfIntervalName);
     }
 
     public long calculateOptionValue(Option option) throws InvalidOptionException {

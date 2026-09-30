@@ -49,6 +49,13 @@ public class AccountData {
     public static final int CURRENT_VERSION = 1;
     
     private Integer version;
+    /** Stable RuneScape character identity, stored as an unsigned decimal account hash. */
+    private String accountId;
+    /** Last observed RuneScape name; UI disambiguation never changes this value. */
+    private String displayName;
+    /** The actual source file, including for legacy filenames that need migration. */
+    private transient String storageFileName;
+    private transient boolean persistenceReadFailed;
     private Map<Integer, OfferEvent> lastOffers = new HashMap<>();
     private List<FlippingItem> trades = new ArrayList<>();
     private Instant sessionStartTime = Instant.now();
@@ -84,6 +91,27 @@ public class AccountData {
         cleanup();
     }
     
+    /** Updates ownership labels without changing offer UUIDs or the character's actual name. */
+    public void renameAccount(String ownerLabel) {
+        for (FlippingItem item : trades) {
+            item.setFlippedBy(ownerLabel);
+            item.getHistory().setOfferMadeBy(ownerLabel);
+        }
+        lastOffers.values().forEach(offer -> offer.setMadeBy(ownerLabel));
+        recipeFlipGroups.forEach(group -> group.getPartialOffers().forEach(partial -> {
+            if (partial.getOffer() != null) {
+                partial.getOffer().setMadeBy(ownerLabel);
+            }
+        }));
+        if (slotTimers != null) {
+            slotTimers.forEach(timer -> {
+                if (timer.currentOffer != null) {
+                    timer.currentOffer.setMadeBy(ownerLabel);
+                }
+            });
+        }
+    }
+
     /**
      * Cleans up redundant data to reduce file size.
      * Removes PartialOffers with amountConsumed == 0.
