@@ -247,7 +247,7 @@ public class FlippingItem implements Searchable
 		return HistoryManager.getTotalRevenueOrExpense(tradeList, isBuy);
 	}
 
-	public static int countFlipQuantity(List<OfferEvent> tradeList)
+	public static long countFlipQuantity(List<OfferEvent> tradeList)
 	{
 		return HistoryManager.countFlipQuantity(tradeList);
 	}
