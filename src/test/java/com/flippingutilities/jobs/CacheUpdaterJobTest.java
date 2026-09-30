@@ -59,11 +59,11 @@ public class CacheUpdaterJobTest
         Filepath directory = Filepath.Unchecked.getRooted(temporary.newFolder("accounts").toPath());
         TradePersister persister = new TradePersister(new Gson(), directory);
         AccountData account = new AccountData();
-        persister.writeToFile("Con", account);
+        persister.bindAccount("123", "Con", account);
         ManualExecutor executor = new ManualExecutor();
         CacheUpdaterJob job = new CacheUpdaterJob(directory, executor);
         List<String> changes = new ArrayList<>();
-        job.subscribe(name -> changes.add(TradePersister.accountNameFromFileName(name)));
+        job.subscribe(changes::add);
         job.start();
         executor.tick();
         assertTrue(changes.isEmpty());
@@ -71,16 +71,17 @@ public class CacheUpdaterJobTest
         account.setAccumulatedSessionTimeMillis(1_000_000L);
         persister.writeToFile("Con", account);
         executor.tick();
-        assertEquals(Arrays.asList("Con"), changes);
+        assertEquals(Arrays.asList("123_Con.json"), changes);
         persister.writeBackup("Con", account);
         executor.tick();
-        assertEquals(Arrays.asList("Con"), changes);
+        assertEquals(Arrays.asList("123_Con.json"), changes);
 
-        persister.writeToFile("Aux", account);
-        persister.writeBackup("Aux", account);
+        AccountData other = new AccountData();
+        persister.bindAccount("456", "Aux", other);
+        persister.writeBackup("Aux", other);
         executor.tick();
         executor.tick();
-        assertEquals(Arrays.asList("Con", "Aux"), changes);
+        assertEquals(Arrays.asList("123_Con.json", "456_Aux.json"), changes);
         job.stop();
     }
 

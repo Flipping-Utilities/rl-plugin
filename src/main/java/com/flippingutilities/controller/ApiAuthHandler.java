@@ -173,7 +173,7 @@ public class ApiAuthHandler {
                 validJwtSubscriberActions.forEach(Runnable::run);
                 log.debug("successfully logged in with token!");
                 if (plugin.getCurrentlyLoggedInAccount() != null) {
-                    checkRsn(plugin.getCurrentlyLoggedInAccount());
+                    checkRsn(plugin.getCurrentlyLoggedInDisplayName());
                 }
                 setPremiumStatus();
             }

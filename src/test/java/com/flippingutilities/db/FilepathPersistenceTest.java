@@ -194,13 +194,13 @@ public class FilepathPersistenceTest {
     public void reservedAccountNameSurvivesSaveReloadDiscoveryAndDeletion() throws Exception {
         AccountData account = accountFor("Con");
 
-        persister.writeToFile("Con", account);
+        persister.bindAccount("123", "Con", account);
         persister.setupFlippingFolder();
 
-        Path primary = directory.resolve("@436f6e.json");
+        Path primary = directory.resolve("123_Con.json");
         assertTrue(Files.isRegularFile(primary));
-        assertFalse(Files.exists(directory.resolve("@436f6e.json.tmp")));
-        assertEquals("Con", TradePersister.accountNameFromFileName(primary.getFileName().toString()));
+        assertFalse(Files.exists(directory.resolve("123_Con.json.tmp")));
+        assertEquals("Con", persister.loadAccountFile(primary.getFileName().toString()).getDisplayName());
         assertSavedTrade(persister.loadAccount("Con"), "Con");
         assertEquals(Collections.singleton("Con"), persister.loadAllAccounts().keySet());
         assertSavedTrade(persister.loadAllAccounts().get("Con"), "Con");
@@ -212,8 +212,8 @@ public class FilepathPersistenceTest {
 
     @Test
     public void encodedLookingLiteralAccountNameRemainsDistinct() throws Exception {
-        persister.writeToFile("Con", accountFor("Con"));
-        persister.writeToFile("@436f6e", accountFor("@436f6e"));
+        persister.bindAccount("123", "Con", accountFor("Con"));
+        persister.bindAccount("456", "@436f6e", accountFor("@436f6e"));
 
         persister.setupFlippingFolder();
         persister.setupFlippingFolder();
@@ -222,15 +222,15 @@ public class FilepathPersistenceTest {
         assertEquals(2, accounts.size());
         assertSavedTrade(accounts.get("Con"), "Con");
         assertSavedTrade(accounts.get("@436f6e"), "@436f6e");
-        assertEquals("@436f6e", TradePersister.accountNameFromFileName("@40343336663665.json"));
-        assertTrue(Files.isRegularFile(directory.resolve("@40343336663665.json")));
+        assertEquals("@436f6e", persister.loadAccountFile("456_@436f6e.json").getDisplayName());
+        assertTrue(Files.isRegularFile(directory.resolve("456_@436f6e.json")));
     }
 
     @Test
     public void reservedAccountNameRetainsBackupsAndRecoversCorruptPrimary() throws Exception {
         AccountData account = accountFor("Con");
-        persister.writeToFile("Con", account);
-        byte[] original = Files.readAllBytes(directory.resolve("@436f6e.json"));
+        persister.bindAccount("123", "Con", account);
+        byte[] original = Files.readAllBytes(directory.resolve("123_Con.json"));
         persister.createPreMigrationBackup("Con");
 
         account.setAccumulatedSessionTimeMillis(987654L);
@@ -238,32 +238,32 @@ public class FilepathPersistenceTest {
         persister.writeBackup("Con", account);
         persister.createPreMigrationBackup("Con");
 
-        Path migrationBackup = directory.resolve("@436f6e.json.pre-migration");
+        Path migrationBackup = directory.resolve("123_Con.json.pre-migration");
         assertArrayEquals(original, Files.readAllBytes(migrationBackup));
-        assertTrue(Files.isRegularFile(directory.resolve("@436f6e.backup.json")));
-        writeFixture("@436f6e.json", "{ corrupt primary");
+        assertTrue(Files.isRegularFile(directory.resolve("123_Con.backup.json")));
+        writeFixture("123_Con.json", "{ corrupt primary");
         AccountData recovered = persister.loadAccount("Con");
         assertSavedTrade(recovered, "Con");
         assertEquals(987654L, recovered.getAccumulatedSessionTimeMillis());
 
         persister.deletePreMigrationBackup("Con");
         assertFalse(Files.exists(migrationBackup));
-        assertTrue(Files.isRegularFile(directory.resolve("@436f6e.backup.json")));
+        assertTrue(Files.isRegularFile(directory.resolve("123_Con.backup.json")));
     }
 
     @Test
     public void reservedAccountNameCanExportCsv() throws Exception {
-        Filepath output = TradePersister.exportToCsv(Filepath.Unchecked.getRooted(directory), "Con",
+        Filepath output = TradePersister.exportToCsv(Filepath.Unchecked.getRooted(directory), "123", "Con",
             accountFor("Con").getTrades(), "All time");
 
-        assertEquals("@436f6e.csv", output.getFileName());
+        assertEquals("123_Con.csv", output.getFileName());
         String csv = Files.readString(directory.resolve(output.getFileName()));
         assertTrue(csv.contains("Abyssal whip — saved"));
         assertTrue(csv.contains(",3,3000000001,BOUGHT"));
     }
 
     @Test
-    public void existingReservedAccountAndSupportingFilesMigrateWithoutChangingBytes() throws Exception {
+    public void reservedLegacyFilesWaitForIdentityAndPreserveSupportingBytes() throws Exception {
         Assume.assumeFalse(System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows"));
         Map<String, String> saved = new LinkedHashMap<>();
         saved.put(".json", accountJsonFor("Con"));
@@ -278,31 +278,39 @@ public class FilepathPersistenceTest {
         persister.setupFlippingFolder();
 
         for (Map.Entry<String, String> file : saved.entrySet()) {
-            assertFalse(Files.exists(directory.resolve("Con" + file.getKey())));
             assertArrayEquals(file.getValue().getBytes(StandardCharsets.UTF_8),
-                Files.readAllBytes(directory.resolve("@436f6e" + file.getKey())));
+                Files.readAllBytes(directory.resolve("Con" + file.getKey())));
+        }
+        persister.bindAccount("123", "Con", persister.loadAccount("Con"));
+        for (Map.Entry<String, String> file : saved.entrySet()) {
+            assertFalse(Files.exists(directory.resolve("Con" + file.getKey())));
+            if (!file.getKey().equals(".json")) {
+                assertArrayEquals(file.getValue().getBytes(StandardCharsets.UTF_8),
+                    Files.readAllBytes(directory.resolve("123_Con" + file.getKey())));
+            }
         }
         assertEquals(Collections.singleton("Con"), persister.loadAllAccounts().keySet());
         assertSavedTrade(persister.loadAllAccounts().get("Con"), "Con");
-        Files.delete(directory.resolve("@436f6e.json"));
+        Files.delete(directory.resolve("123_Con.json"));
         assertSavedTrade(persister.loadAccount("Con"), "Con");
         assertEquals(234567L, persister.loadAccount("Con").getAccumulatedSessionTimeMillis());
     }
 
     @Test
-    public void reservedFilenameMigrationNeverOverwritesAnExistingEncodedFile() throws Exception {
+    public void reservedFilenameMigrationNeverOverwritesAnExistingIdentityFile() throws Exception {
         Assume.assumeFalse(System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows"));
         String legacy = accountJsonFor("Con");
         String encoded = legacy.replace("123456", "999999");
         writeFixture("Con.json", legacy);
-        writeFixture("@436f6e.json", encoded);
+        writeFixture("123_Con.json", encoded);
 
         try {
             persister.setupFlippingFolder();
+            persister.bindAccount("123", "Con", persister.loadAccount("Con"));
             fail("Migration must report a filename collision without overwriting either file");
         } catch (IOException expected) {
             assertEquals(legacy, Files.readString(directory.resolve("Con.json")));
-            assertEquals(encoded, Files.readString(directory.resolve("@436f6e.json")));
+            assertEquals(encoded, Files.readString(directory.resolve("123_Con.json")));
         }
     }
 

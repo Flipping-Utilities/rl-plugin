@@ -58,7 +58,7 @@ public class LoginPanel extends JPanel {
             if (plugin.getCurrentlyLoggedInAccount() == null) {
                 timeOfLastSuccessfulRequest = null;
                 loggedInPanel.setSlotFeatureHealthText("Inactive (not logged in)");
-            } else if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount())) {
+            } else if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInDisplayName())) {
                 loggedInPanel.setSlotFeatureHealthText("Inactive (not registered yet)");
             } else if (timeOfLastSuccessfulRequest == null) {
                 loggedInPanel.setSlotFeatureHealthText("Active (starting up)");
