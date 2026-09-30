@@ -4,8 +4,14 @@ import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.Option;
 import com.flippingutilities.utilities.InvalidOptionException;
+import net.runelite.api.Client;
+import net.runelite.api.Item;
+import net.runelite.api.ItemContainer;
+import net.runelite.api.gameval.InventoryID;
+import net.runelite.api.gameval.ItemID;
 import org.junit.Test;
 
+import java.lang.reflect.Proxy;
 import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
@@ -26,6 +32,54 @@ public class LongPriceOptionTest {
     @Test(expected = InvalidOptionException.class)
     public void priceModifierOverflowIsReportedInsteadOfClamped() throws Exception {
         calculate(Long.MAX_VALUE, "+1", false);
+    }
+
+    @Test
+    public void cashStackQuantityRoundsDownUsingTheSetupPrice() throws Exception {
+        assertEquals(3L, cashStackQuantity(1_000, 300L));
+    }
+
+    @Test
+    public void cashStackQuantitySupportsSetupPricesAboveIntRange() throws Exception {
+        assertEquals(0L, cashStackQuantity(Integer.MAX_VALUE, 3_000_000_001L));
+    }
+
+    @Test(expected = InvalidOptionException.class)
+    public void cashStackQuantityRejectsAnUnavailableSetupPrice() throws Exception {
+        cashStackQuantity(1_000, 0L);
+    }
+
+    private long cashStackQuantity(int cash, long price) throws Exception {
+        ItemContainer inventory = (ItemContainer) Proxy.newProxyInstance(
+            ItemContainer.class.getClassLoader(), new Class<?>[]{ItemContainer.class},
+            (proxy, method, args) -> {
+                if (method.getName().equals("getItems")) {
+                    return new Item[]{new Item(ItemID.COINS, cash)};
+                }
+                throw new UnsupportedOperationException(method.getName());
+            });
+        Client client = (Client) Proxy.newProxyInstance(
+            Client.class.getClassLoader(), new Class<?>[]{Client.class},
+            (proxy, method, args) -> {
+                switch (method.getName()) {
+                    case "getItemContainer":
+                        assertEquals(InventoryID.INV, args[0]);
+                        return inventory;
+                    case "getVarpLongValue":
+                        assertEquals(5753, args[0]);
+                        return price;
+                    default:
+                        throw new UnsupportedOperationException(method.getName());
+                }
+            });
+        FlippingPlugin plugin = new FlippingPlugin() {
+            @Override
+            public Client getClient() {
+                return client;
+            }
+        };
+        return new OptionHandler(plugin).calculateOptionValue(
+            new Option("", Option.CASHSTACK, "+0", true), Optional.empty(), 4151);
     }
 
     private long calculate(long price, String modifier, boolean quantity) throws Exception {
