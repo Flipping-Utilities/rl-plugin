@@ -14,6 +14,7 @@ import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import org.junit.Rule;
 import org.junit.Test;
+import net.runelite.client.util.Filepath;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
@@ -60,7 +61,7 @@ public class LongPricePersistenceTest {
         assertMoney(fromJson);
 
         File csv = folder.newFile("export.csv");
-        TradePersister.exportToCsv(csv, fromJson.getTrades(), "All time");
+        TradePersister.exportToCsv(Filepath.Unchecked.getRooted(csv.toPath()), fromJson.getTrades(), "All time");
         String exported = Files.readString(csv.toPath());
         assertTrue(exported.contains(",3000000001,BOUGHT"));
         assertTrue(exported.contains(",4995000001,SOLD"));

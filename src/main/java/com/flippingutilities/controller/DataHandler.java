@@ -26,7 +26,6 @@
 
 package com.flippingutilities.controller;
 
-import com.flippingutilities.db.TradePersister;
 import com.flippingutilities.model.AccountData;
 import com.flippingutilities.model.AccountWideData;
 import com.flippingutilities.model.BackupCheckpoints;
@@ -72,7 +71,7 @@ public class DataHandler {
     public void deleteAccount(String displayName) {
         log.info("deleting account: {}", displayName);
         accountSpecificData.remove(displayName);
-        TradePersister.deleteFile(displayName + ".json");
+        plugin.tradePersister.deleteFile(displayName + ".json");
     }
 
     public Collection<AccountData> getAllAccountData() {
@@ -128,19 +127,6 @@ public class DataHandler {
 
     public void loadData() {
         log.debug("Loading data on startup");
-        try {
-            TradePersister.setupFlippingFolder();
-        }
-        catch (Exception e) {
-            log.warn("Couldn't set up flipping folder, setting defaults", e);
-            accountWideData = new AccountWideData();
-            accountWideData.setDefaults();
-            accountSpecificData = new HashMap<>();
-            accountWideDataChanged = true;
-            plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
-            return;
-        }
-
         backupCheckpoints = plugin.tradePersister.fetchBackupCheckpoints();
         accountWideData = fetchAccountWideData();
         plugin.getRecipeHandler().setLocalRecipes(accountWideData.getLocalRecipes());
@@ -212,10 +198,10 @@ public class DataHandler {
                 if (accountData.needsMigration()) {
                     log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
                         displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
-                    TradePersister.createPreMigrationBackup(displayName);
+                    plugin.tradePersister.createPreMigrationBackup(displayName);
                     accountData.markMigrated();
                     plugin.tradePersister.writeToFile(displayName, accountData);
-                    TradePersister.deletePreMigrationBackup(displayName);
+                    plugin.tradePersister.deletePreMigrationBackup(displayName);
                     log.info("Migration complete for {}", displayName);
                 }
             }
@@ -261,10 +247,10 @@ public class DataHandler {
             if (accountData.needsMigration()) {
                 log.info("Migrating account data for {} (version={}, trades={}, recipeFlips={})", 
                     displayName, accountData.getVersion(), accountData.getTrades().size(), accountData.getRecipeFlipGroups().size());
-                TradePersister.createPreMigrationBackup(displayName);
+                plugin.tradePersister.createPreMigrationBackup(displayName);
                 accountData.markMigrated();
                 plugin.tradePersister.writeToFile(displayName, accountData);
-                TradePersister.deletePreMigrationBackup(displayName);
+                plugin.tradePersister.deletePreMigrationBackup(displayName);
                 log.info("Migration complete for {}", displayName);
             }
             

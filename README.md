@@ -128,6 +128,26 @@ Quickly lookup your favorited items just by typing "1" in the ge search!
 
 # Development
 
+### Data storage
+
+Account JSON files and backups live in `.runelite/plugin-data/flipping-utilities/`.
+On first use, RuneLite moves the existing `.runelite/flipping/` directory there if
+the new directory does not already exist. Close other RuneLite clients before
+upgrading so an older plugin cannot continue writing to the old location. If both
+directories already exist, RuneLite uses the new directory and leaves the old one
+untouched.
+
+RuneLite's filename rules apply on every operating system, including rejecting
+Windows device names such as `Con.json`. If an existing account filename is not
+supported, startup stops with an error rather than loading empty replacement
+data. New saves with unsupported account names also fail; this migration does
+not introduce a different account filename format.
+
+File access uses RuneLite’s `Filepath` API. Cross-client changes are checked once
+per second, and CSV exports use a directory selected through `Filepath.Chooser`.
+The OSRS Cloud API uses `https://api.osrs.cloud/v1/`; the
+`OSRS_CLOUD_API_BASE_URL` environment override has been removed.
+
 ### Building and checking Plugin Hub compatibility
 
 Use Java 11 and `./gradlew clean build` to compile the plugin and run its tests.
@@ -239,9 +259,9 @@ user data to disk and cancelling any background jobs that were running.
 This section describes how the plugin models users' trade history. The main model classes used to do this are:
 AccountData, FlippingItem, HistoryManager, and OfferEvent.
 
-When you go to `.runelite/flipping/<username>.json` and open it, you will see the JSON version of an `AccountData`
+When you go to `.runelite/plugin-data/flipping-utilities/<username>.json` and open it, you will see the JSON version of an `AccountData`
 object. Each of the user's osrs accounts get their own AccountData object, each of which is stored in a file
-of the format `.runelite/flipping/<account_username>.json`.
+of the format `.runelite/plugin-data/flipping-utilities/<account_username>.json`.
 
 AccountData objects are created from the JSON in those files on client startup (or created on account login if they have
 no previously saved data for that account). As the user makes trades, deletes trades via the UI, and so on, the

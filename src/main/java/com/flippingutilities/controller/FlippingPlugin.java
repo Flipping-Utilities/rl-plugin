@@ -71,6 +71,7 @@ import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.tooltip.TooltipManager;
 import net.runelite.client.util.ImageUtil;
+import net.runelite.client.util.Filepath;
 import net.runelite.client.game.ItemStats;
 import okhttp3.*;
 
@@ -78,7 +79,6 @@ import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import java.awt.*;
 import java.awt.event.KeyEvent;
-import java.io.File;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -94,6 +94,8 @@ import java.util.stream.Collectors;
 @Slf4j
 @PluginDescriptor(
         name = "Flipping Utilities",
+        internalName = "flipping-utilities",
+        legacyDataDirectory = "flipping",
         description = "Provides utilities for GE flipping"
 )
 public class FlippingPlugin extends Plugin {
@@ -233,10 +235,12 @@ public class FlippingPlugin extends Plugin {
     private OfferGraphChartOverlay offerGraphChartOverlay;
 
     @Override
-    protected void startUp() {
+    protected void startUp() throws IOException {
         accountCurrentlyViewed = ACCOUNT_WIDE;
 
-        tradePersister = new TradePersister(gson);
+        Filepath directory = getPluginDirectory();
+        tradePersister = new TradePersister(gson, directory);
+        tradePersister.setupFlippingFolder();
         recipeHandler = new RecipeHandler(gson, httpClient, null);
         flippingItemHandler = new FlippingItemHandler(this);
 
@@ -297,6 +301,10 @@ public class FlippingPlugin extends Plugin {
     @Override
     protected void shutDown() {
         log.debug("shutdown running!");
+        if (cacheUpdaterJob != null) {
+            cacheUpdaterJob.stop();
+            cacheUpdaterJob = null;
+        }
         if (generalRepeatingTasks != null) {
             generalRepeatingTasks.cancel(true);
             generalRepeatingTasks = null;
@@ -309,9 +317,13 @@ public class FlippingPlugin extends Plugin {
             autoSaveTask.cancel(true);
             autoSaveTask = null;
         }
-        masterPanel.dispose();
+        if (masterPanel != null) {
+            masterPanel.dispose();
+        }
 
-        clientToolbar.removeNavigation(navButton);
+        if (navButton != null) {
+            clientToolbar.removeNavigation(navButton);
+        }
     }
 
     //called when the X button on the client is pressed
@@ -324,7 +336,9 @@ public class FlippingPlugin extends Plugin {
             slotTimersTask.cancel(true);
             slotTimersTask = null;
         }
-        dataHandler.storeData();
+        if (dataHandler != null) {
+            dataHandler.storeData();
+        }
         if (cacheUpdaterJob != null) cacheUpdaterJob.stop();
         if (wikiDataFetcherJob != null) wikiDataFetcherJob.stop();
         if (slotStateSenderJob != null) slotStateSenderJob.stop();
@@ -544,7 +558,7 @@ public class FlippingPlugin extends Plugin {
     }
 
     private void startJobs() {
-        cacheUpdaterJob = new CacheUpdaterJob();
+        cacheUpdaterJob = new CacheUpdaterJob(tradePersister.getDirectory(), executor);
         cacheUpdaterJob.subscribe(this::onDirectoryUpdate);
         cacheUpdaterJob.start();
 
@@ -574,10 +588,10 @@ public class FlippingPlugin extends Plugin {
      * @param fileName name of the file which was modified.
      */
     public void onDirectoryUpdate(String fileName) {
-        if (!fileName.contains(".json") || fileName.contains(".backup.json") || fileName.contains(".special.json")) {
+        if (!fileName.endsWith(".json") || fileName.endsWith(".backup.json") || fileName.endsWith(".special.json")) {
             return;
         }
-        String displayNameOfChangedAcc = fileName.split("\\.")[0];
+        String displayNameOfChangedAcc = fileName.substring(0, fileName.length() - ".json".length());
 
         if (displayNameOfChangedAcc.equals(dataHandler.thisClientLastStored)) {
             log.debug("not reloading data for {} into the cache as this client was the last one to store it", displayNameOfChangedAcc);
@@ -915,8 +929,8 @@ public class FlippingPlugin extends Plugin {
         truncateTradeList();
     }
 
-    public void exportToCsv(File parentDirectory, Instant startOfInterval, String startOfIntervalName) throws IOException {
-        if (parentDirectory.equals(TradePersister.PARENT_DIRECTORY)) {
+    public void exportToCsv(Filepath parentDirectory, Instant startOfInterval, String startOfIntervalName) throws IOException {
+        if (parentDirectory.equals(tradePersister.getDirectory())) {
             throw new RuntimeException("Cannot save csv file in the flipping directory, pick another directory");
         }
         //create new flipping item list with only history from that interval
@@ -931,7 +945,7 @@ public class FlippingPlugin extends Plugin {
             items.add(itemWithOnlySelectedIntervalHistory);
         }
 
-        TradePersister.exportToCsv(new File(parentDirectory, accountCurrentlyViewed + ".csv"), items, startOfIntervalName);
+        TradePersister.exportToCsv(parentDirectory.joinSegment(accountCurrentlyViewed + ".csv"), items, startOfIntervalName);
     }
 
     public long calculateOptionValue(Option option) throws InvalidOptionException {
