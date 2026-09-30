@@ -28,6 +28,7 @@ package com.flippingutilities.db;
 
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
+import com.google.common.io.BaseEncoding;
 import com.google.gson.Gson;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
@@ -43,10 +44,12 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -59,6 +62,11 @@ import java.util.stream.Stream;
 @Slf4j
 public class TradePersister
 {
+	private static final BaseEncoding ACCOUNT_NAME_ENCODING = BaseEncoding.base16().lowerCase();
+	private static final String[] ACCOUNT_FILE_SUFFIXES = {
+		".backup.json.tmp", ".json.pre-migration", ".backup.json", ".json.tmp", ".json"
+	};
+
 	/** Gson for deserialization (reads all fields) */
 	Gson gson;
 	
@@ -89,28 +97,71 @@ public class TradePersister
 	}
 
 	/**
-	 * Creates the plugin data directory and removes the obsolete combined trades file.
+	 * Creates the plugin data directory, migrates unsupported filenames, and removes the obsolete combined file.
 	 *
 	 * @throws IOException handled in FlippingPlugin
 	 */
 	public void setupFlippingFolder() throws IOException
 	{
 		directory.createDirectories();
+		Map<Filepath, Filepath> moves = new LinkedHashMap<>();
 		try (Stream<Filepath> files = directory.walk(1)) {
 			Iterator<Filepath> iterator = files.iterator();
 			while (iterator.hasNext()) {
 				Filepath file = iterator.next();
-				if (file.isFile() && file.getFileName().endsWith(".json")) {
-					try {
-						directory.joinSegment(file.getFileName());
-					} catch (IllegalArgumentException e) {
-						throw new IOException("Account filename is not supported by RuneLite Filepath: "
-							+ file.getFileName() + ". Existing data has not been changed.", e);
+				if (!file.isFile()) {
+					continue;
+				}
+				for (String suffix : ACCOUNT_FILE_SUFFIXES) {
+					String name = file.getFileName();
+					if (!name.endsWith(suffix)) {
+						continue;
 					}
+					String stem = name.substring(0, name.length() - suffix.length());
+					String accountName = accountNameFromFileName(stem + ".json");
+					Filepath target = accountFile(directory, accountName, suffix);
+					if (!file.equals(target)) {
+						if (target.exists() || moves.containsValue(target)) {
+							throw new IOException("Cannot migrate " + name + ": " + target.getFileName()
+								+ " already exists. Existing files have not been overwritten.");
+						}
+						moves.put(file, target);
+					}
+					break;
 				}
 			}
 		}
+		for (Map.Entry<Filepath, Filepath> move : moves.entrySet()) {
+			// No replacement: an existing destination must never be overwritten during migration.
+			move.getKey().moveTo(move.getValue());
+		}
 		directory.joinSegment("trades.json").deleteIfExists();
+	}
+
+	private static Filepath accountFile(Filepath directory, String accountName, String suffix) {
+		if (accountName.contains("/") || accountName.contains("\\")) {
+			throw new IllegalArgumentException("Account names cannot contain path separators");
+		}
+		if (!accountName.startsWith("@")) {
+			try {
+				return directory.joinSegment(accountName + suffix);
+			} catch (IllegalArgumentException ignored) {
+				// Legitimate names such as Con are reserved filenames on Windows.
+			}
+		}
+		return directory.joinSegment("@" + ACCOUNT_NAME_ENCODING.encode(accountName.getBytes(StandardCharsets.UTF_8)) + suffix);
+	}
+
+	/** Returns the display name for a committed account filename, including portable encoded names. */
+	public static String accountNameFromFileName(String fileName) {
+		if (!fileName.endsWith(".json")) {
+			throw new IllegalArgumentException("Not an account JSON filename: " + fileName);
+		}
+		String name = fileName.substring(0, fileName.length() - ".json".length());
+		if (name.startsWith("@") && ACCOUNT_NAME_ENCODING.canDecode(name.substring(1))) {
+			return new String(ACCOUNT_NAME_ENCODING.decode(name.substring(1)), StandardCharsets.UTF_8);
+		}
+		return name;
 	}
 
 	/**
@@ -134,7 +185,7 @@ public class TradePersister
 					|| name.endsWith(".backup.json") || name.endsWith(".special.json")) {
 					continue;
 				}
-				String displayName = name.substring(0, name.length() - ".json".length());
+				String displayName = accountNameFromFileName(name);
 				accountsData.put(displayName, loadAccount(displayName));
 			}
 		}
@@ -148,7 +199,7 @@ public class TradePersister
 	{
 		log.debug("loading data for {}", displayName);
 		try {
-			Filepath accountFile = directory.joinSegment(displayName + ".json");
+			Filepath accountFile = accountFile(directory, displayName, ".json");
 			AccountData accountData = loadFromFile(accountFile);
 			if (accountData == null)
 			{
@@ -170,7 +221,7 @@ public class TradePersister
 	private AccountData loadAccountFromBackup(String displayName) {
 		log.debug("loading data for {} from backup", displayName);
 		try {
-			Filepath accountFile = directory.joinSegment(displayName + ".backup.json");
+			Filepath accountFile = accountFile(directory, displayName, ".backup.json");
 			if (!accountFile.exists()) {
 				log.debug("backup for {} does not exist, returning empty AccountData", displayName);
 				return new AccountData();
@@ -238,9 +289,17 @@ public class TradePersister
 	 * @throws IOException
 	 */
 	public void writeToFile(String displayName, Object data) throws IOException {
+		writeToFile(displayName, data, ".json");
+	}
+
+	public void writeBackup(String displayName, Object data) throws IOException {
+		writeToFile(displayName, data, ".backup.json");
+	}
+
+	private void writeToFile(String displayName, Object data, String suffix) throws IOException {
 		log.debug("Writing to file for {}", displayName);
-		Filepath accountFile = directory.joinSegment(displayName + ".json");
-		Filepath tempFile = directory.joinSegment(displayName + ".json.tmp");
+		Filepath accountFile = accountFile(directory, displayName, suffix);
+		Filepath tempFile = accountFile(directory, displayName, suffix + ".tmp");
 		
 		try (BufferedWriter bufferedWriter = tempFile.openBufferedWriter();
 			JsonWriter jsonWriter = new JsonWriter(bufferedWriter)) {
@@ -262,13 +321,13 @@ public class TradePersister
 		}
 	}
 
-	public void deleteFile(String fileName)
+	public void deleteAccount(String displayName)
 	{
 		try {
-			directory.joinSegment(fileName).deleteIfExists();
-			log.debug("{} deleted", fileName);
+			accountFile(directory, displayName, ".json").deleteIfExists();
+			log.debug("{} deleted", displayName);
 		} catch (IOException e) {
-			log.debug("unable to delete {}", fileName, e);
+			log.debug("unable to delete {}", displayName, e);
 		}
 	}
 
@@ -277,8 +336,8 @@ public class TradePersister
 	 * This should only be called when migration is actually needed.
 	 */
 	public void createPreMigrationBackup(String displayName) throws IOException {
-		Filepath accountFile = directory.joinSegment(displayName + ".json");
-		Filepath backupFile = directory.joinSegment(displayName + ".json.pre-migration");
+		Filepath accountFile = accountFile(directory, displayName, ".json");
+		Filepath backupFile = accountFile(directory, displayName, ".json.pre-migration");
 		if (!backupFile.exists() && accountFile.exists()) {
 			accountFile.copyTo(backupFile);
 			log.info("Created pre-migration backup: {}", backupFile.getFileName());
@@ -292,13 +351,19 @@ public class TradePersister
 	public void deletePreMigrationBackup(String displayName) {
 		String backupFileName = displayName + ".json.pre-migration";
 		try {
-			directory.joinSegment(backupFileName).deleteIfExists();
+			accountFile(directory, displayName, ".json.pre-migration").deleteIfExists();
 			log.info("Deleted pre-migration backup: {}", backupFileName);
 		} catch (IOException e) {
 			log.warn("Failed to delete pre-migration backup: {}", backupFileName, e);
 		}
 	}
 
+
+	public static Filepath exportToCsv(Filepath directory, String accountName, List<FlippingItem> trades, String startOfIntervalName) throws IOException {
+		Filepath file = accountFile(directory, accountName, ".csv");
+		exportToCsv(file, trades, startOfIntervalName);
+		return file;
+	}
 
 	public static void exportToCsv(Filepath file, List<FlippingItem> trades, String startOfIntervalName) throws IOException {
 		try (BufferedWriter out = file.openBufferedWriter()) {

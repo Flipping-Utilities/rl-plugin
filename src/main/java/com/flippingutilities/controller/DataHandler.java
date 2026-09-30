@@ -71,7 +71,7 @@ public class DataHandler {
     public void deleteAccount(String displayName) {
         log.info("deleting account: {}", displayName);
         accountSpecificData.remove(displayName);
-        plugin.tradePersister.deleteFile(displayName + ".json");
+        plugin.tradePersister.deleteAccount(displayName);
     }
 
     public Collection<AccountData> getAllAccountData() {
@@ -146,7 +146,7 @@ public class DataHandler {
 
             if (!accountData.getTrades().isEmpty() && backupCheckpoints.shouldBackup(displayName, accountData.getLastStoredAt())) {
                 try { 
-                    plugin.tradePersister.writeToFile(displayName + ".backup", accountData);
+                    plugin.tradePersister.writeBackup(displayName, accountData);
                     backupCheckpoints.getAccountToBackupTime().put(displayName, accountData.getLastStoredAt());
                     backupCheckpointsChanged = true;
                 }

@@ -1,5 +1,8 @@
 package com.flippingutilities.jobs;
 
+import com.flippingutilities.db.TradePersister;
+import com.flippingutilities.model.AccountData;
+import com.google.gson.Gson;
 import net.runelite.client.util.Filepath;
 import org.junit.Rule;
 import org.junit.Test;
@@ -47,6 +50,37 @@ public class CacheUpdaterJobTest
         executor.tick();
         executor.tick();
         assertEquals(Arrays.asList("new.json"), changes);
+        job.stop();
+    }
+
+    @Test
+    public void persistedReservedAccountNamesSurvivePollingAndBackupsAreIgnored() throws Exception
+    {
+        Filepath directory = Filepath.Unchecked.getRooted(temporary.newFolder("accounts").toPath());
+        TradePersister persister = new TradePersister(new Gson(), directory);
+        AccountData account = new AccountData();
+        persister.writeToFile("Con", account);
+        ManualExecutor executor = new ManualExecutor();
+        CacheUpdaterJob job = new CacheUpdaterJob(directory, executor);
+        List<String> changes = new ArrayList<>();
+        job.subscribe(name -> changes.add(TradePersister.accountNameFromFileName(name)));
+        job.start();
+        executor.tick();
+        assertTrue(changes.isEmpty());
+
+        account.setAccumulatedSessionTimeMillis(1_000_000L);
+        persister.writeToFile("Con", account);
+        executor.tick();
+        assertEquals(Arrays.asList("Con"), changes);
+        persister.writeBackup("Con", account);
+        executor.tick();
+        assertEquals(Arrays.asList("Con"), changes);
+
+        persister.writeToFile("Aux", account);
+        persister.writeBackup("Aux", account);
+        executor.tick();
+        executor.tick();
+        assertEquals(Arrays.asList("Con", "Aux"), changes);
         job.stop();
     }
 

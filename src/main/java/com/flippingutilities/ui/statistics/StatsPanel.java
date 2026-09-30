@@ -696,10 +696,10 @@ public class StatsPanel extends JPanel
 				Filepath selectedDirectory = selection.get(0);
 				log.info("exporting to csv in folder {}", selectedDirectory);
 				try {
-					plugin.exportToCsv(selectedDirectory, startOfInterval, startOfIntervalName);
+					Filepath exportedFile = plugin.exportToCsv(selectedDirectory, startOfInterval, startOfIntervalName);
 					JOptionPane.showMessageDialog(
 							parent,
-							String.format("Successfully saved csv file to %s/%s.csv", selectedDirectory, plugin.getAccountCurrentlyViewed()),
+							String.format("Successfully saved csv file to %s", exportedFile),
 							"Successfully saved CSV!",
 							JOptionPane.INFORMATION_MESSAGE
 					);
