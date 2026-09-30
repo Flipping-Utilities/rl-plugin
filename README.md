@@ -128,6 +128,36 @@ Quickly lookup your favorited items just by typing "1" in the ge search!
 
 # Development
 
+### Building and checking Plugin Hub compatibility
+
+Use Java 11 and `./gradlew clean build` to compile the plugin and run its tests.
+`./gradlew runPlugin` starts the development client.
+
+`runelite-plugin.properties` selects `build=standard` for Plugin Hub distribution.
+The Hub replaces this repository's `build.gradle` and `settings.gradle` with its
+[standard build template](https://github.com/runelite/plugin-hub-tooling/blob/master/package/src/main/resources/net/runelite/pluginhub/packager/standard-build.gradle).
+Local test dependencies and development tasks still work, but custom dependencies
+and tasks in those files do not configure the Hub build. Set the displayed plugin
+version in `runelite-plugin.properties`; the Hub does not read the local Gradle
+version in standard mode.
+
+GitHub Actions runs two independent checks on pull requests and pushes to `master`:
+
+- **Build and test:** runs the local Gradle build and uploads HTML/XML test reports.
+- **Plugin Hub:** uses RuneLite's official packager, the Hub's current RuneLite
+  version and dependency verification metadata, and strict PR checks. This catches
+  standard-build compilation failures, unsupported APIs, invalid plugin metadata,
+  icon/license problems, and oversized JARs. The job summary records the checked commit
+  and upstream versions; artifacts contain the build logs and, on success, the
+  packaged JAR and source archive.
+
+The Hub check always runs in PR mode, including on `master`, and does not publish
+the plugin. Build failures remain failures even if the local Gradle build passes.
+These checks reproduce Hub packaging feedback, not its separate review bot or
+maintainer approval. After merging a release, update the commit in
+[`plugin-hub/plugins/flipping-utilities`](https://github.com/runelite/plugin-hub/blob/master/plugins/flipping-utilities)
+to submit it to the Hub.
+
 ### General Structure of Codebase
 
 This section will talk about the purpose of various parts of the codebase, specifically the folders.
