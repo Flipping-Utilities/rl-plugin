@@ -83,7 +83,7 @@ public class GameUiChangesHandler {
         int inputMode = client.getVarcIntValue(VarClientInt.INPUT_TYPE);
         if (event.getIndex() != VarClientInt.INPUT_TYPE
                 || client.getWidget(InterfaceID.Chatbox.MES_TEXT) == null
-                || (inputMode != Constants.MESLAYER_MODE_INT_INPUT && inputMode != Constants.MESLAYER_MODE_LONG_INPUT)
+                || !OfferEditor.isNumericInputMode(inputMode)
                 || client.getWidget(InterfaceID.GeOffers.SETUP_DESC) == null) {
             return;
         }

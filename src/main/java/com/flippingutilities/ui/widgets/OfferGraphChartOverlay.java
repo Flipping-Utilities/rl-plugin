@@ -344,7 +344,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
      */
     private boolean isInputModeOpen() {
         int inputMode = client.getVarcIntValue(VarClientID.MESLAYERMODE);
-        return inputMode == Constants.MESLAYER_MODE_INT_INPUT || inputMode == Constants.MESLAYER_MODE_LONG_INPUT;
+        return OfferEditor.isNumericInputMode(inputMode);
     }
 
     /**
