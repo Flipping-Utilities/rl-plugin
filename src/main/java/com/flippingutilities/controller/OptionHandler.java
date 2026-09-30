@@ -2,6 +2,7 @@ package com.flippingutilities.controller;
 
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.Option;
+import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.InvalidOptionException;
 import com.flippingutilities.utilities.WikiItemMargins;
 import com.flippingutilities.utilities.WikiRequest;
@@ -9,7 +10,6 @@ import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.ItemID;
-import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.game.ItemStats;
 
 import java.math.BigDecimal;
@@ -103,11 +103,11 @@ public class OptionHandler {
         return item.map(FlippingItem::getTotalGELimit).orElse(geLimit);
     }
 
-    private int cashStackCalculation(Optional<FlippingItem> item, int itemId) throws InvalidOptionException {
+    private long cashStackCalculation(Optional<FlippingItem> item, int itemId) throws InvalidOptionException {
         if (getCashStackInInv() == 0) {
             throw new InvalidOptionException("Player has no cash in inventory");
         }
-        int offerPrice = plugin.getClient().getVarbitValue(VarbitID.GE_NEWOFFER_PRICE);
+        long offerPrice = plugin.getClient().getVarpLongValue(Constants.GE_SETUP_PRICE_VARP);
         if (offerPrice <= 0) {
             throw new InvalidOptionException("Item offer price missing");
         }
