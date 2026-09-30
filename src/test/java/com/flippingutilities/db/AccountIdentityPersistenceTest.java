@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
@@ -53,6 +54,19 @@ public class AccountIdentityPersistenceTest {
     public void setUp() throws IOException {
         directory = folder.newFolder("plugin-data").toPath();
         persister = newPersister();
+    }
+
+    @Test
+    public void corruptIdentityMarkerDoesNotBlockHealthyHistory() throws Exception {
+        persister.bindAccount(ID, "Old", account("Old", 123456L));
+        write(ID + "_Old.identity.special.json", "{ damaged marker");
+        TradePersister restarted = newPersister();
+        AccountData saved = restarted.loadAllAccounts().get("Old");
+
+        restarted.bindAccount(ID, "New", saved);
+
+        assertSavedTrade(newPersister().loadAllAccounts().get("New"), "New", 123456L);
+        assertFalse(Files.exists(directory.resolve(ID + "_Old.json")));
     }
 
     @Test
@@ -456,6 +470,191 @@ public class AccountIdentityPersistenceTest {
     }
 
     @Test
+    public void occupiedBackupDestinationBlocksFirstMigrationWithoutChangingFiles() throws Exception {
+        String original = legacyJson("Existing", 123456L);
+        String unrelated = legacyJson("Unrelated", 987654L);
+        write("Existing.json", original);
+        AccountData account = loadIndexed().get("Existing");
+        write(ID + "_Existing.backup.json", unrelated);
+
+        try {
+            persister.bindAccount(ID, "Existing", account);
+            fail("An unrelated destination backup must not be adopted during first migration");
+        } catch (IOException expected) {
+            assertEquals(original, Files.readString(directory.resolve("Existing.json")));
+            assertEquals(unrelated, Files.readString(directory.resolve(ID + "_Existing.backup.json")));
+            assertFalse(Files.exists(directory.resolve(ID + "_Existing.json")));
+            assertNull(account.getAccountId());
+        }
+    }
+
+    @Test
+    public void corruptLegacyPrimaryRecoveredFromBackupCanMigrateAndSave() throws Exception {
+        String backup = legacyJson("Existing", 123456L);
+        write("Existing.json", "{ corrupt primary");
+        write("Existing.backup.json", backup);
+        AccountData recovered = loadIndexed().get("Existing");
+        assertFalse(recovered.isPersistenceReadFailed());
+        assertSavedTrade(recovered, "Existing", 123456L);
+
+        persister.bindAccount(ID, "Existing", recovered);
+        recovered.setAccumulatedSessionTimeMillis(777L);
+        persister.writeToFile("Existing", recovered);
+
+        assertFalse(Files.exists(directory.resolve("Existing.json")));
+        assertFalse(Files.exists(directory.resolve("Existing.backup.json")));
+        assertEquals(backup, Files.readString(directory.resolve(ID + "_Existing.backup.json")));
+        Map<String, AccountData> accounts = newPersister().loadAllAccounts();
+        assertEquals(Collections.singleton("Existing"), accounts.keySet());
+        assertEquals(ID, accounts.get("Existing").getAccountId());
+        assertSavedTrade(accounts.get("Existing"), "Existing", 777L);
+    }
+
+    @Test
+    public void restartResumesRenameWhenIdentityMarkerAlreadyMoved() throws Exception {
+        String oldStem = ID + "_Old name";
+        String newStem = ID + "_New name";
+        String primary = identifiedJson(ID, "New name", 123456L);
+        String backup = legacyJson("Old name", 987654L);
+        String marker = identityMarker(ID, "Old name");
+        // A process died after moving the identity marker, before moving the history family.
+        write(oldStem + ".json", primary);
+        write(oldStem + ".backup.json", backup);
+        write(newStem + ".identity.special.json", marker);
+        write(newStem + ".rename.special.json", renameJournal(oldStem, newStem, "New name",
+            Map.of(".json", primary, ".backup.json", backup, ".identity.special.json", marker), false));
+        TradePersister restarted = newPersister();
+        Map<String, AccountData> interrupted = restarted.loadAllAccounts();
+        assertEquals(Collections.singleton("New name"), interrupted.keySet());
+
+        restarted.bindAccount(ID, "New name", interrupted.get("New name"));
+
+        assertFalse(Files.exists(directory.resolve(oldStem + ".json")));
+        assertFalse(Files.exists(directory.resolve(oldStem + ".backup.json")));
+        assertFalse(Files.exists(directory.resolve(oldStem + ".identity.special.json")));
+        assertFalse(Files.exists(directory.resolve(newStem + ".rename.special.json")));
+        assertTrue(Files.isRegularFile(directory.resolve(newStem + ".identity.special.json")));
+        assertEquals(backup, Files.readString(directory.resolve(newStem + ".backup.json")));
+        Map<String, AccountData> completed = newPersister().loadAllAccounts();
+        assertEquals(Collections.singleton("New name"), completed.keySet());
+        assertEquals(ID, completed.get("New name").getAccountId());
+        assertSavedTrade(completed.get("New name"), "New name", 123456L);
+    }
+
+    @Test
+    public void restartResumesRenameWithoutReplacingAnAlreadyMovedBackup() throws Exception {
+        String oldStem = ID + "_Old name";
+        String newStem = ID + "_New name";
+        String primary = identifiedJson(ID, "New name", 123456L);
+        String backup = legacyJson("Old name", 987654L);
+        String marker = identityMarker(ID, "Old name");
+        // The destination label was committed before moving files; the old backup has already moved.
+        write(oldStem + ".json", primary);
+        write(oldStem + ".identity.special.json", marker);
+        write(newStem + ".backup.json", backup);
+        write(newStem + ".rename.special.json", renameJournal(oldStem, newStem, "New name",
+            Map.of(".json", primary, ".backup.json", backup, ".identity.special.json", marker), false));
+        TradePersister restarted = newPersister();
+        Map<String, AccountData> interrupted = restarted.loadAllAccounts();
+
+        restarted.bindAccount(ID, "New name", interrupted.get("New name"));
+
+        assertFalse(Files.exists(directory.resolve(oldStem + ".json")));
+        assertFalse(Files.exists(directory.resolve(oldStem + ".identity.special.json")));
+        assertFalse(Files.exists(directory.resolve(newStem + ".rename.special.json")));
+        assertEquals(backup, Files.readString(directory.resolve(newStem + ".backup.json")));
+        assertTrue(Files.isRegularFile(directory.resolve(newStem + ".identity.special.json")));
+        Map<String, AccountData> completed = newPersister().loadAllAccounts();
+        assertEquals(Collections.singleton("New name"), completed.keySet());
+        assertEquals(ID, completed.get("New name").getAccountId());
+        assertSavedTrade(completed.get("New name"), "New name", 123456L);
+    }
+
+    @Test
+    public void restartRejectsDestinationBackupWhoseBytesDoNotMatchTheJournal() throws Exception {
+        String oldStem = ID + "_Old name";
+        String newStem = ID + "_New name";
+        String primary = identifiedJson(ID, "New name", 123456L);
+        String intendedBackup = legacyJson("Old name", 987654L);
+        String unrelatedBackup = legacyJson("Unrelated", 999L);
+        String marker = identityMarker(ID, "Old name");
+        String journal = renameJournal(oldStem, newStem, "New name",
+            Map.of(".json", primary, ".backup.json", intendedBackup, ".identity.special.json", marker), false);
+        write(oldStem + ".json", primary);
+        write(oldStem + ".identity.special.json", marker);
+        write(newStem + ".backup.json", unrelatedBackup);
+        write(newStem + ".rename.special.json", journal);
+
+        try {
+            newPersister().loadAllAccounts();
+            fail("An interrupted rename must not adopt a destination whose bytes differ from the journal");
+        } catch (IOException expected) {
+            assertEquals(primary, Files.readString(directory.resolve(oldStem + ".json")));
+            assertEquals(marker, Files.readString(directory.resolve(oldStem + ".identity.special.json")));
+            assertEquals(unrelatedBackup, Files.readString(directory.resolve(newStem + ".backup.json")));
+            assertEquals(journal, Files.readString(directory.resolve(newStem + ".rename.special.json")));
+            assertFalse(Files.exists(directory.resolve(newStem + ".json")));
+            assertFalse(Files.exists(directory.resolve(newStem + ".identity.special.json")));
+        }
+    }
+
+    @Test
+    public void restartRecoversPrimaryFromCaseOnlyRenameIntermediate() throws Exception {
+        String oldStem = ID + "_Case name";
+        String newStem = ID + "_CASE name";
+        String primary = identifiedJson(ID, "CASE name", 123456L);
+        String backup = legacyJson("Case name", 987654L);
+        String marker = identityMarker(ID, "Case name");
+        write(newStem + ".json.rename.tmp", primary);
+        write(newStem + ".backup.json", backup);
+        write(newStem + ".identity.special.json", marker);
+        write(newStem + ".rename.special.json", renameJournal(oldStem, newStem, "CASE name",
+            Map.of(".json", primary, ".backup.json", backup, ".identity.special.json", marker), false));
+
+        Map<String, AccountData> recovered = newPersister().loadAllAccounts();
+
+        assertEquals(Collections.singleton("CASE name"), recovered.keySet());
+        assertEquals(ID, recovered.get("CASE name").getAccountId());
+        assertSavedTrade(recovered.get("CASE name"), "CASE name", 123456L);
+        assertEquals(primary, Files.readString(directory.resolve(newStem + ".json")));
+        assertEquals(backup, Files.readString(directory.resolve(newStem + ".backup.json")));
+        assertFalse(Files.exists(directory.resolve(newStem + ".json.rename.tmp")));
+        assertFalse(Files.exists(directory.resolve(newStem + ".rename.special.json")));
+        try (Stream<Path> files = Files.list(directory)) {
+            Set<String> filenames = files.map(file -> file.getFileName().toString()).collect(Collectors.toSet());
+            assertTrue(filenames.contains(newStem + ".json"));
+            assertFalse(filenames.contains(oldStem + ".json"));
+        }
+    }
+
+    @Test
+    public void completedJournalCleanupIsSafeAfterFinalIdentityWasAlreadyPublished() throws Exception {
+        String oldStem = ID + "_Old name";
+        String newStem = ID + "_New name";
+        String primary = identifiedJson(ID, "New name", 123456L);
+        String oldMarker = identityMarker(ID, "Old name");
+        write(newStem + ".json", primary);
+        write(newStem + ".identity.special.json", identityMarker(ID, "New name"));
+        // The move hashes describe the old marker; cleanup has already replaced it with the final marker.
+        write(newStem + ".rename.special.json", renameJournal(oldStem, newStem, "New name",
+            Map.of(".json", primary, ".identity.special.json", oldMarker), true));
+
+        Map<String, AccountData> recovered = newPersister().loadAllAccounts();
+        Map<String, AccountData> reloadedAgain = newPersister().loadAllAccounts();
+
+        assertEquals(Collections.singleton("New name"), recovered.keySet());
+        assertEquals(Collections.singleton("New name"), reloadedAgain.keySet());
+        assertEquals(ID, recovered.get("New name").getAccountId());
+        assertSavedTrade(recovered.get("New name"), "New name", 123456L);
+        assertEquals(primary, Files.readString(directory.resolve(newStem + ".json")));
+        assertFalse(Files.exists(directory.resolve(newStem + ".rename.special.json")));
+        AccountData marker = GSON.fromJson(Files.readString(directory.resolve(newStem + ".identity.special.json")),
+            AccountData.class);
+        assertEquals(ID, marker.getAccountId());
+        assertEquals("New name", marker.getDisplayName());
+    }
+
+    @Test
     public void corruptLegacyFileCannotBeBoundAsEmptyHistory() throws Exception {
         String corrupt = "{ corrupt saved account";
         write("Existing.json", corrupt);
@@ -503,6 +702,29 @@ public class AccountIdentityPersistenceTest {
     private static String identifiedJson(String id, String name, long sessionMillis) {
         return "{\"accountId\":" + GSON.toJson(id) + ",\"displayName\":" + GSON.toJson(name)
             + "," + legacyJson(name, sessionMillis).substring(1);
+    }
+
+    private static String identityMarker(String id, String name) {
+        return "{\"accountId\":" + GSON.toJson(id) + ",\"displayName\":" + GSON.toJson(name) + "}";
+    }
+
+    private static String renameJournal(String oldStem, String newStem, String name,
+                                        Map<String, String> originalFiles, boolean completed) throws Exception {
+        Map<String, Object> record = new LinkedHashMap<>();
+        record.put("accountId", ID);
+        record.put("displayName", name);
+        record.put("renameFrom", oldStem + ".json");
+        record.put("renameTo", newStem + ".json");
+        Map<String, String> hashes = new LinkedHashMap<>();
+        for (Map.Entry<String, String> file : originalFiles.entrySet()) {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(file.getValue().getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte value : digest) hex.append(String.format(Locale.ROOT, "%02x", value & 0xff));
+            hashes.put(file.getKey(), hex.toString());
+        }
+        record.put("fileHashes", hashes);
+        record.put("completed", completed);
+        return GSON.toJson(record);
     }
 
     private static void assertSavedTrade(AccountData account, String name, long sessionMillis) {

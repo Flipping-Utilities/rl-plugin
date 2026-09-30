@@ -156,7 +156,9 @@ Migration checks every destination before renaming and refuses to overwrite
 conflicting files. A small `<player_id>_<rsn>.identity.special.json` record keeps
 the current ID/name available even when recovering an older backup. File locks
 coordinate writes and renames between upgraded clients. Failed saves retain their
-pending edits for a retry; interrupted migrations retain their history on disk.
+pending edits for a retry. A temporary `<player_id>_<rsn>.rename.special.json`
+journal records file hashes so interrupted renames resume without replacing
+unrelated files; the journal is removed after completion.
 
 File access uses RuneLite’s `Filepath` API. Cross-client changes are checked once
 per second, and CSV exports use a directory selected through `Filepath.Chooser`.

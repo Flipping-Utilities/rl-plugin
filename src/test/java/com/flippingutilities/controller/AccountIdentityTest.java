@@ -71,10 +71,52 @@ public class AccountIdentityTest {
         AccountData disk = account("123", "Old name");
         disk.setStorageFileName("123_Old name.json");
         disk.getTrades().add(new FlippingItem(1, "Existing history", 100, "Old name"));
+        disk.setSessionStartTime(Instant.EPOCH);
+        disk.setAccumulatedSessionTimeMillis(900000);
+        disk.setLastSessionTimeUpdate(Instant.EPOCH.plusSeconds(900));
         persister.files.put("123_Old name.json", disk);
+        Instant beforeLogin = Instant.now();
         assertEquals("New name", handler.bindLoggedInAccount("123", "New name"));
         assertSame(disk, handler.viewAccountData("New name"));
         assertEquals("Existing history", handler.viewAccountData("New name").getTrades().get(0).getItemName());
+        assertFalse(disk.getSessionStartTime().isBefore(beforeLogin));
+        assertEquals(0, disk.getAccumulatedSessionTimeMillis());
+        assertNull(disk.getLastSessionTimeUpdate());
+    }
+
+    @Test public void loginRefreshKeepsTheSessionResetAtPluginStartup() throws Exception {
+        AccountData cached = account("123", "Bob");
+        cached.startNewSession();
+        assertLoginRefreshKeepsSession(cached);
+    }
+
+    @Test public void loginRefreshKeepsElapsedTimeFromThisClientsSession() throws Exception {
+        AccountData cached = account("123", "Bob");
+        cached.setSessionStartTime(Instant.parse("2026-09-30T10:00:00Z"));
+        cached.setAccumulatedSessionTimeMillis(4321);
+        cached.setLastSessionTimeUpdate(Instant.parse("2026-09-30T10:00:05Z"));
+        assertLoginRefreshKeepsSession(cached);
+    }
+
+    private void assertLoginRefreshKeepsSession(AccountData cached) throws Exception {
+        cached.getTrades().add(new FlippingItem(1, "Stale cached history", 100, "Bob"));
+        seed("Bob", cached);
+        AccountData disk = account("123", "Bob");
+        disk.setStorageFileName("123_Bob.json");
+        disk.getTrades().add(new FlippingItem(2, "Latest disk history", 100, "Bob"));
+        disk.setSessionStartTime(Instant.EPOCH);
+        disk.setAccumulatedSessionTimeMillis(900000);
+        disk.setLastSessionTimeUpdate(Instant.EPOCH.plusSeconds(900));
+        persister.files.put("123_Bob.json", disk);
+
+        assertEquals("Bob", handler.bindLoggedInAccount("123", "Bob"));
+
+        AccountData refreshed = handler.viewAccountData("Bob");
+        assertSame(disk, refreshed);
+        assertEquals("Latest disk history", refreshed.getTrades().get(0).getItemName());
+        assertEquals(cached.getSessionStartTime(), refreshed.getSessionStartTime());
+        assertEquals(cached.getAccumulatedSessionTimeMillis(), refreshed.getAccumulatedSessionTimeMillis());
+        assertEquals(cached.getLastSessionTimeUpdate(), refreshed.getLastSessionTimeUpdate());
     }
 
     @Test public void playerNamedAccountwideCannotBecomeTheCombinedView() throws Exception {
