@@ -591,7 +591,7 @@ public class FlippingPlugin extends Plugin {
         if (!fileName.endsWith(".json") || fileName.endsWith(".backup.json") || fileName.endsWith(".special.json")) {
             return;
         }
-        String displayNameOfChangedAcc = fileName.substring(0, fileName.length() - ".json".length());
+        String displayNameOfChangedAcc = TradePersister.accountNameFromFileName(fileName);
 
         if (displayNameOfChangedAcc.equals(dataHandler.thisClientLastStored)) {
             log.debug("not reloading data for {} into the cache as this client was the last one to store it", displayNameOfChangedAcc);
@@ -929,7 +929,7 @@ public class FlippingPlugin extends Plugin {
         truncateTradeList();
     }
 
-    public void exportToCsv(Filepath parentDirectory, Instant startOfInterval, String startOfIntervalName) throws IOException {
+    public Filepath exportToCsv(Filepath parentDirectory, Instant startOfInterval, String startOfIntervalName) throws IOException {
         if (parentDirectory.equals(tradePersister.getDirectory())) {
             throw new RuntimeException("Cannot save csv file in the flipping directory, pick another directory");
         }
@@ -945,7 +945,7 @@ public class FlippingPlugin extends Plugin {
             items.add(itemWithOnlySelectedIntervalHistory);
         }
 
-        TradePersister.exportToCsv(parentDirectory.joinSegment(accountCurrentlyViewed + ".csv"), items, startOfIntervalName);
+        return TradePersister.exportToCsv(parentDirectory, accountCurrentlyViewed, items, startOfIntervalName);
     }
 
     public long calculateOptionValue(Option option) throws InvalidOptionException {

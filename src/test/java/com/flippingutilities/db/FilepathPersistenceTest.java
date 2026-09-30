@@ -8,8 +8,8 @@ import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.Option;
 import com.google.gson.Gson;
 import net.runelite.client.util.Filepath;
-import org.junit.Before;
 import org.junit.Assume;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -20,8 +20,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Collections;
-import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -190,18 +191,118 @@ public class FilepathPersistenceTest {
     }
 
     @Test
-    public void unsupportedLegacyFilenameStopsSetupWithoutChangingSavedFiles() throws Exception {
+    public void reservedAccountNameSurvivesSaveReloadDiscoveryAndDeletion() throws Exception {
+        AccountData account = accountFor("Con");
+
+        persister.writeToFile("Con", account);
+        persister.setupFlippingFolder();
+
+        Path primary = directory.resolve("@436f6e.json");
+        assertTrue(Files.isRegularFile(primary));
+        assertFalse(Files.exists(directory.resolve("@436f6e.json.tmp")));
+        assertEquals("Con", TradePersister.accountNameFromFileName(primary.getFileName().toString()));
+        assertSavedTrade(persister.loadAccount("Con"), "Con");
+        assertEquals(Collections.singleton("Con"), persister.loadAllAccounts().keySet());
+        assertSavedTrade(persister.loadAllAccounts().get("Con"), "Con");
+
+        persister.deleteAccount("Con");
+        assertFalse(Files.exists(primary));
+        assertTrue(persister.loadAllAccounts().isEmpty());
+    }
+
+    @Test
+    public void encodedLookingLiteralAccountNameRemainsDistinct() throws Exception {
+        persister.writeToFile("Con", accountFor("Con"));
+        persister.writeToFile("@436f6e", accountFor("@436f6e"));
+
+        persister.setupFlippingFolder();
+        persister.setupFlippingFolder();
+
+        Map<String, AccountData> accounts = persister.loadAllAccounts();
+        assertEquals(2, accounts.size());
+        assertSavedTrade(accounts.get("Con"), "Con");
+        assertSavedTrade(accounts.get("@436f6e"), "@436f6e");
+        assertEquals("@436f6e", TradePersister.accountNameFromFileName("@40343336663665.json"));
+        assertTrue(Files.isRegularFile(directory.resolve("@40343336663665.json")));
+    }
+
+    @Test
+    public void reservedAccountNameRetainsBackupsAndRecoversCorruptPrimary() throws Exception {
+        AccountData account = accountFor("Con");
+        persister.writeToFile("Con", account);
+        byte[] original = Files.readAllBytes(directory.resolve("@436f6e.json"));
+        persister.createPreMigrationBackup("Con");
+
+        account.setAccumulatedSessionTimeMillis(987654L);
+        persister.writeToFile("Con", account);
+        persister.writeBackup("Con", account);
+        persister.createPreMigrationBackup("Con");
+
+        Path migrationBackup = directory.resolve("@436f6e.json.pre-migration");
+        assertArrayEquals(original, Files.readAllBytes(migrationBackup));
+        assertTrue(Files.isRegularFile(directory.resolve("@436f6e.backup.json")));
+        writeFixture("@436f6e.json", "{ corrupt primary");
+        AccountData recovered = persister.loadAccount("Con");
+        assertSavedTrade(recovered, "Con");
+        assertEquals(987654L, recovered.getAccumulatedSessionTimeMillis());
+
+        persister.deletePreMigrationBackup("Con");
+        assertFalse(Files.exists(migrationBackup));
+        assertTrue(Files.isRegularFile(directory.resolve("@436f6e.backup.json")));
+    }
+
+    @Test
+    public void reservedAccountNameCanExportCsv() throws Exception {
+        Filepath output = TradePersister.exportToCsv(Filepath.Unchecked.getRooted(directory), "Con",
+            accountFor("Con").getTrades(), "All time");
+
+        assertEquals("@436f6e.csv", output.getFileName());
+        String csv = Files.readString(directory.resolve(output.getFileName()));
+        assertTrue(csv.contains("Abyssal whip — saved"));
+        assertTrue(csv.contains(",3,3000000001,BOUGHT"));
+    }
+
+    @Test
+    public void existingReservedAccountAndSupportingFilesMigrateWithoutChangingBytes() throws Exception {
         Assume.assumeFalse(System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows"));
-        writeFixture("Con.json", LEGACY_ACCOUNT_JSON);
-        writeFixture("trades.json", "obsolete combined trades");
+        Map<String, String> saved = new LinkedHashMap<>();
+        saved.put(".json", accountJsonFor("Con"));
+        saved.put(".backup.json", accountJsonFor("Con").replace("123456", "234567"));
+        saved.put(".json.pre-migration", "original migration backup bytes");
+        saved.put(".json.tmp", "interrupted save bytes");
+        for (Map.Entry<String, String> file : saved.entrySet()) {
+            writeFixture("Con" + file.getKey(), file.getValue());
+        }
+
+        persister.setupFlippingFolder();
+        persister.setupFlippingFolder();
+
+        for (Map.Entry<String, String> file : saved.entrySet()) {
+            assertFalse(Files.exists(directory.resolve("Con" + file.getKey())));
+            assertArrayEquals(file.getValue().getBytes(StandardCharsets.UTF_8),
+                Files.readAllBytes(directory.resolve("@436f6e" + file.getKey())));
+        }
+        assertEquals(Collections.singleton("Con"), persister.loadAllAccounts().keySet());
+        assertSavedTrade(persister.loadAllAccounts().get("Con"), "Con");
+        Files.delete(directory.resolve("@436f6e.json"));
+        assertSavedTrade(persister.loadAccount("Con"), "Con");
+        assertEquals(234567L, persister.loadAccount("Con").getAccumulatedSessionTimeMillis());
+    }
+
+    @Test
+    public void reservedFilenameMigrationNeverOverwritesAnExistingEncodedFile() throws Exception {
+        Assume.assumeFalse(System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows"));
+        String legacy = accountJsonFor("Con");
+        String encoded = legacy.replace("123456", "999999");
+        writeFixture("Con.json", legacy);
+        writeFixture("@436f6e.json", encoded);
 
         try {
             persister.setupFlippingFolder();
-            fail("Setup must report an existing account that Filepath cannot save");
+            fail("Migration must report a filename collision without overwriting either file");
         } catch (IOException expected) {
-            assertTrue(expected.getMessage().contains("Con.json"));
-            assertEquals(LEGACY_ACCOUNT_JSON, Files.readString(directory.resolve("Con.json")));
-            assertEquals("obsolete combined trades", Files.readString(directory.resolve("trades.json")));
+            assertEquals(legacy, Files.readString(directory.resolve("Con.json")));
+            assertEquals(encoded, Files.readString(directory.resolve("@436f6e.json")));
         }
     }
 
@@ -209,13 +310,25 @@ public class FilepathPersistenceTest {
         Files.writeString(directory.resolve(filename), contents, StandardCharsets.UTF_8);
     }
 
+    private static String accountJsonFor(String accountName) {
+        return LEGACY_ACCOUNT_JSON.replace(ACCOUNT, accountName);
+    }
+
+    private static AccountData accountFor(String accountName) {
+        return new Gson().fromJson(accountJsonFor(accountName), AccountData.class);
+    }
+
     private static void assertSavedTrade(AccountData account) {
+        assertSavedTrade(account, ACCOUNT);
+    }
+
+    private static void assertSavedTrade(AccountData account, String accountName) {
         assertNotNull(account);
         assertEquals(1, account.getTrades().size());
         FlippingItem item = account.getTrades().get(0);
         assertEquals(4151, item.getItemId());
         assertEquals("Abyssal whip — saved", item.getItemName());
-        assertEquals(ACCOUNT, item.getFlippedBy());
+        assertEquals(accountName, item.getFlippedBy());
         assertTrue(item.isFavorite());
         assertEquals(1, item.getHistory().getCompressedOfferEvents().size());
         OfferEvent offer = item.getHistory().getCompressedOfferEvents().get(0);

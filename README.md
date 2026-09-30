@@ -137,11 +137,11 @@ upgrading so an older plugin cannot continue writing to the old location. If bot
 directories already exist, RuneLite uses the new directory and leaves the old one
 untouched.
 
-RuneLite's filename rules apply on every operating system, including rejecting
-Windows device names such as `Con.json`. If an existing account filename is not
-supported, startup stops with an error rather than loading empty replacement
-data. New saves with unsupported account names also fail; this migration does
-not introduce a different account filename format.
+RuneLite's filename rules apply on every operating system. Account names such as
+`Con` use a portable filename (`@436f6e.json`) while keeping their original name
+in the plugin. Existing files and backups are renamed without changing their
+contents or overwriting an existing destination. The same encoding applies to
+CSV exports; the success dialog shows the actual saved filename.
 
 File access uses RuneLite’s `Filepath` API. Cross-client changes are checked once
 per second, and CSV exports use a directory selected through `Filepath.Chooser`.
