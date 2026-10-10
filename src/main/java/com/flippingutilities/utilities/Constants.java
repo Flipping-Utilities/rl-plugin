@@ -5,6 +5,12 @@ import java.util.Set;
 import net.runelite.api.gameval.ItemID;
 
 public class Constants {
+    // GE setup price moved to a long varp in the 2026-09-30 update (unnamed in RuneLite 1.13.1).
+    public static final int GE_SETUP_PRICE_VARP = 5753;
+    // Numeric chatbox prompts use int input for quantities and long input for prices.
+    public static final int MESLAYER_MODE_INT_INPUT = 7;
+    public static final int MESLAYER_MODE_LONG_INPUT = 30;
+
     //epoch seconds that GE tax was introduced. This is not the exact time, just a close
     //enough approximation
     public static int GE_TAX_START = 1639072800;
