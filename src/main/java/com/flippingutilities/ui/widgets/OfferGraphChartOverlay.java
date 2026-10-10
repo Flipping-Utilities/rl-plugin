@@ -14,7 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import net.runelite.api.Client;
 import net.runelite.api.GrandExchangeOffer;
-import net.runelite.api.events.ScriptPostFired;
+import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarClientID;
@@ -56,6 +56,8 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     private static final int BUTTON_WIDTH = 28;
     private static final int BUTTON_GAP = 4;
     private static final int PADDING = 5;
+    // How many client ticks to wait for the price prompt's input widget to be built before giving up.
+    private static final int MAX_PRICE_SUBMIT_ATTEMPTS = 5;
 
     private final Client client;
     private final ClientThread clientThread;
@@ -68,7 +70,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     private Rectangle graphBounds = new Rectangle();
     private Rectangle chartBounds = new Rectangle();
     private final int[] intervalButtonStartPosition = new int[4];
-    private long priceToSet = -1;
+    long priceToSet = -1;
     private int currentItemId = -1;
     private long currentOfferPrice = 0;
     private GraphDuration selectedDuration;
@@ -667,20 +669,44 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     }
 
     @Subscribe
-    public void onScriptPostFired(ScriptPostFired event) {
-        // When we want to set the price of the item, we first open the chatbox via "Enter price", then set the price
-        // This is setting the price: It must wait until the chatbox is open
-        if (this.priceToSet != -1 && event.getScriptId() == 108) {
-            long price = this.priceToSet;
-            this.priceToSet = -1;
-            clientThread.invokeLater(() -> {
-                Widget chat = client.getWidget(InterfaceID.Chatbox.MES_TEXT2);
-                if(chat != null){
-                    chat.setText(price + "*");
-                    client.setVarcStrValue(VarClientID.MESLAYERINPUT, String.valueOf(price));
-                }
-            });
+    public void onVarClientIntChanged(VarClientIntChanged event) {
+        // When we want to set the price of the item, we first open the chatbox via "Enter price", then set the
+        // price. The chatbox opening is observed through the meslayer input mode changing to a numeric mode;
+        // raw script ids are not used because game updates renumber them.
+        if (event.getIndex() != VarClientID.MESLAYERMODE || this.priceToSet == -1) {
+            return;
         }
+        if (!OfferEditor.isNumericInputMode(client.getVarcIntValue(VarClientID.MESLAYERMODE))) {
+            return;
+        }
+
+        submitPriceToPrompt(this.priceToSet, MAX_PRICE_SUBMIT_ATTEMPTS);
+    }
+
+    private void submitPriceToPrompt(long price, int attemptsLeft) {
+        clientThread.invokeLater(() -> {
+            Widget promptText = client.getWidget(InterfaceID.Chatbox.MES_TEXT);
+            if (promptText == null || !Constants.PRICE_PROMPT_TEXT.equals(promptText.getText())) {
+                // A different numeric prompt (e.g. quantity) opened or the prompt closed; keep the price armed
+                // so it is still typed once the price prompt opens.
+                return;
+            }
+
+            Widget chat = client.getWidget(InterfaceID.Chatbox.MES_TEXT2);
+            if (chat == null) {
+                // The script that opened the prompt may not have built its widgets yet; retry on later ticks.
+                if (attemptsLeft > 0) {
+                    submitPriceToPrompt(price, attemptsLeft - 1);
+                } else {
+                    log.debug("[OfferGraphChartOverlay] Price prompt had no input widget; giving up on price {}", price);
+                }
+                return;
+            }
+
+            this.priceToSet = -1;
+            chat.setText(price + "*");
+            client.setVarcStrValue(VarClientID.MESLAYERINPUT, String.valueOf(price));
+        });
     }
 
     private void clearPriceInfo() {

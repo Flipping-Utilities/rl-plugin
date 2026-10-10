@@ -10,6 +10,8 @@ public class Constants {
     // Numeric chatbox prompts use int input for quantities and long input for prices.
     public static final int MESLAYER_MODE_INT_INPUT = 7;
     public static final int MESLAYER_MODE_LONG_INPUT = 30;
+    // Chatbox prompt title shown when the GE price input is open.
+    public static final String PRICE_PROMPT_TEXT = "Set a price for each item:";
 
     //epoch seconds that GE tax was introduced. This is not the exact time, just a close
     //enough approximation
