@@ -8,6 +8,7 @@ import com.flippingutilities.model.TimeseriesPoint;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.ChartLoadingAnimation;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
+import com.flippingutilities.utilities.Constants;
 
 import lombok.extern.slf4j.Slf4j;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
@@ -181,7 +182,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         }
         
         // Handle offer price changes
-        if (event.getVarbitId() == VarbitID.GE_NEWOFFER_PRICE) {
+        if (event.getVarpId() == Constants.GE_SETUP_PRICE_VARP) {
             handleOfferPriceChange();
             return;
         }
@@ -202,7 +203,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         if (currentItemId <= 0) {
             return;
         }
-        int newPrice = client.getVarbitValue(VarbitID.GE_NEWOFFER_PRICE);
+        long newPrice = client.getVarpLongValue(Constants.GE_SETUP_PRICE_VARP);
         if (newPrice > 0 && newPrice != currentOfferPrice) {
             currentOfferPrice = newPrice;
             if (chart != null) {
@@ -255,9 +256,9 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
             }
         }
         
-        // For new offers, get price from varbit
+        // For new offers, get the long setup price.
         if (offerPrice == 0) {
-            offerPrice = client.getVarbitValue(VarbitID.GE_NEWOFFER_PRICE);
+            offerPrice = client.getVarpLongValue(Constants.GE_SETUP_PRICE_VARP);
         }
         
         return offerPrice;
@@ -342,7 +343,8 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
      * Checks if the price/quantity input chatbox is open.
      */
     private boolean isInputModeOpen() {
-        return client.getVarcIntValue(VarClientID.MESLAYERMODE) == 7;
+        int inputMode = client.getVarcIntValue(VarClientID.MESLAYERMODE);
+        return OfferEditor.isNumericInputMode(inputMode);
     }
 
     /**
