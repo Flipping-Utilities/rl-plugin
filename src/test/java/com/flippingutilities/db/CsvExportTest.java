@@ -10,7 +10,7 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.util.Arrays;
@@ -114,7 +114,7 @@ public class CsvExportTest {
     private String export(List<FlippingItem> items, String interval) throws Exception {
         File file = temporaryFolder.newFile();
         TradePersister.exportToCsv(file, items, interval);
-        return new String(Files.readAllBytes(file.toPath()), Charset.defaultCharset());
+        return new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
     }
 
     private static FlippingItem item(String name, OfferEvent... offers) {

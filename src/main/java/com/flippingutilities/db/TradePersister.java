@@ -307,7 +307,7 @@ public class TradePersister
 
 
 	public static void exportToCsv(File file, List<FlippingItem> trades, String startOfIntervalName) throws IOException {
-		try (BufferedWriter out = new BufferedWriter(new FileWriter(file))) {
+		try (BufferedWriter out = new BufferedWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
 			String comment = "Displaying trades for selected time interval: " + startOfIntervalName;
 			out.write("# " + comment.replace("\r\n", "\n").replace('\r', '\n').replace("\n", "\r\n# ") + "\r\n");
 			writeCsvRecord(out, "name", "date", "quantity", "price", "state");
