@@ -166,17 +166,13 @@ public class StatsPanel extends JPanel
 		return tabGroupContainer;
 	}
 
-	private JLabel createSortIcon() {
-		JLabel sortIcon = new JLabel(Icons.SORT);
-		sortIcon.setBorder(new EmptyBorder(0,0,0,15));
-		sortIcon.setToolTipText("Use this to sort the list!");
-
+	private JButton createSortIcon() {
 		JPopupMenu popupMenu = new JPopupMenu("Sort");
 		//handles deselecting the other buttons when one is selected
 		ButtonGroup group = new ButtonGroup();
 		Stream.of(SORT.values()).forEach(sortEnum -> {
 			JMenuItem menuItem = new JRadioButtonMenuItem(sortEnum.name().replace("_", " "));
-			menuItem.setFont(new Font("Whitney", Font.PLAIN, 12));
+			menuItem.setFont(FontManager.getRunescapeFont());
 			group.add(menuItem);
 			if (sortEnum == SORT.TIME) {
 				menuItem.setSelected(true);
@@ -191,30 +187,16 @@ public class StatsPanel extends JPanel
 			popupMenu.add(menuItem);
 		});
 
-		sortIcon.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mouseClicked(MouseEvent e) {
-				if (SwingUtilities.isLeftMouseButton(e)) {
-					popupMenu.show(sortIcon, e.getX(), e.getY());
-				}
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				sortIcon.setIcon(Icons.SORT_HOVER);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				sortIcon.setIcon(Icons.SORT);
-			}
+		JButton sortIcon = IconButtons.action("Sort history", Icons.SORT, Icons.SORT_HOVER, event -> {
+			Component source = (Component) event.getSource();
+			popupMenu.show(source, 0, source.getHeight());
 		});
 		return sortIcon;
 	}
 
 	private FastTabGroup createTabGroup(JPanel mainDisplay, FlippingItemContainerPanel statItemTabPanel, RecipeGroupContainerPanel recipeTabPanel) {
 		FastTabGroup tabGroup = new FastTabGroup(mainDisplay);
-		tabGroup.setBorder(new EmptyBorder(0,16 + 15,0,0));
+		tabGroup.setBorder(new EmptyBorder(0,32,0,0));
 
 		MaterialTab statItemTab = new MaterialTab("Items", tabGroup, statItemTabPanel);
 		MaterialTab RecipeTab = new MaterialTab("Recipes", tabGroup, recipeTabPanel);
@@ -236,7 +218,9 @@ public class StatsPanel extends JPanel
 			List<FlippingItem> itemsToDisplay = getItemsToDisplay(flippingItems);
 			flippingItemContainerPanel.rebuild(itemsToDisplay);
 			updateCumulativeDisplays(itemsToDisplay, getRecipeFlipGroupsToDisplay(plugin.viewRecipeFlipGroupsForCurrentView()));
-			if (itemsToDisplay.isEmpty() && currentlySearching) flippingItemContainerPanel.showPanel(createEmptySearchPanel());
+			if (itemsToDisplay.isEmpty() && (currentlySearching || hasHistory(flippingItems))) {
+				flippingItemContainerPanel.showPanel(createEmptyResultsPanel("trades"));
+			}
 			revalidate();
 			repaint();
 		});
@@ -247,7 +231,9 @@ public class StatsPanel extends JPanel
 			List<RecipeFlipGroup> recipeFlipGroupsToDisplay = getRecipeFlipGroupsToDisplay(recipeFlipGroups);
 			recipeGroupContainerPanel.rebuild(recipeFlipGroupsToDisplay);
 			updateCumulativeDisplays(getItemsToDisplay(plugin.viewItemsForCurrentView()), recipeFlipGroupsToDisplay);
-			if (recipeFlipGroupsToDisplay.isEmpty() && currentlySearching) recipeGroupContainerPanel.showPanel(createEmptySearchPanel());
+			if (recipeFlipGroupsToDisplay.isEmpty() && (currentlySearching || hasHistory(recipeFlipGroups))) {
+				recipeGroupContainerPanel.showPanel(createEmptyResultsPanel("recipe flips"));
+			}
 			revalidate();
 			repaint();
 		});
@@ -256,20 +242,26 @@ public class StatsPanel extends JPanel
 	/**
 	 * The panel shown when a user's search query returns no results.
 	 */
-	private JPanel createEmptySearchPanel() {
-		JPanel emptySearchPanel = new JPanel(new DynamicGridLayout(2,1));
-		emptySearchPanel.setBorder(new EmptyBorder(10,0,0,0));
-		String lookup = searchBar.getText().toLowerCase();
-		JLabel searchLabel = new JLabel(String.format(
-				"<html><body style='text-align: center'>The search for <br> <b><u>%s</u></b> <br> yielded no results :(</html>", lookup),
-				SwingConstants.CENTER);
-		searchLabel.setFont(new Font("Whitney", Font.PLAIN, 12));
-		searchLabel.setBorder(new EmptyBorder(0,0,10,0));
+	private JPanel createEmptySearchPanel(String records) {
+		return new EmptyStatePanel("No matching " + records,
+			"No " + records + " match your search in this interval. Clear the search to see other results.",
+			"Clear search", () -> {
+				searchBar.setText("");
+				updateSearch(searchBar);
+			});
+	}
 
-		emptySearchPanel.add(searchLabel);
-		emptySearchPanel.add(new JLabel(Icons.GNOME_CHILD));
+	private boolean hasHistory(List<? extends Searchable> history) {
+		return history != null && history.stream().anyMatch(item -> item != null && item.isInInterval(Instant.EPOCH));
+	}
 
-		return emptySearchPanel;
+	private JPanel createEmptyResultsPanel(String records) {
+		if (currentlySearching) {
+			return createEmptySearchPanel(records);
+		}
+		return new EmptyStatePanel("No results in this interval",
+			"This account has " + records + " outside the selected interval. Show all time to see them.",
+			"Show all time", () -> timeIntervalDropdown.setSelectedItem("All"));
 	}
 
 	private void updateSearch(IconTextField searchBar)
@@ -322,8 +314,10 @@ public class StatsPanel extends JPanel
 	}
 
 	private IconTextField createSearchBar() {
-		IconTextField searchBar = UIUtilities.createSearchBar(plugin.getExecutor(), this::updateSearch);
+		IconTextField searchBar = UIUtilities.createSearchBar(plugin.getExecutor(),
+			bar -> SwingUtilities.invokeLater(() -> updateSearch(bar)));
 		searchBar.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
+		searchBar.getAccessibleContext().setAccessibleName("Search history");
 		return searchBar;
 	}
 
@@ -331,6 +325,7 @@ public class StatsPanel extends JPanel
 		JComboBox<String> timeIntervalDropdown = new JComboBox<>(TIME_INTERVAL_STRINGS);
 		timeIntervalDropdown.setRenderer(new TitleCaseListCellRenderer());
 		timeIntervalDropdown.setEditable(true);
+		timeIntervalDropdown.getAccessibleContext().setAccessibleName("History interval");
 		timeIntervalDropdown.setBorder(BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()));
 		timeIntervalDropdown.setBackground(CustomColors.DARK_GRAY_LIGHTER);
 		//setting the selected item as session before the item listener is attached so it doesn't fire a rebuildItemsDisplay.
@@ -646,95 +641,43 @@ public class StatsPanel extends JPanel
 		return objs.stream().filter(obj -> obj != null && obj.isInInterval(startOfInterval)).collect(Collectors.toList());
 	}
 
-	private JLabel createResetButton() {
-		JLabel resetIcon = new JLabel(Icons.TRASH_ICON_OFF);
-		resetIcon.setBorder(new EmptyBorder(0,12,0,0));
-		resetIcon.setPreferredSize(Icons.ICON_SIZE);
-		resetIcon.setToolTipText("Reset Statistics");
-		resetIcon.addMouseListener(new MouseAdapter()
-		{
-			@Override
-			public void mousePressed(MouseEvent e)
-			{
-				if (SwingUtilities.isLeftMouseButton(e))
-				{
-					//Display warning message
-					final int result = JOptionPane.showOptionDialog(resetIcon, "<html>Are you sure you want to reset the statistics?" +
-									"<br>This only resets the statistics within the currently selected time interval</html>",
-							"Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
-							null, new String[]{"Yes", "No"}, "No");
-
-					//If the user pressed "Yes"
-					if (result == JOptionPane.YES_OPTION)
-					{
-						plugin.deleteOffers(startOfInterval);
-						StatsPanel.this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
-						StatsPanel.this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
-					}
-				}
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e)
-			{
-				resetIcon.setIcon(Icons.TRASH_ICON);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e)
-			{
-				resetIcon.setIcon(Icons.TRASH_ICON_OFF);
+	private JButton createResetButton() {
+		return IconButtons.action("Reset statistics for this interval", Icons.TRASH_ICON_OFF, Icons.TRASH_ICON, event -> {
+			final int result = JOptionPane.showOptionDialog(this, "<html>Are you sure you want to reset the statistics?" +
+				"<br>This only resets the statistics within the currently selected time interval</html>",
+				"Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
+				null, new String[]{"Yes", "No"}, "No");
+			if (result == JOptionPane.YES_OPTION) {
+				plugin.deleteOffers(startOfInterval);
+				rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+				rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 			}
 		});
-		return resetIcon;
 	}
 
-	private JLabel createDownloadButton() {
-		JPanel parent = this;
-		JLabel downloadIcon = new JLabel(Icons.DONWLOAD_ICON_OFF);
-		downloadIcon.setBorder(new EmptyBorder(0,12,0,0));
-		downloadIcon.setPreferredSize(Icons.ICON_SIZE);
-		downloadIcon.setToolTipText("Export to CSV");
-		downloadIcon.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mousePressed(MouseEvent e) {
-				JFileChooser f = new JFileChooser();
-				f.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-				f.showSaveDialog(parent);
-				File selectedDirectory = f.getSelectedFile();
-				if (selectedDirectory == null) {
-					return;
-				}
-				log.info("exporting to csv in folder {}", f.getSelectedFile());
-				try {
-					plugin.exportToCsv(f.getSelectedFile(), startOfInterval, startOfIntervalName);
-					JOptionPane.showMessageDialog(
-							parent,
-							String.format("Successfully saved csv file to %s/%s.csv", f.getSelectedFile().toString(), plugin.getAccountCurrentlyViewed()),
-							"Successfully saved CSV!",
-							JOptionPane.INFORMATION_MESSAGE
-					);
-				}
-				catch (Exception exc) {
-					JOptionPane.showMessageDialog(
-							parent,
-							String.format("Could not save CSV file. Error: %s", exc.toString()),
-							"Could not save csv file",
-							JOptionPane.ERROR_MESSAGE);
-				}
+	private JButton createDownloadButton() {
+		return IconButtons.action("Export to CSV", Icons.DONWLOAD_ICON_OFF, Icons.DOWNLOAD_ICON, event -> {
+			JFileChooser chooser = new JFileChooser();
+			chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+			if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+				return;
 			}
-
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				downloadIcon.setIcon(Icons.DOWNLOAD_ICON);
+			File directory = chooser.getSelectedFile();
+			if (directory == null) {
+				return;
 			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				downloadIcon.setIcon(Icons.DONWLOAD_ICON_OFF);
+			log.info("exporting to csv in folder {}", directory);
+			try {
+				plugin.exportToCsv(directory, startOfInterval, startOfIntervalName);
+				JOptionPane.showMessageDialog(this,
+					String.format("Successfully saved csv file to %s/%s.csv", directory, plugin.getAccountCurrentlyViewed()),
+					"Successfully saved CSV!", JOptionPane.INFORMATION_MESSAGE);
+			} catch (Exception exc) {
+				JOptionPane.showMessageDialog(this,
+					String.format("Could not save CSV file. Error: %s", exc.toString()),
+					"Could not save csv file", JOptionPane.ERROR_MESSAGE);
 			}
 		});
-		return downloadIcon;
 	}
 
 	private JPanel createTopPanel(IconTextField searchBar) {

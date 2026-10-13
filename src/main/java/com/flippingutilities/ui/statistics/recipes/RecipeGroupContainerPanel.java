@@ -6,10 +6,10 @@ import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.statistics.recipes.customrecipes.CustomRecipeManagerPanel;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
+import com.flippingutilities.ui.uiutilities.EmptyStatePanel;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
-import net.runelite.client.ui.DynamicGridLayout;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -69,32 +69,8 @@ public class RecipeGroupContainerPanel extends JPanel {
     }
 
     private JPanel createHelpPanel() {
-        JLabel picDesc = new JLabel(
-            "<html><body width='220' style='text-align:center;'>" +
-                "Create a recipe flip by going to an offer for an item " +
-                "and clicking on the recipe flip button.<br><br> ", SwingConstants.CENTER);
-        picDesc.setFont(new Font("Whitney", Font.PLAIN, 15));
-        picDesc.setIcon(Icons.RECIPE_HELP);
-        picDesc.setBorder(new EmptyBorder(20,5,0,0));
-        picDesc.setHorizontalTextPosition(JLabel.CENTER);
-        picDesc.setVerticalTextPosition(JLabel.NORTH);
-
-        JLabel additionalInfoLabel = new JLabel("<html><body width='220' style='text-align:center;'>" +
-            "This button will only be there if that item has a recipe associated with it</b>.<br><br> ",
-            SwingConstants.CENTER);
-        additionalInfoLabel.setFont(new Font("Whitney", Font.PLAIN, 10));
-
-        JLabel contactUsLabel = new JLabel("<html><body width='220' style='text-align:center;'>" +
-            "If a recipe is missing, contact us on discord and we will add it!", SwingConstants.CENTER);
-        contactUsLabel.setFont(new Font("Whitney", Font.ITALIC, 10));
-
-        JPanel helpPanel = new JPanel(new DynamicGridLayout(3,1));
-        helpPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        helpPanel.add(picDesc);
-        helpPanel.add(additionalInfoLabel);
-        helpPanel.add(contactUsLabel);
-
-        return helpPanel;
+        return new EmptyStatePanel("No recipe flips yet",
+            "Create a recipe flip from an offer's recipe action. Manage Custom Recipes adds recipes for other items.");
     }
 
     private JPanel createRecipeGroupContainer() {
@@ -111,7 +87,6 @@ public class RecipeGroupContainerPanel extends JPanel {
         JScrollPane scrollPane = new JScrollPane(statItemPanelsContainerWrapper);
         scrollPane.setBackground(ColorScheme.DARK_GRAY_COLOR);
         scrollPane.setBorder(new EmptyBorder(5, 0, 0, 0));
-        scrollPane.getVerticalScrollBar().setPreferredSize(new Dimension(2, 0));
 
         return scrollPane;
     }
