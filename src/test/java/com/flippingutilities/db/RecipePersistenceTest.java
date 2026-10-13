@@ -149,6 +149,7 @@ public class RecipePersistenceTest {
             assertRecipePreserved(storage.loadAccount(ACCOUNT));
 
             RecipeFlip unresolved = flip.clone();
+            unresolved.setId(UUID.randomUUID().toString());
             unresolved.setTimeOfCreation(flip.getTimeOfCreation().plusSeconds(1));
             unresolved.getOutputs().get(11802).get("detached-output").setOffer(null);
             storage.insertRecipeFlip(ACCOUNT, "recipe", unresolved.clone());

@@ -3,6 +3,8 @@ package com.flippingutilities.db;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.ArrayList;
+import com.flippingutilities.db.accounting.AccountingSchema;
 
 public final class SqliteSchema {
 
@@ -58,6 +60,8 @@ public final class SqliteSchema {
         "  timestamp INTEGER NOT NULL," +
         "  recipe_key TEXT," +
         "  coin_cost INTEGER," +
+        "  definition_json TEXT," +
+        "  execution_count INTEGER," +
         "  natural_key TEXT NOT NULL UNIQUE," +
         "  FOREIGN KEY(account_id) REFERENCES accounts(id)" +
         ");";
@@ -141,7 +145,7 @@ public final class SqliteSchema {
         "CREATE INDEX IF NOT EXISTS idx_recipe_flip_outputs_offer_uuid ON recipe_flip_outputs (offer_uuid)";
 
     public static final List<String> getCreateStatementsInOrder() {
-        return Arrays.asList(
+        List<String> statements = new ArrayList<>(Arrays.asList(
             CREATE_TABLE_ACCOUNTS,
             CREATE_TABLE_ACTIVE_SLOTS,
             CREATE_TABLE_TRADES,
@@ -152,7 +156,9 @@ public final class SqliteSchema {
             CREATE_TABLE_GE_LIMIT_STATE,
             CREATE_TABLE_ITEM_FAVORITES,
             CREATE_TABLE_ITEM_VISIBILITY
-        );
+        ));
+        statements.addAll(AccountingSchema.statements());
+        return statements;
     }
 
     public static final List<String> getIndexStatements() {

@@ -258,8 +258,11 @@ public class MasterPanel extends PluginPanel
 			return;
 		}
 		boolean sqlite = plugin != null && plugin.getSqliteStorage() != null;
+		boolean failed = sqlite && plugin.hasPendingAccountingSaves();
+		statisticsTab.setText(failed ? "stats !" : "stats");
 		statisticsTab.setIcon(sqlite ? Icons.DATABASE_ICON : null);
-		statisticsTab.setToolTipText(sqlite ? "stats (SQLite storage active)" : null);
+		statisticsTab.setToolTipText(failed ? "Trading changes are pending in memory. Open Statistics and Retry saves before closing."
+			: sqlite ? "stats (SQLite storage active)" : null);
 		tabGroup.revalidate();
 		tabGroup.repaint();
 	}

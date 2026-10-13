@@ -28,6 +28,8 @@ package com.flippingutilities.ui.statistics;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.*;
+import com.flippingutilities.ui.accounting.AccountingPanel;
+import com.flippingutilities.ui.accounting.AccountingUiService;
 import com.flippingutilities.ui.statistics.items.FlippingItemPanel;
 import com.flippingutilities.ui.statistics.items.FlippingItemContainerPanel;
 import com.flippingutilities.ui.statistics.recipes.RecipeFlipGroupPanel;
@@ -126,6 +128,10 @@ public class StatsPanel extends JPanel
 	private IconTextField searchBar;
 	private FlippingItemContainerPanel flippingItemContainerPanel;
 	private RecipeGroupContainerPanel recipeGroupContainerPanel;
+	private final JPanel legacyContent = new JPanel(new BorderLayout());
+	private AccountingPanel accountingPanel;
+	private AccountingUiService accountingService;
+	private boolean accountingRefreshQueued;
 	/**
 	 * The statistics panel shows various stats about trades the user has made over a selectable time interval.
 	 * This represents the front-end Statistics Tab.
@@ -148,8 +154,9 @@ public class StatsPanel extends JPanel
 		FastTabGroup tabGroup = createTabGroup(mainDisplay, flippingItemContainerPanel, recipeGroupContainerPanel);
 
 		setLayout(new BorderLayout());
-		add(createTopPanel(searchBar), BorderLayout.NORTH);
-		add(createTabGroupContainer(tabGroup, mainDisplay), BorderLayout.CENTER);
+		legacyContent.add(createTopPanel(searchBar), BorderLayout.NORTH);
+		legacyContent.add(createTabGroupContainer(tabGroup, mainDisplay), BorderLayout.CENTER);
+		add(legacyContent, BorderLayout.CENTER);
 		setBorder(new EmptyBorder(5,7,0,7));
 	}
 
@@ -233,6 +240,8 @@ public class StatsPanel extends JPanel
 
 	public void rebuildItemsDisplay(List<FlippingItem> flippingItems) {
 		SwingUtilities.invokeLater(() -> {
+			plugin.registerAccountingItemNames(flippingItems);
+			if (routeAccountingRefresh() && !isTradeEditorSelected()) return;
 			List<FlippingItem> itemsToDisplay = getItemsToDisplay(flippingItems);
 			flippingItemContainerPanel.rebuild(itemsToDisplay);
 			updateCumulativeDisplays(itemsToDisplay, getRecipeFlipGroupsToDisplay(plugin.viewRecipeFlipGroupsForCurrentView()));
@@ -244,6 +253,7 @@ public class StatsPanel extends JPanel
 
 	public void rebuildRecipesDisplay(List<RecipeFlipGroup> recipeFlipGroups) {
 		SwingUtilities.invokeLater(() -> {
+			if (routeAccountingRefresh() && !isTradeEditorSelected()) return;
 			List<RecipeFlipGroup> recipeFlipGroupsToDisplay = getRecipeFlipGroupsToDisplay(recipeFlipGroups);
 			recipeGroupContainerPanel.rebuild(recipeFlipGroupsToDisplay);
 			updateCumulativeDisplays(getItemsToDisplay(plugin.viewItemsForCurrentView()), recipeFlipGroupsToDisplay);
@@ -251,6 +261,59 @@ public class StatsPanel extends JPanel
 			revalidate();
 			repaint();
 		});
+	}
+
+	/** Called after an accounting projection is committed, without reading full account histories. */
+	public void refreshAccounting() {
+		if (SwingUtilities.isEventDispatchThread()) routeAccountingRefresh();
+		else SwingUtilities.invokeLater(this::routeAccountingRefresh);
+	}
+
+	private boolean isTradeEditorSelected() {
+		return accountingPanel != null && accountingPanel.isTradesSelected();
+	}
+
+	private boolean routeAccountingRefresh() {
+		AccountingUiService service = plugin.getAccountingUiService();
+		if (service == null) {
+			if (accountingPanel != null) {
+				remove(accountingPanel);
+				accountingPanel.dispose();
+				accountingPanel = null;
+				accountingService = null;
+				add(legacyContent, BorderLayout.CENTER);
+				revalidate();
+				repaint();
+			}
+			return false;
+		}
+		if (accountingRefreshQueued) return true;
+		accountingRefreshQueued = true;
+		SwingUtilities.invokeLater(() -> {
+			accountingRefreshQueued = false;
+			AccountingUiService current = plugin.getAccountingUiService();
+			if (current == null) { routeAccountingRefresh(); return; }
+			if (accountingPanel == null || accountingService != current) {
+				if (accountingPanel != null) {
+					remove(accountingPanel);
+					accountingPanel.dispose();
+				}
+				remove(legacyContent);
+				accountingService = current;
+				accountingPanel = new AccountingPanel(current, plugin.getAccountingExecutor(), legacyContent, () -> {
+					rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+					rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
+				});
+				add(accountingPanel, BorderLayout.CENTER);
+			}
+			List<String> names = new ArrayList<>(plugin.getDataHandler().getCurrentAccounts());
+			Collections.sort(names);
+			accountingPanel.setPendingSaves(plugin.hasPendingAccountingSaves());
+			accountingPanel.setAccounts(names, plugin.getAccountCurrentlyViewed(), plugin.viewStartOfSessionForCurrentView());
+			revalidate();
+			repaint();
+		});
+		return true;
 	}
 
 	/**
