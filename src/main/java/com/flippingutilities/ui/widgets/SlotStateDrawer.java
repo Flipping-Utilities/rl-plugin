@@ -262,7 +262,15 @@ public class SlotStateDrawer {
                 clearHover();
             }
         });
-        quickLookWidget.setOnClickListener((JavaScriptCallback) ev -> clearHover());
+        quickLookWidget.setOnClickListener((JavaScriptCallback) ev -> {
+            if (Objects.equals(hoveredSlotIndex, slot.getIndex())
+                    && currentTooltip != null && currentTooltip.canRetryGraph()) {
+                currentlyFetchedItemId = null;
+                currentTooltip.beginGraphLoad();
+            } else {
+                clearHover();
+            }
+        });
 
         quickLookWidget.revalidate();
         return quickLookWidget;
@@ -380,6 +388,12 @@ public class SlotStateDrawer {
                 // Offers can change before another render has requested the new graph.
                 slotInfos.get(slotIndex).filter(current -> current.getItemId() == itemId)
                     .ifPresent(current -> currentTooltip.setGraphData(response, timestep, current.getOfferPrice()));
+            }, failure -> {
+                if (Objects.equals(hoveredSlotIndex, slotIndex) && slotIndex < slotInfos.size()
+                        && currentTooltip != null && plugin.getConfig().priceGraphTimestep() == timestep
+                        && slotInfos.get(slotIndex).filter(current -> current.getItemId() == itemId).isPresent()) {
+                    currentTooltip.showGraphFailure();
+                }
             });
         }
         currentTooltip.update(slotInfo, margins);

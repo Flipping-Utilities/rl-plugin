@@ -5,7 +5,8 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.jobs.TimeseriesFetcher;
 import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesPoint;
-import com.flippingutilities.ui.uiutilities.ChartLoadingAnimation;
+import com.flippingutilities.ui.uiutilities.GraphLoadState;
+import com.flippingutilities.ui.uiutilities.GraphStatusRenderer;
 import com.flippingutilities.ui.uiutilities.GraphDataLoader;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
@@ -86,7 +87,8 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     private String instabuyText = "Instabuy: -";
     private String instasellText = "Instasell: -";
 
-    private ChartLoadingAnimation chartLoadingAnimation;
+    private GraphLoadState graphLoadState = GraphLoadState.LOADING;
+    private final GraphStatusRenderer graphStatusRenderer = new GraphStatusRenderer();
     private TimeSeriesChart chart;
 
     /**
@@ -321,6 +323,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     }
 
     private void clearGraphData() {
+        graphLoadState = GraphLoadState.LOADING;
         priceToSet = -1;
         clearPriceInfo();
         if (chart != null) {
@@ -339,12 +342,10 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         final int itemId = currentItemId;
         final GraphDuration duration = selectedDuration;
         graphDataLoader.load(itemId, duration.getTimestep(), response -> {
-            if (response.getData().isEmpty()) {
-                log.warn("[OfferGraphChartOverlay] No price history data for item {}", itemId);
-            }
             chart.setDataSeries(response, duration.getTimestep(),
                 currentOfferPrice, duration.getMaxTimeRangeSeconds());
-        });
+            graphLoadState = chart.hasData() ? GraphLoadState.READY : GraphLoadState.EMPTY;
+        }, failure -> graphLoadState = GraphLoadState.FAILED);
     }
 
     private boolean isOfferCreation() {
@@ -443,6 +444,11 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
 
         drawDurationButtons(graphics, graphX, graphY);
 
+        if (graphLoadState == GraphLoadState.READY && !chart.hasData()) {
+            graphLoadState = GraphLoadState.EMPTY;
+            priceToSet = -1;
+            clearPriceInfo();
+        }
         drawPriceInfo(graphics, graphX, graphY, graphWidth);
 
         int chartY = graphY + BUTTON_ROW_HEIGHT + 2;
@@ -451,7 +457,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
 
         Shape originalClip = graphics.getClip();
         graphics.setClip(chartBounds);
-        if (chart.hasData()) {
+        if (graphLoadState == GraphLoadState.READY) {
             chart.setPreferredLocation(new Point(chartBounds.x, chartBounds.y));
             chart.setPreferredSize(new Dimension(chartBounds.width, chartBounds.height));
 
@@ -460,10 +466,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
 
             chart.render(graphics);
         } else {
-            if (chartLoadingAnimation == null) {
-                chartLoadingAnimation = new ChartLoadingAnimation();
-            }
-            chartLoadingAnimation.render(graphics, chartBounds, System.currentTimeMillis());
+            graphStatusRenderer.render(graphics, chartBounds, graphLoadState, true);
         }
 
         graphics.setClip(originalClip);
@@ -625,8 +628,14 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
                     }
                 }
             }
+            else if (graphLoadState == GraphLoadState.FAILED
+                    && GraphStatusRenderer.retryBounds(chartBounds).contains(p)) {
+                e.consume();
+                clientThread.invoke(this::fetchGraphData);
+            }
             // Check if click is in chart area - set price
-            else if (chartBounds != null && chartBounds.contains(p) && chart != null && chart.hasData() && isOfferCreation()) {
+            else if (chartBounds != null && chartBounds.contains(p) && chart != null
+                    && graphLoadState == GraphLoadState.READY && chart.hasData() && isOfferCreation()) {
                 e.consume();
                 int price = Math.max(chart.calculatePriceFromY(p.y, chartBounds), 0);
                 this.priceToSet = price;
@@ -741,7 +750,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
      * Checks if the chart instance is valid and has data available.
      */
     private boolean hasChartData() {
-        return chart != null && chart.hasData();
+        return graphLoadState == GraphLoadState.READY && chart != null && chart.hasData();
     }
 
     private boolean isBond(int itemId) {
