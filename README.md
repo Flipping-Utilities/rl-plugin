@@ -128,56 +128,6 @@ Quickly lookup your favorited items just by typing "1" in the ge search!
 
 # Development
 
-### Data storage
-
-Account JSON files and backups live in `.runelite/plugin-data/flipping-utilities/`.
-On first use, RuneLite moves the existing `.runelite/flipping/` directory there if
-the new directory does not already exist. Close other RuneLite clients before
-upgrading so an older plugin cannot continue writing to the old location. If both
-directories already exist, RuneLite uses the new directory and leaves the old one
-untouched.
-
-RuneLite's filename rules apply on every operating system, including rejecting
-Windows device names such as `Con.json`. If an existing account filename is not
-supported, startup stops with an error rather than loading empty replacement
-data. New saves with unsupported account names also fail; this migration does
-not introduce a different account filename format.
-
-File access uses RuneLite’s `Filepath` API. Cross-client changes are checked once
-per second, and CSV exports use a directory selected through `Filepath.Chooser`.
-The OSRS Cloud API uses `https://api.osrs.cloud/v1/`; the
-`OSRS_CLOUD_API_BASE_URL` environment override has been removed.
-
-### Building and checking Plugin Hub compatibility
-
-Use Java 11 and `./gradlew clean build` to compile the plugin and run its tests.
-`./gradlew runPlugin` starts the development client.
-
-`runelite-plugin.properties` selects `build=standard` for Plugin Hub distribution.
-The Hub replaces this repository's `build.gradle` and `settings.gradle` with its
-[standard build template](https://github.com/runelite/plugin-hub-tooling/blob/master/package/src/main/resources/net/runelite/pluginhub/packager/standard-build.gradle).
-Local test dependencies and development tasks still work, but custom dependencies
-and tasks in those files do not configure the Hub build. Set the displayed plugin
-version in `runelite-plugin.properties`; the Hub does not read the local Gradle
-version in standard mode.
-
-GitHub Actions runs two independent checks on pull requests and pushes to `master`:
-
-- **Build and test:** runs the local Gradle build and uploads HTML/XML test reports.
-- **Plugin Hub:** uses RuneLite's official packager, the Hub's current RuneLite
-  version and dependency verification metadata, and strict PR checks. This catches
-  standard-build compilation failures, unsupported APIs, invalid plugin metadata,
-  icon/license problems, and oversized JARs. The job summary records the checked commit
-  and upstream versions; artifacts contain the build logs and, on success, the
-  packaged JAR and source archive.
-
-The Hub check always runs in PR mode, including on `master`, and does not publish
-the plugin. Build failures remain failures even if the local Gradle build passes.
-These checks reproduce Hub packaging feedback, not its separate review bot or
-maintainer approval. After merging a release, update the commit in
-[`plugin-hub/plugins/flipping-utilities`](https://github.com/runelite/plugin-hub/blob/master/plugins/flipping-utilities)
-to submit it to the Hub.
-
 ### General Structure of Codebase
 
 This section will talk about the purpose of various parts of the codebase, specifically the folders.
@@ -259,9 +209,9 @@ user data to disk and cancelling any background jobs that were running.
 This section describes how the plugin models users' trade history. The main model classes used to do this are:
 AccountData, FlippingItem, HistoryManager, and OfferEvent.
 
-When you go to `.runelite/plugin-data/flipping-utilities/<username>.json` and open it, you will see the JSON version of an `AccountData`
+When you go to `.runelite/flipping/<username>.json` and open it, you will see the JSON version of an `AccountData`
 object. Each of the user's osrs accounts get their own AccountData object, each of which is stored in a file
-of the format `.runelite/plugin-data/flipping-utilities/<account_username>.json`.
+of the format `.runelite/flipping/<account_username>.json`.
 
 AccountData objects are created from the JSON in those files on client startup (or created on account login if they have
 no previously saved data for that account). As the user makes trades, deletes trades via the UI, and so on, the
