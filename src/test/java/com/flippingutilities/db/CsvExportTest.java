@@ -7,6 +7,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import net.runelite.client.util.Filepath;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
@@ -113,7 +114,7 @@ public class CsvExportTest {
 
     private String export(List<FlippingItem> items, String interval) throws Exception {
         File file = temporaryFolder.newFile();
-        TradePersister.exportToCsv(file, items, interval);
+        TradePersister.exportToCsv(Filepath.Unchecked.getRooted(file.toPath()), items, interval);
         return new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
     }
 
