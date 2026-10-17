@@ -77,7 +77,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
 
         List<TimeseriesPoint> dataPoints = timeseries.getData();
         if (dataPoints.isEmpty()) {
-            dimension.setSize(config.getWidth(), config.getHeight());
+            dimension.setSize(mutableWidth, mutableHeight);
             return dimension;
         }
 
@@ -96,7 +96,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         drawHoverLine(g2d, bounds, filteredData);
         drawHorizontalPriceLine(g2d, bounds, priceRange);
 
-        dimension.setSize(config.getWidth(), config.getHeight());
+        dimension.setSize(mutableWidth, mutableHeight);
         return dimension;
     }
 
@@ -109,8 +109,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         List<TimeseriesPoint> sorted = new ArrayList<>();
 
         // Only include points within the selected date range
-        long currentTime = System.currentTimeMillis() / 1000;
-        long minTimestamp = currentTime - maxTimeRangeSeconds;
+        long minTimestamp = earliestVisibleTimestamp();
 
         for (TimeseriesPoint point : dataPoints) {
             if (point.getTimestamp() >= minTimestamp) {
@@ -399,7 +398,7 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
         g2d.setFont(config.getLabelFont());
         FontMetrics fm = g2d.getFontMetrics();
 
-        int bottomY = position.y + config.getHeight() - LABEL_PADDING;
+        int bottomY = position.y + mutableHeight - LABEL_PADDING;
         long currentTimeSeconds = System.currentTimeMillis() / 1000;
         String[] timeLabels = TimeLabelGenerator.generate(timestep, currentTimeSeconds);
         int divisions = timestep.getLabelCount() - 1;
@@ -425,9 +424,17 @@ public final class TimeSeriesChart implements LayoutableRenderableEntity {
     }
 
     public boolean hasData() {
-        boolean hasData = timeseries != null && timestep != null && timeseries.getData() != null
-                && !timeseries.getData().isEmpty();
-        return hasData;
+        if (timeseries == null || timestep == null || timeseries.getData() == null) {
+            return false;
+        }
+        long minTimestamp = earliestVisibleTimestamp();
+        return timeseries.getData().stream().anyMatch(point ->
+            point.getTimestamp() >= minTimestamp
+                && (point.getAvgHighPrice() != null || point.getAvgLowPrice() != null));
+    }
+
+    private long earliestVisibleTimestamp() {
+        return System.currentTimeMillis() / 1000 - maxTimeRangeSeconds;
     }
 
     @Override
