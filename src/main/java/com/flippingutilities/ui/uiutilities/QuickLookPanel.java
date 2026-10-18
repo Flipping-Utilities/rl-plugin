@@ -17,8 +17,6 @@ import java.awt.Color;
 import java.awt.Font;
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * The panel that is displayed when you hover over the magnifying glass widget. This panel
@@ -86,36 +84,31 @@ public class QuickLookPanel extends JPanel {
     }
 
     public void updateDetails(SlotInfo slot, WikiItemMargins wikiItemInfo) {
+        toMakeOfferCompetitiveTest.setText("");
+        offerCompetitivenessText.setText("");
         Arrays.asList(wikiInstaBuy, wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setForeground(Color.WHITE));
         if (wikiItemInfo == null || slot == null) {
             Arrays.asList(wikiInstaBuy, wikiInstaSell, wikiInstaBuyAge, wikiInstaSellAge).forEach(l -> l.setText("No data"));
             return;
         }
-        Map<Long, JLabel> wikiMarginToLabel = new HashMap<>();
-        wikiMarginToLabel.put(wikiItemInfo.getHigh(), wikiInstaBuy);
-        wikiMarginToLabel.put(wikiItemInfo.getLow(), wikiInstaSell);
-
         wikiInstaBuyAge.setText(wikiItemInfo.getHighTime() == null || wikiItemInfo.getHighTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getHighTime())));
         wikiInstaSellAge.setText(wikiItemInfo.getLowTime() == null || wikiItemInfo.getLowTime() == 0 ? "No data" : TimeFormatters.formatDuration(Instant.ofEpochSecond(wikiItemInfo.getLowTime())));
         wikiInstaBuy.setText(!wikiItemInfo.hasHigh() ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getHigh()) + " gp");
         wikiInstaSell.setText(!wikiItemInfo.hasLow() ? "No data" : QuantityFormatter.formatNumber(wikiItemInfo.getLow()) + " gp");
 
-        toMakeOfferCompetitiveTest.setText("");
-        offerCompetitivenessText.setText("");
-
         long max = Math.max(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
         long min = Math.min(wikiItemInfo.getHigh(), wikiItemInfo.getLow());
 
         if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
-            UIUtilities.recolorLabel(wikiMarginToLabel.get(max), ColorScheme.GRAND_EXCHANGE_PRICE);
+            recolorPrice(wikiItemInfo, max, ColorScheme.GRAND_EXCHANGE_PRICE);
             offerCompetitivenessText.setText(
                 String.format("<html> buy offer is ultra competitive: %s &gt= %s </html>",
                     UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(max), ColorScheme.GRAND_EXCHANGE_PRICE)
                 ));
         } else if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
-            UIUtilities.recolorLabel(wikiMarginToLabel.get(min), CustomColors.IN_RANGE);
-            UIUtilities.recolorLabel(wikiMarginToLabel.get(max), ColorScheme.GRAND_EXCHANGE_PRICE);
+            recolorPrice(wikiItemInfo, min, CustomColors.IN_RANGE);
+            recolorPrice(wikiItemInfo, max, ColorScheme.GRAND_EXCHANGE_PRICE);
             offerCompetitivenessText.setText(
                 String.format("<html> buy offer is competitive: %s &lt= %s &lt %s </html>",
                     UIUtilities.colorText(QuantityFormatter.formatNumber(min), CustomColors.IN_RANGE),
@@ -123,7 +116,7 @@ public class QuickLookPanel extends JPanel {
                     UIUtilities.colorText(QuantityFormatter.formatNumber(max), ColorScheme.GRAND_EXCHANGE_PRICE)
                 ));
         } else if (slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
-            UIUtilities.recolorLabel(wikiMarginToLabel.get(min), CustomColors.TOMATO);
+            recolorPrice(wikiItemInfo, min, CustomColors.TOMATO);
             offerCompetitivenessText.setText(
                 String.format("<html> buy offer is not competitive: %s &lt %s </html>",
                     UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
@@ -134,15 +127,15 @@ public class QuickLookPanel extends JPanel {
                     UIUtilities.colorText(QuantityFormatter.formatNumber(min), CustomColors.TOMATO)
                 ));
         } else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.BETTER_THAN_WIKI) {
-            UIUtilities.recolorLabel(wikiMarginToLabel.get(min), ColorScheme.GRAND_EXCHANGE_PRICE);
+            recolorPrice(wikiItemInfo, min, ColorScheme.GRAND_EXCHANGE_PRICE);
             offerCompetitivenessText.setText(
                 String.format("<html> sell offer is ultra competitive: %s &lt= %s </html>",
                     UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
                     UIUtilities.colorText(QuantityFormatter.formatNumber(min), ColorScheme.GRAND_EXCHANGE_PRICE)
                 ));
         } else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.IN_RANGE) {
-            UIUtilities.recolorLabel(wikiMarginToLabel.get(min), ColorScheme.GRAND_EXCHANGE_PRICE);
-            UIUtilities.recolorLabel(wikiMarginToLabel.get(max), CustomColors.IN_RANGE);
+            recolorPrice(wikiItemInfo, min, ColorScheme.GRAND_EXCHANGE_PRICE);
+            recolorPrice(wikiItemInfo, max, CustomColors.IN_RANGE);
             offerCompetitivenessText.setText(
                 String.format("<html> sell offer is competitive: %s &lt %s &lt= %s </html>",
                     UIUtilities.colorText(QuantityFormatter.formatNumber(min), ColorScheme.GRAND_EXCHANGE_PRICE),
@@ -150,7 +143,7 @@ public class QuickLookPanel extends JPanel {
                     UIUtilities.colorText(QuantityFormatter.formatNumber(max), CustomColors.IN_RANGE)
                 ));
         } else if (!slot.isBuyOffer() && slot.getPredictedState() == SlotPredictedState.OUT_OF_RANGE) {
-            UIUtilities.recolorLabel(wikiMarginToLabel.get(max), CustomColors.TOMATO);
+            recolorPrice(wikiItemInfo, max, CustomColors.TOMATO);
             offerCompetitivenessText.setText(
                 String.format("<html> sell offer is not competitive: %s &gt %s</html>",
                     UIUtilities.colorText(QuantityFormatter.formatNumber(slot.getOfferPrice()), Color.WHITE),
@@ -160,6 +153,16 @@ public class QuickLookPanel extends JPanel {
                 String.format("<html> set price to &lt= %s </html>",
                     UIUtilities.colorText(QuantityFormatter.formatNumber(max), CustomColors.TOMATO)
                 ));
+        }
+    }
+
+    private void recolorPrice(WikiItemMargins margins, long price, Color color) {
+        // Both rows must be highlighted when the latest buy and sell prices match.
+        if (margins.getHigh() == price) {
+            UIUtilities.recolorLabel(wikiInstaBuy, color);
+        }
+        if (margins.getLow() == price) {
+            UIUtilities.recolorLabel(wikiInstaSell, color);
         }
     }
 }
