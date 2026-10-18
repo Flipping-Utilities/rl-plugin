@@ -1,12 +1,14 @@
 name: Publish Plugin Hub branch
 
 on:
+  push:
+    branches: [master]
   workflow_dispatch:
     inputs:
       base:
-        description: Ref to snapshot the plugin from
+        description: Ref to snapshot the plugin from (defaults to the triggering commit)
         required: false
-        default: master
+        default: ''
         type: string
 
 permissions:
@@ -14,7 +16,10 @@ permissions:
 
 concurrency:
   group: publish-hub
-  cancel-in-progress: false
+  # A newer master push supersedes queued runs: intermediate snapshots are
+  # pointless because reviewers only ever diff pin against pin, and a cancelled
+  # run never leaves partial state on the remote (push is the last step).
+  cancel-in-progress: true
 
 jobs:
   publish:
@@ -43,7 +48,7 @@ jobs:
       - name: Create or update the plugin snapshot
         id: snapshot
         env:
-          HUB_BASE: ${{ inputs.base || 'master' }}
+          HUB_BASE: ${{ inputs.base || github.sha }}
         shell: bash
         run: bash .github/scripts/publish-hub.sh
 
@@ -90,7 +95,7 @@ jobs:
           COMMIT: ${{ steps.snapshot.outputs.commit }}
           PREVIOUS: ${{ steps.snapshot.outputs.previous }}
           CHANGED: ${{ steps.snapshot.outputs.changed }}
-          BASE: ${{ inputs.base || 'master' }}
+          BASE: ${{ inputs.base || github.sha }}
           REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
