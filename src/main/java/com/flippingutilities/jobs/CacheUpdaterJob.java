@@ -43,16 +43,30 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
-/** Polls committed account files and notifies subscribers when a file is created or changed. */
+/**
+ * Polls committed account files and notifies subscribers when a file is created or changed.
+ *
+ * Lifecycle guarantees: stopping is terminal and idempotent (including before start or
+ * while a poll is running), a poll task can never be double-scheduled, a failing
+ * subscriber cannot stop notifications to healthy subscribers, and a permanently
+ * unreadable directory exhausts the retry limit and releases the poll task instead of
+ * leaking a poller that can never succeed. The executor is owned by the plugin and is
+ * never shut down here.
+ */
 @Slf4j
 public class CacheUpdaterJob
 {
+	/** Consecutive failed polls tolerated before the job gives up and releases its poll task. */
+	private static final int MAX_CONSECUTIVE_FAILURES = 3;
+
 	private final Filepath directory;
 	private final ScheduledExecutorService executor;
 	private final List<Consumer<String>> subscribers = new ArrayList<>();
 	private Map<String, FileMetadata> snapshot;
 	private ScheduledFuture<?> updateTask;
 	private long generation;
+	private boolean stopped;
+	private int consecutiveFailures;
 
 	public CacheUpdaterJob(Filepath directory, ScheduledExecutorService executor)
 	{
@@ -67,12 +81,13 @@ public class CacheUpdaterJob
 
 	public synchronized void start()
 	{
-		if (updateTask != null)
+		if (stopped || updateTask != null)
 		{
 			return;
 		}
 
 		snapshot = null;
+		consecutiveFailures = 0;
 		try
 		{
 			snapshot = readSnapshot();
@@ -86,14 +101,21 @@ public class CacheUpdaterJob
 		updateTask = executor.scheduleWithFixedDelay(() -> poll(currentGeneration), 1, 1, TimeUnit.SECONDS);
 	}
 
+	/** Terminal and idempotent, including before start or during a pending poll. */
 	public synchronized void stop()
 	{
+		stopped = true;
 		if (updateTask != null)
 		{
 			++generation;
 			updateTask.cancel(false);
 			updateTask = null;
 		}
+	}
+
+	synchronized boolean isStopped()
+	{
+		return stopped;
 	}
 
 	private synchronized void poll(long currentGeneration)
@@ -110,10 +132,19 @@ public class CacheUpdaterJob
 		}
 		catch (IOException | UncheckedIOException e)
 		{
-			// Keep the last successful snapshot so a temporary failure cannot lose changes.
+			// Keep the last successful snapshot so a temporary failure cannot lose changes,
+			// but stop the job once the directory stays unreadable so no poller is leaked.
+			if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES)
+			{
+				log.error("Unable to read account files after {} consecutive polls; stopping the account file poller",
+					consecutiveFailures, e);
+				stop();
+				return;
+			}
 			log.warn("Unable to read account files; retrying on the next cache poll", e);
 			return;
 		}
+		consecutiveFailures = 0;
 
 		Map<String, FileMetadata> previous = snapshot;
 		snapshot = current;
