@@ -1,0 +1,116 @@
+name: Publish Plugin Hub branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Ref to snapshot the plugin from
+        required: false
+        default: master
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-hub
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Snapshot, validate and push hub/publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history so the seed commit (the current Plugin Hub pin) is
+          # available when the branch is first created.
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create or update the plugin snapshot
+        id: snapshot
+        env:
+          HUB_BASE: ${{ inputs.base || 'master' }}
+        shell: bash
+        run: bash .github/scripts/publish-hub.sh
+
+      # The snapshot tree contains only the files the Plugin Hub packager
+      # consumes, so the check scripts must be staged outside the worktree
+      # before checking the snapshot out.
+      - name: Stage Plugin Hub check scripts
+        if: ${{ steps.snapshot.outputs.changed == 'true' }}
+        run: |
+          dest="${RUNNER_TEMP}/hub-check"
+          mkdir -p "${dest}"
+          cp .github/scripts/check-plugin-hub.sh .github/scripts/plugin-hub-summary.py "${dest}/"
+
+      - name: Check out the snapshot commit
+        if: ${{ steps.snapshot.outputs.changed == 'true' }}
+        env:
+          COMMIT: ${{ steps.snapshot.outputs.commit }}
+        run: git checkout --detach "${COMMIT}"
+
+      - name: Validate with the official Plugin Hub packager
+        if: ${{ steps.snapshot.outputs.changed == 'true' }}
+        env:
+          PLUGIN_REPOSITORY: ${{ github.repository }}
+          PLUGIN_COMMIT: ${{ steps.snapshot.outputs.commit }}
+        shell: bash
+        run: bash "${RUNNER_TEMP}/hub-check/check-plugin-hub.sh"
+
+      - name: Upload Plugin Hub feedback and package
+        if: ${{ always() && steps.snapshot.outputs.changed == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: plugin-hub-check
+          path: build/plugin-hub/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Push hub/publish
+        if: ${{ steps.snapshot.outputs.changed == 'true' }}
+        run: git push origin refs/heads/hub/publish:refs/heads/hub/publish
+
+      - name: Write summary
+        if: ${{ always() }}
+        env:
+          COMMIT: ${{ steps.snapshot.outputs.commit }}
+          PREVIOUS: ${{ steps.snapshot.outputs.previous }}
+          CHANGED: ${{ steps.snapshot.outputs.changed }}
+          BASE: ${{ inputs.base || 'master' }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          {
+            echo '## Plugin Hub snapshot'
+            echo
+            if [[ "${CHANGED}" != true ]]; then
+              echo "Nothing to publish: \`hub/publish\` already matches \`${BASE:-master}\` at \`${COMMIT}\`."
+              exit 0
+            fi
+            echo "- Commit to pin: \`${COMMIT}\`"
+            if [[ -n "${PREVIOUS}" ]]; then
+              echo "- Review diff: [${PREVIOUS:0:10}...${COMMIT:0:10}](https://github.com/${REPOSITORY}/compare/${PREVIOUS}...${COMMIT})"
+            fi
+            echo
+            echo 'Open a pull request against [runelite/plugin-hub](https://github.com/runelite/plugin-hub) updating'
+            echo '[`plugins/flipping-utilities`](https://github.com/runelite/plugin-hub/blob/master/plugins/flipping-utilities) with:'
+            echo
+            echo '```'
+            echo "repository=https://github.com/${REPOSITORY}.git"
+            echo "commit=${COMMIT}"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"

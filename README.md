@@ -174,9 +174,33 @@ GitHub Actions runs two independent checks on pull requests and pushes to `maste
 The Hub check always runs in PR mode, including on `master`, and does not publish
 the plugin. Build failures remain failures even if the local Gradle build passes.
 These checks reproduce Hub packaging feedback, not its separate review bot or
-maintainer approval. After merging a release, update the commit in
-[`plugin-hub/plugins/flipping-utilities`](https://github.com/runelite/plugin-hub/blob/master/plugins/flipping-utilities)
-to submit it to the Hub.
+maintainer approval. After merging a release, publish a pin as described below.
+
+### Publishing to the Plugin Hub
+
+The Hub pins a commit of this repository and reviewers diff the previous pin
+against the new one. To keep those reviews limited to the plugin itself, pins
+live on the `hub/publish` branch, which contains only the files the Hub
+packager builds: `src/main/java`, `src/main/resources`,
+`runelite-plugin.properties`, `icon.png` and `LICENSE`. Everything else
+(tests, README, images, docs, CI) stays on `master` only.
+
+To cut a new pin:
+
+1. Merge your changes to `master` and set `version=` in
+   `runelite-plugin.properties`.
+2. Run the **Publish Plugin Hub branch** workflow on GitHub, or locally:
+   `bash .github/scripts/publish-hub.sh --push`. It appends one snapshot commit
+   to `hub/publish`, validates that commit with RuneLite's official packager,
+   pushes it, and reports the commit SHA to pin. On first use the branch is
+   seeded from the currently pinned commit, so the transition review only shows
+   the removal of non-plugin files.
+3. Open a pull request against [runelite/plugin-hub](https://github.com/runelite/plugin-hub)
+   updating [`plugin-hub/plugins/flipping-utilities`](https://github.com/runelite/plugin-hub/blob/master/plugins/flipping-utilities)
+   with that commit.
+
+Never rewrite or force-push `hub/publish`: the packager clones the pinned
+commit by SHA, and reviewers diff the previous pin against the new one.
 
 ### General Structure of Codebase
 
