@@ -17,8 +17,9 @@ permissions:
 concurrency:
   group: publish-hub
   # A newer master push supersedes queued runs: intermediate snapshots are
-  # pointless because reviewers only ever diff pin against pin, and a cancelled
-  # run never leaves partial state on the remote (push is the last step).
+  # pointless because reviewers only ever diff pin against pin. A cancelled
+  # run can leave only the scratch hub/validate ref behind, which the next
+  # run overwrites; hub/publish itself is only pushed after validation.
   cancel-in-progress: true
 
 jobs:
@@ -68,13 +69,27 @@ jobs:
           COMMIT: ${{ steps.snapshot.outputs.commit }}
         run: git checkout --detach "${COMMIT}"
 
+      # The official packager clones the plugin repository from GitHub and
+      # checks out the pinned SHA, so the snapshot must be reachable from a
+      # ref there before it can be validated. hub/validate is a scratch ref
+      # for exactly that; it is deleted once validation finishes and is never
+      # pinned. hub/publish itself is only pushed after validation passes.
+      - name: Expose the snapshot commit to the packager
+        if: ${{ steps.snapshot.outputs.changed == 'true' }}
+        run: git push origin refs/heads/hub/publish:refs/heads/hub/validate
+
       - name: Validate with the official Plugin Hub packager
+        id: validate
         if: ${{ steps.snapshot.outputs.changed == 'true' }}
         env:
           PLUGIN_REPOSITORY: ${{ github.repository }}
           PLUGIN_COMMIT: ${{ steps.snapshot.outputs.commit }}
         shell: bash
         run: bash "${RUNNER_TEMP}/hub-check/check-plugin-hub.sh"
+
+      - name: Drop the validation ref
+        if: ${{ always() && steps.snapshot.outputs.changed == 'true' }}
+        run: git push origin --delete refs/heads/hub/validate || true
 
       - name: Upload Plugin Hub feedback and package
         if: ${{ always() && steps.snapshot.outputs.changed == 'true' }}
@@ -95,6 +110,7 @@ jobs:
           COMMIT: ${{ steps.snapshot.outputs.commit }}
           PREVIOUS: ${{ steps.snapshot.outputs.previous }}
           CHANGED: ${{ steps.snapshot.outputs.changed }}
+          VALIDATED: ${{ steps.validate.outcome }}
           BASE: ${{ inputs.base || github.sha }}
           REPOSITORY: ${{ github.repository }}
         shell: bash
@@ -104,6 +120,12 @@ jobs:
             echo
             if [[ "${CHANGED}" != true ]]; then
               echo "Nothing to publish: \`hub/publish\` already matches \`${BASE:-master}\` at \`${COMMIT}\`."
+              exit 0
+            fi
+            if [[ "${VALIDATED}" != success ]]; then
+              echo "Validation failed for \`${COMMIT}\`; \`hub/publish\` was not updated."
+              echo "Do not pin \`${COMMIT}\` — it was not pushed. Check the job log and the"
+              echo "plugin-hub-check artifact, fix the cause, and push to \`master\` again."
               exit 0
             fi
             echo "- Commit to pin: \`${COMMIT}\`"
