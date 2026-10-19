@@ -33,35 +33,35 @@ The plugin is divided into three tabs: the slots tab, flipping tab and statistic
 This tab displays info most relevant to you when actively flipping
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/flipping.png" width="300" height="546">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/flipping.png" width="300" height="546">
 </p>
 
 The item cards are highly customizable, allowing you to pick what information to show in which section.
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/customize.png" width="300" height="415">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/customize.png" width="300" height="415">
 </p>
 
 ### The Statistics Tab
 This tab records your trading history, down to every single individual offer you made.
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/stats.png" width="300" height="950">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/stats.png" width="300" height="950">
 </p>
 
 The item cards can be expanded
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/statCard.png">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/statCard.png">
 </p>
 
 The trade history for each item can be expanded to see the offers:
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/offers.png" width="300" height="500">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/offers.png" width="300" height="500">
 </p>
 
 And the flips:
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/flips.png" width="300" height="500">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/flips.png" width="300" height="500">
 </p>
 
 
@@ -75,19 +75,19 @@ Go to your offers for an item in the stats tab. If there is a recipe for that it
 be present on the offer card. Click it and select the appropriate recipe
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/recipeCreation.png" width="500" height="450">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/recipeCreation.png" width="500" height="450">
 </p>
 
 adjust the inputs and outputs if necessary, then combine
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/recipeCreationStep.png">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/recipeCreationStep.png">
 </p>
 
 view your recipe flips in the "recipes" tab of the stats tab
 
 <p align="center"> 
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/viewRecipes.png" width="300" height="633">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/viewRecipes.png" width="300" height="633">
 </p>
 
 ## Additional Features
@@ -98,7 +98,7 @@ Slot timers help you figure out when you should cancel an offer. They show you h
 since the offer was last active.
 
 <p align="center">
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/timer.png">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/timer.png">
 </p>
 
 #### Offer editors
@@ -106,7 +106,7 @@ since the offer was last active.
 The price and quantity help you set up your offers quickly!
 
 <p align="center">
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/editor.png">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/editor.png">
 </p>
 
 
@@ -115,7 +115,7 @@ The price and quantity help you set up your offers quickly!
 Flip on mobile and have untracked trades? Just pop open your ge history and easily add untracked trades
 
 <p align="center">
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/manual.png">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/manual.png">
 </p>
 
 #### Favorites lookup
@@ -123,7 +123,7 @@ Flip on mobile and have untracked trades? Just pop open your ge history and easi
 Quickly lookup your favorited items just by typing "1" in the ge search!
 
 <p align="center">
-  <img src = "https://github.com/Flipping-Utilities/rl-plugin/blob/master/images/lookup.png">
+  <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/lookup.png">
 </p>
 
 # Development
@@ -181,9 +181,13 @@ maintainer approval. After merging a release, publish a pin as described below.
 The Hub pins a commit of this repository and reviewers diff the previous pin
 against the new one. To keep those reviews limited to the plugin itself, pins
 live on the `hub/publish` branch, which contains only the files the Hub
-packager builds: `src/main/java`, `src/main/resources`,
-`runelite-plugin.properties`, `icon.png` and `LICENSE`. Everything else
-(tests, README, images, docs, CI) stays on `master` only.
+consumes: `src/main/java`, `src/main/resources`,
+`runelite-plugin.properties`, `icon.png`, `LICENSE` and `README.md`. The Hub
+build ignores the README, but runelite.net fetches it from the pinned commit
+to render the description on
+https://runelite.net/plugin-hub/show/flipping-utilities, so a pin without it
+shows no description. Everything else (tests, images, docs, CI) stays on
+`master` only.
 
 To cut a new pin:
 
