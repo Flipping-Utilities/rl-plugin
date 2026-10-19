@@ -40,7 +40,7 @@ public class Flip
 {
 	long buyPrice;
 	long sellPrice;
-	int quantity;
+	long quantity;
 	Instant time;
 	boolean marginCheck;
 	boolean ongoing;
