@@ -194,13 +194,17 @@ To cut a new pin:
 1. Merge your changes to `master` and set `version=` in
    `runelite-plugin.properties`.
 2. The **Publish Plugin Hub branch** workflow runs automatically on every push
-   to `master`. It appends one snapshot commit to `hub/publish`, validates that
-   commit with RuneLite's official packager, pushes it, and reports the commit
-   SHA to pin in its summary. Pushes that do not change plugin files (tests,
-   docs, CI) are detected and skipped. You can also run the workflow manually
-   for another ref, or locally: `bash .github/scripts/publish-hub.sh --push`.
-   On first use the branch is seeded from the currently pinned commit, so the
-   transition review only shows the removal of non-plugin files.
+   to `master`. It appends one snapshot commit, exposes it on the temporary
+   `hub/validate` ref so RuneLite's official packager can clone and check out
+   that exact commit from GitHub, validates it, and only then pushes
+   `hub/publish` (deleting the temporary ref) and reports the commit SHA to
+   pin in its summary. If validation fails, `hub/publish` is left untouched
+   and the summary says so — never pin an unreported commit. Pushes that do
+   not change plugin files (tests, docs, CI) are detected and skipped. You can
+   also run the workflow manually for another ref, or locally:
+   `bash .github/scripts/publish-hub.sh --push`. On first use the branch is
+   seeded from the currently pinned commit, so the transition review only
+   shows the removal of non-plugin files.
 3. Open a pull request against [runelite/plugin-hub](https://github.com/runelite/plugin-hub)
    updating [`plugin-hub/plugins/flipping-utilities`](https://github.com/runelite/plugin-hub/blob/master/plugins/flipping-utilities)
    with that commit.
