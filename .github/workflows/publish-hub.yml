@@ -117,5 +117,6 @@ jobs:
             echo '```'
             echo "repository=https://github.com/${REPOSITORY}.git"
             echo "commit=${COMMIT}"
+            echo 'authors=AntonyGarand'
             echo '```'
           } >>"$GITHUB_STEP_SUMMARY"

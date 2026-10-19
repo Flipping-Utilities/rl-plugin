@@ -2,13 +2,18 @@
 # Maintain the Plugin Hub publish branch for this repository.
 #
 # The Plugin Hub pins a literal commit of this repo and its reviewers diff the
-# previous pin against the new one. Development history (tests, README, images,
-# docs, CI) makes those reviews noisy, so this script maintains a branch that
-# contains only what the Plugin Hub packager consumes for a build=standard
-# plugin:
+# previous pin against the new one. Development history (tests, images, docs,
+# CI) makes those reviews noisy, so this script maintains a branch that
+# contains only what the Plugin Hub consumes for a build=standard plugin:
 #
 #   src/main/java  src/main/resources  lombok.config
 #   runelite-plugin.properties  icon.png  LICENSE
+#
+# plus README.md, which the Hub build itself ignores but runelite.net renders
+# as the plugin description: the site fetches
+# repos/<owner>/<repo>/readme?ref=<pinned commit> from the GitHub API, so a pin
+# without a README shows no description on
+# https://runelite.net/plugin-hub/show/flipping-utilities.
 #
 # See STANDARD_BUILD_PATHS and Plugin#build in runelite/plugin-hub-tooling;
 # everything else in this repository is ignored by the Hub build.
@@ -53,7 +58,8 @@ remote="${HUB_REMOTE:-origin}"
 plugin_slug="${PLUGIN_SLUG:-flipping-utilities}"
 pointer_url="https://raw.githubusercontent.com/runelite/plugin-hub/master/plugins/${plugin_slug}"
 
-# Exactly the inputs the Plugin Hub packager reads for build=standard plugins.
+# The inputs the Plugin Hub packager reads for build=standard plugins, plus
+# README.md for the website description (see the header comment).
 keep_paths=(
   src/main/java
   src/main/resources
@@ -61,6 +67,7 @@ keep_paths=(
   icon.png
   LICENSE
   lombok.config
+  README.md
 )
 
 resolve() { git rev-parse --verify --quiet "$1^{commit}" || true; }
