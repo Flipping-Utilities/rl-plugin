@@ -5,6 +5,7 @@ import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesPoint;
 import com.flippingutilities.model.TimeseriesResponse;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
+import com.flippingutilities.utilities.MathUtils;
 import com.flippingutilities.ui.widgets.ChartConfig;
 import com.flippingutilities.ui.widgets.TickIntervalCalculator;
 import com.flippingutilities.ui.widgets.TimeSeriesChart;
@@ -14,6 +15,7 @@ import com.flippingutilities.utilities.GeHistoryTabExtractor;
 import com.flippingutilities.utilities.WikiItemMargins;
 import com.google.gson.Gson;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.util.QuantityFormatter;
 import org.junit.Test;
 
 import java.awt.Font;
@@ -35,6 +37,16 @@ public class LongPriceDisplayTest {
         assertEquals("1Qa", UIUtilities.quantityToRSDecimalStack(1_000_000_000_000_000L, true));
         assertEquals("9.223Qi", UIUtilities.quantityToRSDecimalStack(Long.MAX_VALUE, true));
         assertEquals("-9.223Qi", UIUtilities.quantityToRSDecimalStack(Long.MIN_VALUE, true));
+    }
+
+    @Test
+    public void statsPanelAveragesRoundAndQuantitiesGroupDigits() {
+        //a profit of 47,031,100 gp over 24,999,927 flipped items is 1.88 gp/ea; rounding
+        //keeps the displayed average at 2 gp/ea instead of truncating half of it away
+        assertEquals("2 gp/ea", UIUtilities.quantityToRSDecimalStack(
+            MathUtils.roundedQuotient(47_031_100L, 24_999_927L), true) + " gp/ea");
+        assertEquals("2,352,971,263", QuantityFormatter.formatNumber(2_352_971_263L));
+        assertEquals("1,044,505,776", QuantityFormatter.formatNumber(1_044_505_776L));
     }
 
     @Test

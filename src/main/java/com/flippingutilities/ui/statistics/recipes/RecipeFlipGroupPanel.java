@@ -7,6 +7,7 @@ import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.ui.uiutilities.Paginator;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
+import com.flippingutilities.utilities.MathUtils;
 import com.flippingutilities.utilities.Recipe;
 import lombok.Getter;
 import net.runelite.client.game.ItemManager;
@@ -351,10 +352,10 @@ public class RecipeFlipGroupPanel extends JPanel {
         totalProfitValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
         totalProfitValLabel.setToolTipText(QuantityFormatter.formatNumber(profitFromFlips) + " gp");
 
-        String profitEach = UIUtilities.quantityToRSDecimalStack(itemsFlipped > 0 ? (profitFromFlips / itemsFlipped) : 0, true) + " gp/ea";
-        profitEachValLabel.setText(profitEach);
+        long profitEach = itemsFlipped > 0 ? MathUtils.roundedQuotient(profitFromFlips, itemsFlipped) : 0;
+        profitEachValLabel.setText(UIUtilities.quantityToRSDecimalStack(profitEach, true) + " gp/ea");
         profitEachValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
-        profitEachValLabel.setToolTipText(QuantityFormatter.formatNumber(itemsFlipped > 0 ? profitFromFlips / itemsFlipped : 0) + " gp/ea");
+        profitEachValLabel.setToolTipText(QuantityFormatter.formatNumber(profitEach) + " gp/ea");
 
         quantityFlipped.setText(QuantityFormatter.formatNumber(itemsFlipped) + " Items");
 

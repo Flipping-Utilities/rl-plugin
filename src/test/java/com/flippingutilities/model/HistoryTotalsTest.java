@@ -78,6 +78,28 @@ public class HistoryTotalsTest
         assertEquals(8_000_000_000L, FlippingItem.getValueOfMatchedOffers(offers, false));
     }
 
+    @Test
+    public void flipQuantitiesWidenWhenTheBuysConsumedForASellExceedTheIntRange()
+    {
+        List<OfferEvent> offers = Arrays.asList(
+            offer("a", true, 1_500_000_000, 4),
+            offer("a", true, 1_500_000_000, 4),
+            offer("a", false, 2_000_000_000, 5),
+            offer("a", false, 1_000_000_000, 5));
+
+        List<Flip> flips = FlippingItem.getFlips(offers);
+
+        assertEquals(2, flips.size());
+        assertEquals(2_000_000_000L, flips.get(0).getQuantity());
+        assertEquals(4L, flips.get(0).getBuyPrice());
+        assertEquals(5L, flips.get(0).getSellPrice());
+        //the leftover 1b items of the second buy are matched against the second sell
+        assertEquals(1_000_000_000L, flips.get(1).getQuantity());
+        assertEquals(4L, flips.get(1).getBuyPrice());
+
+        assertEquals(3_000_000_000L, FlippingItem.getProfit(offers));
+    }
+
     private OfferEvent offer(String account, boolean buy, int quantity, int price)
     {
         OfferEvent offer = new OfferEvent();

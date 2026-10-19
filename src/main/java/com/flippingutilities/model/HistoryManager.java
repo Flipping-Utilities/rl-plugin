@@ -632,7 +632,9 @@ public class HistoryManager
 			if (sell.getCurrentQuantityInTrade() == 0) {
 				continue;
 			}
-			int numBuysSeen = 0;
+			//the number of bought items consumed for a sell can exceed the int range when offers
+			//carry huge quantities, so it is accumulated as a long.
+			long numBuysSeen = 0;
 			long totalBuyCost = 0;
 			while (buyIdx < buys.size())
 			{
@@ -641,7 +643,8 @@ public class HistoryManager
 
 				if (numBuysSeen >= sell.getCurrentQuantityInTrade())
 				{
-					int leftOver = numBuysSeen - sell.getCurrentQuantityInTrade();
+					//the leftover is bounded by the current buy's quantity, so it always fits an int
+					int leftOver = (int) (numBuysSeen - sell.getCurrentQuantityInTrade());
 					int amountTaken = buy.getCurrentQuantityInTrade() - leftOver;
 					totalBuyCost += (long) amountTaken * buy.getPrice();
 					buy.setCurrentQuantityInTrade(leftOver);
