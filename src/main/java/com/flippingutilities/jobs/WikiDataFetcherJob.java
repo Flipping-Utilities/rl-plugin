@@ -89,8 +89,8 @@ public class WikiDataFetcherJob {
     private boolean shouldFetch() {
         boolean lastRequestOldEnough = timeOfLastRequestCompletion == null || Instant.now().minus(requestInterval, ChronoUnit.SECONDS).isAfter(timeOfLastRequestCompletion);
         //for the purpose of SlotStateDrawer, we need wiki data even if the master panel is not visible, but only
-        //if the user is premium.
-        return (plugin.getMasterPanel().isVisible() || plugin.getApiAuthHandler().isPremium()) && !inFlightRequest && lastRequestOldEnough;
+        //if the user has slot enhancement enabled.
+        return (plugin.getMasterPanel().isVisible() || plugin.shouldEnhanceSlots()) && !inFlightRequest && lastRequestOldEnough;
     }
 
     public synchronized void attemptToFetchWikiData(boolean force) {

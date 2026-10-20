@@ -19,7 +19,6 @@ import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import net.runelite.client.ui.ColorScheme;
-import net.runelite.client.util.LinkBrowser;
 
 public class LoggedInPanel extends JPanel {
     FlippingPlugin plugin;
@@ -77,7 +76,7 @@ public class LoggedInPanel extends JPanel {
                     @Override
                     public void mouseClicked(MouseEvent e) {
                         // Bad method name, but this re-triggers the login flow
-                        plugin.getApiAuthHandler().setPremiumStatus();
+                        plugin.getApiAuthHandler().checkApiSession();
                     }
 
                     @Override
@@ -99,55 +98,7 @@ public class LoggedInPanel extends JPanel {
         return errorPanel;
     }
 
-    private JPanel createResubPanel() {
-        JPanel resubPanel = new JPanel();
-        resubPanel.setLayout(new BoxLayout(resubPanel, BoxLayout.Y_AXIS));
-        resubPanel.setBorder(new EmptyBorder(10, 0, 10, 0));
-
-        JLabel notPremium = new JLabel(
-                String.format(
-                        "<html><div style=\"text-align:center\" WIDTH=%d>%s</div></html>",
-                        180,
-                        "You are not premium anymore, resub to gain access to premium features"
-                ),
-                JLabel.CENTER
-        );
-        notPremium.setFont(new Font("Whitney", Font.PLAIN, 12));
-        notPremium.setForeground(CustomColors.TOMATO);
-
-        JLabel link = new JLabel(
-                "<html>https://upgrade.chat/flipping-utilities</html>",
-                JLabel.CENTER
-        );
-        link.setFont(new Font("Whitney", Font.PLAIN, 12));
-        link.setForeground(Color.WHITE);
-        link.addMouseListener(
-                new MouseAdapter() {
-                    @Override
-                    public void mouseClicked(MouseEvent e) {
-                        LinkBrowser.browse("https://upgrade.chat/flipping-utilities");
-                    }
-
-                    @Override
-                    public void mouseEntered(MouseEvent e) {
-                        link.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-                    }
-
-                    @Override
-                    public void mouseExited(MouseEvent e) {
-                        link.setForeground(Color.WHITE);
-                    }
-                }
-        );
-
-        resubPanel.add(notPremium);
-        resubPanel.add(Box.createVerticalStrut(10));
-        resubPanel.add(link);
-
-        return resubPanel;
-    }
-
-    private JPanel createPremiumFeaturesPanel() {
+    private JPanel createApiFeaturesPanel() {
         JPanel healthPanel = new JPanel();
         healthPanel.setLayout(new BoxLayout(healthPanel, BoxLayout.Y_AXIS));
         healthPanel.setBorder(new EmptyBorder(10, 0, 10, 0));
@@ -195,7 +146,6 @@ public class LoggedInPanel extends JPanel {
                             plugin
                                     .getDataHandler()
                                     .markDataAsHavingChanged(FlippingPlugin.ACCOUNT_WIDE);
-                            plugin.getApiAuthHandler().setPremium(false);
                             plugin.getApiAuthHandler().setHasValidJWT(false);
                             r.run();
                         }
@@ -234,20 +184,17 @@ public class LoggedInPanel extends JPanel {
         );
     }
 
-    public void showPremiumFeaturesHealth(boolean isPremium) {
+    /**
+     * Shows the health of the features that rely on the api (slot sending) alongside the
+     * slot enhancement toggle.
+     */
+    public void showApiFeaturesHealth() {
         SwingUtilities.invokeLater(
                 () -> {
-                    if (isPremium) {
-                        removeAll();
-                        add(createTitle(), BorderLayout.NORTH);
-                        add(createSignOutButton(), BorderLayout.SOUTH);
-                        add(createPremiumFeaturesPanel(), BorderLayout.CENTER);
-                    } else {
-                        removeAll();
-                        add(createTitle(), BorderLayout.NORTH);
-                        add(createSignOutButton(), BorderLayout.SOUTH);
-                        add(createResubPanel(), BorderLayout.CENTER);
-                    }
+                    removeAll();
+                    add(createTitle(), BorderLayout.NORTH);
+                    add(createSignOutButton(), BorderLayout.SOUTH);
+                    add(createApiFeaturesPanel(), BorderLayout.CENTER);
                     revalidate();
                     repaint();
                 }

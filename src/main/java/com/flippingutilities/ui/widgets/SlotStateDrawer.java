@@ -119,7 +119,6 @@ public class SlotStateDrawer {
         if (
                 slotWidgets == null ||
                         plugin.getCurrentlyLoggedInAccount() == null ||
-                        !plugin.getApiAuthHandler().isPremium() ||
                         !plugin.shouldEnhanceSlots()
         ) {
             return;

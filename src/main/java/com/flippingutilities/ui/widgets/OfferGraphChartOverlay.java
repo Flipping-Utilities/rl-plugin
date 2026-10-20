@@ -233,9 +233,6 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     }
 
     private void showGraphForItem(int itemId) {
-        if (!plugin.getApiAuthHandler().isPremium()) {
-            return;
-        }
         if (!config.offerPageChartEnabled()) {
             return;
         }

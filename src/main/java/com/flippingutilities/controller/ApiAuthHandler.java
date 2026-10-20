@@ -28,11 +28,7 @@ public class ApiAuthHandler {
     private boolean hasValidJWT;
     private Set<String> successfullyRegisteredRsns = new HashSet<>();
     List<Runnable> validJwtSubscriberActions = new ArrayList<>();
-    List<Consumer<Boolean>> premiumCheckSubscribers = new ArrayList<>();
     List<Consumer<Boolean>> errorsSubscribers = new ArrayList<>();
-    @Getter
-    @Setter
-    private boolean isPremium;
 
     public ApiAuthHandler(FlippingPlugin plugin) {
         this.plugin = plugin;
@@ -40,10 +36,6 @@ public class ApiAuthHandler {
 
     public void subscribeToLogin(Runnable r) {
         this.validJwtSubscriberActions.add(r);
-    }
-
-    public void subscribeToPremiumChecking(Consumer<Boolean> consumer) {
-        this.premiumCheckSubscribers.add(consumer);
     }
 
     public void subscribeToError(Consumer<Boolean> consumer) {
@@ -59,21 +51,16 @@ public class ApiAuthHandler {
     }
 
     /**
-     * Checks if the user is premium, and if so, sets the premium status
+     * Validates the stored session against the api so that problems with it surface in the login panel.
      */
-    public void setPremiumStatus() {
+    public void checkApiSession() {
         if (!hasValidJWT) {
             return;
         }
         plugin.getApiRequestHandler().getUser().whenComplete((user, exception) -> {
             if (exception != null) {
-                log.warn("failed to get user, error: ", exception);
+                log.warn("failed to validate session, error: ", exception);
                 errorsSubscribers.forEach(c -> c.accept(true));
-                isPremium = false;
-            } else {
-                log.debug("got user, premium status: {}", user.isPremium());
-                isPremium = user.isPremium();
-                premiumCheckSubscribers.forEach(c -> c.accept(isPremium));
             }
         });
     }
@@ -175,7 +162,7 @@ public class ApiAuthHandler {
                 if (plugin.getCurrentlyLoggedInAccount() != null) {
                     checkRsn(plugin.getCurrentlyLoggedInAccount());
                 }
-                setPremiumStatus();
+                checkApiSession();
             }
         });
 

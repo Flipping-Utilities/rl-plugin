@@ -244,7 +244,7 @@ This section will talk about the purpose of various parts of the codebase, speci
 
 **jobs/**
 - This folder contains code that is running in background threads to periodically perform some action, such as the
-  code that queries the wiki to get the new prices of items, or the code that sends premium users' slots to our server.
+  code that queries the wiki to get the new prices of items, or the code that sends logged-in users' slots to our server.
 
 **utilities/**
 - Just random code that doesn't fit neatly into any of the categories above.
