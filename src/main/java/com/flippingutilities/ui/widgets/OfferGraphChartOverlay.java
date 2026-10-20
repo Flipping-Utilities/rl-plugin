@@ -15,6 +15,7 @@ import com.flippingutilities.ui.uiutilities.UIUtilities;
 import net.runelite.api.Client;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.events.ScriptPostFired;
+import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarClientID;
@@ -233,9 +234,6 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     }
 
     private void showGraphForItem(int itemId) {
-        if (!plugin.getApiAuthHandler().isPremium()) {
-            return;
-        }
         if (!config.offerPageChartEnabled()) {
             return;
         }
@@ -360,7 +358,9 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     @Override
     public Dimension render(Graphics2D graphics) {
         if (!shouldRender()) {
-            if (!isOfferCreation()) {
+            //keep the pending price while a numeric prompt is open; it is about to be entered
+            //into that prompt and the GE frame state during the prompt is unreliable.
+            if (!isInputModeOpen() && !isOfferCreation()) {
                 priceToSet = -1;
             }
             return null;
@@ -671,16 +671,39 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         // When we want to set the price of the item, we first open the chatbox via "Enter price", then set the price
         // This is setting the price: It must wait until the chatbox is open
         if (this.priceToSet != -1 && event.getScriptId() == 108) {
-            long price = this.priceToSet;
-            this.priceToSet = -1;
-            clientThread.invokeLater(() -> {
-                Widget chat = client.getWidget(InterfaceID.Chatbox.MES_TEXT2);
-                if(chat != null){
-                    chat.setText(price + "*");
-                    client.setVarcStrValue(VarClientID.MESLAYERINPUT, String.valueOf(price));
-                }
-            });
+            applyPendingPriceToInput();
         }
+    }
+
+    /**
+     * Price prompts moved to the long input mode in the 2026-09-30 update and no longer reliably run
+     * script 108 when opened via the "..." button. Entering the price as soon as the price input mode
+     * opens keeps the click-chart-then-"..." flow working regardless of which script opens the prompt.
+     */
+    @Subscribe
+    public void onVarClientIntChanged(VarClientIntChanged event) {
+        if (this.priceToSet == -1 || event.getIndex() != VarClientID.MESLAYERMODE) {
+            return;
+        }
+        int inputMode = client.getVarcIntValue(VarClientID.MESLAYERMODE);
+        //prices use the long input mode; the int input mode is for quantities
+        if (inputMode == Constants.MESLAYER_MODE_LONG_INPUT) {
+            applyPendingPriceToInput();
+        }
+    }
+
+    private void applyPendingPriceToInput() {
+        long price = this.priceToSet;
+        this.priceToSet = -1;
+        clientThread.invokeLater(() -> {
+            Widget chat = client.getWidget(InterfaceID.Chatbox.MES_TEXT2);
+            if (chat != null) {
+                chat.setText(price + "*");
+                client.setVarcStrValue(VarClientID.MESLAYERINPUT, String.valueOf(price));
+            } else {
+                log.debug("price input widget not available; could not enter price {}", price);
+            }
+        });
     }
 
     private void clearPriceInfo() {

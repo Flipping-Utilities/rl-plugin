@@ -105,7 +105,7 @@ public class SlotPanel extends JPanel {
         priceAndMagnifyingGlassPanel.setBackground(CustomColors.DARK_GRAY);
 
         JLabel magnifyingGlassIcon = new JLabel(Icons.MAGNIFYING_GLASS);
-        magnifyingGlassIcon.setVisible(false);
+        magnifyingGlassIcon.setVisible(true);
         magnifyingGlassIcon.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
@@ -131,8 +131,6 @@ public class SlotPanel extends JPanel {
         add(bottomPanel, BorderLayout.SOUTH);
 
         panelsToColor = Arrays.asList(topPanel, centerPanel, bottomPanel, priceAndMagnifyingGlassPanel);
-
-        plugin.getApiAuthHandler().subscribeToPremiumChecking(magnifyingGlassIcon::setVisible);
     }
 
     public void updateTimer(String timeString) {
@@ -172,9 +170,6 @@ public class SlotPanel extends JPanel {
     }
 
     public void drawSlotStatus() {
-        if (!plugin.getApiAuthHandler().isPremium()) {
-            return;
-        }
         if (offerEvent == null || offerEvent.isCausedByEmptySlot() || wikiRequest == null) {
             return;
         }

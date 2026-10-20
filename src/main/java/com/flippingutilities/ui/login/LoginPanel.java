@@ -33,9 +33,6 @@ public class LoginPanel extends JPanel {
         this.plugin = plugin;
         this.loggedInPanel = new LoggedInPanel(plugin, this::showLoggedOutView);
         plugin.getApiAuthHandler().subscribeToLogin(this::showLoggedInView);
-        plugin.getApiAuthHandler().subscribeToPremiumChecking((isPremium) -> {
-            loggedInPanel.showPremiumFeaturesHealth(isPremium);
-        });
         plugin.getApiAuthHandler().subscribeToError((hasError) -> {
             if (hasError) {
                 loggedInPanel.showLoginError();
@@ -90,6 +87,7 @@ public class LoginPanel extends JPanel {
         SwingUtilities.invokeLater(() -> {
             removeAll();
             add(loggedInPanel);
+            loggedInPanel.showApiFeaturesHealth();
             revalidate();
             repaint();
             if (this.onViewChange != null) {
