@@ -284,8 +284,7 @@ public class FlippingPlugin extends Plugin {
                 autoSaveTask = startAutoSave();
             }
             startJobs();
-            apiAuthHandler.subscribeToPremiumChecking((isPremium) -> { if (isPremium) WikiDataFetcherJob.requestInterval = 30; });
-            apiAuthHandler.checkExistingJwt().thenRun(() -> apiAuthHandler.setPremiumStatus());
+            apiAuthHandler.checkExistingJwt().thenRun(() -> apiAuthHandler.checkApiSession());
 
             //this is only relevant if the user downloads/enables the plugin after they login.
             if (client.getGameState() == GameState.LOGGED_IN) {
@@ -1108,7 +1107,8 @@ public class FlippingPlugin extends Plugin {
     }
 
     public boolean shouldEnhanceSlots() {
-        return dataHandler.getAccountWideData().isEnhancedSlots();
+        AccountWideData accountWideData = dataHandler.viewAccountWideData();
+        return accountWideData != null && accountWideData.isEnhancedSlots();
     }
 
     @Subscribe
