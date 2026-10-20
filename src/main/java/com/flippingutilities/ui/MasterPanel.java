@@ -198,10 +198,16 @@ public class MasterPanel extends PluginPanel
 	private JComboBox accountSelector()
 	{
 		JComboBox viewSelectorDropdown = new JComboBox();
+		//keep it hidden until setupAccSelectorDropdown populates it. An empty combo box has a null selection,
+		//which the title case renderer can't render, so painting the panel while it is empty crashes the client.
+		viewSelectorDropdown.setVisible(false);
 		viewSelectorDropdown.setBackground(CustomColors.DARK_GRAY_LIGHTER);
 		viewSelectorDropdown.setFocusable(false);
 		viewSelectorDropdown.setForeground(ColorScheme.GRAND_EXCHANGE_PRICE);
-		viewSelectorDropdown.setRenderer(new TitleCaseListCellRenderer());
+		//TitleCaseListCellRenderer calls value.toString() and so throws on a null selection
+		TitleCaseListCellRenderer titleCaseRenderer = new TitleCaseListCellRenderer();
+		viewSelectorDropdown.setRenderer((list, value, index, isSelected, cellHasFocus) ->
+			titleCaseRenderer.getListCellRendererComponent(list, value == null ? "" : value, index, isSelected, cellHasFocus));
 
 		viewSelectorDropdown.setBorder(BorderFactory.createCompoundBorder(
 			BorderFactory.createMatteBorder(1,1,1,1, ColorScheme.DARKER_GRAY_COLOR.darker()),

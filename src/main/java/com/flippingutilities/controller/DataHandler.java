@@ -209,7 +209,13 @@ public class DataHandler {
                 log.warn("Couldn't prepare account data for {} due to {}, setting default", displayName, e);
                 AccountData newAccountData = new AccountData();
                 newAccountData.startNewSession();
-                newAccountData.prepareForUse(plugin);
+                try {
+                    newAccountData.prepareForUse(plugin);
+                }
+                catch (Exception ex) {
+                    //if this also threw it would propagate out of loadData() and abort plugin startup
+                    log.warn("Couldn't prepare fresh account data for {} either; using it unprepared", displayName, ex);
+                }
                 allAccountData.put(displayName, newAccountData);
             }
         }

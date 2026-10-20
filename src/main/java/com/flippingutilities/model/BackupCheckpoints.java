@@ -11,10 +11,12 @@ public class BackupCheckpoints {
     Map<String, Instant> accountToBackupTime = new HashMap<>();
 
     public boolean shouldBackup(String displayName, Instant lastUpdatedAt) {
-        if (!accountToBackupTime.containsKey(displayName)) {
+        //the map can be null if the checkpoint file explicitly contained null and lastUpdatedAt can be null
+        //for data that was never stored; neither should abort startup with an NPE
+        if (accountToBackupTime == null || !accountToBackupTime.containsKey(displayName)) {
             return true;
         }
         Instant backupLastUpdatedTime = accountToBackupTime.get(displayName);
-        return !lastUpdatedAt.equals(backupLastUpdatedTime);
+        return lastUpdatedAt == null || !lastUpdatedAt.equals(backupLastUpdatedTime);
     }
 }
