@@ -277,7 +277,16 @@ public class FlippingPlugin extends Plugin {
                     return false;
             }
 
-            dataHandler.loadData();
+            //if loading data throws, this invokeLater task would be dropped, which would leave the account
+            //selector empty and the panels never set up. Log the failure and continue with what loaded.
+            try
+            {
+                dataHandler.loadData();
+            }
+            catch (Exception e)
+            {
+                log.error("error while loading data on startup; continuing with whatever loaded successfully", e);
+            }
             masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
             generalRepeatingTasks = setupRepeatingTasks(1000);
             if (config.autoSaveEnabled()) {
