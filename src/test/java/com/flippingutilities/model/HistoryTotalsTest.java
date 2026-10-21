@@ -63,7 +63,7 @@ public class HistoryTotalsTest
     }
 
     @Test
-    public void accountWideQuantityWidensTheSumWithoutSharingUnmatchedInventory()
+    public void accountWideQuantityMatchesItemsFunnelledAcrossAccounts()
     {
         List<OfferEvent> offers = Arrays.asList(
             offer("a", true, 2_000_000_000, 1),
@@ -73,9 +73,11 @@ public class HistoryTotalsTest
             offer("buy-only", true, 1_000_000_000, 1),
             offer("sell-only", false, 1_000_000_000, 2));
 
-        assertEquals(4_000_000_000L, FlippingItem.countFlipQuantity(offers));
-        assertEquals(4_000_000_000L, FlippingItem.getValueOfMatchedOffers(offers, true));
-        assertEquals(8_000_000_000L, FlippingItem.getValueOfMatchedOffers(offers, false));
+        //5b bought and 5b sold overall, so every bought item is matched against a sold one even
+        //though the surplus inventory moves between accounts (bought on "buy-only", sold on "sell-only")
+        assertEquals(5_000_000_000L, FlippingItem.countFlipQuantity(offers));
+        assertEquals(5_000_000_000L, FlippingItem.getValueOfMatchedOffers(offers, true));
+        assertEquals(10_000_000_000L, FlippingItem.getValueOfMatchedOffers(offers, false));
     }
 
     @Test
