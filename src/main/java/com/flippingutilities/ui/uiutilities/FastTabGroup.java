@@ -77,8 +77,23 @@ public class FastTabGroup extends MaterialTabGroup
 		display.add(panel, name);
 	}
 
+	/**
+	 * Tab content is displayed through a CardLayout, so every entry point here ends up validating
+	 * the component tree, which takes the AWT tree lock and reads text field documents while doing
+	 * so. When this group is manipulated from a non-EDT thread (the game client thread delivering
+	 * widget/script events, or a scheduler thread), that validation can deadlock against the EDT
+	 * setting text on those same fields (document write lock held while waiting for the tree lock).
+	 * Swing components must only be touched on the EDT, so these entry points bounce there first.
+	 */
 	public boolean select(MaterialTab selectedTab)
 	{
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(() -> select(selectedTab));
+			//no caller relies on the result when switching from a non-EDT thread
+			return true;
+		}
+
 		// If the OnTabSelected returned false, exit the method to prevent tab switching
 		if (!selectedTab.select())
 		{
@@ -106,6 +121,12 @@ public class FastTabGroup extends MaterialTabGroup
 	}
 
 	public void showView(String name) {
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(() -> showView(name));
+			return;
+		}
+
 		currentlyShowingView = true;
 		unselectAll();
 		CardLayout cardLayout = (CardLayout) display.getLayout();
@@ -113,6 +134,12 @@ public class FastTabGroup extends MaterialTabGroup
 	}
 
 	public void revertToSafeDisplay() {
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(this::revertToSafeDisplay);
+			return;
+		}
+
 		if (currentlyShowingView) {
 
 			selectPreviouslySelectedTab();
@@ -120,6 +147,12 @@ public class FastTabGroup extends MaterialTabGroup
 	}
 
 	public void selectPreviouslySelectedTab() {
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(this::selectPreviouslySelectedTab);
+			return;
+		}
+
 		for (MaterialTab tab: tabs) {
 			if (tab.getText().equals(lastSelectedTab)) {
 				select(tab);
