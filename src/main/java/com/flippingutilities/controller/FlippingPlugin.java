@@ -277,23 +277,18 @@ public class FlippingPlugin extends Plugin {
                     return false;
             }
 
-            //if loading data throws, this invokeLater task would be dropped, which would leave the account
-            //selector empty and the panels never set up. Log the failure and continue with what loaded.
-            try
-            {
-                dataHandler.loadData();
-            }
-            catch (Exception e)
-            {
-                log.error("error while loading data on startup; continuing with whatever loaded successfully", e);
-            }
-            masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts());
+            //each step is guarded so a failure doesn't drop the invokeLater task, which would leave
+            //the account selector empty (an empty selector crashes every paint of the panel)
+            Safely.run("loading data on startup", dataHandler::loadData);
+            Safely.run("setting up the account selector dropdown", () ->
+                masterPanel.setupAccSelectorDropdown(dataHandler.getCurrentAccounts()));
             generalRepeatingTasks = setupRepeatingTasks(1000);
             if (config.autoSaveEnabled()) {
                 autoSaveTask = startAutoSave();
             }
-            startJobs();
-            apiAuthHandler.checkExistingJwt().thenRun(() -> apiAuthHandler.checkApiSession());
+            Safely.run("starting jobs", this::startJobs);
+            Safely.run("checking the existing jwt", () ->
+                apiAuthHandler.checkExistingJwt().thenRun(() -> apiAuthHandler.checkApiSession()));
 
             //this is only relevant if the user downloads/enables the plugin after they login.
             if (client.getGameState() == GameState.LOGGED_IN) {
@@ -394,7 +389,7 @@ public class FlippingPlugin extends Plugin {
             previouslyLoggedIn = true;
 
             if (currentlyLoggedInAccount == null) {
-                handleLogin(name);
+                Safely.run("handling login for " + name, () -> handleLogin(name));
             }
             //stops scheduling this task
             return true;
@@ -608,9 +603,8 @@ public class FlippingPlugin extends Plugin {
         }
 
         if (fileName.equals("accountwide.json")) {
-            executor.schedule(() -> {
-                dataHandler.loadAccountWideData();
-            }, 1000, TimeUnit.MILLISECONDS);
+            executor.schedule(Safely.safely("reloading accountwide data after a directory update",
+                dataHandler::loadAccountWideData), 1000, TimeUnit.MILLISECONDS);
             return;
         }
 
@@ -619,7 +613,7 @@ public class FlippingPlugin extends Plugin {
             //have to run on client thread cause loadAccount calls accountData.prepareForUse which uses the itemmanager
             clientThread.invokeLater(() -> {
                 log.debug("second has passed, updating cache for {}", displayNameOfChangedAcc);
-                dataHandler.loadAccountData(displayNameOfChangedAcc);
+                Safely.run("loading data for " + displayNameOfChangedAcc, () -> dataHandler.loadAccountData(displayNameOfChangedAcc));
                 if (!masterPanel.getViewSelectorItems().contains(displayNameOfChangedAcc)) {
                     masterPanel.getAccountSelector().addItem(displayNameOfChangedAcc);
                 }
@@ -632,10 +626,12 @@ public class FlippingPlugin extends Plugin {
 
                 //rebuildItemsDisplay if you are currently looking at the account who's cache just got updated or the account wide view.
                 if (accountCurrentlyViewed.equals(ACCOUNT_WIDE) || accountCurrentlyViewed.equals(displayNameOfChangedAcc)) {
-                    List<FlippingItem> tradesForCurrentView = viewItemsForCurrentView();
-                    flippingPanel.rebuild(tradesForCurrentView);
-                    statPanel.rebuildItemsDisplay(tradesForCurrentView);
-                    statPanel.rebuildRecipesDisplay(viewRecipeFlipGroupsForCurrentView());
+                    Safely.run("rebuilding panels after updating the cache for " + displayNameOfChangedAcc, () -> {
+                        List<FlippingItem> tradesForCurrentView = viewItemsForCurrentView();
+                        flippingPanel.rebuild(tradesForCurrentView);
+                        statPanel.rebuildItemsDisplay(tradesForCurrentView);
+                        statPanel.rebuildRecipesDisplay(viewRecipeFlipGroupsForCurrentView());
+                    });
                 }
             });
         }, 1000, TimeUnit.MILLISECONDS);
@@ -1021,7 +1017,9 @@ public class FlippingPlugin extends Plugin {
     }
 
     private ScheduledFuture startSlotTimers() {
-        return executor.scheduleAtFixedRate(() ->
+        //wrapped so an exception (such as the account data not being loaded) doesn't silently cancel
+        //the timer task forever; scheduled tasks stop repeating when they throw
+        return executor.scheduleAtFixedRate(Safely.safely("updating slot timers", () ->
                 dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().forEach(slotWidgetTimer ->
                         clientThread.invokeLater(() -> {
                             try {
@@ -1030,7 +1028,7 @@ public class FlippingPlugin extends Plugin {
                             } catch (Exception e) {
                                 log.error("exception when trying to update timer", e);
                             }
-                        })), 1000, 1000, TimeUnit.MILLISECONDS);
+                        }))), 1000, 1000, TimeUnit.MILLISECONDS);
     }
 
     private ScheduledFuture startAutoSave() {
