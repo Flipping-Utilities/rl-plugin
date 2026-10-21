@@ -119,7 +119,7 @@ public class OfferGraphChartOverlayTest {
         TimeseriesFetcher timeseriesFetcher = new TimeseriesFetcher(null, null);
         FlippingPlugin plugin = new FlippingPlugin();
 
-        OfferGraphChartOverlay overlay = new OfferGraphChartOverlay(client, clientThread, timeseriesFetcher, eventBus, config, plugin);
+        OfferGraphChartOverlay overlay = new OfferGraphChartOverlay(client, clientThread, timeseriesFetcher, eventBus, config, plugin, null, null);
         return overlay;
     }
 

@@ -63,6 +63,22 @@ public class GeSpriteLoader {
     }
 
     /**
+     * Removes the custom sprites from the client's sprite overrides. Called when the plugin is
+     * disabled so no trace of the custom slot border sprites is left in the client.
+     */
+    public static void clearClientSpriteOverrides(Client client) {
+        List<List<Integer>> customSpriteGroups = Arrays.asList(
+            CustomSpriteIds.RED_SLOT_SPRITES,
+            CustomSpriteIds.BLUE_SLOT_SPRITES,
+            CustomSpriteIds.GREEN_SLOT_SPRITES);
+        for (List<Integer> spriteIds : customSpriteGroups) {
+            for (int spriteId : spriteIds) {
+                client.getSpriteOverrides().remove(spriteId);
+            }
+        }
+    }
+
+    /**
      * Associates the custom sprite ids with the sprite image. To actually change a sprite on screen, we later make
      * the widget with the sprite we want to change have its sprite id = to some custom sprite id here
      */

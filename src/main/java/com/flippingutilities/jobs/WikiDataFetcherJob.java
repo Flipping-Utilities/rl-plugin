@@ -57,10 +57,14 @@ public class WikiDataFetcherJob {
     }
 
     public void stop() {
-        if (!wikiDataFetchTask.isCancelled() && !wikiDataFetchTask.isCancelled()) {
+        if (wikiDataFetchTask != null && !wikiDataFetchTask.isCancelled()) {
             wikiDataFetchTask.cancel(true);
-            log.debug("shut down wiki fetching job");
         }
+        //this job owns its executor (a new instance is created on every plugin start up), so
+        //shut the executor down to release its thread; otherwise every disable/enable cycle
+        //of the plugin leaks a thread
+        executor.shutdownNow();
+        log.debug("shut down wiki fetching job");
     }
 
     public synchronized void onWorldSwitch(EnumSet<WorldType> worldType) {
