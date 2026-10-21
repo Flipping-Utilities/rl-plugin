@@ -380,20 +380,19 @@ public class HistoryManager
 	/**
 	 * Gets the amount of items in a given tradelist that have been "flipped". We take
 	 * min(itemsBought, itemsSold) bc we only want the amount of items that will actually be matched against each
-	 * other to create flips and if either buys or sells has a surplus relative to the other, that surplus won't be
-	 * matched.
+	 * other to create flips and if either buys or sells has a surplus relative to the other, that surplus won't
+	 * be matched.
+	 *
+	 * The count spans every account in the tradelist. In the account-wide view players legitimately
+	 * funnel items between their own accounts (eg buying on alts to bypass the ge limit and selling
+	 * on a main), so an item bought on an alt and sold on a main was still flipped by the player even
+	 * though no single account both bought and sold it. Counting only within-account matches made
+	 * the account-wide totals blind to that flow and massively undercounted those players' profits.
 	 *
 	 * @param tradeList The list of offers that the flip count is based on
-	 * @return The total matched quantity across accounts, including histories larger than one offer
+	 * @return The total matched quantity, including histories larger than one offer
 	 */
 	public static long countFlipQuantity(List<OfferEvent> tradeList)
-	{
-		return groupOffersByAccount(tradeList).stream()
-			.mapToLong(HistoryManager::countAccountFlipQuantity)
-			.sum();
-	}
-
-	private static long countAccountFlipQuantity(List<OfferEvent> tradeList)
 	{
 		long numBoughtItems = 0;
 		long numSoldItems = 0;
@@ -411,16 +410,6 @@ public class HistoryManager
 		}
 
 		return Math.min(numBoughtItems, numSoldItems);
-	}
-
-	private static Collection<List<OfferEvent>> groupOffersByAccount(List<OfferEvent> offers)
-	{
-		Map<String, List<OfferEvent>> accounts = new HashMap<>();
-		for (OfferEvent offer : offers) {
-			// Legacy callers may supply unhydrated offers with no account name.
-			accounts.computeIfAbsent(offer.getMadeBy(), account -> new ArrayList<>()).add(offer);
-		}
-		return accounts.values();
 	}
 
 	/**
