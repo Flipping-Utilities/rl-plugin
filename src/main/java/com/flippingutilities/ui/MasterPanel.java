@@ -284,6 +284,13 @@ public class MasterPanel extends PluginPanel
 	 * are looking at.
 	 */
 	public void setupAccSelectorDropdown(Set<String> currentAccounts) {
+		//this is invoked on the game client thread during startup, but it mutates the account
+		//selector (a swing combo box whose listener rebuilds the panels), so bounce to the edt
+		if (!SwingUtilities.isEventDispatchThread()) {
+			SwingUtilities.invokeLater(() -> setupAccSelectorDropdown(currentAccounts));
+			return;
+		}
+
 		//adding an item causes the event listener (changeView) to fire which causes stat panel
 		//and flipping panel to rebuildItemsDisplay. I think this only happens on the first item you add.
 		accountSelector.addItem(FlippingPlugin.ACCOUNT_WIDE);

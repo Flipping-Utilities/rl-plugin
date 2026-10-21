@@ -424,13 +424,18 @@ public class FlippingPlugin extends Plugin {
         eventsReceivedBeforeFullLogin.forEach(newOfferEventPipelineHandler::onNewOfferEvent);
         eventsReceivedBeforeFullLogin.clear();
 
-        if (dataHandler.getCurrentAccounts().size() > 1) {
-            masterPanel.getAccountSelector().setVisible(true);
-        }
+        //the login flow runs on the game client thread, so the swing mutations below are bounced
+        //to the edt; setSelectedItem fires the listener that rebuilds the flipping/stats panels
         accountCurrentlyViewed = displayName;
-        //this will cause changeView to be invoked which will cause a rebuildItemsDisplay of
-        //flipping and stats panel
-        masterPanel.getAccountSelector().setSelectedItem(displayName);
+        SwingUtilities.invokeLater(() ->
+        {
+            if (dataHandler.getCurrentAccounts().size() > 1) {
+                masterPanel.getAccountSelector().setVisible(true);
+            }
+            //this will cause changeView to be invoked which will cause a rebuildItemsDisplay of
+            //flipping and stats panel
+            masterPanel.getAccountSelector().setSelectedItem(displayName);
+        });
 
         if (slotTimersTask == null && config.slotTimersEnabled()) {
             log.debug("starting slot timers on login");
@@ -465,12 +470,19 @@ public class FlippingPlugin extends Plugin {
         return executor.scheduleAtFixedRate(() ->
         {
             try {
-                flippingPanel.updateTimerDisplays();
-                statPanel.updateTimeDisplay();
-                updateSessionTime();
-                if (config.autoSaveEnabled()) {
-                    statPanel.updateAutoSaveDisplay();
-                }
+                //every step below mutates swing components (labels, panels), so they must run on
+                //the edt. Mutating them from this scheduler thread races against the edt painting
+                //and rebuilding those same components and has deadlocked the client before, so
+                //they are batched into a single invokeLater per tick.
+                SwingUtilities.invokeLater(() ->
+                {
+                    flippingPanel.updateTimerDisplays();
+                    statPanel.updateTimeDisplay();
+                    updateSessionTime();
+                    if (config.autoSaveEnabled()) {
+                        statPanel.updateAutoSaveDisplay();
+                    }
+                });
             } catch (ConcurrentModificationException e) {
                 log.warn("concurrent modification exception. This is fine, will just restart tasks after delay." +
                         " Cancelling general repeating tasks and starting it again after 5000 ms delay");
