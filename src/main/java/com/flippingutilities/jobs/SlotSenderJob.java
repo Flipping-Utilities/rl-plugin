@@ -43,10 +43,14 @@ public class SlotSenderJob {
     }
 
     public void stop() {
-        if (!slotStateSenderTask.isCancelled()) {
+        if (slotStateSenderTask != null && !slotStateSenderTask.isCancelled()) {
             slotStateSenderTask.cancel(true);
-            log.debug("shut down slot sender job");
         }
+        //this job owns its executor (a new instance is created on every plugin start up), so
+        //shut the executor down to release its thread; otherwise every disable/enable cycle
+        //of the plugin leaks a thread
+        executor.shutdownNow();
+        log.debug("shut down slot sender job");
     }
 
     private void sendSlots() {

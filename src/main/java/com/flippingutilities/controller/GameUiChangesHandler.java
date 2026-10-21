@@ -38,13 +38,23 @@ import java.util.Optional;
 public class GameUiChangesHandler {
     private static final int GE_OFFER_INIT_STATE_CHILD_ID = 20;
     private FlippingPlugin plugin;
+    private final EventBus eventBus;
     boolean quantityOrPriceChatboxOpen;
     Optional<FlippingItem> highlightedItem = Optional.empty();
     int highlightedItemId;
 
     GameUiChangesHandler(FlippingPlugin plugin, EventBus eventBus) {
         this.plugin = plugin;
+        this.eventBus = eventBus;
         eventBus.register(this);
+    }
+
+    /**
+     * Unregisters this handler from the event bus. Must be called when the plugin is disabled so
+     * it stops reacting to game ui changes (chatbox editors, ge screen changes, etc.).
+     */
+    void shutdown() {
+        eventBus.unregister(this);
     }
 
     @Subscribe

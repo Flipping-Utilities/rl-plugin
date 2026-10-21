@@ -144,15 +144,26 @@ public class SlotStateDrawer {
     }
 
     /**
-     * Resets all visual enhancements on all slots.
+     * Resets all visual enhancements on all slots. Safe to call when the ge interface has
+     * been closed and the slot widgets are stale; failing slots are skipped.
      */
     public void resetAllSlots() {
         if (slotWidgets == null) {
             return;
         }
         for (int i = 0; i < 8; i++) {
-            resetSlot(i, slotWidgets[i + 1]);
+            if (i + 1 >= slotWidgets.length) {
+                break;
+            }
+            try {
+                resetSlot(i, slotWidgets[i + 1]);
+            } catch (Exception e) {
+                log.debug("could not reset enhancements on slot {}", i, e);
+            }
         }
+        hoveredSlotIndex = null;
+        currentTooltip = null;
+        currentlyFetchedItemId = null;
     }
 
     /**

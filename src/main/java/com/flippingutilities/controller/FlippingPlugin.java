@@ -140,6 +140,7 @@ public class FlippingPlugin extends Plugin {
 
     @Inject
     private KeyManager keyManager;
+    private KeyListener offerEditorKeyListener;
 
     @Inject
     @Getter
@@ -268,7 +269,12 @@ public class FlippingPlugin extends Plugin {
                 .build();
 
         clientToolbar.addNavigation(navButton);
-        keyManager.registerKeyListener(offerEditorKeyListener());
+        offerEditorKeyListener = offerEditorKeyListener();
+        keyManager.registerKeyListener(offerEditorKeyListener);
+        //the chart overlay is a singleton, so it is registered here (and unregistered in
+        //shutDown) instead of registering itself on injection; otherwise it would keep
+        //rendering after the plugin is disabled
+        offerGraphChartOverlay.activate();
         clientThread.invokeLater(() ->
         {
             switch (client.getGameState()) {
@@ -304,9 +310,43 @@ public class FlippingPlugin extends Plugin {
     @Override
     protected void shutDown() {
         log.debug("shutdown running!");
+        offerGraphChartOverlay.deactivate();
+
+        if (offerEditorKeyListener != null) {
+            keyManager.unregisterKeyListener(offerEditorKeyListener);
+            offerEditorKeyListener = null;
+        }
+
+        if (gameUiChangesHandler != null) {
+            gameUiChangesHandler.shutdown();
+            gameUiChangesHandler = null;
+        }
+
+        //the drawer modifies the ge slot widgets themselves (colored borders and quick look
+        //icons), and the game only resets those widgets when the ge interface is rebuilt, so
+        //they must be reverted manually to not linger after the plugin is disabled
+        if (slotStateDrawer != null) {
+            //captured in a local so the deferred reset still sees it after the field is nulled
+            SlotStateDrawer drawer = slotStateDrawer;
+            eventBus.unregister(drawer);
+            clientThread.invokeLater(Safely.safely("resetting ge slot visuals on shutdown", () -> {
+                drawer.resetAllSlots();
+                GeSpriteLoader.clearClientSpriteOverrides(client);
+            }));
+            slotStateDrawer = null;
+        }
+
         if (cacheUpdaterJob != null) {
             cacheUpdaterJob.stop();
             cacheUpdaterJob = null;
+        }
+        if (wikiDataFetcherJob != null) {
+            wikiDataFetcherJob.stop();
+            wikiDataFetcherJob = null;
+        }
+        if (slotStateSenderJob != null) {
+            slotStateSenderJob.stop();
+            slotStateSenderJob = null;
         }
         if (generalRepeatingTasks != null) {
             generalRepeatingTasks.cancel(true);
@@ -319,6 +359,11 @@ public class FlippingPlugin extends Plugin {
         if (autoSaveTask != null) {
             autoSaveTask.cancel(true);
             autoSaveTask = null;
+        }
+        if (dataHandler != null) {
+            //the plugin is unregistered from the event bus when it is disabled, so
+            //onClientShutdown will no longer fire for it; store unsaved trades now
+            dataHandler.storeData();
         }
         if (masterPanel != null) {
             masterPanel.dispose();

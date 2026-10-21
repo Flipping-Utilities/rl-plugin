@@ -64,8 +64,9 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     private final FlippingConfig config;
     private final FlippingPlugin plugin;
 
-    private OverlayManager overlayManager;
-    private MouseManager mouseManager;
+    private final EventBus eventBus;
+    private final OverlayManager overlayManager;
+    private final MouseManager mouseManager;
     private Rectangle graphBounds = new Rectangle();
     private Rectangle chartBounds = new Rectangle();
     private final int[] intervalButtonStartPosition = new int[4];
@@ -136,17 +137,20 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
     @Inject
     public OfferGraphChartOverlay(Client client, ClientThread clientThread, 
                                    TimeseriesFetcher timeseriesFetcher, EventBus eventBus,
-                                   FlippingConfig config, FlippingPlugin plugin) {
+                                   FlippingConfig config, FlippingPlugin plugin,
+                                   OverlayManager overlayManager, MouseManager mouseManager) {
         this.client = client;
         this.clientThread = clientThread;
         this.timeseriesFetcher = timeseriesFetcher;
+        this.eventBus = eventBus;
+        this.overlayManager = overlayManager;
+        this.mouseManager = mouseManager;
         this.config = config;
         this.plugin = plugin;
         this.selectedDuration = GraphDuration.fromTimestep(config.priceGraphTimestep());
         setPosition(OverlayPosition.DYNAMIC);
         setLayer(OverlayLayer.ABOVE_WIDGETS);
         setPriority(PRIORITY_LOW);
-        eventBus.register(this);
         initChart();
     }
     private void initChart() {
@@ -156,16 +160,33 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
         this.chart = new TimeSeriesChart(chartConfig);
     }
 
-    @Inject
-    private void register(OverlayManager overlayManager, MouseManager mouseManager) {
-        this.overlayManager = overlayManager;
-        this.mouseManager = mouseManager;
+    /**
+     * Registers the overlay with the event bus, overlay manager, and mouse manager so it starts
+     * rendering and reacting to game state. Called from the plugin's startUp. The overlay is a
+     * singleton that outlives plugin enable/disable cycles, so it must not register itself at
+     * injection time; otherwise it would keep rendering after the plugin is disabled.
+     */
+    public void activate() {
+        eventBus.register(this);
         overlayManager.add(this);
         mouseManager.registerMouseListener(this);
     }
 
+    /**
+     * Unregisters the overlay so it stops rendering and reacting to game state. Called from the
+     * plugin's shutDown, which runs when the plugin is disabled, so no part of the chart
+     * outlives the plugin being enabled.
+     */
+    public void deactivate() {
+        hide();
+        eventBus.unregister(this);
+        overlayManager.remove(this);
+        mouseManager.unregisterMouseListener(this);
+    }
+
     @Subscribe
     public void onClientShutdown(ClientShutdown event) {
+        eventBus.unregister(this);
         if (overlayManager != null) {
             overlayManager.remove(this);
         }
