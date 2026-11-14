@@ -195,9 +195,9 @@ public class SlotStateDrawer {
             return;
         }
 
-        final Map<Integer, Integer> spriteMap = getSpriteMapForState(
-                slot.getPredictedState()
-        );
+        final Map<Integer, Integer> spriteMap = plugin.getConfig().slotBordersEnabled()
+                ? getSpriteMapForState(slot.getPredictedState())
+                : GeSpriteLoader.CHILDREN_IDX_TO_DEFAULT_SPRITE_ID;
 
         GeSpriteLoader.DYNAMIC_CHILDREN_IDXS.forEach(idx -> {
             Widget child = slotWidget.getChild(idx);

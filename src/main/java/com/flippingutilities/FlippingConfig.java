@@ -106,6 +106,16 @@ public interface FlippingConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "slotBordersEnabled",
+		name = "toggle colored slot borders",
+		description = "Color the border of GE offer slots red/green/blue based on the offer's predicted state"
+	)
+	default boolean slotBordersEnabled()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "verboseView",
 		name = "toggle verbose view",
 		description = "show items in the flipping tab with all their tracked info like buy/sell price, roi, potential" +
