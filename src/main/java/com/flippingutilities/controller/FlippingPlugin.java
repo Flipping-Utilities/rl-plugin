@@ -1201,6 +1201,7 @@ public class FlippingPlugin extends Plugin {
         }
 
         handleSlotTimersConfigChange(event);
+        handleSlotBordersConfigChange(event);
         handleAutoSaveConfigChange(event);
 
         statPanel.rebuildItemsDisplay(viewItemsForCurrentView());
@@ -1221,6 +1222,16 @@ public class FlippingPlugin extends Plugin {
             slotTimersTask.cancel(true);
         }
         dataHandler.viewAccountData(currentlyLoggedInAccount).getSlotTimers().forEach(SlotActivityTimer::resetToDefault);
+    }
+
+    private void handleSlotBordersConfigChange(ConfigChanged event) {
+        if (!event.getKey().equals("slotBordersEnabled")) {
+            return;
+        }
+
+        //redraws every slot, reverting to the default border sprites when the toggle
+        //is off and reapplying the state colors when it is on
+        slotStateDrawer.refreshSlotVisuals();
     }
 
     private void handleAutoSaveConfigChange(ConfigChanged event) {
