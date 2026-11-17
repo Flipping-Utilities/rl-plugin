@@ -4,6 +4,7 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.uiutilities.Paginator;
+import com.flippingutilities.ui.uiutilities.EmptyStatePanel;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
@@ -55,7 +56,8 @@ public class FlippingItemContainerPanel extends JPanel {
             activePanels.addAll(newPanels);
         }
         else {
-            flippingItemPanelsContainer.add(createHelpLabel());
+            flippingItemPanelsContainer.add(new EmptyStatePanel("No trade history yet",
+                "Complete a Grand Exchange offer to see your item history here."));
         }
     }
 
@@ -63,16 +65,6 @@ public class FlippingItemContainerPanel extends JPanel {
         activePanels.clear();
         flippingItemPanelsContainer.removeAll();
         flippingItemPanelsContainer.add(panel);
-    }
-
-    private JLabel createHelpLabel() {
-        JLabel helpLabel = new JLabel(
-            "<html><body width='220' style='text-align:center;'>" +
-                "Make some trades to see your item history here!");
-        helpLabel.setFont(new Font("Whitney", Font.PLAIN, 15));
-        helpLabel.setBorder(new EmptyBorder(40,5,0,0));
-        helpLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        return helpLabel;
     }
 
     private JPanel createStatItemsPanelContainer() {
@@ -89,7 +81,6 @@ public class FlippingItemContainerPanel extends JPanel {
         JScrollPane scrollPane = new JScrollPane(statItemPanelsContainerWrapper);
         scrollPane.setBackground(ColorScheme.DARK_GRAY_COLOR);
         scrollPane.setBorder(new EmptyBorder(5, 0, 0, 0));
-        scrollPane.getVerticalScrollBar().setPreferredSize(new Dimension(2, 0));
 
         return scrollPane;
     }

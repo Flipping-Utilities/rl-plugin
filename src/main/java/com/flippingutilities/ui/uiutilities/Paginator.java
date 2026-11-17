@@ -72,38 +72,8 @@ public class Paginator extends JPanel
 
 	private JButton createPageButton(String name, Icon icon, Icon hoverIcon, int offset)
 	{
-		JButton button = new JButton(icon);
-		button.setRolloverIcon(hoverIcon);
-		button.setToolTipText(name);
-		button.getAccessibleContext().setAccessibleName(name);
+		JButton button = IconButtons.action(name, icon, hoverIcon, event -> changePage(pageNumber + offset));
 		button.setPreferredSize(new Dimension(24, 24));
-		button.setContentAreaFilled(false);
-		button.setBorder(new EmptyBorder(1, 1, 1, 1));
-		button.addFocusListener(new FocusAdapter()
-		{
-			@Override
-			public void focusGained(FocusEvent e)
-			{
-				button.setBorder(BorderFactory.createLineBorder(ColorScheme.LIGHT_GRAY_COLOR));
-			}
-
-			@Override
-			public void focusLost(FocusEvent e)
-			{
-				button.setBorder(new EmptyBorder(1, 1, 1, 1));
-			}
-		});
-		button.addActionListener(e -> changePage(pageNumber + offset));
-		// Space is provided by JButton; support Enter without installing a window-wide shortcut.
-		button.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "changePage");
-		button.getActionMap().put("changePage", new AbstractAction()
-		{
-			@Override
-			public void actionPerformed(ActionEvent e)
-			{
-				button.doClick();
-			}
-		});
 		return button;
 	}
 
@@ -177,6 +147,7 @@ public class Paginator extends JPanel
 
 	private void updateControls()
 	{
+		pageInput.setColumns(Math.max(3, String.valueOf(pageNumber).length()));
 		pageInput.setText(String.valueOf(pageNumber));
 		pageInput.setEnabled(totalPages > 1);
 		pageInput.getAccessibleContext().setAccessibleDescription("Page " + pageNumber + " of " + totalPages);

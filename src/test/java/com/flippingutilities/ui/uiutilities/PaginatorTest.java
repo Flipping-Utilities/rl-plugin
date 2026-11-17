@@ -77,10 +77,12 @@ public class PaginatorTest {
 
             assertTrue(next.isFocusable());
             assertEquals(AccessibleRole.PUSH_BUTTON, next.getAccessibleContext().getAccessibleRole());
-            activate(next, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0));
+            activate(next, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0, false));
+            activate(next, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0, true));
             assertEquals(2, paginator.getPageNumber());
             assertFalse(next.isEnabled());
-            activate(next, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0));
+            activate(next, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0, false));
+            activate(next, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0, true));
             assertEquals(1, changes.get());
 
             activate(previous, KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0, false));
@@ -125,6 +127,11 @@ public class PaginatorTest {
             paginator.setPageSize(1);
             paginator.updateTotalPages(Integer.MAX_VALUE);
             assertEquals("of 2147483647", paginator.getPageOfLabel().getText());
+            paginator.setPageNumber(9999);
+            paginator.setSize(225, 30);
+            paginator.doLayout();
+            assertEquals("9999", input(paginator).getText());
+            assertTrue(input(paginator).getWidth() >= input(paginator).getFontMetrics(input(paginator).getFont()).stringWidth("9999"));
         });
     }
 
