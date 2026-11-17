@@ -211,7 +211,7 @@ public class HistoryManagerTest
 		flips.add(new Flip(1, 2, 1, baseTime.minus(9, ChronoUnit.MINUTES), false, false));
 		flips.add(new Flip(1, 2, 1, baseTime.minus(7, ChronoUnit.MINUTES), false, false));
 		flips.add(new Flip(1, 2, 1, baseTime.minus(7, ChronoUnit.MINUTES), false, false));
-		flips.add(new Flip(1, 2, 8, baseTime.minus(5, ChronoUnit.MINUTES), false, false));
+		flips.add(new Flip(1.125, 2, 8, baseTime.minus(5, ChronoUnit.MINUTES), false, false));
 
 
 		List<Flip> calculatedFlips = historyManager.createFlips(standardizedOffers);
@@ -306,10 +306,10 @@ public class HistoryManagerTest
 
 		expectedFlips.add(new Flip(2, 1, 1, baseTime.minus(20, ChronoUnit.MINUTES), true, false));
 		expectedFlips.add(new Flip(1, 2, 1, baseTime.minus(19, ChronoUnit.MINUTES), false, false));
-		expectedFlips.add(new Flip(1, 3, 5, baseTime.minus(15, ChronoUnit.MINUTES), false, false));
+		expectedFlips.add(new Flip(1.4, 3, 5, baseTime.minus(15, ChronoUnit.MINUTES), false, false));
 		expectedFlips.add(new Flip(7, 4, 1, baseTime.minus(14, ChronoUnit.MINUTES), true, false));
 		expectedFlips.add(new Flip(4, 8, 3, baseTime.minus(11, ChronoUnit.MINUTES), false, false));
-		expectedFlips.add(new Flip(5, 8, 3, baseTime.minus(10, ChronoUnit.MINUTES), false, false));
+		expectedFlips.add(new Flip(16.0 / 3, 8, 3, baseTime.minus(10, ChronoUnit.MINUTES), false, false));
 		expectedFlips.add(new Flip(8, 3, 1, baseTime.minus(10, ChronoUnit.MINUTES), false, false));
 
 		List<Flip> generatedFlips = historyManager.createFlips(offers);

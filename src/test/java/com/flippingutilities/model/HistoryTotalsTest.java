@@ -93,13 +93,30 @@ public class HistoryTotalsTest
 
         assertEquals(2, flips.size());
         assertEquals(2_000_000_000L, flips.get(0).getQuantity());
-        assertEquals(4L, flips.get(0).getBuyPrice());
+        assertEquals(4, flips.get(0).getBuyPrice(), 0);
         assertEquals(5L, flips.get(0).getSellPrice());
         //the leftover 1b items of the second buy are matched against the second sell
         assertEquals(1_000_000_000L, flips.get(1).getQuantity());
-        assertEquals(4L, flips.get(1).getBuyPrice());
+        assertEquals(4, flips.get(1).getBuyPrice(), 0);
 
         assertEquals(3_000_000_000L, FlippingItem.getProfit(offers));
+    }
+
+    @Test
+    public void flipBuyPriceKeepsTheFractionOfAWeightedAverage()
+    {
+        //3 @ 4gp + 2 @ 5gp = 22gp for 5 items, a 4.4gp average buy price
+        List<OfferEvent> offers = Arrays.asList(
+            offer("a", true, 3, 4),
+            offer("a", true, 2, 5),
+            offer("a", false, 5, 6));
+
+        List<Flip> flips = FlippingItem.getFlips(offers);
+
+        assertEquals(1, flips.size());
+        assertEquals(4.4, flips.get(0).getBuyPrice(), 1e-9);
+        assertEquals(8L, Math.round((flips.get(0).getSellPrice() - flips.get(0).getBuyPrice()) * flips.get(0).getQuantity()));
+        assertEquals(8L, FlippingItem.getProfit(offers));
     }
 
     private OfferEvent offer(String account, boolean buy, int quantity, int price)

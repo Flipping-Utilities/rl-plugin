@@ -81,7 +81,7 @@ public class LongPricePersistenceTest {
         OfferEvent sale = offer(false, SELL_PRICE, 3);
         sale.setTime(TIME.plusSeconds(2));
         Flip flip = HistoryManager.getFlips(Arrays.asList(firstBuy, secondBuy, sale)).get(0);
-        assertEquals(BUY_PRICE + 2, flip.getBuyPrice());
+        assertEquals(BUY_PRICE + 2, flip.getBuyPrice(), 0);
         assertEquals(SELL_PRICE - Constants.GE_TAX_CAP, flip.getSellPrice());
     }
 
@@ -108,7 +108,7 @@ public class LongPricePersistenceTest {
         assertEquals(15_000_000L, offers.get(1).getTaxPaid());
         assertEquals(5_985_000_000L, FlippingItem.getProfit(offers));
         Flip flip = HistoryManager.getFlips(offers).get(0);
-        assertEquals(BUY_PRICE, flip.getBuyPrice());
+        assertEquals(BUY_PRICE, flip.getBuyPrice(), 0);
         assertEquals(SELL_PRICE - Constants.GE_TAX_CAP, flip.getSellPrice());
     }
 

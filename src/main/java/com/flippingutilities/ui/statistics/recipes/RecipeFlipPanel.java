@@ -108,7 +108,7 @@ public class RecipeFlipPanel extends JPanel {
         partialOffers.forEach((itemId, partialOfferMap) -> {
             String itemName;
             long quantity;
-            long avgPrice;
+            double avgPrice;
 
             if (itemId == ItemID.COINS) {
                 itemName = "Coins";
@@ -119,7 +119,7 @@ public class RecipeFlipPanel extends JPanel {
                 List<PartialOffer> partialOfferList = new ArrayList<>(partialOfferMap.values());
                 itemName = partialOfferList.get(0).getOffer().getItemName();
                 quantity = partialOfferList.stream().mapToInt(po -> po.amountConsumed).sum();
-                avgPrice =  partialOfferList.stream().mapToLong(po -> po.getOffer().getPrice() * po.amountConsumed).sum()/quantity;
+                avgPrice = (double) partialOfferList.stream().mapToLong(po -> po.getOffer().getPrice() * po.amountConsumed).sum() / quantity;
             }
 
             componentGroupPanel.add(createComponentPanel(itemName, quantity, avgPrice));
@@ -128,7 +128,7 @@ public class RecipeFlipPanel extends JPanel {
         return componentGroupPanel;
     }
 
-    private JPanel createComponentPanel(String itemName, long quantity, long avgPrice){
+    private JPanel createComponentPanel(String itemName, long quantity, double avgPrice){
         if (quantity == 0) {
             JPanel panel = new JPanel(new BorderLayout());
             panel.setBackground(CustomColors.DARK_GRAY);
@@ -155,7 +155,7 @@ public class RecipeFlipPanel extends JPanel {
         pricePanel.setBackground(CustomColors.DARK_GRAY);
         JLabel priceLabel = new JLabel("Avg Price", SwingConstants.CENTER);
         priceLabel.setFont(FontManager.getRunescapeSmallFont());
-        JLabel priceValueLabel = new JLabel(itemName.equals("Coins")? "N/A": QuantityFormatter.formatNumber(avgPrice) + " gp");
+        JLabel priceValueLabel = new JLabel(itemName.equals("Coins")? "N/A": UIUtilities.formatPerItem(avgPrice) + " gp");
         priceValueLabel.setFont(FontManager.getRunescapeSmallFont());
         pricePanel.add(priceLabel, BorderLayout.WEST);
         pricePanel.add(priceValueLabel, BorderLayout.EAST);
@@ -268,9 +268,9 @@ public class RecipeFlipPanel extends JPanel {
             return panel;
         }
         long profit = recipeFlip.getProfit();
-        long profitEach = profit/quantity;
+        double profitEach = (double) profit / quantity;
         String profitString = UIUtilities.quantityToRSDecimalStack(profit, true) + " gp";
-        String profitEachString = quantity == 1? "": " (" + UIUtilities.quantityToRSDecimalStack(profitEach, false) + " gp ea)";
+        String profitEachString = quantity == 1? "": " (" + UIUtilities.formatPerItemStack(profitEach, false) + " gp ea)";
         String profitDescription = profit < 0? "Loss": "Profit:";
 
         JLabel profitValLabel = new JLabel(profitString + profitEachString);

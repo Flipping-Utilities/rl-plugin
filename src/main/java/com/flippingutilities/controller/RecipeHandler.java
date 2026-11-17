@@ -540,7 +540,7 @@ public class RecipeHandler {
                     long totalProfit = flips.stream().mapToLong(RecipeFlip::getProfit).sum();
                     long totalRecipesMade = flips.stream().mapToInt(rf -> rf.getRecipeCountMade(group.getRecipe()))
                             .sum();
-                    return totalProfit / totalRecipesMade;
+                    return totalRecipesMade == 0 ? -Double.MAX_VALUE : (double) totalProfit / totalRecipesMade;
                 }));
                 break;
             case ROI:

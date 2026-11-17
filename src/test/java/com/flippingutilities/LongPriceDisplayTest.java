@@ -5,7 +5,6 @@ import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesPoint;
 import com.flippingutilities.model.TimeseriesResponse;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
-import com.flippingutilities.utilities.MathUtils;
 import com.flippingutilities.ui.widgets.ChartConfig;
 import com.flippingutilities.ui.widgets.TickIntervalCalculator;
 import com.flippingutilities.ui.widgets.TimeSeriesChart;
@@ -41,10 +40,10 @@ public class LongPriceDisplayTest {
 
     @Test
     public void statsPanelAveragesRoundAndQuantitiesGroupDigits() {
-        //a profit of 47,031,100 gp over 24,999,927 flipped items is 1.88 gp/ea; rounding
-        //keeps the displayed average at 2 gp/ea instead of truncating half of it away
-        assertEquals("2 gp/ea", UIUtilities.quantityToRSDecimalStack(
-            MathUtils.roundedQuotient(47_031_100L, 24_999_927L), true) + " gp/ea");
+        //a profit of 47,031,100 gp over 24,999,927 flipped items is 1.88 gp/ea; per-item values
+        //under 10 gp keep their decimals instead of truncating half of the profit away
+        assertEquals("1.88 gp/ea", UIUtilities.formatPerItemStack(
+            (double) 47_031_100L / 24_999_927L, true) + " gp/ea");
         assertEquals("2,352,971,263", QuantityFormatter.formatNumber(2_352_971_263L));
         assertEquals("1,044,505,776", QuantityFormatter.formatNumber(1_044_505_776L));
     }
