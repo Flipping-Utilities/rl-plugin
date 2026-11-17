@@ -4,6 +4,7 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
 import javax.swing.Box;
@@ -96,7 +97,7 @@ public class LoggedInPanel extends JPanel {
 
     private JPanel createSignOutButton() {
         JPanel signoutButtonWrapper = new JPanel();
-        JButton signOutButton = new JButton("Sign out");
+        JButton signOutButton = LoginButtons.filled(new JButton("Sign Out"), CustomColors.TOMATO, Color.WHITE);
         signOutButton.setToolTipText("Sign out of Flipping Utilities");
         signOutButton.addActionListener(event -> {
             int result = JOptionPane.showOptionDialog(

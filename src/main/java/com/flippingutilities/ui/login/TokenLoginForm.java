@@ -3,6 +3,7 @@ package com.flippingutilities.ui.login;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BooleanSupplier;
@@ -10,7 +11,6 @@ import java.util.function.Function;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import net.runelite.client.ui.ColorScheme;
-import net.runelite.client.ui.FontManager;
 
 /** Token entry and request feedback; the owner supplies consent and authentication. */
 public final class TokenLoginForm extends JPanel {
@@ -29,8 +29,8 @@ public final class TokenLoginForm extends JPanel {
         setBorder(new EmptyBorder(20, 0, 0, 0));
         setPreferredSize(new Dimension(170, 175));
 
-        JLabel label = new JLabel("Token");
-        label.setFont(FontManager.getRunescapeBoldFont());
+        JLabel label = new JLabel("TOKEN");
+        label.setFont(LoginButtons.FONT);
         label.setForeground(ColorScheme.GRAND_EXCHANGE_ALCH);
         label.setLabelFor(token);
         token.setName("loginToken");
@@ -49,12 +49,13 @@ public final class TokenLoginForm extends JPanel {
         status.setOpaque(false);
         status.setLineWrap(true);
         status.setWrapStyleWord(true);
-        status.setFont(FontManager.getRunescapeSmallFont());
+        status.setFont(new Font("Whitney", Font.PLAIN, 11));
         status.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         status.getAccessibleContext().setAccessibleName("Login status");
         status.setName("loginStatus");
         add(status, BorderLayout.CENTER);
 
+        LoginButtons.filled(login, ColorScheme.GRAND_EXCHANGE_PRICE, ColorScheme.DARKER_GRAY_COLOR);
         login.setName("loginSubmit");
         login.setToolTipText("Log in with this token");
         login.addActionListener(event -> submit());
