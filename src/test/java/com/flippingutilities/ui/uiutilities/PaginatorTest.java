@@ -77,10 +77,12 @@ public class PaginatorTest {
 
             assertTrue(next.isFocusable());
             assertEquals(AccessibleRole.PUSH_BUTTON, next.getAccessibleContext().getAccessibleRole());
-            activate(next, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0));
+            activate(next, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0, false));
+            activate(next, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0, true));
             assertEquals(2, paginator.getPageNumber());
             assertFalse(next.isEnabled());
-            activate(next, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0));
+            activate(next, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0, false));
+            activate(next, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0, true));
             assertEquals(1, changes.get());
 
             activate(previous, KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0, false));
