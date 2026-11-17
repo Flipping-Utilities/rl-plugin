@@ -30,7 +30,6 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.model.*;
 import com.flippingutilities.ui.statistics.StatsPanel;
 import com.flippingutilities.ui.uiutilities.*;
-import com.flippingutilities.utilities.MathUtils;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.game.ItemManager;
@@ -505,10 +504,10 @@ public class FlippingItemPanel extends JPanel
 		totalProfitValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
 		totalProfitValLabel.setToolTipText(QuantityFormatter.formatNumber(profitFromFlips) + " gp");
 
-		long profitEach = itemsFlipped > 0 ? MathUtils.roundedQuotient(profitFromFlips, itemsFlipped) : 0;
-		profitEachValLabel.setText(UIUtilities.quantityToRSDecimalStack(profitEach, true) + " gp/ea");
+		double profitEach = itemsFlipped > 0 ? (double) profitFromFlips / itemsFlipped : 0;
+		profitEachValLabel.setText(UIUtilities.formatPerItemStack(profitEach, true) + " gp/ea");
 		profitEachValLabel.setForeground((profitFromFlips >= 0) ? ColorScheme.GRAND_EXCHANGE_PRICE : CustomColors.OUTDATED_COLOR);
-		profitEachValLabel.setToolTipText(QuantityFormatter.formatNumber(profitEach) + " gp/ea");
+		profitEachValLabel.setToolTipText(UIUtilities.formatPerItem(profitEach) + " gp/ea");
 
 		quantityFlipped.setText(QuantityFormatter.formatNumber(itemsFlipped) + " Items");
 
@@ -520,8 +519,8 @@ public class FlippingItemPanel extends JPanel
 	}
 
 	private void updateGeneralLabels(long totalRevenue, long totalExpense, long numBuys, long numSells) {
-		avgBuyPriceValLabel.setText(QuantityFormatter.formatNumber(numBuys > 0? (totalExpense / numBuys) : 0) + " gp");
-		avgSellPriceValLabel.setText(QuantityFormatter.formatNumber(numSells > 0? (totalRevenue / numSells) : 0) + " gp");
+		avgBuyPriceValLabel.setText(UIUtilities.formatPerItem(numBuys > 0 ? (double) totalExpense / numBuys : 0) + " gp");
+		avgSellPriceValLabel.setText(UIUtilities.formatPerItem(numSells > 0 ? (double) totalRevenue / numSells : 0) + " gp");
 
 		quantityBoughtLabel.setText(QuantityFormatter.formatNumber(numBuys));
 		quantitySoldLabel.setText(QuantityFormatter.formatNumber(numSells));

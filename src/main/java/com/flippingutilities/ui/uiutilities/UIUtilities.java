@@ -85,6 +85,18 @@ public class UIUtilities
 		"#,###.#",
 		DecimalFormatSymbols.getInstance(Locale.ENGLISH)
 	);
+	private static final NumberFormat PER_ITEM_TWO_DECIMALS_FORMATTER = new DecimalFormat(
+		"#,##0.##",
+		DecimalFormatSymbols.getInstance(Locale.ENGLISH)
+	);
+	private static final NumberFormat PER_ITEM_ONE_DECIMAL_FORMATTER = new DecimalFormat(
+		"#,##0.#",
+		DecimalFormatSymbols.getInstance(Locale.ENGLISH)
+	);
+	/** Per-item values below this keep up to two decimals. */
+	private static final double PER_ITEM_TWO_DECIMALS_BELOW = 10;
+	/** Per-item values below this (and from {@link #PER_ITEM_TWO_DECIMALS_BELOW} up) keep up to one decimal. */
+	private static final double PER_ITEM_ONE_DECIMAL_BELOW = 100;
 
 	/**
 	 * This method calculates the red-yellow-green gradient factored by the percentage or max gradient.
@@ -135,6 +147,51 @@ public class UIUtilities
 		int suffix = power / 3;
 		return format.format(quantity / Math.pow(10, suffix * 3))
 			+ new String[] {"", "K", "M", "B", "T", "Qa", "Qi"}[suffix];
+	}
+
+	/**
+	 * Formats a per-item gp value such as an average price or profit each. A fraction of a gp is a
+	 * large share of a cheap item's price (a 1.5 gp/ea margin is not "1 gp/ea"), so values under 10gp keep
+	 * up to two decimals and values under 100gp keep up to one. Larger values are rounded to whole gp.
+	 */
+	public static synchronized String formatPerItem(double value)
+	{
+		String withDecimals = formatPerItemDecimals(value);
+		return withDecimals != null ? withDecimals : QuantityFormatter.formatNumber(Math.round(value));
+	}
+
+	/**
+	 * Same as {@link #formatPerItem(double)}, but values of 10k and above are abbreviated
+	 * like {@link #quantityToRSDecimalStack(long, boolean)}.
+	 */
+	public static synchronized String formatPerItemStack(double value, boolean precise)
+	{
+		String withDecimals = formatPerItemDecimals(value);
+		return withDecimals != null ? withDecimals : quantityToRSDecimalStack(Math.round(value), precise);
+	}
+
+	/**
+	 * @return the value with its decimals if it is small enough to keep any, otherwise null
+	 */
+	private static String formatPerItemDecimals(double value)
+	{
+		double hundredths = roundTo(value, 100);
+		if (Math.abs(hundredths) < PER_ITEM_TWO_DECIMALS_BELOW)
+		{
+			return PER_ITEM_TWO_DECIMALS_FORMATTER.format(hundredths);
+		}
+		double tenths = roundTo(value, 10);
+		if (Math.abs(tenths) < PER_ITEM_ONE_DECIMAL_BELOW)
+		{
+			return PER_ITEM_ONE_DECIMAL_FORMATTER.format(tenths);
+		}
+		return null;
+	}
+
+	private static double roundTo(double value, int scale)
+	{
+		// Adding 0.0 turns -0.0 into 0.0, so tiny losses don't render as "-0".
+		return Math.round(value * scale) / (double) scale + 0.0;
 	}
 
 	public static JDialog createModalFromPanel(Component parent, JComponent panel)
