@@ -3,6 +3,7 @@ package com.flippingutilities.ui.login;
 import com.flippingutilities.ui.uiutilities.CustomColors;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
@@ -65,7 +66,9 @@ public final class TokenLoginForm extends JPanel {
 
     private void submit() {
         if (pending) return;
-        String value = new String(token.getPassword()).trim();
+        char[] entered = token.getPassword();
+        String value = new String(entered).trim();
+        Arrays.fill(entered, '\0');
         if (value.isEmpty()) {
             showError("Enter a token before logging in.");
             token.requestFocusInWindow();
