@@ -5,8 +5,9 @@ import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.jobs.TimeseriesFetcher;
 import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesPoint;
-import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.ChartLoadingAnimation;
+import com.flippingutilities.ui.uiutilities.GraphDataLoader;
+import com.flippingutilities.ui.uiutilities.CustomColors;
 import com.flippingutilities.ui.uiutilities.TimeFormatters;
 import com.flippingutilities.utilities.Constants;
 
@@ -60,7 +61,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
 
     private final Client client;
     private final ClientThread clientThread;
-    private final TimeseriesFetcher timeseriesFetcher;
+    private final GraphDataLoader graphDataLoader;
     private final FlippingConfig config;
     private final FlippingPlugin plugin;
 
@@ -141,7 +142,7 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
                                    OverlayManager overlayManager, MouseManager mouseManager) {
         this.client = client;
         this.clientThread = clientThread;
-        this.timeseriesFetcher = timeseriesFetcher;
+        this.graphDataLoader = new GraphDataLoader(timeseriesFetcher, clientThread);
         this.eventBus = eventBus;
         this.overlayManager = overlayManager;
         this.mouseManager = mouseManager;
@@ -287,43 +288,64 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
      * Enable the chart for the specified item & offer price
      */
     private void show(int itemId, long offerPrice) {
+        // The same item can be re-selected while its graph is shown, e.g. when a GE varp is
+        // re-sent. Keep the loaded graph and any pending chart price (it may be about to be
+        // entered into the price prompt) and only refetch when the item changes or has no data.
+        boolean sameItemLoaded = itemId == currentItemId && chart != null && chart.hasData();
         this.currentItemId = itemId;
         this.currentOfferPrice = offerPrice;
         if (chart != null) {
             chart.setOfferPrice(offerPrice);
         }
-        fetchGraphData();
+        if (!sameItemLoaded) {
+            fetchGraphData();
+        }
     }
 
     /**
      * Hide the chart
      */
     public void hide() {
-        this.currentItemId = -1;
-        this.priceToSet = -1;
+        clientThread.invoke(() -> {
+            graphDataLoader.clear();
+            this.currentItemId = -1;
+            clearGraphData();
+        });
     }
 
     public void setSelectedDuration(GraphDuration duration) {
-        if (duration == null || duration == selectedDuration) {
-            return;
+        clientThread.invoke(() -> {
+            if (duration == null || duration == selectedDuration) {
+                return;
+            }
+            selectedDuration = duration;
+            fetchGraphData();
+        });
+    }
+
+    private void clearGraphData() {
+        priceToSet = -1;
+        clearPriceInfo();
+        if (chart != null) {
+            chart.setDataSeries(null, selectedDuration.getTimestep(), currentOfferPrice);
+            chart.setHoveredPoint(null);
+            chart.setHoveredPriceY(null);
         }
-        selectedDuration = duration;
-        fetchGraphData();
     }
 
     private void fetchGraphData() {
-        if (timeseriesFetcher == null || currentItemId <= 0 || chart == null) {
+        if (currentItemId <= 0 || chart == null) {
             return;
         }
-        timeseriesFetcher.fetch(currentItemId, selectedDuration.getTimestep(), response -> {
-            if (chart != null && response != null && response.getData() != null) {
-                if (response.getData().isEmpty()) {
-                    log.warn("[OfferGraphChartOverlay] No price history data for item {}", currentItemId);
-                } else {
-                    chart.setDataSeries(response, selectedDuration.getTimestep(), 
-                        currentOfferPrice, selectedDuration.getMaxTimeRangeSeconds());
-                }
+        clearGraphData();
+        final int itemId = currentItemId;
+        final GraphDuration duration = selectedDuration;
+        graphDataLoader.load(itemId, duration.getTimestep(), response -> {
+            if (response.getData().isEmpty()) {
+                log.warn("[OfferGraphChartOverlay] No price history data for item {}", itemId);
             }
+            chart.setDataSeries(response, duration.getTimestep(),
+                currentOfferPrice, duration.getMaxTimeRangeSeconds());
         });
     }
 

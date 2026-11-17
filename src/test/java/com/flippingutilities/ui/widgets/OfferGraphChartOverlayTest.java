@@ -2,7 +2,9 @@ package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.FlippingConfig;
 import com.flippingutilities.controller.FlippingPlugin;
+import com.flippingutilities.jobs.ManualClient;
 import com.flippingutilities.jobs.TimeseriesFetcher;
+import com.google.gson.Gson;
 import com.flippingutilities.utilities.Constants;
 import net.runelite.api.Client;
 import net.runelite.api.events.ScriptPostFired;
@@ -15,6 +17,7 @@ import net.runelite.client.eventbus.EventBus;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
 import static org.junit.Assert.assertEquals;
@@ -81,6 +84,25 @@ public class OfferGraphChartOverlayTest {
         assertEquals("500", enteredVarcString);
     }
 
+    @Test
+    public void reselectingTheShownItemKeepsItsGraphAndPendingPrice() throws Exception {
+        ManualClient http = new ManualClient();
+        OfferGraphChartOverlay overlay = overlay(http);
+        show(overlay, 4151);
+        http.calls.get(0).respond(200, recentHistory());
+        setPendingPrice(overlay, 12345);
+
+        //a re-sent GE varp for the same item must not drop the price the player just picked
+        show(overlay, 4151);
+        assertEquals(1, http.calls.size());
+        assertEquals(12345, getPendingPrice(overlay));
+
+        //a different item invalidates both the graph and the pending price
+        show(overlay, 2);
+        assertEquals(2, http.calls.size());
+        assertEquals(-1, getPendingPrice(overlay));
+    }
+
     private OfferGraphChartOverlay overlay() {
         Widget chatWidget = (Widget) Proxy.newProxyInstance(Widget.class.getClassLoader(), new Class<?>[]{Widget.class},
             (proxy, method, args) -> {
@@ -121,6 +143,42 @@ public class OfferGraphChartOverlayTest {
 
         OfferGraphChartOverlay overlay = new OfferGraphChartOverlay(client, clientThread, timeseriesFetcher, eventBus, config, plugin, null, null);
         return overlay;
+    }
+
+    private OfferGraphChartOverlay overlay(ManualClient http) {
+        ClientThread clientThread = new ClientThread() {
+            @Override
+            public void invoke(Runnable runnable) {
+                runnable.run();
+            }
+
+            @Override
+            public void invokeLater(Runnable runnable) {
+                runnable.run();
+            }
+        };
+        FlippingConfig config = (FlippingConfig) Proxy.newProxyInstance(FlippingConfig.class.getClassLoader(), new Class<?>[]{FlippingConfig.class},
+            (proxy, method, args) -> null);
+        FlippingPlugin plugin = new FlippingPlugin();
+        plugin.gson = new Gson();
+        return new OfferGraphChartOverlay(null, clientThread, new TimeseriesFetcher(http, plugin), new EventBus(), config, plugin, null, null);
+    }
+
+    private static void show(OfferGraphChartOverlay overlay, int itemId) throws Exception {
+        Method show = OfferGraphChartOverlay.class.getDeclaredMethod("show", int.class, long.class);
+        show.setAccessible(true);
+        show.invoke(overlay, itemId, 100L);
+    }
+
+    private static String recentHistory() {
+        long now = System.currentTimeMillis() / 1000;
+        return "{\"data\":[{\"timestamp\":" + now + ",\"avgHighPrice\":110,\"avgLowPrice\":90}]}";
+    }
+
+    private long getPendingPrice(OfferGraphChartOverlay overlay) throws Exception {
+        Field field = OfferGraphChartOverlay.class.getDeclaredField("priceToSet");
+        field.setAccessible(true);
+        return field.getLong(overlay);
     }
 
     private void setPendingPrice(OfferGraphChartOverlay overlay, long price) throws Exception {
