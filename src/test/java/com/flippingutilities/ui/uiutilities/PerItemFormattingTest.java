@@ -17,12 +17,25 @@ public class PerItemFormattingTest
 	}
 
 	@Test
-	public void valuesFromTenGpUpAreWholeGp()
+	public void valuesFromTenToHundredGpKeepUpToOneDecimal()
 	{
 		assertEquals("10", UIUtilities.formatPerItem(9.999));
-		assertEquals("13", UIUtilities.formatPerItem(12.6));
+		assertEquals("10.9", UIUtilities.formatPerItem(10.908));
+		assertEquals("42.6", UIUtilities.formatPerItem(42.607));
+		assertEquals("62.3", UIUtilities.formatPerItem(62.333));
+		assertEquals("99.6", UIUtilities.formatPerItem(99.629));
+		assertEquals("13", UIUtilities.formatPerItem(13.02));
+		assertEquals("-15.2", UIUtilities.formatPerItem(-15.2));
+		assertEquals("55.4", UIUtilities.formatPerItemStack(55.428, true));
+	}
+
+	@Test
+	public void valuesFromHundredGpUpAreWholeGp()
+	{
+		assertEquals("100", UIUtilities.formatPerItem(99.96));
+		assertEquals("101", UIUtilities.formatPerItem(100.6));
 		assertEquals("1,234", UIUtilities.formatPerItem(1234.4));
-		assertEquals("-15", UIUtilities.formatPerItem(-15.2));
+		assertEquals("-150", UIUtilities.formatPerItem(-150.2));
 	}
 
 	@Test

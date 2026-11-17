@@ -85,11 +85,18 @@ public class UIUtilities
 		"#,###.#",
 		DecimalFormatSymbols.getInstance(Locale.ENGLISH)
 	);
-	private static final NumberFormat PER_ITEM_FORMATTER = new DecimalFormat(
+	private static final NumberFormat PER_ITEM_TWO_DECIMALS_FORMATTER = new DecimalFormat(
 		"#,##0.##",
 		DecimalFormatSymbols.getInstance(Locale.ENGLISH)
 	);
-	private static final double PER_ITEM_DECIMALS_THRESHOLD = 10;
+	private static final NumberFormat PER_ITEM_ONE_DECIMAL_FORMATTER = new DecimalFormat(
+		"#,##0.#",
+		DecimalFormatSymbols.getInstance(Locale.ENGLISH)
+	);
+	/** Per-item values below this keep up to two decimals. */
+	private static final double PER_ITEM_TWO_DECIMALS_BELOW = 10;
+	/** Per-item values below this (and from {@link #PER_ITEM_TWO_DECIMALS_BELOW} up) keep up to one decimal. */
+	private static final double PER_ITEM_ONE_DECIMAL_BELOW = 100;
 
 	/**
 	 * This method calculates the red-yellow-green gradient factored by the percentage or max gradient.
@@ -143,18 +150,14 @@ public class UIUtilities
 	}
 
 	/**
-	 * Formats a per-item gp value such as an average price or profit each. Values under
-	 * {@link #PER_ITEM_DECIMALS_THRESHOLD} keep up to two decimals, as a fraction of a gp is a large share
-	 * of a cheap item's price (a 1.5 gp/ea margin is not "1 gp/ea"). Larger values are rounded to whole gp.
+	 * Formats a per-item gp value such as an average price or profit each. A fraction of a gp is a
+	 * large share of a cheap item's price (a 1.5 gp/ea margin is not "1 gp/ea"), so values under 10gp keep
+	 * up to two decimals and values under 100gp keep up to one. Larger values are rounded to whole gp.
 	 */
 	public static synchronized String formatPerItem(double value)
 	{
-		double rounded = roundToCents(value);
-		if (Math.abs(rounded) < PER_ITEM_DECIMALS_THRESHOLD)
-		{
-			return PER_ITEM_FORMATTER.format(rounded);
-		}
-		return QuantityFormatter.formatNumber(Math.round(value));
+		String withDecimals = formatPerItemDecimals(value);
+		return withDecimals != null ? withDecimals : QuantityFormatter.formatNumber(Math.round(value));
 	}
 
 	/**
@@ -163,18 +166,32 @@ public class UIUtilities
 	 */
 	public static synchronized String formatPerItemStack(double value, boolean precise)
 	{
-		double rounded = roundToCents(value);
-		if (Math.abs(rounded) < PER_ITEM_DECIMALS_THRESHOLD)
-		{
-			return PER_ITEM_FORMATTER.format(rounded);
-		}
-		return quantityToRSDecimalStack(Math.round(value), precise);
+		String withDecimals = formatPerItemDecimals(value);
+		return withDecimals != null ? withDecimals : quantityToRSDecimalStack(Math.round(value), precise);
 	}
 
-	private static double roundToCents(double value)
+	/**
+	 * @return the value with its decimals if it is small enough to keep any, otherwise null
+	 */
+	private static String formatPerItemDecimals(double value)
+	{
+		double hundredths = roundTo(value, 100);
+		if (Math.abs(hundredths) < PER_ITEM_TWO_DECIMALS_BELOW)
+		{
+			return PER_ITEM_TWO_DECIMALS_FORMATTER.format(hundredths);
+		}
+		double tenths = roundTo(value, 10);
+		if (Math.abs(tenths) < PER_ITEM_ONE_DECIMAL_BELOW)
+		{
+			return PER_ITEM_ONE_DECIMAL_FORMATTER.format(tenths);
+		}
+		return null;
+	}
+
+	private static double roundTo(double value, int scale)
 	{
 		// Adding 0.0 turns -0.0 into 0.0, so tiny losses don't render as "-0".
-		return Math.round(value * 100) / 100.0 + 0.0;
+		return Math.round(value * scale) / (double) scale + 0.0;
 	}
 
 	public static JDialog createModalFromPanel(Component parent, JComponent panel)
