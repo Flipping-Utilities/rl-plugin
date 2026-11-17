@@ -86,6 +86,35 @@ public class WikiDataFetcherJobTest {
         }
     }
 
+    @Test
+    public void hardcoreWorldsRequestHardcoreMarketPrices() throws Exception {
+        ManualClient client = new ManualClient();
+        WikiDataFetcherJob job = job(client);
+        try {
+            List<WikiRequestWrapper> received = new ArrayList<>();
+            job.subscribe((prices, time) -> received.add(prices));
+            job.onWorldSwitch(EnumSet.of(WorldType.MEMBERS, WorldType.HARDCORE_MAIN));
+            assertEquals(WikiDataSource.HARDCORE, job.getSource());
+            assertEquals("/api/v2/osrs-hc/latest", client.calls.get(0).request().url().encodedPath());
+            assertTrue(client.calls.get(0).respond(200, prices(300)).closed);
+            assertEquals(WikiDataSource.HARDCORE, received.get(0).getWikiDataSource());
+
+            job.onWorldSwitch(EnumSet.of(WorldType.MEMBERS));
+            assertEquals("/api/v2/osrs/latest", client.calls.get(1).request().url().encodedPath());
+        } finally {
+            job.executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void worldTypesMapToTheirMarket() {
+        assertEquals(WikiDataSource.REGULAR, WikiDataSource.fromWorldType(EnumSet.of(WorldType.MEMBERS)));
+        assertEquals(WikiDataSource.HARDCORE, WikiDataSource.fromWorldType(EnumSet.of(WorldType.HARDCORE_MAIN)));
+        assertEquals(WikiDataSource.DMM, WikiDataSource.fromWorldType(EnumSet.of(WorldType.DEADMAN)));
+        assertTrue(WikiDataSource.isHardcoreWorld(EnumSet.of(WorldType.MEMBERS, WorldType.HARDCORE_MAIN)));
+        assertFalse(WikiDataSource.isHardcoreWorld(EnumSet.of(WorldType.MEMBERS)));
+    }
+
     private WikiDataFetcherJob job(ManualClient client) {
         FlippingPlugin plugin = new FlippingPlugin();
         plugin.gson = new Gson();
