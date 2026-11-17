@@ -38,7 +38,11 @@ import java.time.Instant;
 @AllArgsConstructor
 public class Flip
 {
-	long buyPrice;
+	/**
+	 * Average price paid per item. It is a double because a flip can consume several buys at
+	 * different prices, and truncating that average misstates the profit of cheap items.
+	 */
+	double buyPrice;
 	long sellPrice;
 	long quantity;
 	Instant time;

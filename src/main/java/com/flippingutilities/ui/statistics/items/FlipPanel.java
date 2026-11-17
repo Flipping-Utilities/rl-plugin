@@ -56,8 +56,8 @@ public class FlipPanel extends JPanel
 		setBorder(new EmptyBorder(2,2,2,2));
 
 
-		long profitEach = flip.getSellPrice() - flip.getBuyPrice();
-		long profitTotal = profitEach * flip.getQuantity();
+		double profitEach = flip.getSellPrice() - flip.getBuyPrice();
+		long profitTotal = Math.round(profitEach * flip.getQuantity());
 
 		title.setOpaque(true);
 		title.setBackground(ColorScheme.DARKER_GRAY_COLOR);
@@ -69,11 +69,11 @@ public class FlipPanel extends JPanel
 		JLabel sellPriceText = new JLabel("Sell Price:");
 		JLabel profitText = new JLabel((profitTotal >= 0) ? "Profit: " : "Loss: ");
 
-		JLabel buyPriceVal = new JLabel(QuantityFormatter.formatNumber(flip.getBuyPrice()) + " gp", SwingConstants.RIGHT);
+		JLabel buyPriceVal = new JLabel(UIUtilities.formatPerItem(flip.getBuyPrice()) + " gp", SwingConstants.RIGHT);
 		JLabel sellPriceVal = new JLabel(QuantityFormatter.formatNumber(flip.getSellPrice()) + " gp", SwingConstants.RIGHT);
 
 		String profitString = UIUtilities.quantityToRSDecimalStack(profitTotal, true) + " gp"
-			+ ((flip.getQuantity() <= 1) ? "" : " (" + UIUtilities.quantityToRSDecimalStack(profitEach, false) + " gp ea)");
+			+ ((flip.getQuantity() <= 1) ? "" : " (" + UIUtilities.formatPerItemStack(profitEach, false) + " gp ea)");
 
 		JLabel profitVal = new JLabel(profitString);
 

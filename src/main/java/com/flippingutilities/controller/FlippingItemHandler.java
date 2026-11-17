@@ -47,11 +47,11 @@ public class FlippingItemHandler {
                     List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
                     long quantity = FlippingItem.countFlipQuantity(adjustedOffers);
                     if (quantity == 0) {
-                        return Long.MIN_VALUE;
+                        return -Double.MAX_VALUE;
                     }
 
                     long profit = FlippingItem.getProfit(adjustedOffers);
-                    return profit / quantity;
+                    return (double) profit / quantity;
                 }));
                 break;
             case ROI:

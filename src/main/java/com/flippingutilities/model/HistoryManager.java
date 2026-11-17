@@ -637,7 +637,7 @@ public class HistoryManager
 					int amountTaken = buy.getCurrentQuantityInTrade() - leftOver;
 					totalBuyCost += (long) amountTaken * buy.getPrice();
 					buy.setCurrentQuantityInTrade(leftOver);
-					flips.add(new Flip(totalBuyCost / sell.getCurrentQuantityInTrade(), sell.getPrice(), sell.getCurrentQuantityInTrade(), sell.getTime(), false, !sell.isComplete()));
+					flips.add(new Flip((double) totalBuyCost / sell.getCurrentQuantityInTrade(), sell.getPrice(), sell.getCurrentQuantityInTrade(), sell.getTime(), false, !sell.isComplete()));
 					break;
 				}
 				else
@@ -650,7 +650,7 @@ public class HistoryManager
 			//buys only partially exhausted a sell
 			if (buyIdx == buys.size() && numBuysSeen != 0)
 			{
-				flips.add(new Flip(totalBuyCost / numBuysSeen, sell.getPrice(), numBuysSeen, sell.getTime(), false, true));
+				flips.add(new Flip((double) totalBuyCost / numBuysSeen, sell.getPrice(), numBuysSeen, sell.getTime(), false, true));
 				break;
 			}
 		}
