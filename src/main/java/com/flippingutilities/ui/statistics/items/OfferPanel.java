@@ -130,10 +130,10 @@ public class OfferPanel extends JPanel {
         body.setBorder(new EmptyBorder(0, 2, 1, 2));
 
         JLabel priceLabel = new JLabel("Price:");
-        JLabel priceVal = new JLabel(QuantityFormatter.formatNumber(offer.getPrice()) + " gp", SwingConstants.RIGHT);
+        JLabel priceVal = new JLabel(UIUtilities.formatPerItem(offer.getExactPrice()) + " gp", SwingConstants.RIGHT);
 
         JLabel totalPriceLabel = new JLabel("Total:");
-        JLabel totalPriceVal = new JLabel(QuantityFormatter.formatNumber(offer.getPrice() * offer.getCurrentQuantityInTrade()) + " gp", SwingConstants.RIGHT);
+        JLabel totalPriceVal = new JLabel(QuantityFormatter.formatNumber(offer.getTotalValue()) + " gp", SwingConstants.RIGHT);
 
         JLabel[] descriptions = {priceLabel, totalPriceLabel};
         JLabel[] vals = {priceVal, totalPriceVal};

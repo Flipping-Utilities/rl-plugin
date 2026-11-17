@@ -70,7 +70,7 @@ public class FlipPanel extends JPanel
 		JLabel profitText = new JLabel((profitTotal >= 0) ? "Profit: " : "Loss: ");
 
 		JLabel buyPriceVal = new JLabel(UIUtilities.formatPerItem(flip.getBuyPrice()) + " gp", SwingConstants.RIGHT);
-		JLabel sellPriceVal = new JLabel(QuantityFormatter.formatNumber(flip.getSellPrice()) + " gp", SwingConstants.RIGHT);
+		JLabel sellPriceVal = new JLabel(UIUtilities.formatPerItem(flip.getSellPrice()) + " gp", SwingConstants.RIGHT);
 
 		String profitString = UIUtilities.quantityToRSDecimalStack(profitTotal, true) + " gp"
 			+ ((flip.getQuantity() <= 1) ? "" : " (" + UIUtilities.formatPerItemStack(profitEach, false) + " gp ea)");

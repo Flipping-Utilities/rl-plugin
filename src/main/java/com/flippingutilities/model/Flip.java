@@ -43,7 +43,10 @@ public class Flip
 	 * different prices, and truncating that average misstates the profit of cheap items.
 	 */
 	double buyPrice;
-	long sellPrice;
+	/**
+	 * Average post-tax price received per item, kept exact for the same reason.
+	 */
+	double sellPrice;
 	long quantity;
 	Instant time;
 	boolean marginCheck;

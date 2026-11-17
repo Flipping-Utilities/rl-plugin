@@ -64,7 +64,7 @@ public class RecipeFlip {
     private long getIngredientsValue(boolean isBuyOffer) {
         return getPartialOffers().stream()
             .filter(po -> po.getOffer() != null && po.getOffer().isBuy() == isBuyOffer)
-            .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
+            .mapToLong(po -> po.getOffer().getValueOf(po.amountConsumed))
             .sum();
     }
 
@@ -96,11 +96,11 @@ public class RecipeFlip {
 
         long revenue = offers.stream()
             .filter(po -> !po.getOffer().isBuy())
-            .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
+            .mapToLong(po -> po.getOffer().getValueOf(po.amountConsumed))
             .sum();
         long expense = offers.stream()
             .filter(po -> po.getOffer().isBuy())
-            .mapToLong(po -> po.amountConsumed * po.getOffer().getPrice())
+            .mapToLong(po -> po.getOffer().getValueOf(po.amountConsumed))
             .sum();
         return revenue - expense;
     }
