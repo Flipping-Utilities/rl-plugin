@@ -285,6 +285,7 @@ public class SlotStateDrawer {
         quickLookWidget.setOnClickListener((JavaScriptCallback) ev -> {
             if (Objects.equals(hoveredSlotIndex, slot.getIndex())
                     && currentTooltip != null && currentTooltip.canRetryGraph()) {
+                // Show loading at once; the next frame sees no fetched item and requests again.
                 currentlyFetchedItemId = null;
                 currentTooltip.beginGraphLoad();
             } else {
@@ -393,29 +394,31 @@ public class SlotStateDrawer {
 
         if (currentTooltip == null || !Objects.equals(currentlyFetchedItemId, slotInfo.getItemId())
                 || currentlyFetchedTimestep != timestep) {
-            currentTooltip = new QuickLookTooltip();
+            final QuickLookTooltip tooltip = new QuickLookTooltip();
+            currentTooltip = tooltip;
             currentlyFetchedItemId = slotInfo.getItemId();
             currentlyFetchedTimestep = timestep;
             final int slotIndex = hoveredSlotIndex;
             final int itemId = slotInfo.getItemId();
-            graphDataLoader.load(itemId, timestep, response -> {
-                if (!Objects.equals(hoveredSlotIndex, slotIndex) || slotIndex >= slotInfos.size()
-                        || currentTooltip == null || plugin.getConfig().priceGraphTimestep() != timestep) {
-                    return;
-                }
-                // Offers can change before another render has requested the new graph.
-                slotInfos.get(slotIndex).filter(current -> current.getItemId() == itemId)
-                    .ifPresent(current -> currentTooltip.setGraphData(response, timestep, current.getOfferPrice()));
-            }, failure -> {
-                if (Objects.equals(hoveredSlotIndex, slotIndex) && slotIndex < slotInfos.size()
-                        && currentTooltip != null && plugin.getConfig().priceGraphTimestep() == timestep
-                        && slotInfos.get(slotIndex).filter(current -> current.getItemId() == itemId).isPresent()) {
-                    currentTooltip.showGraphFailure();
-                }
-            });
+            // Offers can change before another render has requested the new graph, so
+            // both outcomes re-check that the tooltip still shows this slot's item.
+            graphDataLoader.load(itemId, timestep,
+                response -> stillShowing(tooltip, slotIndex, itemId, timestep)
+                    .ifPresent(current -> tooltip.setGraphData(response, timestep, current.getOfferPrice())),
+                failure -> stillShowing(tooltip, slotIndex, itemId, timestep)
+                    .ifPresent(current -> tooltip.showGraphFailure()));
         }
         currentTooltip.update(slotInfo, margins);
         tooltipManager.add(new Tooltip(currentTooltip));
+    }
+
+    /** The slot's current offer when the tooltip is still showing that item and interval. */
+    private Optional<SlotInfo> stillShowing(QuickLookTooltip tooltip, int slotIndex, int itemId, Timestep timestep) {
+        if (currentTooltip != tooltip || !Objects.equals(hoveredSlotIndex, slotIndex)
+                || slotIndex >= slotInfos.size() || plugin.getConfig().priceGraphTimestep() != timestep) {
+            return Optional.empty();
+        }
+        return slotInfos.get(slotIndex).filter(current -> current.getItemId() == itemId);
     }
 
 }
