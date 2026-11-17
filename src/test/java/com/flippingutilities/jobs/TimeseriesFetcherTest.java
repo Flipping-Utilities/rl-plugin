@@ -6,6 +6,7 @@ import com.flippingutilities.model.CachedTimeseries;
 import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesResponse;
 import com.flippingutilities.ui.widgets.OfferGraphChartOverlay.GraphDuration;
+import com.flippingutilities.utilities.WikiDataSource;
 import com.google.gson.Gson;
 import okhttp3.HttpUrl;
 import okhttp3.ResponseBody;
@@ -16,6 +17,7 @@ import okio.Timeout;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -261,6 +263,36 @@ public class TimeseriesFetcherTest {
         assertEquals(41, client.calls.size());
         fetcher.fetch(2, Timestep.TWENTY_FOUR_HOURS, responses::add);
         assertEquals(42, client.calls.size());
+    }
+
+    @Test
+    public void hardcoreWorldsRequestAndCacheHardcoreMarketHistorySeparately() throws Exception {
+        ManualClient client = new ManualClient();
+        FlippingPlugin plugin = new FlippingPlugin();
+        plugin.gson = new Gson();
+        TimeseriesFetcher fetcher = new TimeseriesFetcher(client, plugin);
+        List<TimeseriesResponse> received = new ArrayList<>();
+
+        fetcher.fetch(4151, Timestep.FIVE_MINUTES, received::add);
+        assertEquals("/api/v2/osrs/timeseries", client.calls.get(0).request().url().encodedPath());
+        assertTrue(client.calls.get(0).respond(200, HISTORY).closed);
+
+        setWikiDataSource(plugin, WikiDataSource.HARDCORE);
+        fetcher.fetch(4151, Timestep.FIVE_MINUTES, received::add);
+        assertEquals("Regular market history must not be served on a hardcore world", 2, client.calls.size());
+        assertEquals("/api/v2/osrs-hc/timeseries", client.calls.get(1).request().url().encodedPath());
+        assertTrue(client.calls.get(1).respond(200, HISTORY).closed);
+
+        setWikiDataSource(plugin, WikiDataSource.REGULAR);
+        fetcher.fetch(4151, Timestep.FIVE_MINUTES, received::add);
+        assertEquals(2, client.calls.size());
+        assertEquals(3, received.size());
+    }
+
+    private static void setWikiDataSource(FlippingPlugin plugin, WikiDataSource source) throws Exception {
+        Field field = FlippingPlugin.class.getDeclaredField("currentWikiDataSource");
+        field.setAccessible(true);
+        field.set(plugin, source);
     }
 
     private CachedTimeseries cached(Instant fetched, Long interval) {

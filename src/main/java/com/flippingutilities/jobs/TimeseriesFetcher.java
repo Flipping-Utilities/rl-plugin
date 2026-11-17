@@ -6,6 +6,7 @@ import com.flippingutilities.model.LruLinkedHashMap;
 import com.flippingutilities.model.TimeseriesCacheKey;
 import com.flippingutilities.model.Timestep;
 import com.flippingutilities.model.TimeseriesResponse;
+import com.flippingutilities.utilities.WikiDataSource;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -30,8 +31,8 @@ import java.util.function.Consumer;
 @Singleton
 public class TimeseriesFetcher {
     // v2 replaced the granularity ("timestep") parameter with required lookback periods;
-    // the point spacing is decided by the API and reported in the response.
-    private static final String TIMESERIES_API_URL = "https://prices.runescape.wiki/api/v2/osrs/timeseries";
+    // the point spacing is decided by the API and reported in the response. The URL depends on
+    // the market of the current world (see WikiDataSource).
     private static final String QUERY_PARAM_LOOKBACK = "lookback";
     private static final String QUERY_PARAM_ID = "id";
     private static final String USER_AGENT_HEADER = "User-Agent";
@@ -61,7 +62,8 @@ public class TimeseriesFetcher {
     public void fetch(int itemId, Timestep timestep, Consumer<TimeseriesResponse> callback) {
         Objects.requireNonNull(timestep, "timestep");
         Objects.requireNonNull(callback, "callback");
-        TimeseriesCacheKey cacheKey = new TimeseriesCacheKey(itemId, timestep);
+        WikiDataSource source = plugin == null ? WikiDataSource.REGULAR : plugin.getCurrentWikiDataSource();
+        TimeseriesCacheKey cacheKey = new TimeseriesCacheKey(itemId, timestep, source);
         TimeseriesResponse cachedResponse = null;
         synchronized (requestLock) {
             CachedTimeseries cachedData = cache.get(cacheKey);
@@ -85,7 +87,7 @@ public class TimeseriesFetcher {
 
         try {
             HttpUrl url = HttpUrl
-                    .parse(TIMESERIES_API_URL)
+                    .parse(source.getTimeseriesUrl())
                     .newBuilder()
                     .addQueryParameter(QUERY_PARAM_LOOKBACK, timestep.getApiValue())
                     .addQueryParameter(QUERY_PARAM_ID, String.valueOf(itemId))
