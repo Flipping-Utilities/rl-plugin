@@ -13,8 +13,6 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
 import java.awt.*;
 import java.time.Instant;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 public class LoginPanel extends JPanel {
     FlippingPlugin plugin;
@@ -24,6 +22,11 @@ public class LoginPanel extends JPanel {
     boolean errorWhenSendingSlotRequest;
     boolean notSendingRequestDueToNoChange;
     LoggedInPanel loggedInPanel;
+    /**
+     * Refreshes the slot sending health text. A swing timer runs on the EDT, so it needs no thread of its own
+     * and can be stopped when the plugin shuts down.
+     */
+    private final Timer healthTimer = new Timer(1000, e -> checkHealth());
 
     public LoginPanel(FlippingPlugin plugin) {
         this.plugin = plugin;
@@ -36,7 +39,19 @@ public class LoginPanel extends JPanel {
         });
 
         add(createLoggedOutPanel());
-        Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(this::checkHealth, 5, 1, TimeUnit.SECONDS);
+        healthTimer.setInitialDelay(5000);
+        healthTimer.start();
+    }
+
+    /**
+     * Stops the health polling so that a disabled plugin does not keep a timer referencing it.
+     */
+    public void dispose() {
+        healthTimer.stop();
+    }
+
+    boolean isHealthPollingActive() {
+        return healthTimer.isRunning();
     }
 
     public void addOnViewChange(Runnable r) {
@@ -47,23 +62,21 @@ public class LoginPanel extends JPanel {
         if (!showingLoggedInView) {
             return;
         }
-        SwingUtilities.invokeLater(() -> {
-            if (plugin.getCurrentlyLoggedInAccount() == null) {
-                timeOfLastSuccessfulRequest = null;
-                loggedInPanel.setSlotFeatureHealthText("Inactive (not logged in)");
-            } else if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount())) {
-                loggedInPanel.setSlotFeatureHealthText("Inactive (not registered yet)");
-            } else if (timeOfLastSuccessfulRequest == null) {
-                loggedInPanel.setSlotFeatureHealthText("Active (starting up)");
-            } else if (notSendingRequestDueToNoChange) {
-                loggedInPanel.setSlotFeatureHealthText("Active (no slot change detected)");
-            } else if (errorWhenSendingSlotRequest) {
-                loggedInPanel.setSlotFeatureHealthText("Inactive (error on slot update)");
-            } else {
-                long diff = Instant.now().getEpochSecond() - timeOfLastSuccessfulRequest.getEpochSecond();
-                loggedInPanel.setSlotFeatureHealthText(String.format("Active (%ds since last update)", diff));
-            }
-        });
+        if (plugin.getCurrentlyLoggedInAccount() == null) {
+            timeOfLastSuccessfulRequest = null;
+            loggedInPanel.setSlotFeatureHealthText("Inactive (not logged in)");
+        } else if (!plugin.getApiAuthHandler().canCommunicateWithApi(plugin.getCurrentlyLoggedInAccount())) {
+            loggedInPanel.setSlotFeatureHealthText("Inactive (not registered yet)");
+        } else if (timeOfLastSuccessfulRequest == null) {
+            loggedInPanel.setSlotFeatureHealthText("Active (starting up)");
+        } else if (notSendingRequestDueToNoChange) {
+            loggedInPanel.setSlotFeatureHealthText("Active (no slot change detected)");
+        } else if (errorWhenSendingSlotRequest) {
+            loggedInPanel.setSlotFeatureHealthText("Inactive (error on slot update)");
+        } else {
+            long diff = Instant.now().getEpochSecond() - timeOfLastSuccessfulRequest.getEpochSecond();
+            loggedInPanel.setSlotFeatureHealthText(String.format("Active (%ds since last update)", diff));
+        }
     }
 
     public void onSlotRequest(int success) {
