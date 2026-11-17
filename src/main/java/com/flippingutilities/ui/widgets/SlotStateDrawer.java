@@ -2,7 +2,9 @@ package com.flippingutilities.ui.widgets;
 
 import com.flippingutilities.controller.FlippingPlugin;
 import com.flippingutilities.jobs.TimeseriesFetcher;
+import com.flippingutilities.model.Timestep;
 import com.flippingutilities.ui.uiutilities.GeSpriteLoader;
+import com.flippingutilities.ui.uiutilities.GraphDataLoader;
 import com.flippingutilities.utilities.SlotInfo;
 import com.flippingutilities.utilities.SlotPredictedState;
 import com.flippingutilities.utilities.WikiItemMargins;
@@ -29,6 +31,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -44,7 +47,7 @@ public class SlotStateDrawer {
     private final FlippingPlugin plugin;
     private final Client client;
     private final TooltipManager tooltipManager;
-    private final TimeseriesFetcher timeseriesFetcher;
+    private final GraphDataLoader graphDataLoader;
 
     private WikiRequest wikiRequest;
     private Widget[] slotWidgets;
@@ -54,6 +57,7 @@ public class SlotStateDrawer {
     private Integer hoveredSlotIndex = null;
     private QuickLookTooltip currentTooltip = null;
     private Integer currentlyFetchedItemId = null;
+    private Timestep currentlyFetchedTimestep = null;
 
     public SlotStateDrawer(
             FlippingPlugin plugin,
@@ -64,20 +68,22 @@ public class SlotStateDrawer {
         this.plugin = plugin;
         this.client = client;
         this.tooltipManager = toolTipManager;
-        this.timeseriesFetcher = timeseriesFetcher;
+        this.graphDataLoader = new GraphDataLoader(timeseriesFetcher, plugin.getClientThread());
     }
 
     @Subscribe
     public void onBeforeRender(BeforeRender event) {
-        if (hoveredSlotIndex == null || !plugin.shouldEnhanceSlots()) {
-            currentTooltip = null;
+        if (hoveredSlotIndex == null) {
+            return;
+        }
+        if (!plugin.shouldEnhanceSlots() || !plugin.getConfig().quickLookupEnabled()) {
+            clearHover();
             return;
         }
 
         final Widget geWindow = client.getWidget(InterfaceID.GeOffers.UNIVERSE);
         if (geWindow == null || geWindow.isHidden()) {
-            hoveredSlotIndex = null;
-            currentTooltip = null;
+            clearHover();
             return;
         }
 
@@ -85,8 +91,7 @@ public class SlotStateDrawer {
                 InterfaceID.GeOffers.SETUP
         );
         if (offerContainer != null && !offerContainer.isHidden()) {
-            hoveredSlotIndex = null;
-            currentTooltip = null;
+            clearHover();
             return;
         }
 
@@ -161,9 +166,7 @@ public class SlotStateDrawer {
                 log.debug("could not reset enhancements on slot {}", i, e);
             }
         }
-        hoveredSlotIndex = null;
-        currentTooltip = null;
-        currentlyFetchedItemId = null;
+        clearHover();
     }
 
     /**
@@ -266,54 +269,29 @@ public class SlotStateDrawer {
         quickLookWidget.setTextShadowed(true);
         quickLookWidget.setHasListener(true);
 
-        // Set mouse listeners to control hover state and trigger data fetching
-        quickLookWidget.setOnMouseOverListener(
-                (JavaScriptCallback) ev -> {
-                    this.hoveredSlotIndex = slot.getIndex();
-                    if (currentlyFetchedItemId == null || !currentlyFetchedItemId.equals(slot.getItemId())) {
-                        currentlyFetchedItemId = slot.getItemId();
-
-                        if (plugin.getConfig().quickLookupEnabled()) {
-                            timeseriesFetcher.fetch(slot.getItemId(), plugin.getConfig().priceGraphTimestep(), tsResponse -> {
-                                if (hoveredSlotIndex == null || hoveredSlotIndex >= slotInfos.size()) {
-                                    return;
-                                }
-                                if (tsResponse == null) {
-                                    return;
-                                }
-                                if (currentTooltip == null) {
-                                    currentTooltip = new QuickLookTooltip();
-                                    Optional<SlotInfo> slotInfoOpt = slotInfos.get(hoveredSlotIndex);
-                                    if (slotInfoOpt.isPresent()) {
-                                        SlotInfo slotInfo = slotInfoOpt.get();
-                                        if (wikiRequest != null && wikiRequest.getData() != null) {
-                                            WikiItemMargins margins = wikiRequest.getData().get(slotInfo.getItemId());
-                                            if (margins != null) {
-                                                currentTooltip.update(slotInfo, margins);
-                                            }
-                                        }
-                                    }
-                                }
-                                if (currentTooltip != null) {
-                                    currentTooltip.setGraphData(tsResponse, plugin.getConfig().priceGraphTimestep(), slot.getOfferPrice());
-                                }
-                            });
-                        }
-                    }
-                }
-        );
-
-        quickLookWidget.setOnMouseLeaveListener(
-                (JavaScriptCallback) ev -> {
-                    this.hoveredSlotIndex = null;
-                    this.currentTooltip = null;
-                    this.currentlyFetchedItemId = null;
-                }
-        );
-
-        quickLookWidget.setOnClickListener(
-                (JavaScriptCallback) ev -> this.hoveredSlotIndex = null
-        );
+        // Widgets can be reused for a different offer. Resolve their current item
+        // from slotInfos when rendering instead of capturing the creation-time offer.
+        quickLookWidget.setOnMouseOverListener((JavaScriptCallback) ev -> {
+            if (!Objects.equals(hoveredSlotIndex, slot.getIndex())) {
+                clearHover();
+                hoveredSlotIndex = slot.getIndex();
+            }
+        });
+        quickLookWidget.setOnMouseLeaveListener((JavaScriptCallback) ev -> {
+            if (Objects.equals(hoveredSlotIndex, slot.getIndex())) {
+                clearHover();
+            }
+        });
+        quickLookWidget.setOnClickListener((JavaScriptCallback) ev -> {
+            if (Objects.equals(hoveredSlotIndex, slot.getIndex())
+                    && currentTooltip != null && currentTooltip.canRetryGraph()) {
+                // Show loading at once; the next frame sees no fetched item and requests again.
+                currentlyFetchedItemId = null;
+                currentTooltip.beginGraphLoad();
+            } else {
+                clearHover();
+            }
+        });
 
         quickLookWidget.revalidate();
         return quickLookWidget;
@@ -389,25 +367,58 @@ public class SlotStateDrawer {
         );
     }
 
+    private void clearHover() {
+        hoveredSlotIndex = null;
+        currentTooltip = null;
+        currentlyFetchedItemId = null;
+        currentlyFetchedTimestep = null;
+        graphDataLoader.clear();
+    }
+
     private void buildAndShowTooltip() {
-        if (hoveredSlotIndex >= slotInfos.size() || wikiRequest == null || wikiRequest.getData() == null) {
+        if (hoveredSlotIndex < 0 || hoveredSlotIndex >= slotInfos.size()
+                || wikiRequest == null || wikiRequest.getData() == null) {
+            clearHover();
             return;
         }
 
         Optional<SlotInfo> slotInfoOpt = slotInfos.get(hoveredSlotIndex);
         if (!slotInfoOpt.isPresent()) {
+            clearHover();
             return;
         }
 
         SlotInfo slotInfo = slotInfoOpt.get();
         WikiItemMargins margins = wikiRequest.getData().get(slotInfo.getItemId());
+        Timestep timestep = plugin.getConfig().priceGraphTimestep();
 
-        if (currentTooltip == null) {
-            currentTooltip = new QuickLookTooltip();
+        if (currentTooltip == null || !Objects.equals(currentlyFetchedItemId, slotInfo.getItemId())
+                || currentlyFetchedTimestep != timestep) {
+            final QuickLookTooltip tooltip = new QuickLookTooltip();
+            currentTooltip = tooltip;
+            currentlyFetchedItemId = slotInfo.getItemId();
+            currentlyFetchedTimestep = timestep;
+            final int slotIndex = hoveredSlotIndex;
+            final int itemId = slotInfo.getItemId();
+            // Offers can change before another render has requested the new graph, so
+            // both outcomes re-check that the tooltip still shows this slot's item.
+            graphDataLoader.load(itemId, timestep,
+                response -> stillShowing(tooltip, slotIndex, itemId, timestep)
+                    .ifPresent(current -> tooltip.setGraphData(response, timestep, current.getOfferPrice())),
+                failure -> stillShowing(tooltip, slotIndex, itemId, timestep)
+                    .ifPresent(current -> tooltip.showGraphFailure()));
         }
         currentTooltip.update(slotInfo, margins);
-
         tooltipManager.add(new Tooltip(currentTooltip));
+    }
+
+    /** The slot's current offer when the tooltip is still showing that item and interval. */
+    private Optional<SlotInfo> stillShowing(QuickLookTooltip tooltip, int slotIndex, int itemId, Timestep timestep) {
+        if (currentTooltip != tooltip || !Objects.equals(hoveredSlotIndex, slotIndex)
+                || slotIndex >= slotInfos.size() || plugin.getConfig().priceGraphTimestep() != timestep) {
+            return Optional.empty();
+        }
+        return slotInfos.get(slotIndex).filter(current -> current.getItemId() == itemId);
     }
 
 }
