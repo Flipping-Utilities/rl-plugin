@@ -288,12 +288,18 @@ public class OfferGraphChartOverlay extends Overlay implements MouseListener {
      * Enable the chart for the specified item & offer price
      */
     private void show(int itemId, long offerPrice) {
+        // The same item can be re-selected while its graph is shown, e.g. when a GE varp is
+        // re-sent. Keep the loaded graph and any pending chart price (it may be about to be
+        // entered into the price prompt) and only refetch when the item changes or has no data.
+        boolean sameItemLoaded = itemId == currentItemId && chart != null && chart.hasData();
         this.currentItemId = itemId;
         this.currentOfferPrice = offerPrice;
         if (chart != null) {
             chart.setOfferPrice(offerPrice);
         }
-        fetchGraphData();
+        if (!sameItemLoaded) {
+            fetchGraphData();
+        }
     }
 
     /**

@@ -166,9 +166,7 @@ public class SlotStateDrawer {
                 log.debug("could not reset enhancements on slot {}", i, e);
             }
         }
-        hoveredSlotIndex = null;
-        currentTooltip = null;
-        currentlyFetchedItemId = null;
+        clearHover();
     }
 
     /**
