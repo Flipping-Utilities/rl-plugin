@@ -291,6 +291,9 @@ public class MasterPanel extends PluginPanel
 			return;
 		}
 
+		//the selector is set up again when switching between the regular and hardcore trade histories
+		accountSelector.removeAllItems();
+
 		//adding an item causes the event listener (changeView) to fire which causes stat panel
 		//and flipping panel to rebuildItemsDisplay. I think this only happens on the first item you add.
 		accountSelector.addItem(FlippingPlugin.ACCOUNT_WIDE);

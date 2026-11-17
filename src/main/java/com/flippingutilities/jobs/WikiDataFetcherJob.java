@@ -27,9 +27,6 @@ import java.util.function.BiConsumer;
 @Slf4j
 public class WikiDataFetcherJob {
     public static int requestInterval = 60; //seconds
-    // Both markets use v2. The Deadman endpoint may return 404 outside active events.
-    static final String API = "https://prices.runescape.wiki/api/v2/osrs/latest";
-    static final String DEADMAN_API = "https://prices.runescape.wiki/api/v2/dmm/latest";
     FlippingPlugin plugin;
     ScheduledExecutorService executor;
     OkHttpClient httpClient;
@@ -37,7 +34,7 @@ public class WikiDataFetcherJob {
     Future wikiDataFetchTask;
     Instant timeOfLastRequestCompletion;
     boolean inFlightRequest = false;
-    String apiUrl = API;
+    WikiDataSource source = WikiDataSource.REGULAR;
     private long requestGeneration;
 
 
@@ -68,22 +65,14 @@ public class WikiDataFetcherJob {
     }
 
     public synchronized void onWorldSwitch(EnumSet<WorldType> worldType) {
-        if (worldType.contains(WorldType.DEADMAN)) {
-            log.debug("Switching to requesting deadman api");
-            apiUrl = DEADMAN_API;
-        }
-        else {
-            apiUrl = API;
-        }
-
+        source = WikiDataSource.fromWorldType(worldType);
+        log.debug("Requesting wiki prices from the {} market", source);
         attemptToFetchWikiData(true);
     }
 
-    private WikiDataSource getWikiDataSourceType() {
-        if (apiUrl.equals(DEADMAN_API)) {
-            return WikiDataSource.DMM;
-        }
-        return WikiDataSource.REGULAR;
+    /** The market prices are currently requested for. */
+    public synchronized WikiDataSource getSource() {
+        return source;
     }
 
 
@@ -103,8 +92,8 @@ public class WikiDataFetcherJob {
         }
         inFlightRequest = true;
         long generation = ++requestGeneration;
-        WikiDataSource source = getWikiDataSourceType();
-        Request request = new Request.Builder().header("User-Agent", "FlippingUtilities").url(apiUrl).build();
+        WikiDataSource source = this.source;
+        Request request = new Request.Builder().header("User-Agent", "FlippingUtilities").url(source.getLatestUrl()).build();
         httpClient.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {

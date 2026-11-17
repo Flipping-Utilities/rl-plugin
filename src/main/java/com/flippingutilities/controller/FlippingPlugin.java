@@ -227,6 +227,15 @@ public class FlippingPlugin extends Plugin {
     private EventBus eventBus;
 
     public TradePersister tradePersister;
+    /**
+     * Hardcore worlds have their own economy, so their trades are kept in a separate history folder
+     * (HARDCORE_DATA_FOLDER inside the plugin directory). This tracks which folder is loaded.
+     */
+    private boolean hardcoreDataLoaded;
+    static final String HARDCORE_DATA_FOLDER = "hc";
+    /** The wiki market whose prices apply to the world the player is on (or was last on). */
+    @Getter
+    private volatile WikiDataSource currentWikiDataSource = WikiDataSource.REGULAR;
     @Getter
     private RecipeHandler recipeHandler;
     private FlippingItemHandler flippingItemHandler;
@@ -239,9 +248,9 @@ public class FlippingPlugin extends Plugin {
     protected void startUp() throws IOException {
         accountCurrentlyViewed = ACCOUNT_WIDE;
 
-        Filepath directory = getPluginDirectory();
-        tradePersister = new TradePersister(gson, directory);
-        tradePersister.setupFlippingFolder();
+        hardcoreDataLoaded = false;
+        currentWikiDataSource = WikiDataSource.REGULAR;
+        tradePersister = createTradePersister(false);
         recipeHandler = new RecipeHandler(gson, httpClient, null);
         flippingItemHandler = new FlippingItemHandler(this);
 
@@ -281,6 +290,18 @@ public class FlippingPlugin extends Plugin {
                 case STARTING:
                 case UNKNOWN:
                     return false;
+            }
+
+            //if the plugin is enabled while logged in on a hardcore world, load the hardcore history
+            //right away instead of loading the regular one and switching on the login handling below
+            if (client.getGameState() == GameState.LOGGED_IN && isOnHardcoreWorld()) {
+                try {
+                    tradePersister = createTradePersister(true);
+                    hardcoreDataLoaded = true;
+                } catch (IOException | RuntimeException e) {
+                    //handleLogin retries the switch and won't track trades if it fails again
+                    log.warn("couldn't set up the hardcore history folder on startup", e);
+                }
             }
 
             //each step is guarded so a failure doesn't drop the invokeLater task, which would leave
@@ -404,6 +425,76 @@ public class FlippingPlugin extends Plugin {
         }
     }
 
+    /**
+     * Hopping between a hardcore world and a regular one doesn't log the account out, but the two have
+     * separate histories and markets. The client fires this when the hop starts, before the ge offers of
+     * the new world come in, so the account is logged out of the old history here; those offers are then
+     * queued until handleLogin has switched to the new world's history.
+     */
+    @Subscribe
+    public void onWorldChanged(WorldChanged event) {
+        if (currentlyLoggedInAccount == null) {
+            //not logged in yet, handleLogin picks the history and market of the world logged into
+            return;
+        }
+        if (isOnHardcoreWorld() != hardcoreDataLoaded) {
+            log.debug("hopped between a hardcore and a regular world, switching trade histories");
+            Safely.run("logging out before switching trade histories", this::handleLogout);
+            return;
+        }
+        WikiDataSource source = WikiDataSource.fromWorldType(client.getWorldType());
+        if (source != currentWikiDataSource) {
+            currentWikiDataSource = source;
+            if (wikiDataFetcherJob != null) {
+                wikiDataFetcherJob.onWorldSwitch(client.getWorldType());
+            }
+        }
+    }
+
+    private boolean isOnHardcoreWorld() {
+        return WikiDataSource.isHardcoreWorld(client.getWorldType());
+    }
+
+    private TradePersister createTradePersister(boolean hardcore) throws IOException {
+        Filepath directory = getPluginDirectory();
+        if (hardcore) {
+            directory = directory.joinSegment(HARDCORE_DATA_FOLDER);
+        }
+        TradePersister persister = new TradePersister(gson, directory);
+        persister.setupFlippingFolder();
+        return persister;
+    }
+
+    /**
+     * Stores the loaded history and replaces it with the one of the other folder (hardcore or regular),
+     * including the directory watched for changes made by other clients. Runs on the client thread, as
+     * loading account data uses the item manager.
+     */
+    private void switchTradeHistory(boolean hardcore) throws IOException {
+        log.info("switching to the {} trade history", hardcore ? "hardcore" : "regular");
+        TradePersister newPersister = createTradePersister(hardcore);
+        dataHandler.storeData();
+
+        boolean watchingDirectory = cacheUpdaterJob != null;
+        if (watchingDirectory) {
+            cacheUpdaterJob.stop();
+            cacheUpdaterJob = null;
+        }
+
+        tradePersister = newPersister;
+        hardcoreDataLoaded = hardcore;
+        dataHandler.thisClientLastStored = null;
+        dataHandler.loadData();
+        updateSinceLastItemAccountWideBuild = true;
+        updateSinceLastRecipeFlipGroupAccountWideBuild = true;
+        accountCurrentlyViewed = ACCOUNT_WIDE;
+        masterPanel.setupAccSelectorDropdown(new HashSet<>(dataHandler.getCurrentAccounts()));
+
+        if (watchingDirectory) {
+            startCacheUpdaterJob();
+        }
+    }
+
     private void onLoggedInGameState() {
         //keep scheduling this task until it returns true (when we have access to a display name)
         clientThread.invokeLater(() ->
@@ -442,8 +533,21 @@ public class FlippingPlugin extends Plugin {
     }
 
     public void handleLogin(String displayName) {
+        currentWikiDataSource = WikiDataSource.fromWorldType(client.getWorldType());
         if (wikiDataFetcherJob != null) {
             wikiDataFetcherJob.onWorldSwitch(client.getWorldType());
+        }
+        boolean hardcore = isOnHardcoreWorld();
+        if (hardcore != hardcoreDataLoaded) {
+            try {
+                switchTradeHistory(hardcore);
+            } catch (IOException | RuntimeException e) {
+                //recording these trades into the other world's history would mix the two economies
+                log.warn("couldn't switch to the {} trade history, not tracking this session",
+                    hardcore ? "hardcore" : "regular", e);
+                eventsReceivedBeforeFullLogin.clear();
+                return;
+            }
         }
         if (client.getVarbitValue(VarbitID.IRONMAN) != 0) {
                 log.debug("account is an ironman, not adding it to the cache");
@@ -618,9 +722,7 @@ public class FlippingPlugin extends Plugin {
     }
 
     private void startJobs() {
-        cacheUpdaterJob = new CacheUpdaterJob(tradePersister.getDirectory(), executor);
-        cacheUpdaterJob.subscribe(this::onDirectoryUpdate);
-        cacheUpdaterJob.start();
+        startCacheUpdaterJob();
 
         wikiDataFetcherJob = new WikiDataFetcherJob(this, httpClient);
         wikiDataFetcherJob.subscribe(this::onWikiFetch);
@@ -629,6 +731,12 @@ public class FlippingPlugin extends Plugin {
         slotStateSenderJob = new SlotSenderJob(this, httpClient);
         slotStateSenderJob.subscribe((success) -> loginPanel.onSlotRequest(success));
         slotStateSenderJob.start();
+    }
+
+    private void startCacheUpdaterJob() {
+        cacheUpdaterJob = new CacheUpdaterJob(tradePersister.getDirectory(), executor);
+        cacheUpdaterJob.subscribe(this::onDirectoryUpdate);
+        cacheUpdaterJob.start();
     }
 
     private void onWikiFetch(WikiRequestWrapper wikiRequestWrapper, Instant timeOfRequestCompletion) {
