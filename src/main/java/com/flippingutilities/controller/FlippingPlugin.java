@@ -386,6 +386,9 @@ public class FlippingPlugin extends Plugin {
             //onClientShutdown will no longer fire for it; store unsaved trades now
             dataHandler.storeData();
         }
+        if (loginPanel != null) {
+            loginPanel.dispose();
+        }
         if (masterPanel != null) {
             masterPanel.dispose();
         }
