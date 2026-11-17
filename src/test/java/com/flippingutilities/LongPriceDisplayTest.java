@@ -53,6 +53,11 @@ public class LongPriceDisplayTest {
         assertEquals(3_000_000_001L, historyOffer("<col=ffffff>3,000,000,001 coins", 1).getPreTaxPrice());
         assertEquals(3_000_000_001L,
             historyOffer("<col=ffffff>(9,000,000,003 - 15,000,000)</col>", 3).getPreTaxPrice());
+
+        //a taxed total that doesn't divide evenly keeps its exact average
+        OfferEvent uneven = historyOffer("<col=ffffff>(201 - 4)</col>", 2);
+        assertEquals(100L, uneven.getPreTaxPrice());
+        assertEquals(100.5, uneven.getExactPreTaxPrice(), 1e-9);
     }
 
     @Test

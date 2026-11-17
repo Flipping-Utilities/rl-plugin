@@ -94,7 +94,7 @@ public class HistoryTotalsTest
         assertEquals(2, flips.size());
         assertEquals(2_000_000_000L, flips.get(0).getQuantity());
         assertEquals(4, flips.get(0).getBuyPrice(), 0);
-        assertEquals(5L, flips.get(0).getSellPrice());
+        assertEquals(5, flips.get(0).getSellPrice(), 0);
         //the leftover 1b items of the second buy are matched against the second sell
         assertEquals(1_000_000_000L, flips.get(1).getQuantity());
         assertEquals(4, flips.get(1).getBuyPrice(), 0);

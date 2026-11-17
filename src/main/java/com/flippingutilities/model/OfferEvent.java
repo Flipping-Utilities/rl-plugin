@@ -96,6 +96,63 @@ public class OfferEvent
 	//used in the live slot view to show what price something was listed at
 	private transient long listedPrice;
 	private transient long spent;
+	/**
+	 * Exact average pre-tax price per item. {@link #price} is the truncated average, which drops the
+	 * fraction when an offer fills at several prices (3 @ 4gp + 2 @ 5gp is 4.4gp, not 4gp). Only set when
+	 * the average has a fraction, so it is null for whole-gp averages and for offers saved before it existed.
+	 * Stored per item rather than as a total so it stays correct when a partial offer reduces the quantity.
+	 */
+	@SerializedName("pE")
+	private Double exactPreTaxPrice;
+
+	/**
+	 * @return the exact average price per item if the average isn't a whole number of gp, otherwise null.
+	 */
+	public static Double exactAveragePrice(long total, long quantity)
+	{
+		if (quantity == 0 || total % quantity == 0)
+		{
+			return null;
+		}
+		return (double) total / quantity;
+	}
+
+	/**
+	 * @return exact average pre-tax price per item, falling back to the whole-gp price
+	 */
+	public double getExactPreTaxPrice()
+	{
+		return exactPreTaxPrice != null ? exactPreTaxPrice : price;
+	}
+
+	/**
+	 * @return exact average post-tax price per item. The tax is taken from the whole-gp price, as the GE
+	 * applies it per item and the individual fill prices aren't known.
+	 */
+	public double getExactPrice()
+	{
+		return getExactPreTaxPrice() - getTaxPaidPerItem();
+	}
+
+	/**
+	 * @return post-tax gp value of the given number of items from this offer, using the exact average price
+	 */
+	public long getValueOf(long quantity)
+	{
+		if (exactPreTaxPrice == null)
+		{
+			return quantity * getPrice();
+		}
+		return Math.round(getExactPrice() * quantity);
+	}
+
+	/**
+	 * @return post-tax gp value of all the items traded in this offer
+	 */
+	public long getTotalValue()
+	{
+		return getValueOf(currentQuantityInTrade);
+	}
 
 	/**
 	 * @return post tax values
@@ -220,7 +277,8 @@ public class OfferEvent
 				madeBy,
 				itemName,
 				listedPrice,
-				spent
+				spent,
+				exactPreTaxPrice
 		);
 	}
 
@@ -301,7 +359,8 @@ public class OfferEvent
 			null,
 			null,
 			offer.getPrice(),
-			offer.getSpent());
+			offer.getSpent(),
+			exactAveragePrice(offer.getSpent(), offer.getQuantitySold()));
 	}
 
 	/**
@@ -338,7 +397,8 @@ public class OfferEvent
 				"",
 				itemName,
 				0,
-				0);
+				0,
+				null);
 	}
 }
 

@@ -374,7 +374,7 @@ public class HistoryManager
 	{
 		return tradeList.stream().
 			filter(o -> o.isBuy() == isBuy).
-			mapToLong(o -> (long) o.getCurrentQuantityInTrade() * o.getPrice()).sum();
+			mapToLong(OfferEvent::getTotalValue).sum();
 	}
 
 	/**
@@ -435,12 +435,12 @@ public class HistoryManager
 		{
 			if (itemsSeen + offer.getCurrentQuantityInTrade() >= itemLimit)
 			{
-				moneySpent += (itemLimit - itemsSeen) * offer.getPrice();
+				moneySpent += offer.getValueOf(itemLimit - itemsSeen);
 				break;
 			}
 			else
 			{
-				moneySpent += (long) offer.getCurrentQuantityInTrade() * offer.getPrice();
+				moneySpent += offer.getTotalValue();
 				itemsSeen += offer.getCurrentQuantityInTrade();
 			}
 
@@ -575,7 +575,7 @@ public class HistoryManager
 			long millisBetweenBuyAndSell = Duration.between(buy.getTime(), sell.getTime()).toMillis();
 			if (millisBetweenBuyAndSell >= 0 && millisBetweenBuyAndSell < 60000) //60k milliseconds is a minute
 			{
-				flips.add(new Flip(buy.getPrice(), sell.getPrice(), sell.getCurrentQuantityInTrade(), sell.getTime(), sell.isMarginCheck(), false));
+				flips.add(new Flip(buy.getExactPrice(), sell.getExactPrice(), sell.getCurrentQuantityInTrade(), sell.getTime(), sell.isMarginCheck(), false));
 				sellIdx++;
 			}
 
@@ -635,14 +635,14 @@ public class HistoryManager
 					//the leftover is bounded by the current buy's quantity, so it always fits an int
 					int leftOver = (int) (numBuysSeen - sell.getCurrentQuantityInTrade());
 					int amountTaken = buy.getCurrentQuantityInTrade() - leftOver;
-					totalBuyCost += (long) amountTaken * buy.getPrice();
+					totalBuyCost += buy.getValueOf(amountTaken);
 					buy.setCurrentQuantityInTrade(leftOver);
-					flips.add(new Flip((double) totalBuyCost / sell.getCurrentQuantityInTrade(), sell.getPrice(), sell.getCurrentQuantityInTrade(), sell.getTime(), false, !sell.isComplete()));
+					flips.add(new Flip((double) totalBuyCost / sell.getCurrentQuantityInTrade(), sell.getExactPrice(), sell.getCurrentQuantityInTrade(), sell.getTime(), false, !sell.isComplete()));
 					break;
 				}
 				else
 				{
-					totalBuyCost += (long) buy.getCurrentQuantityInTrade() * buy.getPrice();
+					totalBuyCost += buy.getTotalValue();
 					buyIdx++;
 				}
 			}
@@ -650,7 +650,7 @@ public class HistoryManager
 			//buys only partially exhausted a sell
 			if (buyIdx == buys.size() && numBuysSeen != 0)
 			{
-				flips.add(new Flip((double) totalBuyCost / numBuysSeen, sell.getPrice(), numBuysSeen, sell.getTime(), false, true));
+				flips.add(new Flip((double) totalBuyCost / numBuysSeen, sell.getExactPrice(), numBuysSeen, sell.getTime(), false, true));
 				break;
 			}
 		}

@@ -36,7 +36,12 @@ public class GeHistoryTabExtractor {
         GrandExchangeOfferState offerState = getState(widgets.get(2));
         int quantity = widgets.get(4).getItemQuantity();
         int itemId = widgets.get(4).getItemId();
-        long price = getPrice(widgets.get(5), quantity);
+        String priceText = widgets.get(5).getText();
+        long parsedPrice = parsePrice(priceText);
+        //taxed offers show the pre-tax total rather than the price of each item
+        boolean isTotalPrice = isTaxedTotal(priceText);
+        long price = isTotalPrice ? parsedPrice / quantity : parsedPrice;
+        Double exactPrice = isTotalPrice ? OfferEvent.exactAveragePrice(parsedPrice, quantity) : null;
         boolean isBuy = offerState == GrandExchangeOfferState.BOUGHT;
         Instant time = Instant.now();
         int totalQuantity = quantity;
@@ -44,7 +49,7 @@ public class GeHistoryTabExtractor {
         //just making ticksSinceFirst offer something > 2 so it doesn't count as a margin check
         int ticksSinceFirstOffer = 10;
 
-        OfferEvent offerEvent = new OfferEvent(UUID.randomUUID().toString(), isBuy, itemId, quantity, price, time, slot, offerState, tickArrivedAt, ticksSinceFirstOffer, totalQuantity, null, false, null, null,0,0);
+        OfferEvent offerEvent = new OfferEvent(UUID.randomUUID().toString(), isBuy, itemId, quantity, price, time, slot, offerState, tickArrivedAt, ticksSinceFirstOffer, totalQuantity, null, false, null, null,0,0, exactPrice);
         return offerEvent;
     }
 
@@ -54,21 +59,19 @@ public class GeHistoryTabExtractor {
      * OfferEvent class wherever we need to display it. That means that if we get the price after tax
      * here and then construct an OfferEvent with that price, and then try to display the OfferEvent's price
      * using OfferEvent.getPrice(), we will effectively be applying the ge tax twice.
-     * @return the original price of each item in the offer
+     * @return the original price of each item in the offer, or the original total price if
+     * {@link #isTaxedTotal(String)} is true
      */
-    private static long getPrice(Widget w, int quantity) {
-        String text = w.getText();
-        String numString = text;
+    private static long parsePrice(String text) {
+        String numString;
         Matcher m;
-        boolean isTotalPrice = false;
         // This will trigger anytime there is the ge tax text on an offer in the history
         // For example when you have that text with the format "({original price} - {ge_tax})
         // Whenever that text is present, we want to get the original price (NOT THE PRICE
-        // AFTER THE TAX). However, since the original price displayed is not the price of each item
-        //we have to divide it by the quantity to get the original price of each item.
-        if (text.contains(")</col>")) {
+        // AFTER THE TAX). However, the original price displayed is the total, not the price of each item,
+        // so the caller has to divide it by the quantity.
+        if (isTaxedTotal(text)) {
             m = ORIGINAL_PRICE_PATTERN.matcher(text);
-            isTotalPrice = true;
         }
         //if the case above doesn't trigger that means there is no tax on the item, so we check if "each"
         //is present which allows us to use the regex for getting the price of each item when multiple
@@ -89,11 +92,11 @@ public class GeHistoryTabExtractor {
             }
         }
 
-        long price = Long.parseLong(s.toString());
-        if (isTotalPrice) {
-            return price/quantity;
-        }
-        return price;
+        return Long.parseLong(s.toString());
+    }
+
+    private static boolean isTaxedTotal(String text) {
+        return text.contains(")</col>");
     }
 
     private static GrandExchangeOfferState getState(Widget w) {

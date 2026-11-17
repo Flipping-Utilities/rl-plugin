@@ -82,7 +82,7 @@ public class LongPricePersistenceTest {
         sale.setTime(TIME.plusSeconds(2));
         Flip flip = HistoryManager.getFlips(Arrays.asList(firstBuy, secondBuy, sale)).get(0);
         assertEquals(BUY_PRICE + 2, flip.getBuyPrice(), 0);
-        assertEquals(SELL_PRICE - Constants.GE_TAX_CAP, flip.getSellPrice());
+        assertEquals(SELL_PRICE - Constants.GE_TAX_CAP, flip.getSellPrice(), 0);
     }
 
     private AccountData account() {
@@ -109,7 +109,7 @@ public class LongPricePersistenceTest {
         assertEquals(5_985_000_000L, FlippingItem.getProfit(offers));
         Flip flip = HistoryManager.getFlips(offers).get(0);
         assertEquals(BUY_PRICE, flip.getBuyPrice(), 0);
-        assertEquals(SELL_PRICE - Constants.GE_TAX_CAP, flip.getSellPrice());
+        assertEquals(SELL_PRICE - Constants.GE_TAX_CAP, flip.getSellPrice(), 0);
     }
 
     @Test
@@ -152,6 +152,6 @@ public class LongPricePersistenceTest {
     private OfferEvent offer(boolean buy, long price, int quantity) {
         return new OfferEvent(UUID.randomUUID().toString(), buy, 4151, quantity, price, TIME,
             2, buy ? GrandExchangeOfferState.BOUGHT : GrandExchangeOfferState.SOLD,
-            10, 10, quantity, null, false, ACCOUNT, null, price, price * quantity);
+            10, 10, quantity, null, false, ACCOUNT, null, price, price * quantity, null);
     }
 }
