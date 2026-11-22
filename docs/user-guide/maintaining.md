@@ -44,12 +44,9 @@ parentheses.
 8. **GE history imports** are dated at import time ([Adding untracked trades](ge-history.md)).
 9. The sell quantity prompt doesn't switch the offer editor to the quantity tab ([Setting up offers](offer-setup.md)).
 10. **Quick look** shows its state as the raw enum name (`IN_RANGE`).
-11. **Possible crashes:** the GE price prompt dereferences the last wiki request, which is null if prices were
-    never fetched (`GameUiChangesHandler`); the GE search handler looks up the logged-in account's data, which is
-    null for untracked accounts such as ironmen (`FlippingPlugin.onGrandExchangeSearched`).
-12. **Backup checkpoints** are written as `backupCheckpoints.special.json` but read as
+11. **Backup checkpoints** are written as `backupCheckpoints.special.json` but read as
     `backupcheckpoints.special.json`. On case-sensitive file systems every start makes a new backup.
-13. **The recipe datasets are fetched with a blocking `join()` in `startUp`**, so a slow network delays the
+12. **The recipe datasets are fetched with a blocking `join()` in `startUp`**, so a slow network delays the
     plugin.
-14. The card customization window uses old names for the values ("price check buy price" is *Last insta sell*).
-15. The profile button's popup says *Click to open your profile page!* but it opens the status window.
+13. The card customization window uses old names for the values ("price check buy price" is *Last insta sell*).
+14. The profile button's popup says *Click to open your profile page!* but it opens the status window.
