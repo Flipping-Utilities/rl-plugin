@@ -21,6 +21,7 @@ dependencies {
 
     testImplementation 'junit:junit:4.12'
     testImplementation 'org.slf4j:slf4j-simple:1.7.12'
+    testImplementation 'org.mockito:mockito-core:5.14.2'
     testImplementation group: 'net.runelite', name:'client', version: runeLiteVersion, {
         exclude group: 'ch.qos.logback', module: 'logback-classic'
     }
@@ -39,4 +40,10 @@ tasks.register('runPlugin', JavaExec) {
     mainClass = 'com.flippingutilities.PluginRunner'
     jvmArgs "-ea"
     args "--developer-mode"
+}
+// Renders the user guide screenshots (docs/user-guide/images) from the real panels with fixture data.
+tasks.register('docsScreenshots', JavaExec) {
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.flippingutilities.docs.DocsScreenshots'
+    args file('docs/user-guide/images').absolutePath
 }

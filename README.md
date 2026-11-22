@@ -3,6 +3,9 @@ Flipping Utilities is a Runelite plugin that aids over 50,000 players in making 
 It calculates your profits in real time, keeps a richly detailed log of your trading activity, lets you quickly input
 optimal prices according to your margin checks with just a key press, and a lot more!
 
+**New to the plugin? Read the [user guide](docs/user-guide/README.md)**: every tab, the offer editor
+hotkeys, recipe flips, settings and where your data lives, with screenshots.
+
 old repo: https://github.com/Belieal/flipping-utilities
 
 ## Community
