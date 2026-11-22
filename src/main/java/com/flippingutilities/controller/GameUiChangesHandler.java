@@ -7,6 +7,7 @@ import com.flippingutilities.ui.offereditor.OfferEditorContainerPanel;
 import com.flippingutilities.ui.widgets.OfferEditor;
 import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.WikiRequest;
+import com.flippingutilities.utilities.WikiRequestWrapper;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
@@ -27,6 +28,7 @@ import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemStats;
 
+import javax.swing.SwingUtilities;
 import java.util.Optional;
 
 /**
@@ -108,7 +110,7 @@ public class GameUiChangesHandler {
             String offerText = client.getWidget(InterfaceID.GeOffers.SETUP).getChild(GE_OFFER_INIT_STATE_CHILD_ID).getText();
 
             if (chatInputText.equals("How many do you wish to buy?")) {
-                plugin.getFlippingPanel().getOfferEditorContainerPanel().selectQuantityEditor();
+                selectOfferEditor(true);
                 //No recorded data; default to total GE limit
                 if (!selectedItem.isPresent()) {
                     ItemStats itemStats = plugin.getItemManager().getItemStats(client.getVarpValue(VarPlayerID.TRADINGPOST_SEARCH));
@@ -118,8 +120,10 @@ public class GameUiChangesHandler {
                     flippingWidget.showQuantityWidgets(selectedItem.get().getRemainingGeLimit());
                 }
             } else if (chatInputText.equals("Set a price for each item:")) {
-                plugin.getFlippingPanel().getOfferEditorContainerPanel().selectPriceEditor();
-                WikiRequest wikiRequest = plugin.getLastWikiRequestWrapper().getWikiRequest();
+                selectOfferEditor(false);
+                //no wiki prices have been fetched yet when the sidebar was never opened and slot enhancement is off
+                WikiRequestWrapper wikiRequestWrapper = plugin.getLastWikiRequestWrapper();
+                WikiRequest wikiRequest = wikiRequestWrapper == null ? null : wikiRequestWrapper.getWikiRequest();
 
                 if (offerText.equals("Buy offer")) {
                     long instaSellPrice = 0;
@@ -127,7 +131,7 @@ public class GameUiChangesHandler {
                     if (selectedItem.isPresent() && selectedItem.get().getLatestInstaSell().isPresent()) {
                         instaSellPrice = selectedItem.get().getLatestInstaSell().get().getPreTaxPrice();
                     }
-                    if (wikiRequest != null && wikiRequest.getData().containsKey(highlightedItemId)
+                    if (wikiRequest != null && wikiRequest.getData() != null && wikiRequest.getData().containsKey(highlightedItemId)
                         && wikiRequest.getData().get(highlightedItemId).hasLow()) {
                         wikiInstaSellPrice = wikiRequest.getData().get(highlightedItemId).getLow();
                     }
@@ -139,12 +143,31 @@ public class GameUiChangesHandler {
                         instaBuyPrice = selectedItem.get().getLatestInstaBuy().get().getPrice();
                     }
 
-                    if (wikiRequest != null && wikiRequest.getData().containsKey(highlightedItemId)
+                    if (wikiRequest != null && wikiRequest.getData() != null && wikiRequest.getData().containsKey(highlightedItemId)
                         && wikiRequest.getData().get(highlightedItemId).hasHigh()) {
                         wikiInstaBuyPrice = wikiRequest.getData().get(highlightedItemId).getHigh();
                     }
                     flippingWidget.showInstaBuyPrices(instaBuyPrice, wikiInstaBuyPrice);
                 }
+            }
+        });
+    }
+
+    /**
+     * Selects the quantity or price tab of the offer editor. The editor only exists once an item has been
+     * highlighted in the flipping panel (it is created by an EDT rebuild that can still be pending when the
+     * chatbox prompt opens), and it is a swing component, so this runs on the EDT and skips a missing editor.
+     */
+    private void selectOfferEditor(boolean quantity) {
+        SwingUtilities.invokeLater(() -> {
+            OfferEditorContainerPanel editor = plugin.getFlippingPanel().getOfferEditorContainerPanel();
+            if (editor == null) {
+                return;
+            }
+            if (quantity) {
+                editor.selectQuantityEditor();
+            } else {
+                editor.selectPriceEditor();
             }
         });
     }
