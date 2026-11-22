@@ -1289,7 +1289,13 @@ public class FlippingPlugin extends Plugin {
     @Subscribe
     public void onGrandExchangeSearched(GrandExchangeSearched event) {
         final String input = client.getVarcStrValue(VarClientStr.INPUT_TEXT);
-        Set<Integer> ids = dataHandler.viewAccountData(currentlyLoggedInAccount).
+        //accounts the plugin does not track (ironmen, seasonal worlds) have no logged in account or trade
+        //history, so there are no favorites to look up and the regular GE search should run
+        AccountData accountData = currentlyLoggedInAccount == null ? null : dataHandler.viewAccountData(currentlyLoggedInAccount);
+        if (input == null || accountData == null) {
+            return;
+        }
+        Set<Integer> ids = accountData.
                 getTrades()
                 .stream()
                 .filter(item -> item.isFavorite() && input.equals(item.getFavoriteCode()))
