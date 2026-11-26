@@ -363,7 +363,6 @@ public class StatsPanel extends JPanel
 			}
 
 			selectInterval(justTheInterval);
-			lastNonCustomInterval = justTheInterval;
 			setTimeInterval(justTheInterval);
 		});
 		return timeIntervalDropdown;
@@ -639,9 +638,20 @@ public class StatsPanel extends JPanel
 	 */
 	public void setTimeInterval(String selectedInterval)
 	{
+		if (!trySetTimeInterval(selectedInterval)) {
+			showInvalidIntervalMessage();
+		}
+	}
+
+	/**
+	 * Applies a preset or a typed interval such as "-36h". Returns false for input that doesn't
+	 * parse, leaving the current interval and the cancel fallback untouched.
+	 */
+	boolean trySetTimeInterval(String selectedInterval)
+	{
 		if (selectedInterval == null)
 		{
-			return;
+			return false;
 		}
 
 		Instant timeNow = Instant.now();
@@ -656,30 +666,32 @@ public class StatsPanel extends JPanel
 		}
 		else {
 			if (selectedInterval.length() < 3) {
-				JOptionPane.showMessageDialog(timeIntervalDropdown, "Invalid input. Valid input is a negative whole number followed by an abbreviated unit of time. For example," +
-						"-123h or -2d or -55w or -2m or -1y are valid inputs.", "Invalid Input",  JOptionPane.ERROR_MESSAGE);
-				return;
+				return false;
 			}
 
 			String timeUnitString = String.valueOf(selectedInterval.charAt(selectedInterval.length() - 1));
 			if (!TimeFormatters.stringToTimeUnit.containsKey(timeUnitString)) {
-				JOptionPane.showMessageDialog(timeIntervalDropdown, "Invalid input. Valid input is a negative whole number followed by an abbreviated unit of time. For example," +
-						"-123h or -2d or -55w or -2m or -1y are valid inputs.", "Invalid Input",  JOptionPane.ERROR_MESSAGE);
-				return;
+				return false;
 			}
 
 			try {
 				int amountToSubtract = Integer.parseInt(selectedInterval.substring(1, selectedInterval.length() - 1)) * (int) TimeFormatters.stringToTimeUnit.get(timeUnitString);
 				interval = TimeRange.from(timeNow.minus(amountToSubtract, ChronoUnit.HOURS));
 				intervalName = selectedInterval;
-
 			} catch (NumberFormatException e) {
-				JOptionPane.showMessageDialog(timeIntervalDropdown, "Invalid input. Valid input is a negative whole number followed by an abbreviated unit of time. For example," +
-						"-123h or -2d or -55w or -2m or -1y are valid inputs.", "Invalid Input",  JOptionPane.ERROR_MESSAGE);
-				return;
+				return false;
 			}
 		}
+
+		lastNonCustomInterval = selectedInterval;
 		refreshDisplayForInterval();
+		return true;
+	}
+
+	private void showInvalidIntervalMessage()
+	{
+		JOptionPane.showMessageDialog(timeIntervalDropdown, "Invalid input. Valid input is a negative whole number followed by an abbreviated unit of time. For example," +
+			"-123h or -2d or -55w or -2m or -1y are valid inputs.", "Invalid Input", JOptionPane.ERROR_MESSAGE);
 	}
 
 	/**

@@ -73,6 +73,15 @@ public class FlippingItemRangeTest
 		assertEquals(1, item.getIntervalHistory(TimeRange.from(now.minus(2, ChronoUnit.HOURS))).size());
 	}
 
+	@Test
+	public void offerExactlyAtTheStartOfAnOpenRangeIsStillVisible()
+	{
+		Instant offerTime = now.minus(1, ChronoUnit.HOURS);
+		FlippingItem item = itemWithOffersAt(offerTime);
+
+		assertTrue(item.isInInterval(TimeRange.from(offerTime)));
+	}
+
 	private static FlippingItem itemWithOffersAt(Instant... offerTimes)
 	{
 		FlippingItem item = new FlippingItem(1, "Item", 100, "account");

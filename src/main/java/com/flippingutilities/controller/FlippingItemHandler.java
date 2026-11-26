@@ -34,7 +34,7 @@ public class FlippingItemHandler {
 
         switch (selectedSort) {
             case TIME:
-                result.sort(Comparator.comparing(FlippingItem::getLatestActivityTime));
+                result.sort(Comparator.comparing(item -> latestActivityInRange(item, range)));
                 break;
 
             case TOTAL_PROFIT:
@@ -87,6 +87,17 @@ public class FlippingItemHandler {
         }
         Collections.reverse(result);
         return result;
+    }
+
+    /**
+     * Sorts by what the user can actually see: offers outside the selected range must not make an
+     * item look more recent than it is.
+     */
+    private static Instant latestActivityInRange(FlippingItem item, TimeRange range) {
+        return item.getIntervalHistory(range).stream()
+            .map(OfferEvent::getTime)
+            .max(Instant::compareTo)
+            .orElse(Instant.MIN);
     }
 
     public void deleteRemovedItems(List<FlippingItem> currItems) {

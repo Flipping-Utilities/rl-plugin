@@ -251,7 +251,7 @@ public class HistoryManager
 		}
 		if (range.isOpenEnded()) {
 			OfferEvent lastOffer = compressedOfferEvents.get(compressedOfferEvents.size()-1);
-			return lastOffer.getTime().isAfter(range.getFrom());
+			return !lastOffer.getTime().isBefore(range.getFrom());
 		}
 		return compressedOfferEvents.stream().anyMatch(offer -> range.contains(offer.getTime()));
 	}

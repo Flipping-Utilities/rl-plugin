@@ -169,8 +169,17 @@ public class RecipeFlipGroup implements Searchable {
     }
 
     public void deleteFlipsWithDeletedOffers(List<OfferEvent> offers) {
+        deleteFlipsWithDeletedOffers(offers, TimeRange.ALL);
+    }
+
+    /**
+     * Removes flips that use one of the deleted offers. Flips created outside the range are left
+     * alone, so resetting an interval never deletes history outside it.
+     */
+    public void deleteFlipsWithDeletedOffers(List<OfferEvent> offers, TimeRange range) {
         Set<String> offerIds = offers.stream().map(OfferEvent::getUuid).collect(Collectors.toSet());
-        recipeFlips.removeIf(rf -> rf.getPartialOffers().stream().anyMatch(po -> offerIds.contains(po.getOfferUuid())));
+        recipeFlips.removeIf(rf -> range.contains(rf.getTimeOfCreation())
+            && rf.getPartialOffers().stream().anyMatch(po -> offerIds.contains(po.getOfferUuid())));
     }
 
     @Override

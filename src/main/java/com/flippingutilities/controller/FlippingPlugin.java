@@ -1076,12 +1076,12 @@ public class FlippingPlugin extends Plugin {
         if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
             for (AccountData accountData : dataHandler.getAllAccountData()) {
                 accountData.getTrades().forEach(item -> {
-                    deleteOffers(item.getIntervalHistory(range), item);
+                    deleteOffers(item.getIntervalHistory(range), item, range);
                 });
             }
         } else {
             getItemsForCurrentView().forEach(item -> {
-                deleteOffers(item.getIntervalHistory(range), item);
+                deleteOffers(item.getIntervalHistory(range), item, range);
             });
         }
 
@@ -1094,9 +1094,18 @@ public class FlippingPlugin extends Plugin {
         deleteOffers(offers, viewRecipeFlipGroupsForCurrentView(), item);
     }
 
+    private void deleteOffers(List<OfferEvent> offers, FlippingItem item, TimeRange range) {
+        deleteOffers(offers, viewRecipeFlipGroupsForCurrentView(), item, range);
+    }
+
     private void deleteOffers(List<OfferEvent> offers, List<RecipeFlipGroup> recipeFlipGroups, FlippingItem item) {
+        deleteOffers(offers, recipeFlipGroups, item, TimeRange.ALL);
+    }
+
+    private void deleteOffers(List<OfferEvent> offers, List<RecipeFlipGroup> recipeFlipGroups, FlippingItem item,
+                              TimeRange range) {
         item.deleteOffers(offers);
-        recipeHandler.deleteInvalidRecipeFlips(offers, recipeFlipGroups);
+        recipeHandler.deleteInvalidRecipeFlips(offers, recipeFlipGroups, range);
         markAccountTradesAsHavingChanged(accountCurrentlyViewed);
         updateSinceLastItemAccountWideBuild = true;
         updateSinceLastRecipeFlipGroupAccountWideBuild = true;

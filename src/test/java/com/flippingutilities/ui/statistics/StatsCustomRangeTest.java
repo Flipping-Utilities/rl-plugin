@@ -106,6 +106,24 @@ public class StatsCustomRangeTest
 	}
 
 	@Test
+	public void rejectedInputDoesNotBecomeTheCancelFallback() throws Exception
+	{
+		try (StatsEmptyStateTest.Fixture fixture = new StatsEmptyStateTest.Fixture())
+		{
+			SwingUtilities.invokeAndWait(() ->
+			{
+				assertTrue(fixture.panel.trySetTimeInterval("All"));
+				assertFalse(fixture.panel.trySetTimeInterval("-bad"));
+				assertEquals("All", fixture.panel.getIntervalName());
+			});
+
+			SwingUtilities.invokeAndWait(() -> fixture.panel.restoreLastNonCustomInterval());
+
+			assertEquals("All", fixture.panel.getIntervalName());
+		}
+	}
+
+	@Test
 	public void customRangePromptIsDeferredUntilTheDropdownPopupCloses() throws Exception
 	{
 		try (StatsEmptyStateTest.Fixture fixture = new StatsEmptyStateTest.Fixture())

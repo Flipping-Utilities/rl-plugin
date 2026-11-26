@@ -2,7 +2,6 @@ package com.flippingutilities.utilities;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
 
 /**
@@ -46,7 +45,8 @@ public final class TimeRange
 	{
 		return between(
 			from.atStartOfDay(zone).toInstant(),
-			to.atTime(LocalTime.MAX).atZone(zone).toInstant());
+			//ends one nanosecond before the next day starts, so days where the last hour repeats are covered
+			to.plusDays(1).atStartOfDay(zone).toInstant().minusNanos(1));
 	}
 
 	public boolean contains(Instant time)

@@ -68,6 +68,19 @@ public class TimeRangeTest
 		assertFalse(range.isOpenEnded());
 	}
 
+	@Test
+	public void localDateRangeKeepsTheRepeatedFinalHourOfTheEndDay()
+	{
+		//Santiago ends DST at midnight, so the last hour of 4 April 2026 happens twice
+		ZoneId santiago = ZoneId.of("America/Santiago");
+		LocalDate endDay = LocalDate.of(2026, 4, 4);
+		TimeRange range = TimeRange.ofLocalDates(endDay, endDay, santiago);
+
+		assertTrue(range.contains(Instant.parse("2026-04-05T02:30:00Z")));
+		assertTrue(range.contains(Instant.parse("2026-04-05T03:30:00Z")));
+		assertFalse(range.contains(Instant.parse("2026-04-05T04:00:00Z")));
+	}
+
 	@Test(expected = IllegalArgumentException.class)
 	public void invertedRangeIsRejected()
 	{
