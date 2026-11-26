@@ -28,6 +28,7 @@
 package com.flippingutilities.model;
 
 import com.flippingutilities.utilities.ListUtils;
+import com.flippingutilities.utilities.TimeRange;
 import com.google.gson.annotations.SerializedName;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -189,19 +190,24 @@ public class HistoryManager
 		}
 	}
 
-	/**
-	 * Returns the history of the item that were traded between earliestTime and now.
-	 *
-	 * @param earliestTime the earliest time that trades from the trade history are added to the resulting list.
-	 * @return A list of offers that were within the interval of earliestTime and now.
-	 */
 	public ArrayList<OfferEvent> getIntervalsHistory(Instant earliestTime)
+	{
+		return getIntervalsHistory(TimeRange.from(earliestTime));
+	}
+
+	/**
+	 * Returns the history of the item that was traded within the given range.
+	 *
+	 * @param range the range an offer's time has to fall into to be included in the resulting list.
+	 * @return A list of offers that were within the given range.
+	 */
+	public ArrayList<OfferEvent> getIntervalsHistory(TimeRange range)
 	{
 		ArrayList<OfferEvent> result = new ArrayList<>();
 
 		for (OfferEvent offer : compressedOfferEvents)
 		{
-			if (offer.getTime().isAfter(earliestTime))
+			if (range.contains(offer.getTime()))
 			{
 				result.add(offer);
 			}
@@ -236,11 +242,18 @@ public class HistoryManager
 	}
 
 	public boolean hasOfferInInterval(Instant earliestTime) {
+		return hasOfferInInterval(TimeRange.from(earliestTime));
+	}
+
+	public boolean hasOfferInInterval(TimeRange range) {
 		if (!hasValidOffers()) {
 			return false;
 		}
-		OfferEvent lastOffer = compressedOfferEvents.get(compressedOfferEvents.size()-1);
-		return lastOffer.getTime().isAfter(earliestTime);
+		if (range.isOpenEnded()) {
+			OfferEvent lastOffer = compressedOfferEvents.get(compressedOfferEvents.size()-1);
+			return !lastOffer.getTime().isBefore(range.getFrom());
+		}
+		return compressedOfferEvents.stream().anyMatch(offer -> range.contains(offer.getTime()));
 	}
 
 	/**

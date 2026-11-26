@@ -3,6 +3,7 @@ package com.flippingutilities.model;
 import com.flippingutilities.controller.RecipeHandler;
 import com.flippingutilities.utilities.Recipe;
 import com.flippingutilities.utilities.Searchable;
+import com.flippingutilities.utilities.TimeRange;
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 import lombok.Data;
@@ -146,13 +147,21 @@ public class RecipeFlipGroup implements Searchable {
     }
 
     public List<RecipeFlip> getFlipsInInterval(Instant startOfInterval) {
+        return getFlipsInInterval(TimeRange.from(startOfInterval));
+    }
+
+    public List<RecipeFlip> getFlipsInInterval(TimeRange range) {
         return recipeFlips.stream()
-            .filter(recipeFlip -> recipeFlip.getTimeOfCreation().isAfter(startOfInterval))
+            .filter(recipeFlip -> range.contains(recipeFlip.getTimeOfCreation()))
             .collect(Collectors.toList());
     }
 
     public void deleteFlips(Instant startOfInterval) {
-        recipeFlips.removeIf(rf -> rf.getTimeOfCreation().isAfter(startOfInterval));
+        deleteFlips(TimeRange.from(startOfInterval));
+    }
+
+    public void deleteFlips(TimeRange range) {
+        recipeFlips.removeIf(rf -> range.contains(rf.getTimeOfCreation()));
     }
 
     public void deleteFlip(RecipeFlip recipeFlip) {
@@ -160,13 +169,22 @@ public class RecipeFlipGroup implements Searchable {
     }
 
     public void deleteFlipsWithDeletedOffers(List<OfferEvent> offers) {
+        deleteFlipsWithDeletedOffers(offers, TimeRange.ALL);
+    }
+
+    /**
+     * Removes flips that use one of the deleted offers. Flips created outside the range are left
+     * alone, so resetting an interval never deletes history outside it.
+     */
+    public void deleteFlipsWithDeletedOffers(List<OfferEvent> offers, TimeRange range) {
         Set<String> offerIds = offers.stream().map(OfferEvent::getUuid).collect(Collectors.toSet());
-        recipeFlips.removeIf(rf -> rf.getPartialOffers().stream().anyMatch(po -> offerIds.contains(po.getOfferUuid())));
+        recipeFlips.removeIf(rf -> range.contains(rf.getTimeOfCreation())
+            && rf.getPartialOffers().stream().anyMatch(po -> offerIds.contains(po.getOfferUuid())));
     }
 
     @Override
-    public boolean isInInterval(Instant intervalStart) {
-        return recipeFlips.stream().anyMatch(recipeFlip -> recipeFlip.getTimeOfCreation().isAfter(intervalStart));
+    public boolean isInInterval(TimeRange range) {
+        return recipeFlips.stream().anyMatch(recipeFlip -> range.contains(recipeFlip.getTimeOfCreation()));
     }
 
     @Override

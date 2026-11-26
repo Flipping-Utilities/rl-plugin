@@ -35,6 +35,7 @@ import com.flippingutilities.ui.statistics.recipes.RecipeGroupContainerPanel;
 import com.flippingutilities.ui.uiutilities.*;
 import com.flippingutilities.utilities.SORT;
 import com.flippingutilities.utilities.Searchable;
+import com.flippingutilities.utilities.TimeRange;
 import com.google.common.base.Strings;
 import net.runelite.client.ui.components.TitleCaseListCellRenderer;
 import lombok.Getter;
@@ -52,11 +53,13 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.text.StyleContext;
 import java.awt.*;
 import java.awt.event.ItemEvent;
-import java.awt.event.ItemListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.*;
@@ -66,7 +69,9 @@ import java.util.stream.Stream;
 @Slf4j
 public class StatsPanel extends JPanel
 {
-	private static final String[] TIME_INTERVAL_STRINGS = {"-1h (Past Hour)", "-4h (Past 4 Hours)", "-12h (Past 12 Hours)", "-1d (Past Day)", "-1w (Past Week)", "-1m (Past Month)", "Session", "All"};
+	private static final String[] TIME_INTERVAL_STRINGS = {"-1h (Past Hour)", "-4h (Past 4 Hours)", "-12h (Past 12 Hours)", "-1d (Past Day)", "-1w (Past Week)", "-1m (Past Month)", "Session", "All", "Custom range..."};
+	private static final String CUSTOM_RANGE_INTERVAL = "Custom range...";
+	private static final DateTimeFormatter RANGE_DATE_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH);
 	private static final Dimension ICON_SIZE = new Dimension(16, 16);
 
 	private FlippingPlugin plugin;
@@ -74,7 +79,7 @@ public class StatsPanel extends JPanel
 	//Holds the sub info labels.
 	private JPanel subInfoPanel;
 
-	//Combo box that selects the time interval that startOfInterval contains.
+	//Combo box that selects the time interval dropdown's selection.
 	private JComboBox<String> timeIntervalDropdown = this.createTimeIntervalDropdown();
 
 	//Represents the total profit made in the selected time interval.
@@ -106,11 +111,14 @@ public class StatsPanel extends JPanel
 	private final JPanel autoSavePanel = new JPanel(new BorderLayout());
 	private final JPanel[] subInfoPanelArray = {hourlyProfitPanel, roiPanel, totalFlipsPanel, taxPaidPanel, sessionTimePanel};
 
-	//Contains the unix time of the start of the interval.
+	//Contains the range of time the statistics are currently shown for.
 	@Getter
-	private Instant startOfInterval;
+	private TimeRange interval;
 	@Getter
-	private String startOfIntervalName = "Session";
+	private String intervalName = "Session";
+	//The last interval selected from the dropdown that was not a custom range.
+	private String lastNonCustomInterval = "Session";
+	private boolean updatingIntervalSelection;
 
 	@Getter
 	private SORT selectedSort = SORT.TIME;
@@ -137,7 +145,7 @@ public class StatsPanel extends JPanel
 	{
 		super(false);
 		this.plugin = plugin;
-		this.startOfInterval = plugin.viewStartOfSessionForCurrentView();
+		this.interval = TimeRange.from(plugin.viewStartOfSessionForCurrentView());
 		this.prepareLabels();
 
 		searchBar = createSearchBar();
@@ -288,7 +296,7 @@ public class StatsPanel extends JPanel
 	private <T extends Searchable> List<T> getSearchResults(List<T> objs, String lookup) {
 		return objs.stream().filter(
 			obj ->
-				obj.getNameForSearch().toLowerCase().contains(lookup) && obj.isInInterval(startOfInterval)).
+				obj.getNameForSearch().toLowerCase().contains(lookup) && obj.isInInterval(interval)).
 			collect(Collectors.toList());
 	}
 
@@ -306,11 +314,11 @@ public class StatsPanel extends JPanel
 	}
 
 	public List<FlippingItem> getItemsToDisplay(List<FlippingItem> items) {
-		return plugin.sortItems(getResultsForCurrentSearchQuery(getObjsInInterval(items)), selectedSort, startOfInterval);
+		return plugin.sortItems(getResultsForCurrentSearchQuery(getObjsInInterval(items)), selectedSort, interval);
 	}
 
 	public List<RecipeFlipGroup> getRecipeFlipGroupsToDisplay(List<RecipeFlipGroup> recipeFlipGroups) {
-		return plugin.sortRecipeFlipGroups(getResultsForCurrentSearchQuery(getObjsInInterval(recipeFlipGroups)), selectedSort, startOfInterval);
+		return plugin.sortRecipeFlipGroups(getResultsForCurrentSearchQuery(getObjsInInterval(recipeFlipGroups)), selectedSort, interval);
 	}
 
 	private IconTextField createSearchBar() {
@@ -333,27 +341,94 @@ public class StatsPanel extends JPanel
 		timeIntervalDropdown.setToolTipText("Specify the time span you would like to see the statistics of");
 		timeIntervalDropdown.addItemListener(event ->
 		{
-			if (event.getStateChange() == ItemEvent.SELECTED)
+			if (event.getStateChange() != ItemEvent.SELECTED || updatingIntervalSelection)
 			{
-				String interval = (String) event.getItem();
-				if (interval == null) {
-					return;
-				}
-				//remove the helper text. so something like "1w (Past week)" becomes just "1w"
-				String justTheInterval = interval.split(" \\(")[0];
-				ItemListener[] itemListeners = timeIntervalDropdown.getItemListeners();
-				//have to remove item listeners so setSelectedItem doesn't cause another rebuildItemsDisplay.
-				for (ItemListener listener : itemListeners) {
-					timeIntervalDropdown.removeItemListener(listener);
-				}
-				timeIntervalDropdown.setSelectedItem(justTheInterval);
-				for (ItemListener itemListener : itemListeners) {
-					timeIntervalDropdown.addItemListener(itemListener);
-				}
-				setTimeInterval(justTheInterval);
+				return;
 			}
+
+			String selected = (String) event.getItem();
+			if (selected == null) {
+				return;
+			}
+
+			//remove the helper text. so something like "1w (Past week)" becomes just "1w"
+			String justTheInterval = selected.split(" \\(")[0];
+
+			if (CUSTOM_RANGE_INTERVAL.equals(justTheInterval)) {
+				//hide the list before the modal picker opens, otherwise the popup stays on top
+				//and swallows every click
+				timeIntervalDropdown.setPopupVisible(false);
+				SwingUtilities.invokeLater(this::promptForCustomRange);
+				return;
+			}
+
+			selectInterval(justTheInterval);
+			setTimeInterval(justTheInterval);
 		});
 		return timeIntervalDropdown;
+	}
+
+	/**
+	 * Changes the dropdown selection without re-triggering the interval listener.
+	 */
+	private void selectInterval(String selection) {
+		updatingIntervalSelection = true;
+		try {
+			timeIntervalDropdown.setSelectedItem(selection);
+		}
+		finally {
+			updatingIntervalSelection = false;
+		}
+	}
+
+	void promptForCustomRange() {
+		ZoneId zone = ZoneId.systemDefault();
+		LocalDate today = LocalDate.now(zone);
+		LocalDate initialStart = interval.isOpenEnded() ? today.minusDays(6) : LocalDate.ofInstant(interval.getFrom(), zone);
+		LocalDate initialEnd = interval.isOpenEnded() ? today : LocalDate.ofInstant(interval.getTo(), zone);
+
+		DateRangePicker picker = new DateRangePicker(initialStart, initialEnd);
+		int result = JOptionPane.showConfirmDialog(timeIntervalDropdown, picker, "Custom date range",
+			JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+		if (result != JOptionPane.OK_OPTION || !picker.hasCompleteSelection()) {
+			restoreLastNonCustomInterval();
+			return;
+		}
+
+		applyCustomRange(picker.getStartDate(), picker.getEndDate());
+	}
+
+	/**
+	 * Shows the statistics for every moment of the two given local dates, both days included.
+	 */
+	public void applyCustomRange(LocalDate from, LocalDate to) {
+		if (from == null || to == null) {
+			return;
+		}
+
+		LocalDate start = from.isAfter(to) ? to : from;
+		LocalDate end = from.isAfter(to) ? from : to;
+
+		interval = TimeRange.ofLocalDates(start, end, ZoneId.systemDefault());
+		intervalName = RANGE_DATE_FORMAT.format(start) + " - " + RANGE_DATE_FORMAT.format(end);
+		selectInterval(intervalName);
+		refreshDisplayForInterval();
+	}
+
+	/**
+	 * Puts the panel back on the interval it used before a custom range was picked.
+	 */
+	void restoreLastNonCustomInterval() {
+		selectInterval(lastNonCustomInterval);
+		setTimeInterval(lastNonCustomInterval);
+	}
+
+	private void refreshDisplayForInterval() {
+		this.flippingItemContainerPanel.resetPaginator();
+		this.recipeGroupContainerPanel.resetPaginator();
+		this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
+		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 	}
 
 	public void updateCumulativeDisplays(List<FlippingItem> tradesList, List<RecipeFlipGroup> recipeFlipGroups)
@@ -378,7 +453,7 @@ public class StatsPanel extends JPanel
 		for (FlippingItem item : tradesList)
 		{
 			Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-			List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
+			List<OfferEvent> intervalHistory = item.getIntervalHistory(interval);
 			if (intervalHistory.isEmpty()) {
 				continue;
 			}
@@ -392,7 +467,7 @@ public class StatsPanel extends JPanel
 		}
 
 		for (RecipeFlipGroup recipeFlipGroup : recipeFlipGroups) {
-			List<RecipeFlip> recipeFlips = recipeFlipGroup.getFlipsInInterval(startOfInterval);
+			List<RecipeFlip> recipeFlips = recipeFlipGroup.getFlipsInInterval(interval);
 			if (recipeFlips.isEmpty()) continue;
 			taxPaid += recipeFlips.stream().mapToLong(RecipeFlip::getTaxPaid).sum();
 			totalProfit += recipeFlips.stream().mapToLong(RecipeFlip::getProfit).sum();
@@ -542,13 +617,13 @@ public class StatsPanel extends JPanel
 	 */
 	public void deleteItemPanel(FlippingItemPanel itemPanel) {
 		FlippingItem item = itemPanel.getItem();
-		plugin.deleteOffers(item.getIntervalHistory(startOfInterval), item);
+		plugin.deleteOffers(item.getIntervalHistory(interval), item);
 		this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
 		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 	}
 
 	public void deleteRecipeFlipGroupPanel(RecipeFlipGroupPanel recipeFlipGroupPanel) {
-		recipeFlipGroupPanel.getRecipeFlipGroup().deleteFlips(startOfInterval);
+		recipeFlipGroupPanel.getRecipeFlipGroup().deleteFlips(interval);
 		plugin.setUpdateSinceLastRecipeFlipGroupAccountWideBuild(true);
 		plugin.markAccountTradesAsHavingChanged(plugin.getAccountCurrentlyViewed());
 		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
@@ -563,50 +638,60 @@ public class StatsPanel extends JPanel
 	 */
 	public void setTimeInterval(String selectedInterval)
 	{
+		if (!trySetTimeInterval(selectedInterval)) {
+			showInvalidIntervalMessage();
+		}
+	}
+
+	/**
+	 * Applies a preset or a typed interval such as "-36h". Returns false for input that doesn't
+	 * parse, leaving the current interval and the cancel fallback untouched.
+	 */
+	boolean trySetTimeInterval(String selectedInterval)
+	{
 		if (selectedInterval == null)
 		{
-			return;
+			return false;
 		}
 
 		Instant timeNow = Instant.now();
 
 		if (selectedInterval.equals("Session")) {
-			startOfInterval = plugin.viewStartOfSessionForCurrentView();
-			startOfIntervalName = "Session";
+			interval = TimeRange.from(plugin.viewStartOfSessionForCurrentView());
+			intervalName = "Session";
 		}
 		else if (selectedInterval.equals("All")) {
-			startOfInterval = Instant.EPOCH;
-			startOfIntervalName = "All";
+			interval = TimeRange.ALL;
+			intervalName = "All";
 		}
 		else {
 			if (selectedInterval.length() < 3) {
-				JOptionPane.showMessageDialog(timeIntervalDropdown, "Invalid input. Valid input is a negative whole number followed by an abbreviated unit of time. For example," +
-						"-123h or -2d or -55w or -2m or -1y are valid inputs.", "Invalid Input",  JOptionPane.ERROR_MESSAGE);
-				return;
+				return false;
 			}
 
 			String timeUnitString = String.valueOf(selectedInterval.charAt(selectedInterval.length() - 1));
 			if (!TimeFormatters.stringToTimeUnit.containsKey(timeUnitString)) {
-				JOptionPane.showMessageDialog(timeIntervalDropdown, "Invalid input. Valid input is a negative whole number followed by an abbreviated unit of time. For example," +
-						"-123h or -2d or -55w or -2m or -1y are valid inputs.", "Invalid Input",  JOptionPane.ERROR_MESSAGE);
-				return;
+				return false;
 			}
 
 			try {
 				int amountToSubtract = Integer.parseInt(selectedInterval.substring(1, selectedInterval.length() - 1)) * (int) TimeFormatters.stringToTimeUnit.get(timeUnitString);
-				startOfInterval = timeNow.minus(amountToSubtract, ChronoUnit.HOURS);
-				startOfIntervalName = selectedInterval;
-
+				interval = TimeRange.from(timeNow.minus(amountToSubtract, ChronoUnit.HOURS));
+				intervalName = selectedInterval;
 			} catch (NumberFormatException e) {
-				JOptionPane.showMessageDialog(timeIntervalDropdown, "Invalid input. Valid input is a negative whole number followed by an abbreviated unit of time. For example," +
-						"-123h or -2d or -55w or -2m or -1y are valid inputs.", "Invalid Input",  JOptionPane.ERROR_MESSAGE);
-				return;
+				return false;
 			}
 		}
-		this.flippingItemContainerPanel.resetPaginator();
-		this.recipeGroupContainerPanel.resetPaginator();
-		this.rebuildItemsDisplay(plugin.viewItemsForCurrentView());
-		this.rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
+
+		lastNonCustomInterval = selectedInterval;
+		refreshDisplayForInterval();
+		return true;
+	}
+
+	private void showInvalidIntervalMessage()
+	{
+		JOptionPane.showMessageDialog(timeIntervalDropdown, "Invalid input. Valid input is a negative whole number followed by an abbreviated unit of time. For example," +
+			"-123h or -2d or -55w or -2m or -1y are valid inputs.", "Invalid Input", JOptionPane.ERROR_MESSAGE);
 	}
 
 	/**
@@ -626,7 +711,7 @@ public class StatsPanel extends JPanel
 			return new ArrayList<>();
 			}
 
-		return objs.stream().filter(obj -> obj != null && obj.isInInterval(startOfInterval)).collect(Collectors.toList());
+		return objs.stream().filter(obj -> obj != null && obj.isInInterval(interval)).collect(Collectors.toList());
 	}
 
 	private JButton createResetButton() {
@@ -636,7 +721,7 @@ public class StatsPanel extends JPanel
 				"Are you sure?", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
 				null, new String[]{"Yes", "No"}, "No");
 			if (result == JOptionPane.YES_OPTION) {
-				plugin.deleteOffers(startOfInterval);
+				plugin.deleteOffers(interval);
 				rebuildItemsDisplay(plugin.viewItemsForCurrentView());
 				rebuildRecipesDisplay(plugin.viewRecipeFlipGroupsForCurrentView());
 			}
@@ -656,7 +741,7 @@ public class StatsPanel extends JPanel
 			Filepath selectedDirectory = selection.get(0);
 			log.info("exporting to csv in folder {}", selectedDirectory);
 			try {
-				plugin.exportToCsv(selectedDirectory, startOfInterval, startOfIntervalName);
+				plugin.exportToCsv(selectedDirectory, interval, intervalName);
 				JOptionPane.showMessageDialog(
 						parent,
 						String.format("Successfully saved csv file to %s/%s.csv", selectedDirectory, plugin.getAccountCurrentlyViewed()),

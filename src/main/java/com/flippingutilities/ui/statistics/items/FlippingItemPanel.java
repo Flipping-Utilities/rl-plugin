@@ -100,7 +100,7 @@ public class FlippingItemPanel extends JPanel
 		this.item = item;
 		this.statsPanel = plugin.getStatPanel();
 
-		List<OfferEvent> offers = item.getIntervalHistory(statsPanel.getStartOfInterval());
+		List<OfferEvent> offers = item.getIntervalHistory(statsPanel.getInterval());
 		Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
 		List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(offers, offerIdToPartialOffer);
 		List<Flip> flips = FlippingItem.getFlips(adjustedOffers);

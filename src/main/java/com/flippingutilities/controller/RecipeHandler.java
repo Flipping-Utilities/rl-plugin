@@ -33,6 +33,7 @@ import com.flippingutilities.utilities.PotionGroup;
 import com.flippingutilities.utilities.Recipe;
 import com.flippingutilities.utilities.RecipeItem;
 import com.flippingutilities.utilities.SORT;
+import com.flippingutilities.utilities.TimeRange;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -512,6 +513,11 @@ public class RecipeHandler {
 
     public List<RecipeFlipGroup> sortRecipeFlipGroups(List<RecipeFlipGroup> items, SORT selectedSort,
             Instant startOfInterval) {
+        return sortRecipeFlipGroups(items, selectedSort, TimeRange.from(startOfInterval));
+    }
+
+    public List<RecipeFlipGroup> sortRecipeFlipGroups(List<RecipeFlipGroup> items, SORT selectedSort,
+            TimeRange range) {
         List<RecipeFlipGroup> result = new ArrayList<>(items);
 
         if (selectedSort == null || result.isEmpty()) {
@@ -520,23 +526,23 @@ public class RecipeHandler {
 
         switch (selectedSort) {
             case TIME:
-                result.sort(Comparator.comparing(RecipeFlipGroup::getLatestFlipTime));
+                result.sort(Comparator.comparing(group -> latestFlipInRange(group, range)));
                 break;
             case FLIP_COUNT:
                 result.sort(Comparator.comparing(group -> {
-                    List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+                    List<RecipeFlip> flips = group.getFlipsInInterval(range);
                     return flips.stream().mapToInt(rf -> rf.getRecipeCountMade(group.getRecipe())).sum();
                 }));
                 break;
             case TOTAL_PROFIT:
                 result.sort(Comparator.comparing(group -> {
-                    List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+                    List<RecipeFlip> flips = group.getFlipsInInterval(range);
                     return flips.stream().mapToLong(RecipeFlip::getProfit).sum();
                 }));
                 break;
             case PROFIT_EACH:
                 result.sort(Comparator.comparing(group -> {
-                    List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+                    List<RecipeFlip> flips = group.getFlipsInInterval(range);
                     long totalProfit = flips.stream().mapToLong(RecipeFlip::getProfit).sum();
                     long totalRecipesMade = flips.stream().mapToInt(rf -> rf.getRecipeCountMade(group.getRecipe()))
                             .sum();
@@ -545,7 +551,7 @@ public class RecipeHandler {
                 break;
             case ROI:
                 result.sort(Comparator.comparing(group -> {
-                    List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+                    List<RecipeFlip> flips = group.getFlipsInInterval(range);
                     long totalProfit = flips.stream().mapToLong(RecipeFlip::getProfit).sum();
                     long totalExpense = flips.stream().mapToLong(RecipeFlip::getExpense).sum();
                     return (float) totalProfit / totalExpense * 100;
@@ -556,7 +562,27 @@ public class RecipeHandler {
         return result;
     }
 
+    /**
+     * Sorts by the newest flip the user can actually see, so flips outside the range do not make a
+     * group look more recent.
+     */
+    private static Instant latestFlipInRange(RecipeFlipGroup group, TimeRange range) {
+        return group.getFlipsInInterval(range).stream()
+            .map(RecipeFlip::getTimeOfCreation)
+            .max(Instant::compareTo)
+            .orElse(Instant.MIN);
+    }
+
     public void deleteInvalidRecipeFlips(List<OfferEvent> offers, List<RecipeFlipGroup> recipeFlipGroups) {
+        deleteInvalidRecipeFlips(offers, recipeFlipGroups, TimeRange.ALL);
+    }
+
+    /**
+     * Deleting inside a range must not cascade into flips created outside it, so the range also
+     * bounds which dependent flips are removed.
+     */
+    public void deleteInvalidRecipeFlips(List<OfferEvent> offers, List<RecipeFlipGroup> recipeFlipGroups,
+                                         TimeRange range) {
         if (offers.isEmpty()) {
             return;
         }
@@ -564,7 +590,7 @@ public class RecipeHandler {
         // get all the rfgs containing recipe flips that the offers could possibly be
         // referenced in
         recipeFlipGroups.stream().filter(rfg -> rfg.isInGroup(itemId))
-                .forEach(rfg -> rfg.deleteFlipsWithDeletedOffers(offers));
+                .forEach(rfg -> rfg.deleteFlipsWithDeletedOffers(offers, range));
     }
 
     private Optional<List<PotionGroup>> loadPotionGroups() {

@@ -45,6 +45,10 @@ The item cards are highly customizable, allowing you to pick what information to
 ### The Statistics Tab
 This tab records your trading history, down to every single individual offer you made.
 
+The interval selector accepts a relative span (for example `-36h` or `-2w`), the current session, all
+time, or a **Custom range...** picked from a calendar. A custom range covers every moment of both the
+start and end day.
+
 <p align="center"> 
   <img src = "https://raw.githubusercontent.com/Flipping-Utilities/rl-plugin/master/images/stats.png" width="300" height="950">
 </p>
