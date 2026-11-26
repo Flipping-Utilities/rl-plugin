@@ -29,6 +29,7 @@ package com.flippingutilities.model;
 import com.flippingutilities.utilities.Constants;
 import com.flippingutilities.utilities.GeTax;
 import com.flippingutilities.utilities.Searchable;
+import com.flippingutilities.utilities.TimeRange;
 import com.google.gson.annotations.SerializedName;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -252,7 +253,12 @@ public class FlippingItem implements Searchable
 
 	public ArrayList<OfferEvent> getIntervalHistory(Instant earliestTime)
 	{
-		return history.getIntervalsHistory(earliestTime);
+		return getIntervalHistory(TimeRange.from(earliestTime));
+	}
+
+	public ArrayList<OfferEvent> getIntervalHistory(TimeRange range)
+	{
+		return history.getIntervalsHistory(range);
 	}
 
 	public int getRemainingGeLimit()
@@ -281,8 +287,8 @@ public class FlippingItem implements Searchable
 	}
 
 	@Override
-	public boolean isInInterval(Instant earliestTime) {
-		return history.hasOfferInInterval(earliestTime);
+	public boolean isInInterval(TimeRange range) {
+		return history.hasOfferInInterval(range);
 	}
 
 	/**

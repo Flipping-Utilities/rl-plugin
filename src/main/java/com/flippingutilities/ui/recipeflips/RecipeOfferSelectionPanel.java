@@ -10,6 +10,7 @@ import com.flippingutilities.ui.uiutilities.Icons;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.ui.uiutilities.UIUtilities;
 import com.flippingutilities.utilities.Recipe;
+import com.flippingutilities.utilities.TimeRange;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.client.ui.ColorScheme;
@@ -84,7 +85,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
         //All the partial offers for every item in the recipe in this time range
         Map<Integer, List<PartialOffer>> itemIdToPartialOffers = createItemIdToPartialOffers(
                 itemsInRecipe,
-                plugin.getStatPanel().getStartOfInterval());
+                plugin.getStatPanel().getInterval());
         add(createTitle(), BorderLayout.NORTH);
         add(createBody(itemIdToPartialOffers), BorderLayout.CENTER);
         add(createBottomPanel(itemIdToPartialOffers), BorderLayout.SOUTH);
@@ -304,14 +305,14 @@ public class RecipeOfferSelectionPanel extends JPanel {
      */
     private Map<Integer, List<PartialOffer>> createItemIdToPartialOffers(
             Map<Integer, Optional<FlippingItem>> itemIdToItem,
-            Instant startOfInterval
+            TimeRange interval
     ) {
         Map<Integer, List<PartialOffer>> itemIdToPartialOffers = new HashMap<>();
 
         itemIdToItem.forEach((itemId, item) -> {
             List<PartialOffer> partialOffers = item.map(fitem -> {
                 Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(itemId);
-                List<OfferEvent> offers = itemId == sourceOffer.getItemId()? new ArrayList<>(Arrays.asList(sourceOffer)): fitem.getIntervalHistory(startOfInterval);
+                List<OfferEvent> offers = itemId == sourceOffer.getItemId()? new ArrayList<>(Arrays.asList(sourceOffer)): fitem.getIntervalHistory(interval);
                 Collections.reverse(offers);
 
                 return offers.stream().filter(o -> o.isBuy() == recipe.isInput(itemId) && o.isComplete()).
@@ -546,7 +547,7 @@ public class RecipeOfferSelectionPanel extends JPanel {
         JPanel intervalPanel = new JPanel();
         intervalPanel.setBackground(Color.BLACK);
 
-        String intervalName = plugin.getStatPanel().getStartOfIntervalName();
+        String intervalName = plugin.getStatPanel().getIntervalName();
 
         JLabel intervalDescLabel = new JLabel("You are looking at offers from the interval: ");
         intervalDescLabel.setFont(new Font("Whitney", Font.PLAIN, 14));

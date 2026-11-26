@@ -836,11 +836,21 @@ public class FlippingPlugin extends Plugin {
     }
 
     public List<FlippingItem> sortItems(List<FlippingItem> items, SORT sort, Instant startOfInterval) {
-        return flippingItemHandler.sortItems(items, sort, startOfInterval);
+        return sortItems(items, sort, TimeRange.from(startOfInterval));
     }
 
-    public List<RecipeFlipGroup> sortRecipeFlipGroups(List<RecipeFlipGroup> recipeFlipGroups, SORT sort, Instant startOfInterval) {
-        return recipeHandler.sortRecipeFlipGroups(recipeFlipGroups, sort, startOfInterval);
+    public List<FlippingItem> sortItems(List<FlippingItem> items, SORT sort, TimeRange range) {
+        return flippingItemHandler.sortItems(items, sort, range);
+    }
+
+    public List<RecipeFlipGroup> sortRecipeFlipGroups(List<RecipeFlipGroup> recipeFlipGroups, SORT sort,
+                                                      Instant startOfInterval) {
+        return sortRecipeFlipGroups(recipeFlipGroups, sort, TimeRange.from(startOfInterval));
+    }
+
+    public List<RecipeFlipGroup> sortRecipeFlipGroups(List<RecipeFlipGroup> recipeFlipGroups, SORT sort,
+                                                      TimeRange range) {
+        return recipeHandler.sortRecipeFlipGroups(recipeFlipGroups, sort, range);
     }
 
     /**
@@ -1056,15 +1066,22 @@ public class FlippingPlugin extends Plugin {
      * Used by the stats panel to invalidate all offers for a certain interval when a user hits the reset button.
      */
     public void deleteOffers(Instant startOfInterval) {
+        deleteOffers(TimeRange.from(startOfInterval));
+    }
+
+    /**
+     * Used by the stats panel to invalidate all offers for a certain range when a user hits the reset button.
+     */
+    public void deleteOffers(TimeRange range) {
         if (accountCurrentlyViewed.equals(ACCOUNT_WIDE)) {
             for (AccountData accountData : dataHandler.getAllAccountData()) {
                 accountData.getTrades().forEach(item -> {
-                    deleteOffers(item.getIntervalHistory(startOfInterval), item);
+                    deleteOffers(item.getIntervalHistory(range), item);
                 });
             }
         } else {
             getItemsForCurrentView().forEach(item -> {
-                deleteOffers(item.getIntervalHistory(startOfInterval), item);
+                deleteOffers(item.getIntervalHistory(range), item);
             });
         }
 
@@ -1102,13 +1119,17 @@ public class FlippingPlugin extends Plugin {
     }
 
     public void exportToCsv(Filepath parentDirectory, Instant startOfInterval, String startOfIntervalName) throws IOException {
+        exportToCsv(parentDirectory, TimeRange.from(startOfInterval), startOfIntervalName);
+    }
+
+    public void exportToCsv(Filepath parentDirectory, TimeRange range, String intervalName) throws IOException {
         if (parentDirectory.equals(tradePersister.getDirectory())) {
             throw new RuntimeException("Cannot save csv file in the flipping directory, pick another directory");
         }
         //create new flipping item list with only history from that interval
         List<FlippingItem> items = new ArrayList<>();
         for (FlippingItem item : viewItemsForCurrentView()) {
-            List<OfferEvent> offersInInterval = item.getIntervalHistory(startOfInterval);
+            List<OfferEvent> offersInInterval = item.getIntervalHistory(range);
             if (offersInInterval.isEmpty()) {
                 continue;
             }
@@ -1117,7 +1138,7 @@ public class FlippingPlugin extends Plugin {
             items.add(itemWithOnlySelectedIntervalHistory);
         }
 
-        TradePersister.exportToCsv(parentDirectory.joinSegment(accountCurrentlyViewed + ".csv"), items, startOfIntervalName);
+        TradePersister.exportToCsv(parentDirectory.joinSegment(accountCurrentlyViewed + ".csv"), items, intervalName);
     }
 
     public long calculateOptionValue(Option option) throws InvalidOptionException {

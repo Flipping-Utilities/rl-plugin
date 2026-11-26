@@ -5,6 +5,7 @@ import com.flippingutilities.model.FlippingItem;
 import com.flippingutilities.model.OfferEvent;
 import com.flippingutilities.model.PartialOffer;
 import com.flippingutilities.utilities.SORT;
+import com.flippingutilities.utilities.TimeRange;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -20,6 +21,11 @@ public class FlippingItemHandler {
 
     public List<FlippingItem> sortItems(List<FlippingItem> items, SORT selectedSort, Instant startOfInterval)
     {
+        return sortItems(items, selectedSort, TimeRange.from(startOfInterval));
+    }
+
+    public List<FlippingItem> sortItems(List<FlippingItem> items, SORT selectedSort, TimeRange range)
+    {
         List<FlippingItem> result = new ArrayList<>(items);
 
         if (selectedSort == null || result.isEmpty()) {
@@ -34,7 +40,7 @@ public class FlippingItemHandler {
             case TOTAL_PROFIT:
                 result.sort(Comparator.comparing(item -> {
                     Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-                    ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
+                    ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(range);
                     List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
                     return FlippingItem.getProfit(adjustedOffers);
                 }));
@@ -43,7 +49,7 @@ public class FlippingItemHandler {
             case PROFIT_EACH:
                 result.sort(Comparator.comparing(item -> {
                     Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-                    ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
+                    ArrayList<OfferEvent> intervalHistory = item.getIntervalHistory(range);
                     List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
                     long quantity = FlippingItem.countFlipQuantity(adjustedOffers);
                     if (quantity == 0) {
@@ -57,7 +63,7 @@ public class FlippingItemHandler {
             case ROI:
                 result.sort(Comparator.comparing(item -> {
                     Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-                    List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
+                    List<OfferEvent> intervalHistory = item.getIntervalHistory(range);
                     List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
 
                     long profit = FlippingItem.getProfit(adjustedOffers);
@@ -73,7 +79,7 @@ public class FlippingItemHandler {
                 result.sort(Comparator.comparing(
                     item -> {
                         Map<String, PartialOffer> offerIdToPartialOffer = plugin.getOfferIdToPartialOffer(item.getItemId());
-                        List<OfferEvent> intervalHistory = item.getIntervalHistory(startOfInterval);
+                        List<OfferEvent> intervalHistory = item.getIntervalHistory(range);
                         List<OfferEvent> adjustedOffers = FlippingItem.getPartialOfferAdjustedView(intervalHistory, offerIdToPartialOffer);
                         return FlippingItem.countFlipQuantity(adjustedOffers);
                     }));

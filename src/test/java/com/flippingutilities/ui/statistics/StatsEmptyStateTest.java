@@ -12,6 +12,7 @@ import com.flippingutilities.ui.uiutilities.EmptyStatePanel;
 import com.flippingutilities.utilities.Recipe;
 import com.flippingutilities.utilities.RecipeItem;
 import com.flippingutilities.utilities.SORT;
+import com.flippingutilities.utilities.TimeRange;
 import net.runelite.client.ui.components.IconTextField;
 import org.junit.Test;
 
@@ -67,7 +68,7 @@ public class StatsEmptyStateTest {
                 fixture.items = Collections.emptyList();
                 fixture.recipes = Collections.emptyList();
                 find(fixture.panel, JButton.class, "Show all time").doClick();
-                assertEquals(Instant.EPOCH, fixture.panel.getStartOfInterval());
+                assertEquals(Instant.EPOCH, fixture.panel.getInterval().getFrom());
                 assertEquals("All", findNamed(fixture.panel, JComboBox.class, "History interval").getSelectedItem());
             });
             flushEdt();
@@ -92,7 +93,7 @@ public class StatsEmptyStateTest {
                 assertNull(find(fixture.panel, JButton.class, "Show all time"));
                 find(fixture.panel, JButton.class, "Clear search").doClick();
                 assertEquals("", find(fixture.panel, IconTextField.class, null).getText());
-                assertEquals("All", fixture.panel.getStartOfIntervalName());
+                assertEquals("All", fixture.panel.getIntervalName());
             });
             flushEdt();
             SwingUtilities.invokeAndWait(() -> assertNotNull(find(fixture.panel, JLabel.class, "No trade history yet")));
@@ -171,5 +172,7 @@ public class StatsEmptyStateTest {
         @Override public List<RecipeFlipGroup> viewRecipeFlipGroupsForCurrentView() { return recipes; }
         @Override public List<FlippingItem> sortItems(List<FlippingItem> values, SORT sort, Instant since) { return values; }
         @Override public List<RecipeFlipGroup> sortRecipeFlipGroups(List<RecipeFlipGroup> values, SORT sort, Instant since) { return values; }
+        @Override public List<FlippingItem> sortItems(List<FlippingItem> values, SORT sort, TimeRange range) { return values; }
+        @Override public List<RecipeFlipGroup> sortRecipeFlipGroups(List<RecipeFlipGroup> values, SORT sort, TimeRange range) { return values; }
     }
 }

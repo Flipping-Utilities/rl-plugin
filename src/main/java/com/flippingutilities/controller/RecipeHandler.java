@@ -33,6 +33,7 @@ import com.flippingutilities.utilities.PotionGroup;
 import com.flippingutilities.utilities.Recipe;
 import com.flippingutilities.utilities.RecipeItem;
 import com.flippingutilities.utilities.SORT;
+import com.flippingutilities.utilities.TimeRange;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -512,6 +513,11 @@ public class RecipeHandler {
 
     public List<RecipeFlipGroup> sortRecipeFlipGroups(List<RecipeFlipGroup> items, SORT selectedSort,
             Instant startOfInterval) {
+        return sortRecipeFlipGroups(items, selectedSort, TimeRange.from(startOfInterval));
+    }
+
+    public List<RecipeFlipGroup> sortRecipeFlipGroups(List<RecipeFlipGroup> items, SORT selectedSort,
+            TimeRange range) {
         List<RecipeFlipGroup> result = new ArrayList<>(items);
 
         if (selectedSort == null || result.isEmpty()) {
@@ -524,19 +530,19 @@ public class RecipeHandler {
                 break;
             case FLIP_COUNT:
                 result.sort(Comparator.comparing(group -> {
-                    List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+                    List<RecipeFlip> flips = group.getFlipsInInterval(range);
                     return flips.stream().mapToInt(rf -> rf.getRecipeCountMade(group.getRecipe())).sum();
                 }));
                 break;
             case TOTAL_PROFIT:
                 result.sort(Comparator.comparing(group -> {
-                    List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+                    List<RecipeFlip> flips = group.getFlipsInInterval(range);
                     return flips.stream().mapToLong(RecipeFlip::getProfit).sum();
                 }));
                 break;
             case PROFIT_EACH:
                 result.sort(Comparator.comparing(group -> {
-                    List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+                    List<RecipeFlip> flips = group.getFlipsInInterval(range);
                     long totalProfit = flips.stream().mapToLong(RecipeFlip::getProfit).sum();
                     long totalRecipesMade = flips.stream().mapToInt(rf -> rf.getRecipeCountMade(group.getRecipe()))
                             .sum();
@@ -545,7 +551,7 @@ public class RecipeHandler {
                 break;
             case ROI:
                 result.sort(Comparator.comparing(group -> {
-                    List<RecipeFlip> flips = group.getFlipsInInterval(startOfInterval);
+                    List<RecipeFlip> flips = group.getFlipsInInterval(range);
                     long totalProfit = flips.stream().mapToLong(RecipeFlip::getProfit).sum();
                     long totalExpense = flips.stream().mapToLong(RecipeFlip::getExpense).sum();
                     return (float) totalProfit / totalExpense * 100;
